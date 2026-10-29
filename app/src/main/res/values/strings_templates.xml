@@ -8,6 +8,12 @@
     <string name="template_node_description">package.json 与入口脚本，可使用 npm start 运行。</string>
     <string name="template_python">Python</string>
     <string name="template_python_description">main.py 与依赖清单，可使用 python3 运行。</string>
+    <string name="template_cpp">C++</string>
+    <string name="template_cpp_description">CMake 与 C++17 入口源码，可在安装编译器后构建。</string>
+    <string name="template_go">Go</string>
+    <string name="template_go_description">go.mod 与入口源码，可使用 go run . 运行。</string>
+    <string name="template_rust">Rust</string>
+    <string name="template_rust_description">Cargo.toml 与入口源码，可使用 cargo run 运行。</string>
     <string name="template_other">其他</string>
     <string name="template_other_description">只创建空文件夹，稍后自行添加文件。</string>
     <string name="project_template_invalid">初始化模板内容不合法，未创建项目。</string>
