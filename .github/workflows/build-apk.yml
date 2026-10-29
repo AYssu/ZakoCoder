@@ -51,7 +51,19 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
           mkdir -p apk-output
           apk_name="ZakoCoder-debug-arm64-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "apk-output/$apk_name"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$signer" sign --ks "$HOME/.android/debug.keystore" \
+            --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
+            --out "apk-output/$apk_name" app/build/outputs/apk/debug/app-debug.apk
+          expected_certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
+          actual_certificate=$("$signer" verify --print-certs "apk-output/$apk_name" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          if [[ "$actual_certificate" != "$expected_certificate" ]]; then
+            echo '::error::APK signer differs from the configured CI debug key.'
+            exit 1
+          fi
+          rm -f "apk-output/$apk_name.idsig"
           (cd apk-output && sha256sum "$apk_name" > SHA256SUMS.txt)
           printf '%s\n' \
             'ZakoCoder ARM64 Debug test build; not a production release.' \
