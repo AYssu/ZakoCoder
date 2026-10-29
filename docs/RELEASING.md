@@ -1,6 +1,26 @@
 # 发布流程
 
-当前没有正式发行或自动发布工作流。CI 只构建与检查，不公开分发验证 APK，不签发正式版本，也不上传应用商店。现有 PRoot／loader 验证制品仍存在发行来源与许可门槛，Release 任务被阻止；仅修改版本或关闭构建检查不能解除该限制。
+当前没有正式发行或自动发布工作流。常规 CI 只构建与检查；维护者可另行手动打包 Debug 测试 APK，通过 Actions 下载，不创建版本 tag、GitHub Release 或应用商店版本。现有 PRoot／loader 验证制品仍存在发行来源与许可门槛，Release 任务被阻止；仅修改版本或关闭构建检查不能解除该限制。
+
+## 手动打包测试 APK
+
+仓库的 **Actions → Build Debug APK → Run workflow** 提供按需打包入口，通常选择已通过 PR 检查的 `main`；也可选择已推送的开发分支。不会在每次提交时自动上传 APK。
+
+流程检查仓库、构建 `assembleDebug`、执行 Lint，并校验 APK 签名后上传独立 Artifact。成功后从运行摘要的下载链接或页面下方 Artifacts 下载 ZIP，解压得到：
+
+- `ZakoCoder-debug-arm64-<运行编号>-<提交短摘要>.apk`：ARM64 Debug 测试包。
+- `SHA256SUMS.txt`：APK 的 SHA-256，在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
+- `BUILD.txt`：提交、分支、运行编号和测试包边界。
+
+Artifact 保留 14 天，下载需要登录 GitHub，过期后可重新运行。打包工作流不代替 PR 的完整单元测试，不发布正式 Release，不更改 PRoot 发行门槛；不要把测试包当成可公开正式发行的版本。
+
+### CI 测试签名
+
+工作流需要仓库 Actions Secret `ZAKOCODER_DEBUG_KEYSTORE_BASE64`，内容为 CI 专用 Debug keystore 的 Base64。缺失时明确失败，不临时生成另一份签名。它应使用 Android 默认 Debug 的 `androiddebugkey` 别名和 `android` 存储/密钥口令，不得使用正式签名。
+
+首次由维护者在仓库外或忽略的本地目录生成一份 Debug keystore，将 Base64 内容保存为上述 Secret，并安全保留备份；不得提交 keystore、编码后的内容或口令文件。工作流只在临时 runner 中恢复签名，任务末尾删除，不将其加入 Artifact、缓存或输出日志。更换 Secret 会改变后续测试包的签名。
+
+同一份 CI 签名的包可以相互覆盖更新，但与本地 Android Studio／其他电脑的 Debug 签名不保证兼容；签名不一致时不能直接覆盖，不应为解决签名问题盲目卸载或清数据。版本仍为开发版，应用升级不自动替换已安装的 Ubuntu；此流程不验证最低 Android 版本、模拟器或所有厂商设备。
 
 ## 解除发行门槛
 

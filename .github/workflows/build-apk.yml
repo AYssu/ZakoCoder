@@ -1,0 +1,83 @@
+name: Build Debug APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Restore CI debug signing key
+        env:
+          CI_DEBUG_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_DEBUG_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CI_DEBUG_KEYSTORE_BASE64" ]]; then
+            echo '::error::Missing ZAKOCODER_DEBUG_KEYSTORE_BASE64 repository secret; see docs/RELEASING.md.'
+            exit 1
+          fi
+          umask 077
+          mkdir -p "$HOME/.android"
+          printf '%s' "$CI_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey > /dev/null
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@v5
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Check repository and build test APK
+        run: |
+          python3 scripts/check_repository.py
+          ./gradlew :app:assembleDebug :app:lintDebug --stacktrace
+      - name: Verify and collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p apk-output
+          apk_name="ZakoCoder-debug-arm64-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "apk-output/$apk_name"
+          (cd apk-output && sha256sum "$apk_name" > SHA256SUMS.txt)
+          printf '%s\n' \
+            'ZakoCoder ARM64 Debug test build; not a production release.' \
+            "Commit: $GITHUB_SHA" \
+            "Ref: $GITHUB_REF" \
+            "Run: $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
+            'Signed with the repository CI debug key; local debug signatures may differ.' \
+            'Upgrading does not automatically replace the installed Ubuntu environment.' \
+            > apk-output/BUILD.txt
+      - name: Upload test APK
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-debug-arm64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: apk-output/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Show download link
+        env:
+          APK_ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        shell: bash
+        run: |
+          printf '## ARM64 Debug 测试包\n\n[下载 APK、SHA-256 和构建信息](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' '保存 14 天，需要登录 GitHub 下载。这是测试包，不是正式 Release；PRoot 发行门槛保持不变。' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove signing material
+        if: always()
+        shell: bash
+        run: rm -f "$HOME/.android/debug.keystore"

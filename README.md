@@ -53,6 +53,8 @@ python3 scripts/check_repository.py
 
 调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。最低 Android 版本为 8.0（API 26），当前真机覆盖为 Android 13 ARM64，最低版本尚未验收。
 
+无需本地构建时，在 GitHub 的 **Actions → Build Debug APK → Run workflow** 手动打包，通常选择 `main`。成功后从运行摘要或 Artifacts 下载测试包压缩文件，内含 ARM64 Debug APK、SHA-256 与提交信息，保留 14 天。使用固定的 CI 测试签名；与本机签名不同的包无法直接覆盖安装。首次配置和限制见[手动测试包](docs/RELEASING.md#手动打包测试-apk)。
+
 当前 **Release 构建被阻止**：PRoot 验证制品的可复现自编译与完整源码对应关系尚未完成。公开源码不代表已具备正式 APK 发行条件，准确来源、许可证和限制见 [第三方材料](THIRD_PARTY.md) 与 [发布流程](docs/RELEASING.md)。构建不需要本地参考工程、过程记录或设备数据。
 
 ## 数据与边界
