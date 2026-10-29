@@ -84,7 +84,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             mcp.preview(server, method, params)
         },
         mcpTool = { id, args -> mcp.request(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
-        finishMcpTask = { id -> mcp.closeTask(id) })
+        finishMcpTask = { id -> mcp.closeTask(id) }, proxy = { mutable.value.settings.proxy })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))

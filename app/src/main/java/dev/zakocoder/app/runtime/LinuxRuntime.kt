@@ -7,6 +7,7 @@ import android.os.StatFs
 import android.system.Os
 import dev.zakocoder.app.R
 import dev.zakocoder.app.settings.AppSettings
+import dev.zakocoder.app.settings.NetworkProxy
 import dev.zakocoder.app.settings.TerminalShell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -43,6 +44,17 @@ class LinuxRuntime(private val context: Context) {
     }
 
     fun freeBytes(): Long = StatFs(context.filesDir.absolutePath).availableBytes
+
+    /**
+     * Settings validation runs before saving, but a value persisted by an older build can still be
+     * malformed. Translate that into the same localized error instead of surfacing an English parse
+     * exception, and never fall back to a silent direct connection.
+     */
+    private fun <T> proxySetting(block: () -> T): T = try {
+        block()
+    } catch (_: IllegalArgumentException) {
+        throw IllegalArgumentException(context.getString(R.string.invalid_proxy))
+    }
 
     private fun checksum(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -90,9 +102,8 @@ class LinuxRuntime(private val context: Context) {
         }
         if (!archive.exists()) {
             val partial = File(cache, "rootfs.partial")
-            val proxy = if (settings.proxy.isEmpty()) java.net.Proxy.NO_PROXY else java.net.URI(settings.proxy).let {
-                java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress(it.host, it.port))
-            }
+            // SOCKS5 uses Proxy.Type.SOCKS; plain HTTP keeps the previous HttpURLConnection proxy path.
+            val proxy = proxySetting { NetworkProxy.javaProxy(settings.proxy) } ?: java.net.Proxy.NO_PROXY
             val connection = URL(image.getString("url")).openConnection(proxy) as HttpURLConnection
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
@@ -159,9 +170,10 @@ class LinuxRuntime(private val context: Context) {
             Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         """.trimIndent() + "\n")
         PrivateFiles.writeConfined(target, "etc/apt/sources.list", "")
-        // APT's AI_ADDRCONFIG rejects loopback proxies when Android is offline.
+        // APT's AI_ADDRCONFIG rejects loopback HTTP proxies when Android is offline.
+        // SOCKS5 has no apt/HTTP-proxy equivalent here, so its workaround file stays empty.
         PrivateFiles.writeConfined(target, "etc/apt/apt.conf.d/99zakocoder-network",
-            if (settings.proxy.isEmpty()) "" else "Acquire::Connect::AddrConfig \"false\";\n")
+            if (proxySetting { NetworkProxy.aptAddrConfigWorkaround(settings.proxy) }) "Acquire::Connect::AddrConfig \"false\";\n" else "")
         File(target, "root").mkdirs()
         File(target, "tmp").mkdirs()
         File(target, "workspace").mkdirs()
@@ -206,7 +218,8 @@ class LinuxRuntime(private val context: Context) {
         }
         val path = listOf(settings.additionalPath, "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             .filter(String::isNotEmpty).joinToString(":")
-        val network = if (settings.proxy.isEmpty()) emptyList() else listOf("http_proxy=${settings.proxy}", "https_proxy=${settings.proxy}", "HTTP_PROXY=${settings.proxy}", "HTTPS_PROXY=${settings.proxy}", "no_proxy=localhost,127.0.0.1")
+        // HTTP exports http_proxy/https_proxy; SOCKS5 exports only ALL_PROXY (never a fake http_proxy).
+        val network = proxySetting { NetworkProxy.guestEnvironment(settings.proxy) }
         val executable = File(nativeDirectory, "libzakocoder_proot.so").absolutePath
         val args = mutableListOf(
             "--kill-on-exit", "--link2symlink", "-0", "-r", target.absolutePath,

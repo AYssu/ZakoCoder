@@ -39,12 +39,13 @@ class SettingsRepository(private val context: Context) {
             val parts = address.trim().split('.')
             parts.size == 4 && parts.all { it.matches(Regex("[0-9]{1,3}")) && it.toInt() in 0..255 }
         }) { context.getString(dev.zakocoder.app.R.string.invalid_dns) }
-        if (settings.proxy.isNotEmpty()) {
-            val uri = try { java.net.URI(settings.proxy) } catch (_: java.net.URISyntaxException) {
+        if (settings.proxy.isNotBlank()) {
+            // Blank means disabled; any other non-blank value must be an exact HTTP/SOCKS5 endpoint.
+            try {
+                NetworkProxy.parse(settings.proxy)
+            } catch (_: IllegalArgumentException) {
                 throw IllegalArgumentException(context.getString(dev.zakocoder.app.R.string.invalid_proxy))
             }
-            require(uri.scheme == "http" && uri.host != null && uri.port in 1..65535 && uri.userInfo == null &&
-                uri.query == null && uri.fragment == null && uri.path.orEmpty() in setOf("", "/")) { context.getString(dev.zakocoder.app.R.string.invalid_proxy) }
         }
     }
     fun save(settings: AppSettings) {
@@ -55,7 +56,7 @@ class SettingsRepository(private val context: Context) {
             putString("shell", settings.terminalShell.name)
             putString("path", settings.additionalPath)
             putString("dns", settings.dns)
-            putString("proxy", settings.proxy)
+            putString("proxy", settings.proxy.trim())
         }
     }
 }
