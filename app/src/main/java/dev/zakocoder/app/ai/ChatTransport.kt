@@ -35,8 +35,16 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
      * callers map it to a network failure instead of silently going direct.
      */
     private fun clientFor(raw: String): OkHttpClient {
-        if (raw.isBlank()) return client
+        if (raw.isBlank()) {
+            // Disabling the proxy must clear the process-wide binding immediately; otherwise a
+            // later SOCKS5 authentication elsewhere could still receive the old pair.
+            NetworkProxy.configureSocksAuthentication(null)
+            return client
+        }
         synchronized(proxyLock) {
+            // OkHttp delegates SOCKS5 username/password authentication to the JDK global
+            // authenticator. Bind it to this exact endpoint on every call (never a previous pair).
+            NetworkProxy.configureSocksAuthentication(raw)
             if (proxyRaw == raw) return requireNotNull(proxyClient)
             val derived = client.newBuilder().proxy(NetworkProxy.javaProxy(raw)).build()
             proxyRaw = raw
