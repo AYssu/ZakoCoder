@@ -51,7 +51,7 @@ AI 可按项目权限列出、读取、新建、输入、中断及关闭终端�
 
 ## 设置、恢复与兼容
 
-软件源、IPv4 DNS 写入 guest 配置；附加 PATH 和无凭据 `http://host:port` 代理用于新进程。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
+软件源、IPv4 DNS 写入 guest 配置；附加 PATH 及无凭据 HTTP／SOCKS5 代理用于新进程。代理接受 `http://host:port` 与 `socks5://host:port`（均不支持用户名密码），作用于环境镜像下载与 AI 请求：HTTP 代理为 guest 导出 `http_proxy`／`https_proxy` 等变量，SOCKS5 仅导出 `ALL_PROXY`，apt 等只识别 HTTP 代理的工具不会走 SOCKS5，SOCKS5 的目标域名仍由本机解析（不支持远程 DNS）。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
 
 取消 APT 可能留下 dpkg 未配置状态，需确认后执行 `dpkg --configure -a` 并重检；取消不等于回滚已安装包。暂不提供自动环境升级、重装迁移或任意 rootfs 管理。
 

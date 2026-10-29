@@ -37,7 +37,9 @@ class AiController(private val context: Context, root: (String) -> File, private
     private val longCommand: (suspend (String, String, Long, (String) -> Unit) -> CommandResult)? = null,
     private val terminalTool: (suspend (String, AiTool, JSONObject) -> String)? = null,
     private val commandLog: (suspend (String, String, Int, Int, String) -> String)? = null,
-    private val restoreAvailable: () -> Boolean = { true }) {
+    private val restoreAvailable: () -> Boolean = { true },
+    /** Current settings proxy; read at request time so edits apply without recreating the controller. */
+    private val proxy: () -> String = { "" }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(AiState())
     val state = mutable.asStateFlow()
@@ -57,10 +59,10 @@ class AiController(private val context: Context, root: (String) -> File, private
     private var historyRetry: Job? = null
     @Volatile private var epoch = 0L
     private val marker = android.util.AtomicFile(File(context.filesDir, "ai-task-marker.json"))
-    val models = AiModelsController(context, config, transport, { mutable.value.active }) { active ->
+    val models = AiModelsController(context, config, transport, { mutable.value.active }, { active ->
         mutable.update { it.copy(endpoint = active?.endpoint.orEmpty(), model = active?.model.orEmpty(), hasKey = active?.hasKey == true,
             configured = active != null, configurationRevision = it.configurationRevision + 1) }
-    }
+    }, proxy)
     init { scope.launch { try {
         val interrupted = withContext(Dispatchers.IO) { marker.baseFile.exists() }
         mutable.update { it.copy(interrupted = interrupted) }
@@ -472,7 +474,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             val requestEpoch = epoch
             messages.getJSONObject(0).put("content", SYSTEM + "\nCurrent app permissions: " + AiTool.entries.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
             val ruleDelivery = discovered.delivery()
-            val reply = transport.request(settings, messages, schemas(), toolDelta = { drafts ->
+            val reply = transport.request(settings, messages, schemas(), proxy = proxy(), toolDelta = { drafts ->
                 mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving) else it }
             }, observe = { record -> mutable.update { current ->
                 if (epoch != requestEpoch || !current.active || current.projectId != id) current else current.copy(requests = boundedRequests(current.requests.filterNot { it.id == record.id } + record.copy(turn = current.turn, round = round)))
@@ -578,6 +580,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         val summary = transport.request(settings.copy(parameters = settings.parameters.copy(maxTokens = minOf(settings.parameters.maxTokens ?: 2048, 2048))),
             JSONArray().put(JSONObject().put("role", "system").put("content", CONTEXT_SUMMARY_PROMPT))
                 .put(JSONObject().put("role", "user").put("content", evidence.toString())), JSONArray(),
+            proxy = proxy(),
             observe = { record -> mutable.update { state ->
                 if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
             } }, delta = {})

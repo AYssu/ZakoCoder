@@ -52,13 +52,38 @@ class ProjectRepository(private val context: Context, val base: File) {
                 it.canonicalFile.toPath().startsWith(base.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
         }
     }
-    fun create(name: String): Project {
+    fun create(name: String, templateFiles: Map<String, String> = emptyMap()): Project {
         require(name.isNotBlank() && name.length <= 80 && name.none { it == '/' || it == '\\' || it.isISOControl() }) {
             context.getString(R.string.project_name_invalid)
         }
         val project = Project(UUID.randomUUID().toString(), name.trim(), emptySet())
-        check(File(base, project.id).mkdirs())
-        return project
+        val root = File(base, project.id)
+        check(root.mkdirs())
+        if (templateFiles.isEmpty()) return project
+        try {
+            require(templateFiles.size <= ProjectTemplates.MAX_FILES) { context.getString(R.string.project_template_invalid) }
+            val canonicalRoot = root.canonicalFile.toPath()
+            templateFiles.forEach { (relative, content) ->
+                require(ProjectTemplates.isSafeRelativePath(relative)) { context.getString(R.string.project_template_invalid) }
+                val bytes = content.toByteArray(Charsets.UTF_8)
+                require(bytes.size <= ProjectTemplates.MAX_FILE_BYTES) { context.getString(R.string.project_template_invalid) }
+                var target = root
+                relative.split('/').forEach { segment ->
+                    require(segment.isNotEmpty() && segment != "." && segment != "..") { context.getString(R.string.project_template_invalid) }
+                    target = File(target, segment)
+                }
+                val canonicalTarget = target.canonicalFile.toPath()
+                require(canonicalTarget != canonicalRoot && canonicalTarget.startsWith(canonicalRoot)) {
+                    context.getString(R.string.project_template_invalid)
+                }
+                Files.createDirectories(requireNotNull(target.parentFile).toPath())
+                Files.write(target.toPath(), bytes)
+            }
+            return project
+        } catch (error: Exception) {
+            root.deleteRecursively()
+            throw error
+        }
     }
     suspend fun import(tree: Uri, progress: (Int) -> Unit): Project {
         val resolver = context.contentResolver

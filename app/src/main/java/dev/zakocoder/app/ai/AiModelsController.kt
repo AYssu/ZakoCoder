@@ -16,7 +16,9 @@ data class AiModelsState(val catalog: AiCatalog = AiCatalog(), val loading: Bool
 }
 /** Owns configuration IO/network. UI only holds unsaved fields and replacement credentials. */
 class AiModelsController(private val context: Context, private val store: AiConfigStore, private val transport: ChatTransport,
-    private val taskActive: () -> Boolean, private val changed: (AiProfile?) -> Unit) {
+    private val taskActive: () -> Boolean, private val changed: (AiProfile?) -> Unit,
+    /** Same settings proxy as chat requests, so model discovery/testing honours it too. */
+    private val proxy: () -> String = { "" }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(AiModelsState())
     val state = mutable.asStateFlow()
@@ -59,7 +61,7 @@ class AiModelsController(private val context: Context, private val store: AiConf
             try {
                 val config = withContext(Dispatchers.IO) { store.resolve(draft, requireModel = testing) }
                 if (!testing) {
-                    val models = transport.models(config)
+                    val models = transport.models(config, proxy())
                     if (owner == generation) mutable.update { it.copy(probe = AiProbe.Idle, available = models, probeMessage = context.getString(if (models.isEmpty()) R.string.ai_models_remote_empty else R.string.ai_models_fetched, models.size)) }
                 } else {
                     withTimeout(30000) {
@@ -67,7 +69,7 @@ class AiModelsController(private val context: Context, private val store: AiConf
                             .put("required", JSONArray(listOf("ack"))).put("additionalProperties", false)
                         val tools = JSONArray().put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "connection_probe").put("description", "Acknowledge a connection test; no action is performed").put("parameters", parameters)))
                         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", "Connection test only. Call connection_probe with ack=ok. No project files or commands are involved."))
-                        val reply = transport.request(config, messages, tools, forceTool = "connection_probe") {}
+                        val reply = transport.request(config, messages, tools, forceTool = "connection_probe", proxy = proxy()) {}
                         if (!runCatching { reply.calls.size == 1 && reply.calls[0].name == "connection_probe" && JSONObject(reply.calls[0].arguments).optString("ack") == "ok" }.getOrDefault(false)) throw AiProbeUnsupported()
                     }
                     if (owner == generation) mutable.update { it.copy(probe = AiProbe.Passed, probeMessage = context.getString(R.string.ai_models_test_passed)) }
