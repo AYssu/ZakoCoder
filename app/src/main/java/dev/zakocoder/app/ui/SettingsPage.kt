@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import dev.zakocoder.app.settings.TerminalShell
 import dev.zakocoder.app.runtime.ToolStatus
 import dev.zakocoder.app.runtime.ToolBundles
@@ -52,7 +54,7 @@ internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> U
 
 @Composable
 internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: (() -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
+    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick).heightIn(min = 48.dp) else Modifier)
         .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -65,37 +67,45 @@ internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifi
 @Composable
 internal fun GroupDivider() { HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF222A34) else androidx.compose.ui.graphics.Color(0xFFF1F5F9)) }
 
-/** Settings keeps the prototype's smaller, muted grouping separate from detail-sheet headings. */
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, Modifier.padding(start = 4.dp, top = 4.dp), fontSize = 11.5.sp, lineHeight = 16.sp,
-            fontWeight = FontWeight.Normal, letterSpacing = .3.sp, color = TertiaryText)
-        Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface,
-            border = cardBorder(), shadowElevation = if (LocalWorkbenchDark.current) 0.dp else .5.dp) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, Modifier.padding(start = 4.dp).semantics { heading() }, fontSize = 12.sp, lineHeight = 16.sp,
+            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+            border = cardBorder()) {
             Column(Modifier.fillMaxWidth(), content = content)
         }
     }
 }
 
 @Composable
-private fun SettingsRow(title: String, value: String, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
-        .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, Modifier.weight(1f), fontSize = 13.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
-        Text(value, Modifier.widthIn(max = 165.dp), fontSize = 12.5.sp, lineHeight = 18.sp,
-            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
-            color = TertiaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(12.dp), tint = if (LocalWorkbenchDark.current) Color(0xFF4A5563) else Color(0xFFC3CEDD))
+private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
+    val tone = if (enabled) 1f else .45f
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else Modifier)
+        .heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = tone))
+            if (value.isNotEmpty()) Text(value, fontSize = 12.sp, lineHeight = 18.sp,
+                fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
     }
 }
 
 @Composable
-private fun SettingsDivider() { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) }
+private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant) }
 
 @Composable
-internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit) {
+internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}) {
     val context = LocalContext.current
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
@@ -119,49 +129,60 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     val notificationSettingsUnavailable = stringResource(R.string.notification_settings_unavailable)
     Column(Modifier.fillMaxSize()) {
         PageHeading(stringResource(R.string.nav_settings))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
+        Text(stringResource(R.string.settings_device_hint), Modifier.padding(bottom = 16.dp), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 24.dp)) {
         item { SettingsGroup(stringResource(R.string.nav_ai)) {
-            SettingsRow(stringResource(R.string.ai_settings), models.catalog.active?.name ?: notConfigured, onClick = onModels)
+            SettingsRow(stringResource(R.string.ai_settings), models.catalog.active?.name ?: notConfigured, glyph = Glyph.Ai, onClick = onModels)
+            SettingsDivider()
+            SettingsRow(stringResource(R.string.ai_extensions), stringResource(R.string.ai_extensions_types), glyph = Glyph.Extensions, onClick = onExtensions)
             SettingsDivider()
             SettingsRow(stringResource(R.string.ai_permissions), state.project?.name ?: stringResource(R.string.select_project_first),
-                enabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
+                glyph = Glyph.Shield, enabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
                 onClick = { workbench.ai.select(state.selectedId); if (workbench.ai.state.value.projectId == state.selectedId) aiPermissions = true })
         } }
         item { SettingsGroup(stringResource(R.string.nav_terminal)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(stringResource(R.string.terminal_font), fontSize = 13.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
-                    Text(stringResource(R.string.terminal_output_font), fontSize = 11.sp, lineHeight = 15.sp, color = TertiaryText)
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Keyboard, Modifier.size(20.dp)) }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.terminal_font), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                        Text(stringResource(R.string.terminal_output_font), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                Surface(shape = RoundedCornerShape(9.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    Row(Modifier.padding(3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.align(Alignment.End)) {
+                    Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 10) {
-                            WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(12.dp), description = stringResource(R.string.decrease_font))
+                            WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(16.dp), description = stringResource(R.string.decrease_font))
                         }
-                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.width(44.dp), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 48.dp), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp + 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp < 28) {
-                            WorkbenchIcon(Glyph.Add, modifier = Modifier.size(12.dp), description = stringResource(R.string.increase_font))
+                            WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp), description = stringResource(R.string.increase_font))
                         }
                     }
                 }
             }
             SettingsDivider()
-            SettingsRow(stringResource(R.string.extra_path), settings.additionalPath.ifEmpty { notConfigured }, enabled = !state.busy, onClick = { editing = "path" })
+            SettingsRow(stringResource(R.string.extra_path), settings.additionalPath.ifEmpty { notConfigured }, glyph = Glyph.File, enabled = !state.busy, onClick = { editing = "path" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.terminal_shell), stringResource(if (settings.terminalShell == TerminalShell.Bash) R.string.shell_bash else R.string.shell_zsh), enabled = !state.busy, onClick = { editing = "shell" })
+            SettingsRow(stringResource(R.string.terminal_shell), stringResource(if (settings.terminalShell == TerminalShell.Bash) R.string.shell_bash else R.string.shell_zsh), glyph = Glyph.Terminal, enabled = !state.busy, onClick = { editing = "shell" })
         } }
         item { SettingsGroup(stringResource(R.string.network_settings)) {
-            SettingsRow(stringResource(R.string.apt_source), stringResource(if (settings.aptSource == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua), enabled = !state.busy, onClick = { editing = "source" })
+            SettingsRow(stringResource(R.string.apt_source), stringResource(if (settings.aptSource == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua), glyph = Glyph.Projects, enabled = !state.busy, onClick = { editing = "source" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, mono = true, enabled = !state.busy, onClick = { editing = "dns" })
+            SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, mono = true, glyph = Glyph.Globe, enabled = !state.busy, onClick = { editing = "dns" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.proxy_short), settings.proxy.ifEmpty { notConfigured }, enabled = !state.busy, onClick = { editing = "proxy" })
+            SettingsRow(stringResource(R.string.proxy_short), settings.proxy.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = { editing = "proxy" })
         } }
         item { SettingsGroup(stringResource(R.string.storage_title)) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.storage_used), Modifier.weight(1f), fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium)
-                    Text(state.usedBytes?.let(StorageUsage::format) ?: unavailable, fontSize = 12.sp, lineHeight = 18.sp, color = TertiaryText)
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Storage, Modifier.size(20.dp)) }
+                    }
+                    Text(stringResource(R.string.storage_used), Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    Text(state.usedBytes?.let(StorageUsage::format) ?: unavailable, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val cacheScope = stringResource(R.string.cache_scope)
@@ -169,7 +190,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                         TextButton(onClick = workbench::clearCache, enabled = !state.busy, shape = RoundedCornerShape(9.dp),
                             colors = ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
-                            modifier = Modifier.semantics { stateDescription = cacheScope }.defaultMinSize(minHeight = 32.dp)) {
+                            modifier = Modifier.semantics { stateDescription = cacheScope }.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.cache_compact_action), fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
@@ -180,10 +201,10 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             }
         } }
         item { SettingsGroup(stringResource(R.string.application_settings)) {
-            SettingsRow(stringResource(R.string.running_notifications), stringResource(notificationStatus.label()), onClick = { editing = "notifications" })
+            SettingsRow(stringResource(R.string.running_notifications), stringResource(notificationStatus.label()), glyph = Glyph.Bell, onClick = { editing = "notifications" })
         } }
         item {
-            TextButton(onClick = { editing = "about" }, modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 0.dp)) {
+            TextButton(onClick = { editing = "about" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
                 Text(stringResource(R.string.settings_version_footer, stringResource(R.string.app_version)), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal, color = TertiaryText)
             }
         }
@@ -224,6 +245,15 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                         }
                     }
                     "about" -> {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Surface(color = BrandFill, shape = RoundedCornerShape(12.dp)) {
+                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { WorkbenchBrandMark(Modifier.size(28.dp)) }
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.app_version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                         Text(stringResource(R.string.about_description))
                         Text(stringResource(R.string.validation_artifacts_notice), color = MaterialTheme.colorScheme.error)
                         Text(stringResource(R.string.licenses_description))

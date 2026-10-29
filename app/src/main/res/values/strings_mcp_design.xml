@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_design_about">关于 MCP 服务</string>
+    <string name="mcp_design_empty_title">连接外部工具</string>
+    <string name="mcp_design_tools">工具目录</string>
+    <string name="mcp_design_add_server">添加 MCP 服务</string>
+    <string name="mcp_design_stdio">本地 · stdio</string>
+    <string name="mcp_design_http">远程 · HTTP</string>
+    <string name="mcp_design_sse">远程 · SSE</string>
+    <string name="mcp_design_protocol">连接方式</string>
+    <string name="mcp_design_advanced">高级配置</string>
+    <string name="mcp_design_advanced_hint">按需填写 JSON 格式的参数与凭据。收起后仍保留当前输入，敏感内容默认隐藏。</string>
+</resources>

@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
+import dev.zakocoder.app.R
 
 internal val WorkbenchColors = lightColorScheme(
     primary = Color(0xFF2563EB), onPrimary = Color.White,
@@ -47,8 +49,13 @@ internal enum class Glyph(private val drawing: String) {
     Projects("M3 9Q3 7 5 7V5H10L12 7H19Q21 7 21 9V18Q21 20 19 20H5Q3 20 3 18Z M3 9H21"),
     ProjectAdd("M3 9Q3 7 5 7V5H10L12 7H19Q21 7 21 9V18Q21 20 19 20H5Q3 20 3 18Z M12 11V17 M9 14H15"),
     Terminal("M6 4H18Q21 4 21 7V17Q21 20 18 20H6Q3 20 3 17V7Q3 4 6 4Z M7 9L10 12L7 15 M13 15H17"),
+    Extensions("M3 3H9V9H3Z M15 3H21V9H15Z M3 15H9V21H3Z M15 18H21 M18 15V21"),
+    ChevronDown("M6 9L12 15L18 9"),
     Environment("M7 9Q7 7 9 7H15Q17 7 17 9V15Q17 17 15 17H9Q7 17 7 15Z M9 3V5 M15 3V5 M9 19V21 M15 19V21 M3 9H5 M3 15H5 M19 9H21 M19 15H21"),
-    Settings("M9 3H15L16 6L19 7L22 10V14L19 17L16 18L15 21H9L8 18L5 17L2 14V10L5 7L8 6Z M15 12A3 3 0 1 1 9 12A3 3 0 1 1 15 12"),
+    Settings("M9.17 5.16L10.21 4.82L10.48 2.42L13.52 2.42L13.79 4.82L14.83 5.16L15.81 5.66L17.70 4.15L19.85 6.30L18.34 8.19L18.84 9.17L19.18 10.21L21.58 10.48L21.58 13.52L19.18 13.79L18.84 14.83L18.34 15.81L19.85 17.70L17.70 19.85L15.81 18.34L14.83 18.84L13.79 19.18L13.52 21.58L10.48 21.58L10.21 19.18L9.17 18.84L8.19 18.34L6.30 19.85L4.15 17.70L5.66 15.81L5.16 14.83L4.82 13.79L2.42 13.52L2.42 10.48L4.82 10.21L5.16 9.17L5.66 8.19L4.15 6.30L6.30 4.15L8.19 5.66Z M15.3 12A3.3 3.3 0 1 1 8.7 12A3.3 3.3 0 1 1 15.3 12"),
+    Bell("M5 17H19L17.5 14V9A5.5 5.5 0 0 0 6.5 9V14Z M10 20Q12 22 14 20 M12 3V2"),
+    Globe("M22 12A10 10 0 1 1 2 12A10 10 0 1 1 22 12 M2 12H22 M12 2C6 8 6 16 12 22C18 16 18 8 12 2"),
+    Storage("M5 3H19V21H5Z M5 9H19 M5 15H19 M9 6H9.1 M9 12H9.1 M9 18H9.1"),
     Info("M12 2A10 10 0 1 0 12 22A10 10 0 1 0 12 2 M12 11V17 M12 7V7.2"),
     Send("M3 11L21 3L13 21L11 13Z M11 13L21 3"),
     Trash("M4 6H20 M9 6V3H15V6 M6 6L7 21H17L18 6 M10 10V17 M14 10V17"),
@@ -88,4 +95,10 @@ internal enum class Glyph(private val drawing: String) {
 internal fun WorkbenchIcon(glyph: Glyph, modifier: Modifier = Modifier, description: String? = null,
                            tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Icon(glyph.vector, description, modifier.size(22.dp), tint = tint)
+}
+
+/** Original Z and code cursor, shared with launcher foreground geometry. */
+@Composable
+internal fun WorkbenchBrandMark(modifier: Modifier = Modifier) {
+    Icon(painterResource(R.drawable.ic_brand_mark), contentDescription = null, modifier = modifier.size(24.dp), tint = Color.Unspecified)
 }

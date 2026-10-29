@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_disk_changed_short">磁盘已变化 · 编辑保留</string>
+    <string name="editor_disk_unavailable_short">磁盘暂不可读 · 编辑保留</string>
+    <string name="editor_disk_details">磁盘详情</string>
+</resources>
