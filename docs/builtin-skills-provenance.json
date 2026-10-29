@@ -1,0 +1,153 @@
+{
+  "version": "1.0.0-zakocoder",
+  "license": "Apache-2.0 (ZakoCoder authored assets)",
+  "references": [
+    {
+      "name": "caveman",
+      "reference": "reference-material:caveman/SKILL.md",
+      "sha256": "415d43518f2b1a9498c15a445d4657117b129ee5e81b19454ce348439cc6672b",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "megacave",
+      "reference": "reference-material:megacave/SKILL.md",
+      "sha256": "139105296c0686c1ee24610caca1db293ab84162beb0d94aa7a9ad7cbc3352bf",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "ultracave",
+      "reference": "reference-material:ultracave/SKILL.md",
+      "sha256": "a8da5b0b3501b853e1b98f2ae09fe8dc9c0edf481b1d3fa9529f8557011c1ef8",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "caveman-commit",
+      "reference": "reference-material:caveman-commit/SKILL.md",
+      "sha256": "c788a282fc75b981b421dfdad5d84ea7f83f946c126daa39cfc7d3f97845e193",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "caveman-compress",
+      "reference": "reference-material:caveman-compress/SKILL.md",
+      "sha256": "dd5388f085316f9f6a8b34ad906441023033596f8ac1d63b81fb20e8d3f50283",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "caveman-help",
+      "reference": "reference-material:caveman-help/SKILL.md",
+      "sha256": "0bf9ee3fc8a9258b2d5f6b8bf24ac21f0bf2e4b9b4641dbc426b74f18186f81d",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "frontend-design",
+      "reference": "reference-material:frontend-design/SKILL.md",
+      "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "lean-build",
+      "reference": "reference-material:lean-build/SKILL.md",
+      "sha256": "4d498073c6312858b220e9a04b7456c2485c734edb077f6bb17d88a7ed96ad7a",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "surgical-patch",
+      "reference": "reference-material:surgical-patch/SKILL.md",
+      "sha256": "81ea9f7b51409970099e04b98875dd65806cd35472f9a774b847030328187387",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "investigate-first",
+      "reference": "reference-material:investigate-first/SKILL.md",
+      "sha256": "7cc19dd2fc457eb20d65c44dee4d1b72dcdfcd1617182f5bff666700f2a055d8",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "safe-refactor",
+      "reference": "reference-material:safe-refactor/SKILL.md",
+      "sha256": "cd52867aba26aafb53379d43068cef9b2feca3a3fff850f877a99f710ccd02c0",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "verify-and-stop",
+      "reference": "reference-material:verify-and-stop/SKILL.md",
+      "sha256": "3d5599f49771b864eba94f27f456fda295c48c1a37fa6ba2f65fdcb13cc32acb",
+      "distribution": "not bundled; independently authored mobile guidance"
+    },
+    {
+      "name": "audit",
+      "reference": "reference-material:audit/SKILL.md",
+      "sha256": "b51ea95ea29be112b8407bdb961470e45884d46e6a74fc50302fc6eae7f77d8c",
+      "distribution": "not bundled; independently authored mobile guidance"
+    }
+  ],
+  "date": "2026-10-28",
+  "bundled": [
+    {
+      "id": "audit",
+      "path": "app/src/main/assets/skills/audit/SKILL.md",
+      "sha256": "b70a99bc9b24dca6d3252a8e01dcc5046bbe6f2f2fe964d2a93711823ac47efd"
+    },
+    {
+      "id": "caveman",
+      "path": "app/src/main/assets/skills/caveman/SKILL.md",
+      "sha256": "20e2a25dd9675508b3fcdf1be88701152bee6f6c7e34dd1db7f9a1a2bc1aeae1"
+    },
+    {
+      "id": "caveman-commit",
+      "path": "app/src/main/assets/skills/caveman-commit/SKILL.md",
+      "sha256": "729f4a4a4a7878bdeb6b4b793cf0957825b47bf7c107139c7df6c1c7a60f713a"
+    },
+    {
+      "id": "caveman-compress",
+      "path": "app/src/main/assets/skills/caveman-compress/SKILL.md",
+      "sha256": "896394f6b1fa7bc73068a8b3c0e5df0a3dee71fa70a3b34f246ea6f9a65d7e40"
+    },
+    {
+      "id": "caveman-help",
+      "path": "app/src/main/assets/skills/caveman-help/SKILL.md",
+      "sha256": "698183a7d2caf236cca9b5067c7be368713470b629076da73d30e1f67f2af817"
+    },
+    {
+      "id": "frontend-design",
+      "path": "app/src/main/assets/skills/frontend-design/SKILL.md",
+      "sha256": "5cf80e25e4943ede5bfeb2d1c1266676d3245fed002215608f0ca9bd89b35cc0"
+    },
+    {
+      "id": "investigate-first",
+      "path": "app/src/main/assets/skills/investigate-first/SKILL.md",
+      "sha256": "4cb08d0c19e76f3112553a3f3d9ac51c1a4f5afa2bbd40efc268539115365c52"
+    },
+    {
+      "id": "lean-build",
+      "path": "app/src/main/assets/skills/lean-build/SKILL.md",
+      "sha256": "c9f8add99bd2e48d3270f0d6969361090d849522786c49475dd2b47cd21e66f6"
+    },
+    {
+      "id": "megacave",
+      "path": "app/src/main/assets/skills/megacave/SKILL.md",
+      "sha256": "d6362552ac3dbb3ff2588edbfee6d445d78f65d85c0eafbc67cb649d216fe5f9"
+    },
+    {
+      "id": "safe-refactor",
+      "path": "app/src/main/assets/skills/safe-refactor/SKILL.md",
+      "sha256": "87b815aeb58711ce9e46d89e1a2923b1706ae2ffcfc4bf0a4c585e6bb866cf9b"
+    },
+    {
+      "id": "surgical-patch",
+      "path": "app/src/main/assets/skills/surgical-patch/SKILL.md",
+      "sha256": "17d0fcbb4f6bd54d93f29a83b4c73fd2a08e373baf3a9864e702f17dec8cc15e"
+    },
+    {
+      "id": "ultracave",
+      "path": "app/src/main/assets/skills/ultracave/SKILL.md",
+      "sha256": "5148d119d47dac9eff11287acc135f15283f8a95ac6cc54749c7a3e3bd75b58b"
+    },
+    {
+      "id": "verify-and-stop",
+      "path": "app/src/main/assets/skills/verify-and-stop/SKILL.md",
+      "sha256": "00670758f7e3d08e5f19aa0dce70d804c4c353cfe7782ab1e16ff23bcd310cc1"
+    }
+  ],
+  "reference_notes": "Reference material is not bundled. Identifiers name the material whose SHA-256 was recorded; they are not upstream repository URLs or executable dependencies."
+}

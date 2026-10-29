@@ -1,0 +1,45 @@
+{
+  "name": "kotlin",
+  "scopeName": "source.zako.kotlin",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block",
+      "begin": "/\\*",
+      "end": "\\*/"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\b(?:fun|val|var|class|object|interface|package|import|return|if|else|when|for|while|try|catch|throw|null|true|false|override|private|public|internal|protected|data|sealed|suspend|inline|is|in|as|typealias|constructor|init|this|super|companion|enum|annotation)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

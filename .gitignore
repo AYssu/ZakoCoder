@@ -1,0 +1,52 @@
+# Local references: never commit or publish
+/example/
+/参考源码/
+# Android and IDE
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.externalNativeBuild/
+.cxx/
+# Credentials and signing
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+# Local runtime / user data
+/runtime-artifacts/
+*.apk
+*.aab
+*.hprof
+.DS_Store
+
+# Python maintenance scripts and local tooling
+__pycache__/
+*.py[cod]
+.venv/
+.kotlin/
+
+# Local agent configuration and credentials
+/.aws/
+/.codex/
+/.agents/
+
+# Local development notes and assistant settings
+/.local/
+/outputs/
+/AGENTS.md
+/AGENT.md
+/CLAUDE.md
+/.cursor/
+/.cursorrules
+/.continue/
+/.gemini/
+/.mcp.json
+/aider.conf.yml
+/.aider*
+*.log

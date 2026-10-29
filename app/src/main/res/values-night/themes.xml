@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.ZakoCoder" parent="Theme.ZakoCoder.Base">
+        <item name="android:windowBackground">#0B0F14</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#0B1016</item>
+    </style>
+</resources>

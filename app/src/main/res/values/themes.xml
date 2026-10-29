@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ZakoCoder.Base" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#F5F7FA</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+    <style name="Theme.ZakoCoder" parent="Theme.ZakoCoder.Base" />
+</resources>

@@ -1,0 +1,56 @@
+{
+  "name": "zako-dark",
+  "colors": {
+    "editor.background": "#0B0F14",
+    "editor.foreground": "#E6EDF3",
+    "editorLineNumber.foreground": "#728094",
+    "editorCursor.foreground": "#4C8DFF",
+    "editor.selectionBackground": "#23416A",
+    "editor.lineHighlightBackground": "#151D28",
+    "editorIndentGuide.background": "#232B36"
+  },
+  "tokenColors": [
+    {
+      "scope": "comment",
+      "settings": {
+        "foreground": "#82907F"
+      }
+    },
+    {
+      "scope": "string",
+      "settings": {
+        "foreground": "#A5D6A7"
+      }
+    },
+    {
+      "scope": "keyword",
+      "settings": {
+        "foreground": "#C4A7E7"
+      }
+    },
+    {
+      "scope": "constant.numeric",
+      "settings": {
+        "foreground": "#E5B980"
+      }
+    },
+    {
+      "scope": "constant.character.escape",
+      "settings": {
+        "foreground": "#8AB4F8"
+      }
+    },
+    {
+      "scope": "markup.inserted",
+      "settings": {
+        "foreground": "#6EE7B7"
+      }
+    },
+    {
+      "scope": "markup.deleted",
+      "settings": {
+        "foreground": "#FCA5A5"
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.ZakoCoder" parent="Theme.ZakoCoder.Base">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

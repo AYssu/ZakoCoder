@@ -1,0 +1,28 @@
+name: 缺陷报告
+description: 提交可复现的问题
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 应用版本/提交、设备、Android 版本、安装来源。不要附密钥或私人项目。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 从初始状态开始描述，附最小可公开例子。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志或截图
+      description: 安全漏洞请按 SECURITY.md 私密报告。

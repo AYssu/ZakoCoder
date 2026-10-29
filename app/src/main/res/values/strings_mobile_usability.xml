@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_add_project">添加项目</string>
+    <string name="mobile_import_source">导入现有源码</string>
+    <string name="mobile_import_source_hint">选择系统目录，创建应用内工作副本</string>
+    <string name="mobile_create_empty">创建空项目</string>
+    <string name="mobile_create_empty_hint">从空目录开始，稍后添加代码</string>
+    <string name="mobile_clone_hint">克隆公开 HTTPS 仓库，需 Ubuntu 和 Git</string>
+    <string name="mobile_expanded">已展开</string>
+    <string name="mobile_collapsed">已收起</string>
+</resources>

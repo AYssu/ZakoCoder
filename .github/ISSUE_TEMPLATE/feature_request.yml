@@ -1,0 +1,31 @@
+name: 功能设计
+description: 在较大实现前讨论用户需求和验收
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户与问题
+      description: 谁在什么情况下遇到什么困难？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 方案与范围
+      description: 描述交互、模块边界、替代方案以及本次不做什么。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 成功、失败、取消如何验证？
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 兼容、权限和维护成本
+      description: 是否新增依赖、网络/文件访问、持久化数据或运行环境？
+    validations:
+      required: true

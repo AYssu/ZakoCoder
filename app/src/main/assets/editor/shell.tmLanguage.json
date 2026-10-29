@@ -1,0 +1,40 @@
+{
+  "name": "shell",
+  "scopeName": "source.zako.shell",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "#.*$"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\b(?:if|then|else|elif|fi|for|while|do|done|case|esac|function|in|export|local|readonly|return|exit|true|false)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

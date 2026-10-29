@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Versions are pinned and reviewed through Dependabot PRs. Keep update
+         suggestions visible without making upstream releases break an unchanged build.
+         Correctness, security and API compatibility warnings remain build-blocking. -->
+    <issue id="AndroidGradlePluginVersion" severity="informational" />
+    <issue id="GradleDependency" severity="informational" />
+    <issue id="NewerVersionAvailable" severity="informational" />
+    <issue id="OldTargetApi" severity="informational" />
+    <!-- This validation milestone explicitly targets ARM64 phones only. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+</lint>

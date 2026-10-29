@@ -1,0 +1,56 @@
+{
+  "name": "zako-light",
+  "colors": {
+    "editor.background": "#FFFFFF",
+    "editor.foreground": "#202B3D",
+    "editorLineNumber.foreground": "#94A0B2",
+    "editorCursor.foreground": "#2563EB",
+    "editor.selectionBackground": "#DBEAFE",
+    "editor.lineHighlightBackground": "#F5F8FC",
+    "editorIndentGuide.background": "#E8EDF4"
+  },
+  "tokenColors": [
+    {
+      "scope": "comment",
+      "settings": {
+        "foreground": "#667668"
+      }
+    },
+    {
+      "scope": "string",
+      "settings": {
+        "foreground": "#28734F"
+      }
+    },
+    {
+      "scope": "keyword",
+      "settings": {
+        "foreground": "#8456A1"
+      }
+    },
+    {
+      "scope": "constant.numeric",
+      "settings": {
+        "foreground": "#A56522"
+      }
+    },
+    {
+      "scope": "constant.character.escape",
+      "settings": {
+        "foreground": "#2563EB"
+      }
+    },
+    {
+      "scope": "markup.inserted",
+      "settings": {
+        "foreground": "#087F5B"
+      }
+    },
+    {
+      "scope": "markup.deleted",
+      "settings": {
+        "foreground": "#C33745"
+      }
+    }
+  ]
+}

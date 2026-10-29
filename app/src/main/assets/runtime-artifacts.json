@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "validationOnly": true,
+  "nativeSource": {
+    "repository": "https://github.com/AAswordman/OperitTerminalCore",
+    "commit": "e4442bc6a047b6165bf59103721ad143149c620d",
+    "license": "Upstream LGPL-3.0 declaration; PRoot upstream GPL-2.0. Exact corresponding native build inputs pending self-build."
+  },
+  "nativeArtifacts": [
+    {
+      "name": "libzakocoder_proot.so",
+      "path": "src/main/jniLibs/arm64-v8a/liboperit_proot.so",
+      "sha256": "cb40a1ced11cee76569b4008a9e478c87883ce831152be4eb9570763b82e580d"
+    },
+    {
+      "name": "libzakocoder_loader.so",
+      "path": "src/main/jniLibs/arm64-v8a/liboperit_loader.so",
+      "sha256": "f149774236db1e69b36cc1e4ed3866c7094db2eee52da0d4956aa63a9bb26929"
+    }
+  ],
+  "rootfs": {
+    "version": "ubuntu-noble-aarch64-pd-v4.18.0",
+    "url": "https://github.com/termux/proot-distro/releases/download/v4.18.0/ubuntu-noble-aarch64-pd-v4.18.0.tar.xz",
+    "sha256": "91acaa786b8e2fbba56a9fd0f8a1188cee482b5c7baeed707b29ddaa9a294daa",
+    "bytes": 64133552,
+    "prefix": "ubuntu-noble-aarch64/",
+    "unpackedBytes": 292934755
+  }
+}

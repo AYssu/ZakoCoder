@@ -1,0 +1,50 @@
+{
+  "name": "python",
+  "scopeName": "source.zako.python",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "#.*$"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"\"\"",
+      "end": "\"\"\""
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'''",
+      "end": "'''"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\b(?:def|class|import|from|as|return|if|elif|else|for|while|try|except|finally|raise|with|lambda|yield|async|await|in|is|not|and|or|None|True|False|pass|break|continue|global|nonlocal)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

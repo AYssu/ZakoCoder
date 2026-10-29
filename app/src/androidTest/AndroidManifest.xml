@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test APK only: serves fixed test bytes, never application files. Removed with the test APK. -->
+        <provider android:name="dev.zakocoder.app.ImportFixtureProvider"
+            android:authorities="dev.zakocoder.app.test.import-fixture" android:exported="true" />
+    </application>
+</manifest>
