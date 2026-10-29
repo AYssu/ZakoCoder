@@ -37,6 +37,9 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     private fun clientFor(raw: String): OkHttpClient {
         if (raw.isBlank()) return client
         synchronized(proxyLock) {
+            // OkHttp delegates SOCKS5 username/password authentication to the JDK global
+            // authenticator; keep it in sync even when the derived client is already cached.
+            NetworkProxy.configureSocksAuthentication(NetworkProxy.credentials(raw))
             if (proxyRaw == raw) return requireNotNull(proxyClient)
             val derived = client.newBuilder().proxy(NetworkProxy.javaProxy(raw)).build()
             proxyRaw = raw
