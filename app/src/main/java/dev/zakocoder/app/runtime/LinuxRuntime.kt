@@ -103,9 +103,11 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         if (!archive.exists()) {
             val partial = File(cache, "rootfs.partial")
             // SOCKS5 uses Proxy.Type.SOCKS; plain HTTP keeps the previous HttpURLConnection proxy path.
-            val proxy = proxySetting { NetworkProxy.javaProxy(settings.proxy) } ?: java.net.Proxy.NO_PROXY
+            val rawProxy = proxySetting { NetworkProxy.withCredentials(settings.proxy, proxyCredentials()) }
+            val proxy = proxySetting { NetworkProxy.javaProxy(rawProxy) } ?: java.net.Proxy.NO_PROXY
             // The JDK carries SOCKS5 RFC1929 credentials through the global authenticator only.
-            NetworkProxy.configureSocksAuthentication(proxyCredentials())
+            // Bind them to this exact endpoint so a settings switch can never send them elsewhere.
+            NetworkProxy.configureSocksAuthentication(rawProxy)
             val connection = URL(image.getString("url")).openConnection(proxy) as HttpURLConnection
             connection.connectTimeout = 30000
             connection.readTimeout = 30000

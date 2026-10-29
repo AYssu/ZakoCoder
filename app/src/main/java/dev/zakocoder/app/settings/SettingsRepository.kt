@@ -75,6 +75,10 @@ class SettingsRepository(private val context: Context) {
             spec == null || previousEndpoint != endpoint -> credentials.clear()
             // Same endpoint without an entered pair: keep the stored credentials.
         }
+        // Keep the process-wide SOCKS5 authenticator in sync with the saved setting immediately:
+        // switching endpoints replaces the endpoint-bound snapshot atomically, and disabling the
+        // proxy clears it, so a stale pair can never be handed to a different proxy.
+        NetworkProxy.configureSocksAuthentication(proxyForRuntime())
     }
 
     /** Credentials stored for the persisted SOCKS5 endpoint, if any. Safe to call off the UI. */
