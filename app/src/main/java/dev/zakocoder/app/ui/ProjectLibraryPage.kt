@@ -31,6 +31,7 @@ import dev.zakocoder.app.projects.Project
 import dev.zakocoder.app.projects.ProjectFile
 import dev.zakocoder.app.projects.ProjectTemplate
 import dev.zakocoder.app.projects.ProjectTemplates
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -217,6 +218,25 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     var actionName by remember { mutableStateOf("") }
     val clipboard = androidx.compose.ui.platform.LocalClipboard.current
     val fileScope = rememberCoroutineScope()
+    val apkContext = androidx.compose.ui.platform.LocalContext.current
+    val apkInstaller = remember(workbench) { dev.zakocoder.app.projects.ProjectApkInstaller(apkContext, workbench.projects) }
+    var installingApk by remember(project.id) { mutableStateOf<ProjectFile?>(null) }
+    var apkBusy by remember(project.id) { mutableStateOf(false) }
+    var apkFailure by remember(project.id) { mutableStateOf<String?>(null) }
+    var apkPreparation by remember(project.id) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val currentApkProject by rememberUpdatedState(project.id)
+    val apkUnavailableMessage = stringResource(R.string.apk_install_unavailable)
+    val apkPrepareFailedMessage = stringResource(R.string.apk_prepare_failed)
+    DisposableEffect(project.id) {
+        onDispose { apkPreparation?.cancel() }
+    }
+    val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    fun openFile(file: ProjectFile) {
+        if (file.directory) directory = file.relative
+        else if (file.name.endsWith(".apk", ignoreCase = true)) installingApk = file
+        else workbench.editor.open(project.id, file.relative)
+    }
+
     var fileName by remember { mutableStateOf("") }
     var uploadProjectId by rememberSaveable { mutableStateOf(project.id) }
     var uploadDirectory by rememberSaveable { mutableStateOf("") }
@@ -278,7 +298,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                 Surface(color = MaterialTheme.colorScheme.surface, border = cardBorder(), shape = RoundedCornerShape(
                     topStart = if (first) 18.dp else 0.dp, topEnd = if (first) 18.dp else 0.dp,
                     bottomStart = if (last) 18.dp else 0.dp, bottomEnd = if (last) 18.dp else 0.dp)) {
-                    Row(Modifier.fillMaxWidth().combinedClickable(onClick = { if (file.directory) directory = file.relative else workbench.editor.open(project.id, file.relative) }, onLongClick = { fileActions = file })
+                    Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openFile(file) }, onLongClick = { fileActions = file })
                         .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         IconTile(if (file.directory) Glyph.Projects else Glyph.File, Modifier.size(36.dp))
@@ -307,8 +327,42 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             }
         }
     }
+    installingApk?.let { file ->
+        val needsPermission = apkInstaller.needsSourcePermission()
+        AlertDialog(onDismissRequest = { if (!apkBusy) installingApk = null },
+            title = { Text(stringResource(if (needsPermission) R.string.apk_source_permission else R.string.apk_install)) },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(if (needsPermission) R.string.apk_source_permission_hint else R.string.apk_install_confirmation, file.relative))
+                if (apkBusy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.apk_preparing)) }
+                apkFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } },
+            confirmButton = { TextButton(enabled = !apkBusy, onClick = {
+                apkFailure = null
+                if (needsPermission) {
+                    try { apkLauncher.launch(apkInstaller.sourcePermissionIntent()); installingApk = null }
+                    catch (_: android.content.ActivityNotFoundException) { apkFailure = apkUnavailableMessage }
+                    catch (_: SecurityException) { apkFailure = apkUnavailableMessage }
+                } else apkPreparation = fileScope.launch {
+                    apkBusy = true
+                    try {
+                        val prepared = apkInstaller.prepare(project.id, file.relative)
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        if (currentApkProject == project.id) {
+                            apkLauncher.launch(prepared)
+                            installingApk = null
+                        }
+                    }
+                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: android.content.ActivityNotFoundException) { apkFailure = apkUnavailableMessage }
+                    catch (_: SecurityException) { apkFailure = apkUnavailableMessage }
+                    catch (error: Exception) { apkFailure = error.message ?: apkPrepareFailedMessage }
+                    finally { apkBusy = false }
+                }
+            }) { Text(stringResource(if (needsPermission) R.string.apk_source_permission else R.string.apk_install)) } },
+            dismissButton = { TextButton(enabled = !apkBusy, onClick = { installingApk = null; apkFailure = null }) { Text(stringResource(R.string.cancel)) } })
+    }
     fileActions?.let { file -> WorkbenchSheet(file.name, { fileActions = null }) {
-        TextButton(onClick = { fileActions = null; if (file.directory) directory = file.relative else workbench.editor.open(project.id, file.relative) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
+        TextButton(onClick = { fileActions = null; openFile(file) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
         TextButton(onClick = { fileActions = null; actionName = file.name; fileOperation = file to "rename" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_rename)) }
         if (!file.directory) TextButton(onClick = { fileActions = null; actionName = file.name; fileOperation = file to "copy" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy)) }
         TextButton(onClick = { fileScope.launch { clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", file.relative))) }; fileActions = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy_path)) }

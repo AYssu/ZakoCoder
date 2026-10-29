@@ -362,11 +362,32 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }
         }
     }
-    fun installToolBundles(ids: Set<String>) = run(R.string.install_selected_bundles, foreground = true, recheckTools = true) {
+    fun installToolBundles(ids: Set<String>, acceptAndroidLicense: Boolean = false) = run(R.string.install_selected_bundles, foreground = true, recheckTools = true) {
         check(mutable.value.installed)
+        require("android" !in ids || acceptAndroidLicense) { context.getString(R.string.android_sdk_license_required) }
+        val androidPackages = ids.count { it == "android" || it == "android-ndk" }
+        if (androidPackages > 0) require(withContext(Dispatchers.IO) { runtime.freeBytes() } >= androidPackages * 3L * 1024 * 1024 * 1024) {
+            context.getString(R.string.android_toolchain_storage_required, androidPackages * 3)
+        }
+        if ("android-ndk" in ids && "android" !in ids) {
+            val sdk = runtime.execute(AndroidToolchain.PROBE, null, mutable.value.settings, output = ::append)
+            check(sdk.exitCode == 0) { context.getString(R.string.android_ndk_sdk_required) }
+        }
         val packages = ToolBundles.packages(ids, mutable.value.bundleTools)
         if (packages.isNotEmpty()) {
             val result = runtime.execute(DevelopmentTools.installScript(packages), null, mutable.value.settings, output = ::append)
+            append(context.getString(R.string.command_exit, result.exitCode))
+            check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+        }
+        if ("android" in ids) {
+            val script = withContext(Dispatchers.IO) { context.assets.open("android-build/install.sh").bufferedReader().use { it.readText() } }
+            val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
+            append(context.getString(R.string.command_exit, result.exitCode))
+            check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+        }
+        if ("android-ndk" in ids) {
+            val script = withContext(Dispatchers.IO) { context.assets.open("android-build/install-ndk.sh").bufferedReader().use { it.readText() } }
+            val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
         }

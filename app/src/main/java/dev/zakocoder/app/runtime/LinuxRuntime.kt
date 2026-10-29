@@ -185,20 +185,48 @@ class LinuxRuntime(private val context: Context) {
             context.getString(R.string.shell_not_installed, settings.terminalShell.name)
         }
         if (settings.terminalShell == TerminalShell.Zsh) {
+            // Ubuntu's global zshrc otherwise runs compinit before our managed configuration.
+            PrivateFiles.writeConfined(root, "etc/zakocoder/zsh/.zshenv", "skip_global_compinit=1\n")
             PrivateFiles.writeConfined(root, "etc/zakocoder/zsh/.zshrc", """
                 autoload -Uz compinit
-                compinit -i -d /root/.cache/zakocoder/zcompdump
                 bindkey -e
+                if [[ -s /root/.zshrc ]]; then
+                    # Existing user config may call compdef during startup.
+                    compinit -i -d /root/.cache/zakocoder/zcompdump
+                else
+                    # PRoot makes completion-directory checks expensive. Pay that cost on first Tab,
+                    # retaining compinit's ownership/security checks and normal completion behavior.
+                    _zakocoder_complete() {
+                        bindkey '^I' expand-or-complete
+                        compinit -i -d /root/.cache/zakocoder/zcompdump
+                        zle expand-or-complete
+                    }
+                    zle -N _zakocoder_complete
+                    bindkey '^I' _zakocoder_complete
+                fi
                 HISTFILE=/root/.cache/zakocoder/zsh_history
                 HISTSIZE=5000
                 SAVEHIST=5000
                 setopt append_history
-                if [[ -n ${'$'}ZAKOCODER_PROJECT_LABEL && -n ${'$'}ZAKOCODER_PROJECT_PATH ]]; then
-                    hash -d -- "${'$'}ZAKOCODER_PROJECT_LABEL=${'$'}ZAKOCODER_PROJECT_PATH"
-                fi
                 PROMPT='%F{#9AA7B8}%1~%f %F{#8AB4F8}›%f '
                 PROMPT_EOL_MARK='%F{#6B7684}↵%f'
                 if [[ -r /root/.zshrc ]]; then source /root/.zshrc; fi
+                # Named directories reject whitespace. Keep the label as prompt data instead.
+                # A user's custom prompt takes precedence over our managed default.
+                if [[ ${'$'}PROMPT == '%F{#9AA7B8}%1~%f %F{#8AB4F8}›%f ' ]]; then
+                    _ZAKOCODER_LAST_PROMPT=${'$'}PROMPT
+                    _zakocoder_prompt() {
+                        [[ ${'$'}PROMPT == "${'$'}_ZAKOCODER_LAST_PROMPT" ]] || return 0
+                        local location='%1~'
+                        if [[ -n ${'$'}ZAKOCODER_PROJECT_LABEL && ${'$'}PWD == "${'$'}ZAKOCODER_PROJECT_PATH" ]]; then
+                            location=${'$'}{ZAKOCODER_PROJECT_LABEL//\%/%%}
+                        fi
+                        PROMPT='%F{#9AA7B8}'"${'$'}location"'%f %F{#8AB4F8}›%f '
+                        _ZAKOCODER_LAST_PROMPT=${'$'}PROMPT
+                    }
+                    autoload -Uz add-zsh-hook
+                    add-zsh-hook precmd _zakocoder_prompt
+                fi
             """.trimIndent() + "\n")
             PrivateFiles.writeConfined(root, "root/.cache/zakocoder/.managed", "")
         }
@@ -216,7 +244,14 @@ class LinuxRuntime(private val context: Context) {
             require(java.util.UUID.fromString(projectId).toString() == projectId)
             "/workspace/$projectId"
         }
-        val path = listOf(settings.additionalPath, "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        val androidMarker = File(target, AndroidToolchain.MARKER.removePrefix("/"))
+        val androidReady = androidMarker.isFile && androidMarker.length() == AndroidToolchain.VERSION.length + 1L &&
+            androidMarker.readText().trim() == AndroidToolchain.VERSION
+        val ndkMarker = File(target, AndroidNdkToolchain.MARKER.removePrefix("/"))
+        val ndkReady = androidReady && ndkMarker.isFile && ndkMarker.length() == AndroidNdkToolchain.VERSION.length + 1L &&
+            ndkMarker.readText().trim() == AndroidNdkToolchain.VERSION
+        val path = listOf(settings.additionalPath, if (androidReady) AndroidToolchain.PATH else "",
+            if (ndkReady) AndroidNdkToolchain.PATH else "", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             .filter(String::isNotEmpty).joinToString(":")
         // HTTP exports http_proxy/https_proxy; SOCKS5 exports only ALL_PROXY (never a fake http_proxy).
         val network = proxySetting { NetworkProxy.guestEnvironment(settings.proxy) }
@@ -236,6 +271,8 @@ class LinuxRuntime(private val context: Context) {
                 "PS1=${'$'}{PWD/#${'$'}ZAKOCODER_PROJECT_PATH/${'$'}ZAKOCODER_PROJECT_LABEL} \\$ ")
         } else args += "PS1=\\w \\$ "
         args += network
+        if (androidReady) args += AndroidToolchain.environment(settings.proxy)
+        if (ndkReady) args += AndroidNdkToolchain.environment()
         args += "SHELL=${if (script == null) settings.terminalShell.executable else "/bin/bash"}"
         if (script == null && settings.terminalShell == TerminalShell.Zsh) {
             args += listOf("ZDOTDIR=/etc/zakocoder/zsh", "/usr/bin/zsh", "-i")

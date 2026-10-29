@@ -141,7 +141,7 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                         style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
                     if (command != null && preview != command.script) Text(stringResource(R.string.project_command_preview_help),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row { TextButton(onClick = { val original = command ?: ProjectCommand(kind, ""); script = original.script; cwd = original.cwd; timeout = original.timeoutSeconds.toString(); editing = kind }, enabled = canChange) { Text(stringResource(R.string.project_command_configure)) }
+                    Row { TextButton(onClick = { val original = command ?: ProjectCommand(kind, if (kind == "build" && dev.zakocoder.app.projects.ProjectKind.Android in host.project?.kinds.orEmpty()) "gradle --no-daemon :app:assembleDebug" else ""); script = original.script; cwd = original.cwd; timeout = original.timeoutSeconds.toString(); editing = kind }, enabled = canChange) { Text(stringResource(R.string.project_command_configure)) }
                         TextButton(onClick = { executing = command }, enabled = command != null && canChange) { Text(stringResource(R.string.project_command_execute)) } }
                 } }
             }

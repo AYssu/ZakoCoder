@@ -26,7 +26,8 @@ object DevelopmentTools {
         DevelopmentTool("cc", "cc --version", listOf("build-essential")),
         DevelopmentTool("make", "make --version", listOf("build-essential")),
         DevelopmentTool("cmake", "cmake --version", listOf("cmake", "pkg-config")),
-        DevelopmentTool("android-sdk", "sdkmanager --version", emptyList()),
+        DevelopmentTool("android-sdk", AndroidToolchain.PROBE, AndroidToolchain.packages),
+        DevelopmentTool("android-ndk", AndroidNdkToolchain.PROBE, AndroidNdkToolchain.packages),
         DevelopmentTool("flutter", "flutter --version", emptyList()),
     )
     fun required(kinds: Set<ProjectKind>): List<DevelopmentTool> {
@@ -34,7 +35,7 @@ object DevelopmentTools {
         return catalog.filter { it.id in ids }
     }
     fun doctorScript(tools: List<DevelopmentTool>): String = tools.joinToString("\n") { tool ->
-        val executable = when (tool.id) { "python", "pip", "venv" -> "python3"; "android-sdk" -> "sdkmanager"; else -> tool.id }
+        val executable = when (tool.id) { "python", "pip", "venv" -> "python3"; "android-sdk" -> "sdkmanager"; "android-ndk" -> "${AndroidNdkToolchain.PATH}/clang"; else -> tool.id }
         """
             if ! command -v $executable >/dev/null 2>&1; then
               printf 'ZAKO_TOOL\t${tool.id}\tMissing\t-\n'

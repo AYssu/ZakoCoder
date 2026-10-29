@@ -12,7 +12,7 @@ enum class TerminalShell(val executable: String) { Bash("/bin/bash"), Zsh("/usr/
 
 data class AppSettings(
     val aptSource: AptSource = AptSource.Ubuntu,
-    val terminalFontSp: Int = 13,
+    val terminalFontSp: Int = 11,
     val terminalShell: TerminalShell = TerminalShell.Bash,
     val additionalPath: String = "",
     val dns: String = "1.1.1.1,8.8.8.8",
