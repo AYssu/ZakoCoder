@@ -253,9 +253,19 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 mutable.update { it.copy(plans = emptyList(), checkingPlans = false, plansError = true) }
         }
     }
-    fun create(name: String) = run(R.string.create_project) {
-        val project = withContext(Dispatchers.IO) { projects.create(name) }
-        persist(mutable.value.projects + project, project.id)
+    fun create(name: String, template: ProjectTemplate = ProjectTemplate.Other) = run(R.string.create_project) {
+        // The repository stores the trimmed name; generate template content from that same value so a
+        // README or HTML title never keeps the surrounding whitespace the project list does not show.
+        val projectName = name.trim()
+        val project = withContext(Dispatchers.IO) { projects.create(projectName, ProjectTemplates.files(template, projectName)) }
+        val kinds = try {
+            withContext(Dispatchers.IO) { ProjectDetector.detect(projects.directory(project.id)) }
+        } catch (error: Exception) {
+            // Detection is best effort; never leave an unregistered working copy behind.
+            withContext(NonCancellable + Dispatchers.IO) { runCatching { PrivateFiles.deleteTree(projects.directory(project.id)) } }
+            throw error
+        }
+        persist(mutable.value.projects + project.copy(kinds = kinds), project.id)
     }
     fun import(tree: Uri) = run(R.string.import_project, foreground = true) {
         val project = withContext(Dispatchers.IO) { projects.import(tree) { count -> mutable.update { it.copy(operation = context.getString(R.string.import_progress, count)) } } }

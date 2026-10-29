@@ -29,6 +29,8 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.projects.Project
 import dev.zakocoder.app.projects.ProjectFile
+import dev.zakocoder.app.projects.ProjectTemplate
+import dev.zakocoder.app.projects.ProjectTemplates
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -43,6 +45,7 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     var adding by rememberSaveable { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
+    var templateName by rememberSaveable { mutableStateOf(ProjectTemplate.Other.name) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var removing by remember { mutableStateOf<Project?>(null) }
@@ -145,8 +148,24 @@ PageHeading(stringResource(R.string.projects_title)) {
         onCreate = { adding = false; creating = true },
         onClone = { adding = false; cloning = true })
     if (creating) WorkbenchSheet(stringResource(R.string.create_project), { creating = false }, stringResource(R.string.library_description)) {
+        // A restored saveable may name a template that no longer exists; fall back to Other everywhere.
+        val selectedTemplate = ProjectTemplates.entries.firstOrNull { it.name == templateName } ?: ProjectTemplate.Other
         OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.project_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { creating = false; onOpened(null); workbench.create(name); name = "" }, enabled = name.isNotBlank() && !state.busy,
+        Text(stringResource(R.string.create_template_section), style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.create_template_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ProjectTemplates.entries.forEach { template ->
+            val selected = template == selectedTemplate
+            SelectablePanel(selected = selected, onClick = { templateName = template.name }) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(stringResource(template.label), style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(template.description), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                SelectionCheck(selected)
+            }
+        }
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
+            creating = false; onOpened(null); workbench.create(name, selectedTemplate); name = ""; templateName = ProjectTemplate.Other.name
+        }, enabled = name.isNotBlank() && !state.busy,
             modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
         TextButton(onClick = { creating = false }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
     }
