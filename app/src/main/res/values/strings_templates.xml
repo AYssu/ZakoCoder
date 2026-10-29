@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="create_template_section">初始化模板</string>
+    <string name="create_template_hint">选择“其他”时只创建空文件夹，不写入示例文件。</string>
+    <string name="template_web">静态网页</string>
+    <string name="template_web_description">index.html、样式与脚本，可直接在浏览器中打开。</string>
+    <string name="template_node">Node.js</string>
+    <string name="template_node_description">package.json 与入口脚本，可使用 npm start 运行。</string>
+    <string name="template_python">Python</string>
+    <string name="template_python_description">main.py 与依赖清单，可使用 python3 运行。</string>
+    <string name="template_other">其他</string>
+    <string name="template_other_description">只创建空文件夹，稍后自行添加文件。</string>
+    <string name="project_template_invalid">初始化模板内容不合法，未创建项目。</string>
+</resources>

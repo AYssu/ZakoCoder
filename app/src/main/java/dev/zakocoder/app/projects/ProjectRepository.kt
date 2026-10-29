@@ -52,12 +52,22 @@ class ProjectRepository(private val context: Context, val base: File) {
                 it.canonicalFile.toPath().startsWith(base.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
         }
     }
-    fun create(name: String): Project {
+    fun create(name: String, templateFiles: Map<String, String> = emptyMap()): Project {
         require(name.isNotBlank() && name.length <= 80 && name.none { it == '/' || it == '\\' || it.isISOControl() }) {
             context.getString(R.string.project_name_invalid)
         }
         val project = Project(UUID.randomUUID().toString(), name.trim(), emptySet())
-        check(File(base, project.id).mkdirs())
+        val root = File(base, project.id)
+        check(root.mkdirs())
+        // The writer validates, writes in UTF-8 and rolls back the whole root itself on failure.
+        if (templateFiles.isNotEmpty()) {
+            try {
+                ProjectTemplateWriter.write(root, templateFiles)
+            } catch (invalid: IllegalArgumentException) {
+                // Surface the user-facing scaffold error while keeping the writer's rollback intact.
+                throw IllegalArgumentException(context.getString(R.string.project_template_invalid), invalid)
+            }
+        }
         return project
     }
     suspend fun import(tree: Uri, progress: (Int) -> Unit): Project {
