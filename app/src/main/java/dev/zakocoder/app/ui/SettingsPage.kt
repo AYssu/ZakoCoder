@@ -141,22 +141,20 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 onClick = { workbench.ai.select(state.selectedId); if (workbench.ai.state.value.projectId == state.selectedId) aiPermissions = true })
         } }
         item { SettingsGroup(stringResource(R.string.nav_terminal)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Keyboard, Modifier.size(20.dp)) }
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.terminal_font), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
-                        Text(stringResource(R.string.terminal_output_font), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Keyboard, Modifier.size(20.dp)) }
                 }
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.align(Alignment.End)) {
-                    Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.terminal_font), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.terminal_output_font), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 10) {
                             WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(16.dp), description = stringResource(R.string.decrease_font))
                         }
-                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 48.dp), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 32.dp), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp + 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp < 28) {
                             WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp), description = stringResource(R.string.increase_font))
                         }

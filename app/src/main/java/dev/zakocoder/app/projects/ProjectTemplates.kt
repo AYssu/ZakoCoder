@@ -9,6 +9,9 @@ enum class ProjectTemplate(@param:StringRes val label: Int, @param:StringRes val
     Web(R.string.template_web, R.string.template_web_description),
     Node(R.string.template_node, R.string.template_node_description),
     Python(R.string.template_python, R.string.template_python_description),
+    AndroidJava(R.string.template_android_java, R.string.template_android_java_description),
+    AndroidKotlin(R.string.template_android_kotlin, R.string.template_android_kotlin_description),
+    AndroidNative(R.string.template_android_native, R.string.template_android_native_description),
     Cpp(R.string.template_cpp, R.string.template_cpp_description),
     Go(R.string.template_go, R.string.template_go_description),
     Rust(R.string.template_rust, R.string.template_rust_description),
@@ -23,7 +26,7 @@ enum class ProjectTemplate(@param:StringRes val label: Int, @param:StringRes val
  * are written; keeping validation here as well keeps the scaffold contract testable on the JVM.
  */
 object ProjectTemplates {
-    const val MAX_FILES = 8
+    const val MAX_FILES = 11
     const val MAX_FILE_BYTES = 16 * 1024
     const val MAX_IDENTIFIER_LENGTH = 40
     const val MAX_RUST_PACKAGE_LENGTH = 64
@@ -52,6 +55,9 @@ object ProjectTemplates {
         val identifier = identifier(projectName)
         val generated = when (template) {
             ProjectTemplate.Other -> emptyMap()
+            ProjectTemplate.AndroidJava -> AndroidProjectTemplates.files(projectName, kotlin = false)
+            ProjectTemplate.AndroidKotlin -> AndroidProjectTemplates.files(projectName, kotlin = true)
+            ProjectTemplate.AndroidNative -> AndroidProjectTemplates.files(projectName, kotlin = true, native = true)
             ProjectTemplate.Web -> mapOf(
                 "index.html" to webIndex(projectName, identifier),
                 "styles.css" to WEB_STYLES,

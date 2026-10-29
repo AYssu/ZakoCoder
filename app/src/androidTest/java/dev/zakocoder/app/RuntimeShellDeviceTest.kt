@@ -57,6 +57,7 @@ class RuntimeShellDeviceTest {
                 File(runtime.root, "root").mkdirs()
                 val userConfig = File(runtime.root, "root/.zshrc").apply { writeText("# preserved user config\n") }
                 runtime.prepareTerminal(settings)
+                assertEquals("skip_global_compinit=1\n", File(runtime.root, "etc/zakocoder/zsh/.zshenv").readText())
                 assertEquals("# preserved user config\n", userConfig.readText())
                 assertTrue(File(runtime.root, "etc/zakocoder/zsh/.zshrc").readText().contains("source /root/.zshrc"))
                 val projectId = UUID.randomUUID().toString()

@@ -17,7 +17,8 @@ object ToolBundles {
         ToolBundle("rust", R.string.bundle_rust, R.string.bundle_rust_description, setOf("rustc", "cargo")),
         ToolBundle("jdk", R.string.bundle_jdk, R.string.bundle_jdk_description, setOf("java", "javac")),
         ToolBundle("cpp", R.string.bundle_cpp, R.string.bundle_cpp_description, setOf("cc", "make", "cmake")),
-        ToolBundle("android", R.string.kind_android, R.string.bundle_manual_description, setOf("android-sdk"), manual = true),
+        ToolBundle("android", R.string.kind_android, R.string.bundle_android_description, setOf("android-sdk", "java", "javac")),
+        ToolBundle("android-ndk", R.string.bundle_android_ndk, R.string.bundle_android_ndk_description, setOf("android-ndk")),
         ToolBundle("flutter", R.string.kind_flutter, R.string.bundle_manual_description, setOf("flutter"), manual = true),
     )
     fun status(bundle: ToolBundle, checks: List<ToolCheck>): BundleStatus {

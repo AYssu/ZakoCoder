@@ -24,6 +24,8 @@ UI 展示生命周期感知状态并派发事件，不直接执行网络、安�
 
 项目注册由 AtomicFile 保存，工作副本位于 `files/workspaces/<uuid>`；选择项和普通设置使用 SharedPreferences。SAF URI 只交由文档提供者读写，不推测 Linux 路径。导入导出是有界复制，不隐式同步原目录。
 
+ProjectApkInstaller 在用户确认后于 IO 线程生成有界 APK 缓存副本，拒绝目录穿越和符号链接，通过 FileProvider 向系统安装器授予只读 URI 权限。提供者只暴露 `cache/apk-install/`；未知来源许可和最终安装由系统界面确认，不直接暴露项目目录或静默安装。
+
 EditorController 持有最多 8 个 Content 缓冲；EditorFileStore 限量读取 UTF-8，保存前检查原始字节摘要，写同目录临时文件、同步并保留权限后原子替换。草稿独立保存文本、基线及光标，只有显式保存修改源码。磁盘变化采样绑定文档与代际，不重设保存基线；外部进程不受应用锁约束，最终检查与替换间仍可能竞争。
 
 AI 会话位于 `noBackupFilesDir/ai-history-v1`，检查点与恢复进度独立持久化；项目命令配置、记录与日志位于 `project-tasks-v1`，草稿位于 `editor-drafts`。这些内容不属于项目导出。数据有保留上限，详见[产品边界](PRODUCT.md)；存储格式变动必须兼容读取或明确迁移，不能静默清空数据。

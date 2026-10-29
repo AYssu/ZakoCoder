@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="template_android_java">Android · Java</string>
+    <string name="template_android_java_description">原生 Activity 工程，可构建 Debug APK；需 Android 构建工具包</string>
+    <string name="template_android_kotlin">Android · Kotlin</string>
+    <string name="template_android_kotlin_description">原生 Kotlin Activity 工程，可构建 Debug APK；需 Android 构建工具包</string>
+    <string name="template_android_native">Android · Kotlin + C++</string>
+    <string name="template_android_native_description">Kotlin 调用 JNI，构建 ARM64 原生库与 Debug APK；需 Android 和 NDK 工具包</string>
+</resources>

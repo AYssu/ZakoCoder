@@ -1,0 +1,17 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="bundle_android_description">手机内构建原生 Java / Kotlin Android 项目：JDK 17、SDK 36、ARM64 构建工具与 Gradle 8.13。NDK 可单独选装。</string>
+    <string name="android_install_details">额外下载 Google SDK、Gradle 与固定版本 ARM64 工具，校验 SHA-256。需要至少 3 GiB 可用空间；首次构建还需联网下载项目依赖。安装失败或取消不会回滚已装 APT 包。</string>
+    <string name="android_sdk_license">我已阅读并同意 Android SDK 许可</string>
+    <string name="android_sdk_license_open">查看 Android SDK 许可</string>
+    <string name="android_sdk_license_required">安装 Android 工具包前需要同意 SDK 许可。</string>
+    <string name="android_authenticated_proxy_unsupported">Android SDK 和 Gradle 的下载暂不支持需要账号密码的 SOCKS5 代理，请改用 HTTP 或无认证 SOCKS5 代理。</string>
+    <string name="android_build_help" tools:ignore="TypographyDashes">Android 工具包已就绪后，可在新建项目中选择 Android Java / Kotlin 模板。终端运行 gradle --no-daemon :app:assembleDebug，或在项目命令中配置相同构建命令。构建完成后，从文件列表打开 app/build/outputs/apk/debug/app-debug.apk，交给系统安装。</string>
+    <string name="android_license_browser_unavailable">无法打开浏览器，请稍后重试查看 SDK 许可。</string>
+    <string name="bundle_android_ndk">Android NDK</string>
+    <string name="bundle_android_ndk_description">原生 C / C++：NDK r28c、CMake、Ninja，面向 ARM64 Android JNI 项目。</string>
+    <string name="android_ndk_install_details">需要已安装 Android 工具包，额外至少 3 GiB 空间。安装社区 ARM64 NDK r28c（HomuHomu833/android-ndk-custom）及 Ubuntu CMake、Ninja；校验固定 SHA-256，保留 NDK、LLVM 等许可。安装失败或取消不会回滚 APT 包。</string>
+    <string name="android_ndk_sdk_required">请先安装 Android 工具包，或同时勾选 Android 后再安装 NDK。</string>
+    <string name="android_toolchain_storage_required">所选 Android 工具包至少需要 %1$d GiB 可用空间。</string>
+    <string name="android_ndk_build_help" tools:ignore="TypographyDashes">NDK 就绪后请新建终端。首批面向 arm64-v8a 的 CMake / JNI 项目，模板固定 NDK 28.2.13676358。运行 gradle --no-daemon :app:assembleDebug 后，从文件列表打开生成的 APK。导入项目的原生库和其他 ABI 仍需单独验证。</string>
+    <string name="android_managed_repair">系统依赖已就绪，将检查或修复所选托管工具链。</string>
+</resources>

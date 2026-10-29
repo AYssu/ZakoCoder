@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="apk_install">安装 APK</string>
+    <string name="apk_install_confirmation">%1$s\n\n将复制安装包到临时缓存，并打开系统安装确认。只安装你信任的构建产物；系统会检查签名和设备兼容性。</string>
+    <string name="apk_source_permission">允许安装此来源</string>
+    <string name="apk_source_permission_hint">系统需要你允许 ZakoCoder 安装应用。前往设置授权后，返回并重新点击此 APK；不会自动开始安装。</string>
+    <string name="apk_prepare_failed">无法准备安装包。请确认 APK 是项目内的普通文件、大小不超过 512 MB，且临时缓存有足够空间；超过一天的安装副本会在下次准备时清理。</string>
+    <string name="apk_install_unavailable">无法打开系统安装器或授权页面，请检查设备限制。</string>
+    <string name="apk_preparing">正在准备安装包…</string>
+</resources>

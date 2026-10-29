@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import androidx.core.net.toUri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
@@ -121,6 +122,8 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
         if (ToolBundles.status(bundle, checks) == BundleStatus.Ready) WorkbenchPrimaryButton(onClick = { detail = null; onTerminal() },
             enabled = state.project != null && state.installed, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.use_in_terminal)) }
         if (state.project == null && ToolBundles.status(bundle, checks) == BundleStatus.Ready) Text(stringResource(R.string.select_project_first), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+        if (bundle.id == "android") Text(stringResource(R.string.android_build_help), style = MaterialTheme.typography.bodySmall)
+        if (bundle.id == "android-ndk") Text(stringResource(R.string.android_ndk_build_help), style = MaterialTheme.typography.bodySmall)
         if (bundle.manual) Text(stringResource(R.string.manual_toolchain), style = MaterialTheme.typography.bodySmall)
         else if (ToolBundles.status(bundle, checks) != BundleStatus.Ready) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
             managing = true; onSelected((selected + bundle.id).distinct()); detail = null
@@ -152,19 +155,45 @@ private fun BundleStatusChip(bundle: ToolBundle, checks: List<ToolCheck>) {
 @Composable
 internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState, selected: List<String>, onInstalled: () -> Unit) {
     var confirmation by remember { mutableStateOf<Set<String>?>(null) }
+    var androidLicense by remember { mutableStateOf(false) }
+    var licenseBrowserError by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val checks = state.bundleTools
     val actionable = selected.filter { id -> ToolBundles.catalog.any { it.id == id && !it.manual && ToolBundles.status(it, checks) != BundleStatus.Ready } }.toSet()
     if (selected.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.background) {
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = actionable }, enabled = state.installed && !state.busy && !state.checkingTools && actionable.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { androidLicense = false; licenseBrowserError = false; confirmation = actionable }, enabled = state.installed && !state.busy && !state.checkingTools && actionable.isNotEmpty(), modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
             Text(stringResource(R.string.install_selected_count, actionable.size))
         }
     }
     confirmation?.let { ids ->
         val packages = ToolBundles.packages(ids, checks)
+        val sdkReady = "android" in ids || checks.any { it.id == "android-sdk" && it.status == ToolStatus.Ready }
+        val canInstallNdk = "android-ndk" !in ids || sdkReady
         WorkbenchSheet(stringResource(R.string.install_selected_bundles), { confirmation = null }) {
             Text(ids.map { id -> stringResource(ToolBundles.catalog.single { it.id == id }.title) }.joinToString(stringResource(R.string.type_separator)))
-            Text(stringResource(R.string.package_confirmation, packages.joinToString(", ")), style = MaterialTheme.typography.bodyMedium)
-            WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids) }, enabled = !state.busy && !state.checkingTools && packages.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
+            if (packages.isNotEmpty()) Text(stringResource(R.string.package_confirmation, packages.joinToString(", ")), style = MaterialTheme.typography.bodyMedium)
+            else Text(stringResource(R.string.android_managed_repair), style = MaterialTheme.typography.bodyMedium)
+            if ("android-ndk" in ids) {
+                Text(stringResource(R.string.android_ndk_install_details), style = MaterialTheme.typography.bodySmall)
+                if (!canInstallNdk) Text(stringResource(R.string.android_ndk_sdk_required), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if ("android" in ids) {
+                Text(stringResource(R.string.android_install_details), style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = {
+                    try {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            "https://developer.android.com/studio/terms".toUri()))
+                        licenseBrowserError = false
+                    } catch (_: android.content.ActivityNotFoundException) { licenseBrowserError = true }
+                    catch (_: SecurityException) { licenseBrowserError = true }
+                }) { Text(stringResource(R.string.android_sdk_license_open)) }
+                if (licenseBrowserError) Text(stringResource(R.string.android_license_browser_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth().clickable { androidLicense = !androidLicense }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = androidLicense, onCheckedChange = { androidLicense = it })
+                    Text(stringResource(R.string.android_sdk_license), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids, androidLicense) }, enabled = !state.busy && !state.checkingTools && (packages.isNotEmpty() || ids.any { it == "android" || it == "android-ndk" }) && canInstallNdk && ("android" !in ids || androidLicense), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
             OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }
