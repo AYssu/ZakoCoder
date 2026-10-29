@@ -94,14 +94,14 @@
     <string name="stop_all">停止全部任务和会话</string>
     <string name="import_runtime">导入离线环境包</string>
     <string name="offline_runtime_help">仅接受 ubuntu-noble-aarch64-pd-v4.18.0.tar.xz，SHA-256 必须与固定版本一致。下载地址见仓库 runtime/artifacts.json。</string>
-    <string name="proxy_label">可选 HTTP 代理（http://主机:端口）</string>
+    <string name="proxy_label">可选网络代理（http://主机:端口 或 socks5://主机:端口）</string>
     <string name="directory_unreadable">无法读取工作目录，请刷新或重新导入项目。</string>
     <string name="repair_packages">修复中断的软件包配置</string>
     <string name="repair_confirmation" tools:ignore="TypographyDashes">将执行 dpkg --configure -a，完成上次中断的软件包配置，可能运行这些包的维护脚本。不会删除项目。若依赖本身缺失，请按日志在终端中处理。</string>
     <string name="invalid_font">字体大小必须在 10–28 sp 之间。</string>
     <string name="invalid_path">附加 PATH 须为冒号分隔的 Linux 绝对路径，不能含换行或空路径项。</string>
     <string name="invalid_dns">请输入逗号分隔的 IPv4 地址，每段数字须在 0–255 之间。</string>
-    <string name="invalid_proxy">代理格式须为 http://主机:端口，不支持用户名、密码或其他路径参数。</string>
+    <string name="invalid_proxy">代理格式须为 http://主机:端口 或 socks5://主机:端口，不支持用户名、密码或其他路径参数。</string>
     <string name="allow_notifications">允许显示运行通知</string>
     <string name="notifications_granted">运行通知可用</string>
     <string name="notification_permission_required">尚未授予通知权限</string>
@@ -162,7 +162,7 @@
     <string name="not_configured">未设置</string>
     <string name="network_settings">网络与软件源</string>
     <string name="dns_short">DNS</string>
-    <string name="proxy_short">HTTP 代理</string>
+    <string name="proxy_short">网络代理</string>
     <string name="storage_title">存储</string>
     <string name="storage_used">工作台已使用</string>
     <string name="storage_unavailable">暂不可用</string>
@@ -174,7 +174,7 @@
     <string name="source_help">保存后用于后续 Ubuntu 软件包安装。</string>
     <string name="path_help">使用 Linux 绝对路径，多个路径用冒号分隔。新建会话后生效。</string>
     <string name="dns_help">逗号分隔多个 IPv4 地址，保存后应用于运行环境。</string>
-    <string name="proxy_help">仅支持不含用户名和密码的 HTTP 代理，留空关闭。</string>
+    <string name="proxy_help">支持 HTTP 与 SOCKS5 代理，均不含用户名和密码，留空关闭。SOCKS5 作用于环境下载、AI 请求及支持 ALL_PROXY 的终端命令；apt 等仅识别 HTTP 代理的工具不会走 SOCKS5。</string>
     <string name="back_to_terminals">返回终端列表</string>
     <string name="terminal_library_empty">还没有终端</string>
     <string name="terminal_library_help">为项目新建一个会话，点击卡片进入终端。返回列表会保留进程和输出。</string>
@@ -238,7 +238,6 @@
     <string name="decrease_font">减小终端字号</string>
     <string name="increase_font">增大终端字号</string>
     <string name="terminal_local_lifecycle">会话在本机运行，返回列表会保留；关闭会话或系统终止应用时结束。</string>
-    <string name="brand_mark">&gt;_</string>
     <string name="projects_section">项目</string>
     <string name="library_environment_summary">Ubuntu 24.04 · 工具 %1$d/%2$d</string>
     <string name="library_environment_short">前往配置</string>
@@ -319,7 +318,7 @@
     <string name="file_copy_path">复制相对路径</string>
     <string name="file_delete">删除</string>
     <string name="file_delete_confirmation">确定删除 %1$s？目录中的内容也会删除，无法撤销。</string>
-    <string name="nav_ai">AI 编码</string>
+    <string name="nav_ai">助手</string>
     <string name="ai_project_busy">AI 正在操作此项目，请先停止任务</string>
     <string name="ai_interrupted">上次 AI 任务意外中断，请检查项目文件；不会自动重放。</string>
     <string name="ai_config_error">配置未保存：请检查 HTTPS 地址、模型名称。更换服务地址时需重新输入或清除密钥。</string>
@@ -337,7 +336,6 @@
     <string name="ai_key_replace">替换密钥（已配置，留空保留）</string>
     <string name="ai_key">API Key（可选）</string>
     <string name="ai_clear_key">清除已保存密钥</string>
-    <string name="ai_not_configured">尚未配置模型</string>
     <string name="ai_undo_file">撤销：%1$s</string>
     <string name="ai_disclosure">发送会将需求及工具读取的项目文本传给所配置服务。请勿输入秘密信息。会话正文和工具结果保存在本机，供查看及续聊；新会话不带旧上下文，卸载应用会删除记录。</string>
     <string name="ai_prompt">描述当前项目的任务</string>

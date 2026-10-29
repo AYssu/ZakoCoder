@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ai
 
+import dev.zakocoder.app.settings.NetworkProxy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -22,7 +23,29 @@ data class AiReply(val text: String, val calls: List<AiCall>)
 class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response") : IOException("AI request failed: ${kind.name}")
 class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
     .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()) {
-    suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null,
+    // Settings change rarely, so cache the last (raw -> client) mapping instead of cloning per request.
+    // Guarded because requests run on the IO dispatcher and can overlap across model probes/tasks.
+    private val proxyLock = Any()
+    private var proxyRaw: String? = null
+    private var proxyClient: OkHttpClient? = null
+
+    /**
+     * Returns the base client when no proxy is configured (never mutating it), or a derived client
+     * carrying the HTTP/SOCKS5 proxy. An invalid stored value is rejected by [NetworkProxy.parse];
+     * callers map it to a network failure instead of silently going direct.
+     */
+    private fun clientFor(raw: String): OkHttpClient {
+        if (raw.isBlank()) return client
+        synchronized(proxyLock) {
+            if (proxyRaw == raw) return requireNotNull(proxyClient)
+            val derived = client.newBuilder().proxy(NetworkProxy.javaProxy(raw)).build()
+            proxyRaw = raw
+            proxyClient = derived
+            return derived
+        }
+    }
+
+    suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null, proxy: String = "",
         toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
         val redactor = AiLogRedactor(config.key)
         val started = System.nanoTime()
@@ -61,11 +84,16 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         }.toString()
         update { it.copy(request = redactor.clean(payload).take(240000), requestBytes = payload.toByteArray().size, truncated = payload.length > 240000) }
         if (payload.length > 8 * 1024 * 1024) { update { it.copy(complete = true, failure = AiFailure.ContextLimit, diagnostic = "request_size_limit") }; throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "request_size_limit") }
+        // Resolve before enqueueing: transport errors are classified by the existing failure kinds.
+        val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {
+            update { it.copy(complete = true, failure = AiFailure.Network, diagnostic = "invalid_proxy") }
+            throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
+        }
         val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/chat/completions")
             .apply { if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }
             .post(payload.toRequestBody("application/json".toMediaType())).build()
         suspendCancellableCoroutine { continuation ->
-            val call = client.newCall(request)
+            val call = http.newCall(request)
             continuation.invokeOnCancellation {
                 call.cancel()
                 update { if (it.complete) it else it.copy(complete = true, failure = AiFailure.Cancelled, diagnostic = "cancelled") }
@@ -179,11 +207,14 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             })
         }
     }
-    suspend fun models(config: AiConfig): List<String> = withContext(Dispatchers.IO) {
+    suspend fun models(config: AiConfig, proxy: String = ""): List<String> = withContext(Dispatchers.IO) {
+        val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {
+            throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
+        }
         val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/models")
             .apply { if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }.build()
         suspendCancellableCoroutine { continuation ->
-            val call = client.newBuilder().callTimeout(20, TimeUnit.SECONDS).build().newCall(request)
+            val call = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build().newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) { if (continuation.isActive) continuation.resumeWithException(AiTransportException()) }

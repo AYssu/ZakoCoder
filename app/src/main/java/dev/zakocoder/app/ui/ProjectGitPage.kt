@@ -40,14 +40,13 @@ internal fun ProjectGitPage(workbench: Workbench, projectId: String, close: () -
     }
     AiFullScreen(stringResource(R.string.git_title), close) {
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text(stringResource(R.string.git_help), style = MaterialTheme.typography.bodySmall) }
             item { Row { TextButton(onClick = workbench.git::refresh, enabled = !state.busy) { Text(stringResource(R.string.refresh)) }
                 if (!state.repository) TextButton(onClick = { initializing = true }, enabled = !state.busy) { Text(stringResource(R.string.git_initialize)) } } }
             if (state.limited) item { Text(stringResource(R.string.git_status_limited), color = MaterialTheme.colorScheme.error) }
             if (state.error.isNotBlank()) item { Text(state.error, color = MaterialTheme.colorScheme.error) }
             if (state.repository && state.entries.isEmpty()) item { Text(stringResource(R.string.git_clean)) }
-            item { Text(stringResource(R.string.git_selection_count, selected.size, state.entries.count { it.index != ' ' && it.index != '?' }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(state.entries, key = { it.path }) { entry ->
                 OutlinedCard { Row(Modifier.fillMaxWidth().toggleable(value = entry.path in selected, enabled = !state.busy && (entry.path in selected || selected.size < 100), role = Role.Checkbox,
                     onValueChange = { checked -> selected = if (checked) selected + entry.path else selected - entry.path }).padding(8.dp)) {
@@ -61,11 +60,19 @@ internal fun ProjectGitPage(workbench: Workbench, projectId: String, close: () -
                     }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } }
             }
-            if (state.repository) item {
-                OutlinedButton(onClick = { workbench.git.stage(selected); selected = emptySet() }, enabled = selected.isNotEmpty() && !state.busy) { Text(stringResource(R.string.git_stage)) }
-                Button(onClick = { committing = true }, enabled = !state.busy && !state.limited && state.entries.any { it.index != ' ' && it.index != '?' }) { Text(stringResource(R.string.git_commit)) }
-            }
             if (state.output.isNotBlank()) item { Text(state.output, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Surface(color = MaterialTheme.colorScheme.surface) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.git_selection_count, selected.size, state.entries.count { it.index != ' ' && it.index != '?' }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state.repository) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { workbench.git.stage(selected); selected = emptySet() }, enabled = selected.isNotEmpty() && !state.busy,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.git_stage)) }
+                    Button(onClick = { committing = true }, enabled = !state.busy && !state.limited && state.entries.any { it.index != ' ' && it.index != '?' },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.git_commit)) }
+                }
+            }
         }
     }
     if (initializing) AlertDialog(onDismissRequest = { initializing = false }, title = { Text(stringResource(R.string.git_initialize)) }, text = { Text(stringResource(R.string.git_help)) }, confirmButton = { TextButton(onClick = { initializing = false; workbench.git.initialize() }) { Text(stringResource(R.string.git_initialize)) } }, dismissButton = { TextButton(onClick = { initializing = false }) { Text(stringResource(R.string.cancel)) } })

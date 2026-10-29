@@ -12,6 +12,7 @@ MainActivity / Compose
     runtime/   下载校验、解包、工具探针、安装计划与 guest 命令
     terminal/  PTY、输入输出、会话归属与前台服务
     ai/        模型配置、SSE、会话、上下文、权限、工具及检查点
+    mcp/       加密服务配置、JSON-RPC、stdio/HTTP/SSE 与连接归属
     workflow/  项目命令配置、执行记录、日志与源码证据
     git/       Ubuntu Git 克隆、状态、暂存与本地提交
     settings/  运行与显示配置
@@ -36,6 +37,8 @@ ChatTransport 处理 HTTPS Chat Completions／SSE，禁止明文 HTTP 和重定�
 AiController 持有单个活动任务，时间线、模型计划、工具草稿与实际事件分开建模。AiHistoryStore 的保存、切换及删除串行执行；异步历史与文件引用绑定项目、会话及代际，迟到结果不能覆盖新身份。首次请求前保存，运行中周期保存，最终保存失败可重试而不重放模型或工具；加载损坏不能通过重试写入覆盖。
 
 AiContext、项目概览和规则加载受读取权限约束。成功轮次、失败进度及有损续接摘要分别保留预算；压缩保留原始需求及最近完整工具组。内置 Skills 从 APK assets 加载，项目 Skills 经受保护文件入口读取，均为用户级参考，不是权限或可执行插件。
+
+McpController 保存设备级服务目录，使用配置代际和项目归属拒绝迟到调用。McpSession 串行初始化与 JSON-RPC 请求，保留嵌套参数和协议结果；后台读写限量，取消关闭连接和已验证归属的 guest 进程。配置保存与显式连接分离，工具调用仍通过 AiController 的权限与审计事件；服务输出不能创建授权。配置加密与限制见[AI 工作流](AI_WORKFLOW.md)。
 
 ## 工具、授权与证据
 

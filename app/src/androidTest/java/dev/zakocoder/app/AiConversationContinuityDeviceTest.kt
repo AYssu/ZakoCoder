@@ -243,6 +243,36 @@ class AiConversationContinuityDeviceTest {
         }
     }
 
+    @Test(timeout = 90000) fun attachmentDuringInitialProjectLoadBelongsToResolvedConversation() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val project = "initial-reference-${UUID.randomUUID()}"
+            val gate = Gate()
+            val history = object : AiHistoryStore(File(f.root, "initial-reference-history")) {
+                override fun load(projectId: String, conversation: String?): AiHistoryStore.Loaded {
+                    gate.hold()
+                    return super.load(projectId, conversation)
+                }
+            }
+            val saved = AiState()
+            withContext(Dispatchers.IO) { history.save(project, saved) }
+            lateinit var ai: AiController
+            try {
+                main { ai = controller(f, history); ai.select(project) }
+                gate.waitEntered()
+                main { assertTrue(ai.referenceProject(project, AiReference("build.log", "BUILD_FAILURE", "build"))) }
+                gate.release.countDown()
+                ready(ai)
+                assertEquals(saved.conversationId, ai.state.value.conversationId)
+                assertEquals("BUILD_FAILURE", ai.state.value.references.single().text)
+                main { ai.conversation() }; ready(ai)
+                assertTrue(ai.state.value.references.isEmpty())
+                main { ai.conversation(saved.conversationId) }; ready(ai)
+                assertEquals("BUILD_FAILURE", ai.state.value.references.single().text)
+                assertEquals(0, f.server.requestCount)
+            } finally { gate.release.countDown() }
+        }
+    }
+
     @Test(timeout = 90000) fun delayedReferenceSuccessAndFailureCannotCrossSessionOrReturnToOldGeneration() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
             val history = History(File(f.root, "continuity-history"))

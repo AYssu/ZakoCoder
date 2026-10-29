@@ -104,17 +104,17 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
             Surface(color = TerminalChrome, contentColor = TerminalText) {
                 val shortcutsLabel = stringResource(R.string.terminal_shortcuts)
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).semantics { contentDescription = shortcutsLabel }.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TerminalKey(stringResource(R.string.escape_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_ESCAPE) } }
-                    TerminalKey(stringResource(R.string.tab_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_TAB) } }
-                    TerminalKey(stringResource(R.string.control_key), Modifier.width(42.dp), modifiers.control) { workbench.terminal.toggleControl() }
-                    TerminalKey(stringResource(R.string.alt_key), Modifier.width(36.dp), modifiers.alt) { workbench.terminal.toggleAlt() }
+                    TerminalKey(stringResource(R.string.escape_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_ESCAPE) } }
+                    TerminalKey(stringResource(R.string.tab_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_TAB) } }
+                    TerminalKey(stringResource(R.string.control_key), Modifier.width(48.dp), modifiers.control) { workbench.terminal.toggleControl() }
+                    TerminalKey(stringResource(R.string.alt_key), Modifier.width(48.dp), modifiers.alt) { workbench.terminal.toggleAlt() }
                     TerminalKey(stringResource(R.string.ctrl_c), Modifier.width(56.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_C, control = true) } }
-                    TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_UP) } }
-                    TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_DOWN) } }
-                    TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_LEFT) } }
-                    TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_RIGHT) } }
-                    TerminalKey(stringResource(R.string.home_key), Modifier.width(44.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_HOME) } }
-                    TerminalKey(stringResource(R.string.end_key), Modifier.width(36.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_END) } }
+                    TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_UP) } }
+                    TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_DOWN) } }
+                    TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_LEFT) } }
+                    TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_RIGHT) } }
+                    TerminalKey(stringResource(R.string.home_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_HOME) } }
+                    TerminalKey(stringResource(R.string.end_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_END) } }
                 }
             }
         }
@@ -157,7 +157,7 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
 
 @Composable
 private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
-    Box(modifier.height(44.dp).semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(modifier.height(48.dp).semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
             color = if (selected) BrandFill else if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F),
             border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Color(0xFF31383F))) {
@@ -170,7 +170,7 @@ private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = f
 
 @Composable
 private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.height(44.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(modifier.height(48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
             color = if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF31383F))) {
             Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(glyph, Modifier.size(16.dp), description = label, tint = TerminalText) }
