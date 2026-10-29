@@ -15,7 +15,8 @@ class ProjectTemplatesTest {
     }
 
     @Test fun entriesAreOfferedInTheDocumentedOrder() {
-        assertEquals(listOf(ProjectTemplate.Web, ProjectTemplate.Node, ProjectTemplate.Python, ProjectTemplate.Other),
+        assertEquals(listOf(ProjectTemplate.Web, ProjectTemplate.Node, ProjectTemplate.Python,
+            ProjectTemplate.Cpp, ProjectTemplate.Go, ProjectTemplate.Rust, ProjectTemplate.Other),
             ProjectTemplates.entries)
         ProjectTemplates.entries.forEach {
             assertNotEquals(0, it.label)
@@ -28,6 +29,9 @@ class ProjectTemplatesTest {
             ProjectTemplate.Web to setOf("index.html", "styles.css", "app.js", "README.md"),
             ProjectTemplate.Node to setOf("package.json", "index.js", "README.md", ".gitignore"),
             ProjectTemplate.Python to setOf("main.py", "requirements.txt", "README.md", ".gitignore"),
+            ProjectTemplate.Cpp to setOf("CMakeLists.txt", "src/main.cpp", "README.md", ".gitignore"),
+            ProjectTemplate.Go to setOf("go.mod", "main.go", "README.md", ".gitignore"),
+            ProjectTemplate.Rust to setOf("Cargo.toml", "src/main.rs", "README.md", ".gitignore"),
         )
         expected.forEach { (template, names) ->
             val files = ProjectTemplates.files(template, projectName)
@@ -71,6 +75,46 @@ class ProjectTemplatesTest {
         val python = ProjectTemplates.files(ProjectTemplate.Python, projectName)
         assertTrue(python.getValue("main.py").contains(identifier))
         assertTrue(python.getValue("README.md").startsWith("# My Project"))
+    }
+
+    @Test fun extendedTemplatesUseCleanedIdentifierAndRawProjectName() {
+        val identifier = ProjectTemplates.identifier(projectName)
+        assertEquals("my-project", identifier)
+
+        val cpp = ProjectTemplates.files(ProjectTemplate.Cpp, projectName)
+        assertTrue(cpp.getValue("CMakeLists.txt").contains("cmake_minimum_required(VERSION 3.20)"))
+        assertTrue(cpp.getValue("CMakeLists.txt").contains("project(my-project LANGUAGES CXX)"))
+        assertTrue(cpp.getValue("CMakeLists.txt").contains("set(CMAKE_CXX_STANDARD 17)"))
+        assertTrue(cpp.getValue("CMakeLists.txt").contains("add_executable(my-project src/main.cpp)"))
+        assertTrue(cpp.getValue("src/main.cpp").contains("#include <iostream>"))
+        assertTrue(cpp.getValue("src/main.cpp").contains("Hello from My Project"))
+        assertTrue(cpp.getValue("README.md").startsWith("# My Project"))
+        assertEquals("build/\n.cache/", cpp.getValue(".gitignore"))
+
+        val go = ProjectTemplates.files(ProjectTemplate.Go, projectName)
+        assertEquals("module my-project\n\ngo 1.22", go.getValue("go.mod"))
+        assertTrue(go.getValue("main.go").contains("package main"))
+        assertTrue(go.getValue("main.go").contains("import \"fmt\""))
+        assertTrue(go.getValue("main.go").contains("fmt.Println(\"Hello from My Project\")"))
+        assertTrue(go.getValue("README.md").startsWith("# My Project"))
+        assertEquals("/bin/\n*.exe", go.getValue(".gitignore"))
+
+        val rust = ProjectTemplates.files(ProjectTemplate.Rust, projectName)
+        assertTrue(rust.getValue("Cargo.toml").contains("[package]"))
+        assertTrue(rust.getValue("Cargo.toml").contains("name = \"my-project\""))
+        assertTrue(rust.getValue("Cargo.toml").contains("edition = \"2021\""))
+        assertTrue(rust.getValue("src/main.rs").contains("fn main()"))
+        assertTrue(rust.getValue("src/main.rs").contains("println!(\"Hello from My Project\")"))
+        assertTrue(rust.getValue("README.md").startsWith("# My Project"))
+        assertEquals("/target/", rust.getValue(".gitignore"))
+    }
+
+    @Test fun cLikeTemplatesEscapeDoubleQuotes() {
+        val quoted = "Say \"Hi\""
+        val expected = "Hello from Say \\\"Hi\\\""
+        assertTrue(ProjectTemplates.files(ProjectTemplate.Cpp, quoted).getValue("src/main.cpp").contains(expected))
+        assertTrue(ProjectTemplates.files(ProjectTemplate.Go, quoted).getValue("main.go").contains(expected))
+        assertTrue(ProjectTemplates.files(ProjectTemplate.Rust, quoted).getValue("src/main.rs").contains(expected))
     }
 
     @Test fun markupInProjectNamesIsEscaped() {

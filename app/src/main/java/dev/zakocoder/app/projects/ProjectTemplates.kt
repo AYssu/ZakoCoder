@@ -9,6 +9,9 @@ enum class ProjectTemplate(@param:StringRes val label: Int, @param:StringRes val
     Web(R.string.template_web, R.string.template_web_description),
     Node(R.string.template_node, R.string.template_node_description),
     Python(R.string.template_python, R.string.template_python_description),
+    Cpp(R.string.template_cpp, R.string.template_cpp_description),
+    Go(R.string.template_go, R.string.template_go_description),
+    Rust(R.string.template_rust, R.string.template_rust_description),
     Other(R.string.template_other, R.string.template_other_description),
 }
 
@@ -58,6 +61,33 @@ object ProjectTemplates {
                     listOf("`main.py`：入口脚本", "`requirements.txt`：第三方依赖清单", "`.gitignore`：忽略缓存与虚拟环境"),
                     "在项目目录运行 `python3 main.py`（需先安装 Python 工具包），再按需编辑 `requirements.txt`。"),
                 ".gitignore" to PYTHON_GITIGNORE,
+            )
+            ProjectTemplate.Cpp -> mapOf(
+                "CMakeLists.txt" to cppManifest(identifier),
+                "src/main.cpp" to cppEntry(projectName),
+                "README.md" to readme(projectName,
+                    "由 ZakoCoder 新建的 C++ 项目，使用 CMake 构建。",
+                    listOf("`CMakeLists.txt`：构建配置（C++17）", "`src/main.cpp`：入口源码", "`.gitignore`：忽略构建产物"),
+                    "安装 C++ 编译器与 CMake 后，在项目目录运行 `cmake -S . -B build && cmake --build build`，再执行 `./build/$identifier`。"),
+                ".gitignore" to CPP_GITIGNORE,
+            )
+            ProjectTemplate.Go -> mapOf(
+                "go.mod" to goMod(identifier),
+                "main.go" to goEntry(projectName),
+                "README.md" to readme(projectName,
+                    "由 ZakoCoder 新建的 Go 项目。",
+                    listOf("`go.mod`：模块定义", "`main.go`：入口源码", "`.gitignore`：忽略构建产物"),
+                    "在项目目录运行 `go run .`（需先安装 Go 工具包），或使用 `go build ./...`。"),
+                ".gitignore" to GO_GITIGNORE,
+            )
+            ProjectTemplate.Rust -> mapOf(
+                "Cargo.toml" to rustManifest(identifier),
+                "src/main.rs" to rustEntry(projectName),
+                "README.md" to readme(projectName,
+                    "由 ZakoCoder 新建的 Rust 项目。",
+                    listOf("`Cargo.toml`：包定义", "`src/main.rs`：入口源码", "`.gitignore`：忽略构建产物"),
+                    "在项目目录运行 `cargo run`（需先安装 Rust 工具包），或使用 `cargo build`。"),
+                ".gitignore" to RUST_GITIGNORE,
             )
         }
         require(generated.size <= MAX_FILES) { "Template exceeds the file limit" }
@@ -155,7 +185,53 @@ object ProjectTemplates {
 
     private fun escapeJs(value: String): String = value.replace("\\", "\\\\").replace("'", "\\'")
 
-    private fun escapePython(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
+    /** Escapes a value for a double-quoted C-family string literal (Python/C++/Go/Rust). */
+    private fun escapeDoubleQuoted(value: String): String = value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    private fun escapePython(value: String): String = escapeDoubleQuoted(value)
+
+    private fun cppManifest(identifier: String): String = """
+        cmake_minimum_required(VERSION 3.20)
+        project($identifier LANGUAGES CXX)
+
+        set(CMAKE_CXX_STANDARD 17)
+        set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+        add_executable($identifier src/main.cpp)
+    """.trimIndent()
+
+    private fun cppEntry(projectName: String): String = """
+        #include <iostream>
+
+        int main() {
+            std::cout << "Hello from ${escapeDoubleQuoted(projectName)}" << std::endl;
+            return 0;
+        }
+    """.trimIndent()
+
+    private fun goMod(identifier: String): String = """
+        module $identifier
+
+        go 1.22
+    """.trimIndent()
+
+    private fun goEntry(projectName: String): String =
+        "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"Hello from ${escapeDoubleQuoted(projectName)}\")\n}\n"
+
+    private fun rustManifest(identifier: String): String = """
+        [package]
+        name = "$identifier"
+        version = "0.1.0"
+        edition = "2021"
+
+        [dependencies]
+    """.trimIndent()
+
+    private fun rustEntry(projectName: String): String = """
+        fn main() {
+            println!("Hello from ${escapeDoubleQuoted(projectName)}");
+        }
+    """.trimIndent()
 
     private val WEB_STYLES = """
         :root {
@@ -213,5 +289,19 @@ object ProjectTemplates {
         __pycache__/
         *.py[cod]
         .venv/
+    """.trimIndent()
+
+    private val CPP_GITIGNORE = """
+        build/
+        .cache/
+    """.trimIndent()
+
+    private val GO_GITIGNORE = """
+        /bin/
+        *.exe
+    """.trimIndent()
+
+    private val RUST_GITIGNORE = """
+        /target/
     """.trimIndent()
 }
