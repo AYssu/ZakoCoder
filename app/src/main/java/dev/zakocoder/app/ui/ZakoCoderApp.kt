@@ -45,6 +45,8 @@ fun ZakoCoderApp(workbench: Workbench) {
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var page by rememberSaveable { mutableStateOf(Page.Project) }
     var modelsOpen by rememberSaveable { mutableStateOf(false) }
+    var modelsAdd by rememberSaveable { mutableStateOf(false) }
+    var extensionsOpen by rememberSaveable { mutableStateOf(false) }
     var terminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var terminalOpen by rememberSaveable { mutableStateOf(false) }
     var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -78,7 +80,7 @@ fun ZakoCoderApp(workbench: Workbench) {
         Scaffold(containerColor = if (inTerminal) TerminalBackground else MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.systemBars,
             bottomBar = {
-                if (!inTerminal && !inFiles && !modelsOpen && !keyboardOpen) Surface(color = PanelBackground) {
+                if (!inTerminal && !inFiles && !modelsOpen && !extensionsOpen && !keyboardOpen) Surface(color = PanelBackground) {
                     Column {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp).height(60.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -102,11 +104,11 @@ fun ZakoCoderApp(workbench: Workbench) {
             }) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Column(Modifier.fillMaxSize()) {
-                if (!inTerminal && !inFiles && !modelsOpen && page != Page.Ai) Row(Modifier.fillMaxWidth().height(44.dp).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
+                if (!inTerminal && !inFiles && !modelsOpen && !extensionsOpen && page != Page.Ai) Row(Modifier.fillMaxWidth().height(44.dp).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Surface(color = BrandFill, shape = androidx.compose.foundation.shape.RoundedCornerShape(9.dp)) {
                         Box(Modifier.size(29.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                            Text(stringResource(R.string.brand_mark), color = Color.White, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            WorkbenchBrandMark(Modifier.size(24.dp))
                         }
                     }
                     Spacer(Modifier.width(9.dp))
@@ -128,7 +130,8 @@ fun ZakoCoderApp(workbench: Workbench) {
                         }
                     }
                 }
-                if (modelsOpen) AiModelsPage(workbench.ai) { modelsOpen = false } else when (page) {
+                if (extensionsOpen) AiExtensionsPage(workbench, state) { extensionsOpen = false }
+                else if (modelsOpen) AiModelsPage(workbench.ai, startAdding = modelsAdd, onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false } else when (page) {
                     Page.Project -> ProjectLibraryPage(workbench, state, openedProjectId, { openedProjectId = it },
                         onEnvironment = { page = Page.Environment }, onAi = { id -> workbench.ai.select(id); page = Page.Ai },
                         onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = Page.Terminal })
@@ -141,8 +144,9 @@ fun ZakoCoderApp(workbench: Workbench) {
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
                             focus.clearFocus(); keyboard?.hide(); terminalId = id; terminalOpen = true; page = Page.Terminal
                         }
-                    }) }
-                    Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }) }
+                    }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
+                        onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true }) }
+                    Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }) }
                 }
             }
             if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(start = 20.dp, end = 20.dp, top = 12.dp),

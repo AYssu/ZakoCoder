@@ -8,11 +8,13 @@ import kotlinx.coroutines.*
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** Built-in assets, isolated settings/history, and a local TLS provider only. */
 class AiBuiltinSkillsDeviceTest {
+    @Before fun foregroundForDeviceUi() { warmDeviceActivity() }
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(condition: () -> Boolean) = withTimeout(25000) { while (!condition()) delay(30) }

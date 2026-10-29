@@ -30,10 +30,12 @@ import dev.zakocoder.app.ai.*
 import java.net.URI
 
 @Composable
-internal fun AiModelsPage(ai: AiController, close: () -> Unit) {
+internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStartAddingConsumed: () -> Unit = {}, close: () -> Unit) {
     val state by ai.models.state.collectAsStateWithLifecycle()
     val task by ai.state.collectAsStateWithLifecycle()
-    var editing by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(startAdding) }
+    // Consume the navigation request; editor drafts intentionally remain memory-only.
+    LaunchedEffect(startAdding) { if (startAdding) onStartAddingConsumed() }
     var profile by remember { mutableStateOf<AiProfile?>(null) }
     var deleting by remember { mutableStateOf<AiProfile?>(null) }
     if (editing) {
@@ -54,12 +56,12 @@ internal fun AiModelsPage(ai: AiController, close: () -> Unit) {
             Text(state.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = ai.models::retry) { Text(stringResource(R.string.editor_retry)) }
         }
-        if (!state.loading && state.catalog.profiles.isEmpty()) Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        if (!state.loading && state.error.isEmpty() && state.catalog.profiles.isEmpty()) Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(20.dp)) { Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Ai, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary) } }
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.ai_models_empty), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
             Text(stringResource(R.string.ai_models_empty_hint), Modifier.padding(top = 10.dp, bottom = 24.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active) { Text(stringResource(R.string.ai_models_add_first)) }
+            WorkbenchPrimaryButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active) { Text(stringResource(R.string.ai_models_add_first)) }
         } else LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text(stringResource(R.string.ai_models_list_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(state.catalog.profiles, key = { it.id }) { item ->
@@ -180,21 +182,23 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
     }
     if (picker) {
         var query by remember { mutableStateOf("") }
-        WorkbenchSheet(stringResource(R.string.ai_models_picker), { picker = false; ai.models.cancelProbe() }) {
+        AiFullScreen(stringResource(R.string.ai_models_picker), { picker = false; ai.models.cancelProbe() }) {
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ModelField(query, { query = it }, R.string.ai_models_search)
             if (state.probe == AiProbe.Models) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.probeMessage.isNotEmpty()) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = { ai.models.discover(draft()) }, enabled = !state.probing) { Text(stringResource(R.string.ai_models_refresh)) }
-            LazyColumn(Modifier.heightIn(max = 330.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.available.filter { it.contains(query, ignoreCase = true) }, key = { it }) { id ->
                     val description = stringResource(R.string.ai_models_choose_named, id)
-                    Row(Modifier.fillMaxWidth().semantics { contentDescription = description }.clickable { model = id; changed(); picker = false }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().semantics { contentDescription = description }.clickable { model = id; changed(); picker = false }.heightIn(min = 48.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(id, Modifier.weight(1f), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
                         if (id == model) WorkbenchIcon(Glyph.Check, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
             TextButton(onClick = { picker = false; ai.models.cancelProbe() }) { Text(stringResource(R.string.ai_models_keep_manual)) }
+        }
         }
     }
     if (templates) WorkbenchSheet(stringResource(R.string.ai_models_templates), { templates = false }) {

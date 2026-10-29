@@ -28,7 +28,7 @@ class AiFilesUiDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val workbench get() = (context.applicationContext as ZakoApplication).workbench
-    @Before fun windows() { instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS } }
+    @Before fun windows() { warmDeviceActivity(); instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS } }
     private suspend fun await(condition: () -> Boolean) = withTimeout(20000) { while (!condition()) delay(60) }
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private fun reviewText(): String? {
@@ -43,10 +43,10 @@ class AiFilesUiDeviceTest {
     private fun find(label: String): AccessibilityNodeInfo? {
         instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo
         fun walk(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-            if (node.text?.toString() == label || node.contentDescription?.toString() == label) {
+            if (node.isVisibleToUser && (node.text?.toString()?.lines()?.contains(label) == true || node.contentDescription?.toString()?.lines()?.contains(label) == true)) {
                 var ancestor = node
-                while (!ancestor.isClickable && ancestor.parent != null) ancestor = ancestor.parent
-                if (ancestor.isClickable) return node
+                while (!ancestor.isClickable && !ancestor.isSelected && ancestor.parent != null) ancestor = ancestor.parent
+                if (ancestor.isClickable || ancestor.isSelected) return node
             }
             for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it)?.let { result -> return result } }
             return null
@@ -54,23 +54,30 @@ class AiFilesUiDeviceTest {
         return instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.mapNotNull(::walk).firstOrNull()
     }
     private suspend fun click(label: String, long: Boolean = false) {
-        val tabLabels = listOf(context.getString(R.string.ai_process), context.getString(R.string.ai_requests), context.getString(R.string.ai_skills), context.getString(R.string.project_validation))
-        if (label in tabLabels && find(label) == null) {
-            repeat(3) {
-                if (find(label) == null) {
-                    fun scrollHorizontal(node: AccessibilityNodeInfo): Boolean {
-                        val rect = android.graphics.Rect(); node.getBoundsInScreen(rect)
-                        if (node.isScrollable && rect.width() > rect.height() * 3 && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true
-                        return (0 until node.childCount).any { index -> node.getChild(index)?.let(::scrollHorizontal) == true }
-                    }
-                    instrumentation.uiAutomation.rootInActiveWindow?.let(::scrollHorizontal); delay(250)
-                }
+        val details = listOf(R.string.ai_requests, R.string.project_validation).map(context::getString)
+        val rootTargets = listOf(R.string.ai_conversation, R.string.ai_changes_title, R.string.ai_more, R.string.ai_new_conversation,
+            R.string.nav_workspace, R.string.nav_environment, R.string.nav_terminal, R.string.nav_settings, R.string.nav_ai).map(context::getString)
+        if (label == context.getString(R.string.ai_skills)) {
+            if (!visibleText(context.getString(R.string.ai_extensions))) {
+                if (details.any(::visibleText) && find(context.getString(R.string.close)) != null) click(context.getString(R.string.close))
+                click(context.getString(R.string.ai_more)); click(context.getString(R.string.ai_extensions))
             }
+            await { visibleText(context.getString(R.string.ai_skills_detail)) }
+            return
+        }
+        if (label in details && find(label) == null) {
+            if (details.any(::visibleText) && find(context.getString(R.string.close)) != null) click(context.getString(R.string.close))
+            click(context.getString(R.string.ai_more))
+        }
+        if (label in rootTargets && find(label) == null) {
+            if (details.any(::visibleText) && find(context.getString(R.string.close)) != null) click(context.getString(R.string.close))
+            if (visibleText(context.getString(R.string.ai_extensions)) && find(context.getString(R.string.ai_extensions_back)) != null) click(context.getString(R.string.ai_extensions_back))
         }
         try { await { find(label) != null } } catch (error: TimeoutCancellationException) { throw AssertionError("Clickable label not found: $label", error) }
         var node = find(label)!!
         if (long) { while (!node.isLongClickable && node.parent != null) node = node.parent }
-        else { while (!node.isClickable && node.parent != null) node = node.parent }
+        else { while (!node.isClickable && !node.isSelected && node.parent != null) node = node.parent }
+        if (!long && node.isSelected && label in listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_changes_title))) return
         assertTrue(label, node.performAction(if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK)); delay(300)
     }
     private fun visibleText(label: String): Boolean {
@@ -94,18 +101,25 @@ class AiFilesUiDeviceTest {
         delay(350)
         return moved
     }
-    private suspend fun field(value: String, label: String? = null, keyboard: Boolean = false) {
+    private suspend fun field(value: String, label: String? = null, keyboard: Boolean = false, revealEditable: Boolean = false) {
         var edit: AccessibilityNodeInfo? = null
         fun walk(node: AccessibilityNodeInfo) {
-            if (node.isEditable) {
-                fun hasLabel(candidate: AccessibilityNodeInfo): Boolean = candidate.text?.toString() == label || candidate.contentDescription?.toString() == label || candidate.hintText?.toString() == label ||
+            if (node.isVisibleToUser && node.isEditable) {
+                fun hasLabel(candidate: AccessibilityNodeInfo): Boolean = candidate.text?.toString()?.lines()?.contains(label) == true || candidate.contentDescription?.toString()?.lines()?.contains(label) == true || candidate.hintText?.toString()?.lines()?.contains(label) == true ||
                     (0 until candidate.childCount).any { index -> candidate.getChild(index)?.let(::hasLabel) == true }
                 val matches = label == null || hasLabel(node)
                 if (matches) edit = node
             }
             for (i in 0 until node.childCount) node.getChild(i)?.let(::walk)
         }
+        if (revealEditable) repeat(8) {
+            edit = null
+            instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo
+            instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.forEach(::walk)
+            if (edit == null) scrollProcess()
+        }
         try { await {
+            edit = null
             instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo
             instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.forEach(::walk)
             edit != null
@@ -1123,7 +1137,7 @@ class AiFilesUiDeviceTest {
                     assertFalse(withContext(Dispatchers.IO) { File(w.projects.directory(id), "c.py").exists() })
                     f.enqueue(calls = listOf(AiCall("terminal", "start_terminal", JSONObject().put("command", "printf 'UI_TERMINAL_LINK\\n'; sleep 30").toString())))
                     f.enqueue("持续进程保留在终端。")
-                    click(context.getString(R.string.ai_process))
+                    click(context.getString(R.string.ai_conversation))
                     main { w.ai.send("启动项目终端") }
                     await { w.ai.state.value.approval != null }; main { w.ai.approve(true) }; await { !w.ai.state.value.active }
                     val session = w.state.value.sessions.single { it.projectId == id }
@@ -1415,7 +1429,7 @@ class AiFilesUiDeviceTest {
                     main { injected = Workbench(context, fixture.transport, fixture.config, aiHistory = fixture.history) }
                     val w = injected!!
                     await { !w.state.value.loading && w.ai.state.value.configured }
-                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click("AI 编码")
+                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click(context.getString(R.string.nav_ai))
                     await { w.ai.state.value.projectId == id && !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                     assertEquals(AiBuiltinSkills.defaults, w.ai.state.value.enabledSkills)
                     click("Skill"); await { visibleText("编码与质量") }; screenshot("ai-builtin-skills")
@@ -1458,14 +1472,14 @@ class AiFilesUiDeviceTest {
                     main { injected = Workbench(context, fixture.transport, fixture.config, aiHistory = fixture.history) }
                     val w = injected!!
                     await { !w.state.value.loading && w.ai.state.value.configured }
-                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click("AI 编码")
+                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click(context.getString(R.string.nav_ai))
                     await { w.ai.state.value.projectId == id && !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                     click("Skill"); field("Python care", context.getString(R.string.ai_skills_search)); await { visibleText("Python care") }; screenshot("ai-skills")
                     main { w.ai.enableSkill(w.ai.state.value.skills.single { !it.builtIn }.path, true) }
                     fixture.enqueue(calls = listOf(AiCall("read", "read_file", "{\"path\":\"review.py\"}")))
                     fixture.enqueue(calls = listOf(AiCall("write", "write_file", "{\"path\":\"review.py\",\"content\":\"print('after')\\n\",\"reason\":\"修改输出，交由用户检查\"}")))
                     fixture.enqueue("文件修改完成，请查看差异。")
-                    click(context.getString(R.string.ai_process)); field("修改 review.py 的输出"); click("发送任务")
+                    click(context.getString(R.string.ai_conversation)); field("修改 review.py 的输出"); click("发送任务")
                     await { w.ai.state.value.approval != null }
                     click("只读代码变更审阅区"); screenshot("ai-review-proposal-diff")
                     click("原文"); screenshot("ai-review-proposal-before")
@@ -1475,7 +1489,7 @@ class AiFilesUiDeviceTest {
                     assertEquals(AiPhase.Completed, w.ai.state.value.phase)
                     click("请求"); screenshot("ai-request-list")
                     click("第 1 轮 · 请求 3"); screenshot("ai-request-details")
-                    click("关闭"); click("文件变更（1）"); click("review.py")
+                    click("关闭"); click(context.getString(R.string.ai_changes_title)); click("review.py")
                     screenshot("ai-review-saved-diff"); click("原文"); screenshot("ai-review-saved-before")
                     click("修改后"); screenshot("ai-review-saved-after"); click("关闭")
                     assertEquals("print('after')\n", File(root, "review.py").readText())
@@ -1501,7 +1515,7 @@ class AiFilesUiDeviceTest {
                     main { injected = Workbench(context, fixture.transport, fixture.config, aiHistory = fixture.history) }
                     val w = injected!!
                     await { !w.state.value.loading && w.ai.state.value.configured }
-                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click("AI 编码")
+                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click(context.getString(R.string.nav_ai))
                     await { w.ai.state.value.projectId == id && !w.ai.state.value.permissionsLoading }
                     val markdown = "## 构建检查\n\n**完成** 原生 Markdown。支持 `inline` 与 [文档](https://example.org/docs)。\n\n> 先检查日志，再修改代码。\n\n1. 检查依赖\n2. 运行构建\n\n```kotlin\nfun main() {\n    println(\"native markdown with a horizontally scrollable long source line\")\n}\n```\n\n| 项目 | 结果 |\n|---|---|\n| 编译 | 通过 |\n\n" + (1..28).joinToString("\n\n") { "### 检查点 $it\n正文内容 $it：保留阅读位置，主动返回最新消息。" } + "\n\n最后一段验收结束。"
                     fun streamPart(text: String) = "data: " + JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject().put("content", text)))).toString() + "\n\n"
@@ -1578,7 +1592,7 @@ class AiFilesUiDeviceTest {
                     val testWorkbench = injected!!
                     await { !testWorkbench.state.value.loading && testWorkbench.ai.state.value.configured }
                     scenario.onActivity { it.setContent { ZakoCoderApp(testWorkbench) } }
-                    click("AI 编码")
+                    click(context.getString(R.string.nav_ai))
                     await { testWorkbench.ai.state.value.projectId == id }
                     screenshot("ai-empty")
                     click("模型配置"); screenshot("ai-model-settings"); click("返回")
@@ -1792,7 +1806,7 @@ class AiFilesUiDeviceTest {
                     val w = injected!!
                     await { !w.state.value.loading && w.ai.state.value.configured }
                     scenario.onActivity { it.setContent { ZakoCoderApp(w) } }
-                    click("AI 编码")
+                    click(context.getString(R.string.nav_ai))
                     await { w.ai.state.value.projectId == id && !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                     fixture.enqueue(calls = listOf(AiCall("unread", "write_file", JSONObject().put("path", "review.txt")
                         .put("content", "replacement\n").put("reason", "更新说明文件").toString())))
@@ -1810,7 +1824,7 @@ class AiFilesUiDeviceTest {
                     }
                     delay(400); screenshot("file-failure-before-navigation")
                     // This task already uses the default process tab; assert its visible content.
-                    await { visibleText(context.getString(R.string.ai_process)) }
+                    await { visibleText(context.getString(R.string.ai_conversation)) }
                     repeat(5) { if (!visibleText(event.output)) scrollProcess() }
                     await { visibleText(event.output) }
                     assertFalse(visibleText(context.getString(R.string.ai_tool_parameters)))
@@ -1861,7 +1875,7 @@ class AiFilesUiDeviceTest {
                     val testWorkbench = injected!!
                     await { !testWorkbench.state.value.loading && testWorkbench.ai.state.value.configured }
                     scenario.onActivity { it.setContent { ZakoCoderApp(testWorkbench) } }
-                    click("AI 编码"); await { testWorkbench.ai.state.value.projectId == id && !testWorkbench.ai.state.value.permissionsLoading }
+                    click(context.getString(R.string.nav_ai)); await { testWorkbench.ai.state.value.projectId == id && !testWorkbench.ai.state.value.permissionsLoading }
                     click(context.getString(R.string.ai_more)); click("工具权限"); screenshot("ai-project-permissions")
                     click("设置写入文件权限"); click("禁止")
                     await { !testWorkbench.ai.state.value.permissionsSaving && testWorkbench.ai.state.value.policy.permission(AiTool.WriteFile) == AiPermission.Deny }
@@ -1887,7 +1901,7 @@ class AiFilesUiDeviceTest {
                     screenshot("ai-execution-finished")
                     click("展开工具详情"); screenshot("ai-expanded-tool-result")
                     scrollProcess(); await { visibleText("已写入 review.txt") }; screenshot("ai-expanded-tool-output")
-                    click("文件变更（1）"); screenshot("ai-file-changes")
+                    click(context.getString(R.string.ai_changes_title)); screenshot("ai-file-changes")
                     click(context.getString(R.string.ai_more)); click("工具权限"); click("设置写入文件权限"); click("允许")
                     screenshot("ai-auto-allow-confirm"); click("取消")
                     assertEquals(AiPermission.Ask, testWorkbench.ai.state.value.policy.permission(AiTool.WriteFile))
@@ -1912,8 +1926,8 @@ class AiFilesUiDeviceTest {
                     val testWorkbench = injected!!
                     await { !testWorkbench.state.value.loading && !testWorkbench.ai.models.state.value.loading }
                     scenario.onActivity { it.setContent { ZakoCoderApp(testWorkbench) } }
-                    click("AI 编码"); screenshot("ai-workspace-redesign")
-                    click("模型配置"); screenshot("models-list")
+                    click(context.getString(R.string.nav_ai)); screenshot("ai-workspace-redesign")
+                    click(context.getString(R.string.ai_more)); click("模型配置"); screenshot("models-list")
                     click("新增配置"); screenshot("models-editor-empty")
                     field("设备验收", "配置名称")
                     click("选择服务"); screenshot("models-service-selection"); click("DeepSeek")
@@ -1926,7 +1940,7 @@ class AiFilesUiDeviceTest {
                     await { testWorkbench.ai.models.state.value.available.size == 2000 }
                     screenshot("models-picker"); field("fixture-code", "搜索模型标识"); click("选择模型：fixture-code")
                     await { testWorkbench.ai.models.state.value.available.isEmpty() }
-                    reveal("启用最大输出长度"); click("启用最大输出长度"); field("512", "最大输出长度")
+                    reveal("启用最大输出长度"); click("启用最大输出长度"); field("512", "最大输出长度", revealEditable = true)
                     reveal("测试流式工具调用")
                     fixture.enqueue(calls = listOf(AiCall("probe-ui", "connection_probe", "{\"ack\":\"ok\"}")))
                     screenshot("models-editor-parameters"); click("测试流式工具调用")

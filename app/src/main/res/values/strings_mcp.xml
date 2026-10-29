@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_config_invalid">MCP 配置无效、存在重复服务或超出范围。未保存更改。</string>
+    <string name="mcp_storage_error">无法读取或保存 MCP 配置。请重试读取，损坏配置不会被覆盖。</string>
+    <string name="mcp_disabled">此 MCP 服务尚未启用。</string>
+    <string name="mcp_timeout">MCP 请求超时，远端可能已执行。请先核对服务状态；未自动重试操作。</string>
+    <string name="mcp_operation_failed">MCP 操作未完成，远端执行结果可能未知。请先核对服务状态，再检查协议能力及当前项目；未自动重试。</string>
+    <string name="mcp_guest_process">在当前项目的 Ubuntu 工作目录启动外部进程；参数和环境以保存配置为准。</string>
+</resources>

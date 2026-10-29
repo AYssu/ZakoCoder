@@ -238,7 +238,6 @@
     <string name="decrease_font">减小终端字号</string>
     <string name="increase_font">增大终端字号</string>
     <string name="terminal_local_lifecycle">会话在本机运行，返回列表会保留；关闭会话或系统终止应用时结束。</string>
-    <string name="brand_mark">&gt;_</string>
     <string name="projects_section">项目</string>
     <string name="library_environment_summary">Ubuntu 24.04 · 工具 %1$d/%2$d</string>
     <string name="library_environment_short">前往配置</string>
@@ -319,7 +318,7 @@
     <string name="file_copy_path">复制相对路径</string>
     <string name="file_delete">删除</string>
     <string name="file_delete_confirmation">确定删除 %1$s？目录中的内容也会删除，无法撤销。</string>
-    <string name="nav_ai">AI 编码</string>
+    <string name="nav_ai">助手</string>
     <string name="ai_project_busy">AI 正在操作此项目，请先停止任务</string>
     <string name="ai_interrupted">上次 AI 任务意外中断，请检查项目文件；不会自动重放。</string>
     <string name="ai_config_error">配置未保存：请检查 HTTPS 地址、模型名称。更换服务地址时需重新输入或清除密钥。</string>
@@ -337,7 +336,6 @@
     <string name="ai_key_replace">替换密钥（已配置，留空保留）</string>
     <string name="ai_key">API Key（可选）</string>
     <string name="ai_clear_key">清除已保存密钥</string>
-    <string name="ai_not_configured">尚未配置模型</string>
     <string name="ai_undo_file">撤销：%1$s</string>
     <string name="ai_disclosure">发送会将需求及工具读取的项目文本传给所配置服务。请勿输入秘密信息。会话正文和工具结果保存在本机，供查看及续聊；新会话不带旧上下文，卸载应用会删除记录。</string>
     <string name="ai_prompt">描述当前项目的任务</string>

@@ -16,6 +16,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,28 +58,27 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         selectedBundles = selectedBundles.filter { id -> ToolBundles.catalog.any { it.id == id && ToolBundles.status(it, state.bundleTools) != BundleStatus.Ready } }
     }
     Column(Modifier.fillMaxSize()) {
-PageHeading(stringResource(R.string.environment_title)) {
+        PageHeading(stringResource(R.string.environment_title)) {
             Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            OutlinedIconButton(onClick = workbench::doctor, modifier = Modifier.size(48.dp), shape = RoundedCornerShape(11.dp),
+            OutlinedIconButton(onClick = workbench::doctor, modifier = Modifier.size(48.dp), shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), enabled = !state.busy && !state.checkingTools && !state.checkingPlans) {
                 WorkbenchIcon(Glyph.Refresh, Modifier.size(17.dp), description = stringResource(R.string.check_tools))
             }
             }
         }
-    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
-        item { Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer,
+    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
+        item { Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer,
             border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF1E3450) else androidx.compose.ui.graphics.Color(0xFFE3EAFB))) {
-            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
                         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Environment, tint = MaterialTheme.colorScheme.primary) }
                     }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.ubuntu_version), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text(stringResource(R.string.runtime_architecture), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     StatusChip(stringResource(if (state.installed) R.string.bundle_ready else R.string.bundle_missing), if (state.installed) ReadyGreen else WaitingAmber)
-                    IconButton(onClick = { maintenance = true }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.environment_maintenance)) }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.storage_title), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -86,9 +87,11 @@ PageHeading(stringResource(R.string.environment_title)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(if (state.checkingTools) R.string.checking_tools else if (state.bundleTools.isEmpty()) R.string.bundle_unknown else R.string.tools_check_complete),
                         Modifier.weight(1f), fontSize = 11.5.sp, color = TertiaryText)
-                    TextButton(onClick = { maintenance = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+                    val maintenanceDescription = stringResource(R.string.environment_maintenance)
+                    TextButton(onClick = { maintenance = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = maintenanceDescription }) {
                         Text(stringResource(R.string.maintenance_short), fontSize = 12.5.sp)
-                        WorkbenchIcon(Glyph.Next, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(4.dp))
+                        WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
                 if (!state.installed) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.installRuntime() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install_runtime)) }
@@ -96,7 +99,7 @@ PageHeading(stringResource(R.string.environment_title)) {
         } }
         item { DetailGroup(stringResource(R.string.project_selected)) {
             Row(Modifier.fillMaxWidth().clickable(enabled = !state.busy) { if (project == null) onProjects() else profiles = true }
-                .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 IconTile(Glyph.Projects, Modifier.size(38.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(project?.name ?: stringResource(R.string.select_project_first), style = MaterialTheme.typography.titleSmall)
