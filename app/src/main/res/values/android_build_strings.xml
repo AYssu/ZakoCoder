@@ -4,6 +4,7 @@
     <string name="android_sdk_license">我已阅读并同意 Android SDK 许可</string>
     <string name="android_sdk_license_open">查看 Android SDK 许可</string>
     <string name="android_sdk_license_required">安装 Android 工具包前需要同意 SDK 许可。</string>
+    <string name="android_authenticated_proxy_unsupported">Android SDK 和 Gradle 的下载暂不支持需要账号密码的 SOCKS5 代理，请改用 HTTP 或无认证 SOCKS5 代理。</string>
     <string name="android_build_help" tools:ignore="TypographyDashes">Android 工具包已就绪后，可在新建项目中选择 Android Java / Kotlin 模板。终端运行 gradle --no-daemon :app:assembleDebug，或在项目命令中配置相同构建命令。构建完成后，从文件列表打开 app/build/outputs/apk/debug/app-debug.apk，交给系统安装。</string>
     <string name="android_license_browser_unavailable">无法打开浏览器，请稍后重试查看 SDK 许可。</string>
     <string name="bundle_android_ndk">Android NDK</string>

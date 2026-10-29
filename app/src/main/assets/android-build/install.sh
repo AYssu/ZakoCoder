@@ -1,5 +1,10 @@
 # Run only inside the managed Ubuntu, after explicit SDK license acceptance.
 set -eu
+# SDK manager cannot inherit the Android app's SOCKS Authenticator. Never pass
+# userinfo as a host or expose it in SDK manager diagnostics.
+case "${ALL_PROXY:-}" in
+  socks5://*@*) printf 'Android SDK requires HTTP or SOCKS5 without authentication.\n' >&2; exit 1 ;;
+esac
 [ "$(uname -m)" = aarch64 ]
 base=/opt/zakocoder
 target="$base/android"

@@ -49,6 +49,8 @@ PRoot 硬链接模拟使用持久 `rootfs/.zakocoder-links`，统一将规范化
 
 后续新终端和项目命令注入 ANDROID_HOME、JDK 17、Gradle PATH、AAPT2 路径覆盖。适配仅在托管工具链就绪时生效，不写项目 `local.properties`，不覆盖用户 Gradle 配置或启动文件；安装前已打开的终端需重新创建。HTTP／SOCKS 设置同时传递给 SDK manager 和 Gradle 的 Java 网络层；Google／Maven／GitHub 不可达时需要先配置可用网络或代理，软件不擅自更换依赖仓库。
 
+SDK manager 和 guest Gradle JVM 不继承 Android 应用的 SOCKS5 认证器，目前只支持 HTTP 或无认证 SOCKS5 代理。选择需账号密码的 SOCKS5 时，Android SDK 安装会在下载及 APT 变更前明确拒绝；已有 SDK 的 Gradle 联网构建也需先改用受支持的代理。该限制不禁止普通终端及支持认证 SOCKS5 的 guest 工具运行。
+
 新建项目可选 Android Java 或 Kotlin：系统 Activity + TextView，固定 AGP 8.13.2、Kotlin 2.2.21（Kotlin 模板）、compileSdk 36、Build Tools 36.0.0。终端执行 `gradle --no-daemon :app:assembleDebug`；项目构建命令配置会预填相同脚本，仍需用户保存并确认执行。模板不携带 Gradle Wrapper 二进制；导入已有项目优先使用其 Wrapper，但其 JDK、插件、SDK 版本与额外原生工具需要另行适配。不能由本阶段推断任意 Android／Compose／NDK 工程都已兼容。
 
 构建产物通常位于 `app/build/outputs/apk/debug/app-debug.apk`。从项目文件页打开 APK，先确认文件；未知来源权限交给系统设置，授权返回后需重新打开文件。应用在 IO 线程将 APK 复制到独立缓存，通过仅暴露 `cache/apk-install/` 的 FileProvider 给系统安装器只读授权，不开放整个项目，不静默安装、卸载或覆盖用户数据。缓存单 APK 上限 512 MiB、总计 1 GiB，保留近期副本供安装器读取，超过 24 小时的副本在下次准备时清理。系统负责最终格式、签名、设备兼容检查和用户安装确认。
@@ -92,7 +94,7 @@ AI 可按项目权限列出、读取、新建、输入、中断及关闭终端�
 
 ## 设置、恢复与兼容
 
-软件源、IPv4 DNS 写入 guest 配置；附加 PATH 及无凭据 HTTP／SOCKS5 代理用于新进程。代理接受 `http://host:port` 与 `socks5://host:port`（均不支持用户名密码），作用于环境镜像下载与 AI 请求。应用自身请求（HttpURLConnection／OkHttp 经 `java.net.Proxy.Type.SOCKS`）实测把目标域名发送给代理（SOCKS5 ATYP=3），由代理侧解析；guest 进程在 HTTP 下导出 `http_proxy`／`https_proxy` 等变量，SOCKS5 下只导出 `socks5://` 形式的 `ALL_PROXY`，guest 工具是否在本机解析域名取决于工具（curl／git 对 `socks5://` 本机解析，仅 `socks5h://` 才由代理解析，本项目不导出 socks5h）；apt 等只识别 HTTP 代理的工具不会走 SOCKS5。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
+软件源、IPv4 DNS 写入 guest 配置；附加 PATH 及 HTTP／SOCKS5 代理用于新进程。代理接受 `http://host:port` 与 `socks5://[user:password@]host:port`（HTTP 不支持凭据，SOCKS5 凭据可省略），作用于环境镜像下载与 AI 请求。SOCKS5 凭据通过 Android Keystore 加密保存在本机、界面以打码形式显示、不写入日志；应用请求（HttpURLConnection／OkHttp 经 `java.net.Proxy.Type.SOCKS`）经 JDK SOCKS 认证层使用该凭据，并实测把目标域名发送给代理（SOCKS5 ATYP=3）、由代理侧解析；guest 进程在 HTTP 下导出 `http_proxy`／`https_proxy` 等变量，SOCKS5 下只导出 `socks5://` 形式的 `ALL_PROXY`（**配置认证时该变量包含凭据，对 guest 进程可见**），guest 工具是否在本机解析域名取决于工具（curl／git 对 `socks5://` 本机解析，仅 `socks5h://` 才由代理解析，本项目不导出 socks5h）；apt 等只识别 HTTP 代理的工具不会走 SOCKS5。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
 
 取消 APT 可能留下 dpkg 未配置状态，需确认后执行 `dpkg --configure -a` 并重检；取消不等于回滚已安装包。暂不提供自动环境升级、重装迁移或任意 rootfs 管理。
 

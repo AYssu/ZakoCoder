@@ -171,7 +171,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             SettingsDivider()
             SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, mono = true, glyph = Glyph.Globe, enabled = !state.busy, onClick = { editing = "dns" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.proxy_short), settings.proxy.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = { editing = "proxy" })
+            SettingsRow(stringResource(R.string.proxy_short), state.proxyDisplay.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = { editing = "proxy" })
         } }
         item { SettingsGroup(stringResource(R.string.storage_title)) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

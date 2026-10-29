@@ -5,6 +5,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AndroidToolchainTest {
+    @Test fun sdkInstallerRejectsAuthenticatedSocksWithoutBlockingOtherProxyModes() {
+        assertTrue(AndroidToolchain.supportsProxy(""))
+        assertTrue(AndroidToolchain.supportsProxy("http://127.0.0.1:7890"))
+        assertTrue(AndroidToolchain.supportsProxy("socks5://127.0.0.1:1080"))
+        assertFalse(AndroidToolchain.supportsProxy("socks5://tester:test%40password@127.0.0.1:1080"))
+    }
     @Test fun bundleRequiresCompilerAndActualArmSdkRatherThanOnlySdkmanager() {
         val android = ToolBundles.catalog.single { it.id == "android" }
         assertFalse(android.manual)

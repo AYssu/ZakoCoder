@@ -111,6 +111,15 @@ Path(args[args.index('-o') + 1]).write_bytes(Path(os.environ['MOCK_PAYLOAD']).re
         self.run_fetch()
         self.assertEqual(1, len(self.calls.read_text().splitlines()), "valid cache must avoid downloading")
 
+    def test_authenticated_socks_rejected_before_install_without_exposing_credentials(self):
+        self.env["ALL_PROXY"] = "socks5://private-user:private-password@127.0.0.1:1080"
+        result = self.shell(self.prefix, expected=1)
+        self.assertIn("without authentication", result.stderr)
+        self.assertNotIn("private-user", result.stdout + result.stderr)
+        self.assertNotIn("private-password", result.stdout + result.stderr)
+        self.assertFalse(self.base.exists())
+        self.assertFalse(self.calls.exists())
+
     def test_digest_mismatch_rejects_download_and_removes_partial(self):
         wrong = "0" * 64
         self.run_fetch(wrong, expected=1)
