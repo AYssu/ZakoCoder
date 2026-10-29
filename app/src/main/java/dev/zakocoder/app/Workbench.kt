@@ -21,13 +21,15 @@ import kotlinx.coroutines.flow.update
     val checkingTools: Boolean = false, val toolCheckError: String = "", val toolCheckRevision: Int = 0,
     val tools: List<ToolCheck> = emptyList(), val bundleTools: List<ToolCheck> = emptyList(), val plans: List<DependencyPlan> = emptyList(),
     val plansProjectId: String? = null, val checkingPlans: Boolean = false, val plansError: Boolean = false,
-    val settings: AppSettings = AppSettings(), val sessions: List<TerminalItem> = emptyList(), val terminalRevision: Int = 0,
+    val settings: AppSettings = AppSettings(), val proxyDisplay: String = "", val sessions: List<TerminalItem> = emptyList(), val terminalRevision: Int = 0,
  ) { val project get() = projects.singleOrNull { it.id == selectedId } }
+
+private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String)
 
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val runtime = LinuxRuntime(context)
+    val runtime = LinuxRuntime(context) { settingsRepository.loadProxyCredentials() }
     val projects = ProjectRepository(context, runtime.workspaces)
     val editor = dev.zakocoder.app.editor.EditorController(context, projects, savedFile = {
         mutable.update { it.copy(fileRevision = it.fileRevision + 1) }
@@ -84,7 +86,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             mcp.preview(server, method, params)
         },
         mcpTool = { id, args -> mcp.request(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
-        finishMcpTask = { id -> mcp.closeTask(id) }, proxy = { mutable.value.settings.proxy })
+        finishMcpTask = { id -> mcp.closeTask(id) }, proxy = { settingsRepository.proxyForRuntime() })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -160,10 +162,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
         scope.launch {
             try {
-                val data = withContext(Dispatchers.IO) { runtime.workspaces.mkdirs(); terminal.prepareTypeface(); Triple(projects.load(), settingsRepository.load(), runtime.isInstalled()) }
+                val data = withContext(Dispatchers.IO) { runtime.workspaces.mkdirs(); terminal.prepareTypeface()
+                    WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay()) }
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
-                mutable.update { it.copy(loading = false, projects = data.first, settings = data.second, installed = data.third,
-                    selectedId = selected?.takeIf { id -> data.first.any { it.id == id } } ?: data.first.firstOrNull()?.id) }
+                mutable.update { it.copy(loading = false, projects = data.projects, settings = data.settings,
+                    proxyDisplay = data.proxyDisplay, installed = data.installed,
+                    selectedId = selected?.takeIf { id -> data.projects.any { it.id == id } } ?: data.projects.firstOrNull()?.id) }
                 refreshPlans()
                 doctor()
             } catch (error: Exception) {
@@ -395,16 +399,26 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         refreshPlans()
         mutable.update { it.copy(message = context.getString(R.string.dependencies_done)) }
     }
-    fun saveSettings(settings: AppSettings) {
+    fun saveSettings(input: AppSettings) {
+        // State and runtime only ever see the credential-free endpoint; credentials are extracted
+        // by SettingsRepository.save and stored encrypted. A malformed value is kept as-is so the
+        // regular validation path reports the localized error.
+        val settings = try {
+            input.copy(proxy = NetworkProxy.parse(input.proxy)?.endpoint.orEmpty())
+        } catch (_: IllegalArgumentException) {
+            input
+        }
         val previous = mutable.value.settings
         val runtimeChanged = settings.copy(terminalFontSp = previous.terminalFontSp, terminalShell = previous.terminalShell) != previous
         run(R.string.save_settings, recheckTools = runtimeChanged) {
-            withContext(Dispatchers.IO) {
-                settingsRepository.validate(settings)
+            val stored = withContext(Dispatchers.IO) {
+                settingsRepository.validate(input)
                 if (mutable.value.installed && runtimeChanged) runtime.configure(settings)
-                settingsRepository.save(settings)
+                settingsRepository.save(input)
+                settingsRepository.load() to settingsRepository.proxyDisplay()
             }
-            mutable.update { it.copy(settings = settings, tools = if (runtimeChanged) emptyList() else it.tools,
+            mutable.update { it.copy(settings = stored.first, proxyDisplay = stored.second,
+                tools = if (runtimeChanged) emptyList() else it.tools,
                 bundleTools = if (runtimeChanged) emptyList() else it.bundleTools, message = context.getString(R.string.settings_saved)) }
         }
     }

@@ -29,7 +29,7 @@ import kotlin.coroutines.resumeWithException
 data class CommandResult(val exitCode: Int, val output: String, val runId: String? = null)
 data class RuntimeCommand(val executable: String, val arguments: List<String>, val environment: Map<String, String>)
 
-class LinuxRuntime(private val context: Context) {
+class LinuxRuntime(private val context: Context, private val proxyCredentials: () -> NetworkProxy.Credentials? = { null }) {
     val home = File(context.filesDir, "linux-runtime")
     val root = File(home, "rootfs")
     val workspaces = File(context.filesDir, "workspaces")
@@ -103,7 +103,11 @@ class LinuxRuntime(private val context: Context) {
         if (!archive.exists()) {
             val partial = File(cache, "rootfs.partial")
             // SOCKS5 uses Proxy.Type.SOCKS; plain HTTP keeps the previous HttpURLConnection proxy path.
-            val proxy = proxySetting { NetworkProxy.javaProxy(settings.proxy) } ?: java.net.Proxy.NO_PROXY
+            val rawProxy = proxySetting { NetworkProxy.withCredentials(settings.proxy, proxyCredentials()) }
+            val proxy = proxySetting { NetworkProxy.javaProxy(rawProxy) } ?: java.net.Proxy.NO_PROXY
+            // The JDK carries SOCKS5 RFC1929 credentials through the global authenticator only.
+            // Bind them to this exact endpoint so a settings switch can never send them elsewhere.
+            NetworkProxy.configureSocksAuthentication(rawProxy)
             val connection = URL(image.getString("url")).openConnection(proxy) as HttpURLConnection
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
@@ -219,7 +223,10 @@ class LinuxRuntime(private val context: Context) {
         val path = listOf(settings.additionalPath, "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             .filter(String::isNotEmpty).joinToString(":")
         // HTTP exports http_proxy/https_proxy; SOCKS5 exports only ALL_PROXY (never a fake http_proxy).
-        val network = proxySetting { NetworkProxy.guestEnvironment(settings.proxy) }
+        // The guest ALL_PROXY URL carries URL-encoded SOCKS5 credentials: they are visible to every
+        // process started inside the guest environment (documented trade-off, see evidence).
+        val credentials = proxyCredentials()
+        val network = proxySetting { NetworkProxy.guestEnvironment(NetworkProxy.withCredentials(settings.proxy, credentials)) }
         val executable = File(nativeDirectory, "libzakocoder_proot.so").absolutePath
         val args = mutableListOf(
             "--kill-on-exit", "--link2symlink", "-0", "-r", target.absolutePath,
