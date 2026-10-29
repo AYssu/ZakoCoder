@@ -140,6 +140,9 @@ class ProjectTemplateWriterTest {
     @Test fun symlinkedDirectoryEscapeIsRejectedAndRolledBack() {
         val outside = File(sandbox, "outside")
         assertTrue(outside.mkdirs())
+        val sentinel = File(outside, "keep.txt").apply { writeText("KEEP_EXTERNAL_CONTENT") }
+        val nested = File(outside, "nested").apply { mkdirs() }
+        val nestedSentinel = File(nested, "keep.txt").apply { writeText("KEEP_NESTED_CONTENT") }
         try {
             Files.createSymbolicLink(File(root, "link").toPath(), outside.toPath())
         } catch (unavailable: Exception) {
@@ -150,5 +153,46 @@ class ProjectTemplateWriterTest {
 
         assertFalse(root.exists())
         assertFalse("write must not escape the project root through a symlink", File(outside, "pwned.txt").exists())
+        assertEquals("KEEP_EXTERNAL_CONTENT", sentinel.readText())
+        assertEquals("KEEP_NESTED_CONTENT", nestedSentinel.readText())
+    }
+
+    @Test fun writeFailurePreservesUnrelatedLinkTargetsAndRemovesDanglingLinks() {
+        val outside = File(sandbox, "outside").apply { mkdirs() }
+        val sentinel = File(outside, "keep.txt").apply { writeText("KEEP_EXTERNAL_CONTENT") }
+        val nested = File(root, "nested").apply { mkdirs() }
+        try {
+            Files.createSymbolicLink(File(nested, "directory-link").toPath(), outside.toPath())
+            Files.createSymbolicLink(File(nested, "file-link").toPath(), sentinel.toPath())
+            Files.createSymbolicLink(File(nested, "dangling-link").toPath(), File(sandbox, "missing").toPath())
+        } catch (unavailable: Exception) {
+            Assume.assumeNoException("symlinks are unavailable on this platform", unavailable)
+        }
+        File(root, "blocker").writeText("occupied")
+
+        assertThrows(java.nio.file.FileSystemException::class.java) {
+            write(linkedMapOf("partial.txt" to "partial", "blocker/nested.txt" to "fail"))
+        }
+
+        assertFalse(Files.exists(root.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertEquals("KEEP_EXTERNAL_CONTENT", sentinel.readText())
+        assertEquals(setOf("keep.txt"), outside.list()!!.toSet())
+    }
+
+    @Test fun rejectedWriteUnlinksRootSymlinkWithoutDeletingTarget() {
+        val outside = File(sandbox, "outside").apply { mkdirs() }
+        val sentinel = File(outside, "keep.txt").apply { writeText("KEEP_EXTERNAL_CONTENT") }
+        assertTrue(root.delete())
+        try {
+            Files.createSymbolicLink(root.toPath(), outside.toPath())
+        } catch (unavailable: Exception) {
+            Assume.assumeNoException("symlinks are unavailable on this platform", unavailable)
+        }
+
+        assertThrows(IllegalArgumentException::class.java) { write(mapOf("../escape.txt" to "fail")) }
+
+        assertFalse(Files.exists(root.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertEquals("KEEP_EXTERNAL_CONTENT", sentinel.readText())
+        assertEquals(setOf("keep.txt"), outside.list()!!.toSet())
     }
 }

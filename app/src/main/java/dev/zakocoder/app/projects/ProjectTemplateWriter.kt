@@ -1,5 +1,6 @@
 package dev.zakocoder.app.projects
 
+import dev.zakocoder.app.runtime.PrivateFiles
 import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -66,11 +67,12 @@ object ProjectTemplateWriter {
 
     private fun rollback(root: File, error: Exception) {
         try {
-            root.deleteRecursively()
+            // Remove link entries themselves, never recurse into their targets.
+            PrivateFiles.deleteTree(root)
         } catch (cleanup: Exception) {
             error.addSuppressed(cleanup)
         }
-        if (root.exists()) {
+        if (Files.exists(root.toPath(), LinkOption.NOFOLLOW_LINKS)) {
             error.addSuppressed(IOException("Failed to roll back the project directory: ${root.absolutePath}"))
         }
     }
