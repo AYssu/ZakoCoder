@@ -31,6 +31,7 @@ class TerminalInteractionDeviceTest {
     private val app get() = instrumentation.targetContext.applicationContext as ZakoApplication
 
     @Before fun inspectOwnedPopupWindows() {
+        warmDeviceActivity()
         val automation = instrumentation.uiAutomation
         automation.serviceInfo = automation.serviceInfo.apply {
             flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -526,20 +527,25 @@ class TerminalInteractionDeviceTest {
                 }
                 if (missingBundle != null) {
                     click("管理")
-                    click(instrumentation.targetContext.getString(R.string.select_bundle, instrumentation.targetContext.getString(missingBundle.title)))
+                    val selectionLabel = instrumentation.targetContext.getString(R.string.select_bundle, instrumentation.targetContext.getString(missingBundle.title))
+                    revealBundle(selectionLabel)
+                    click(selectionLabel)
                     click("安装所选工具包（1）")
                     val packages = dev.zakocoder.app.runtime.ToolBundles.packages(setOf(missingBundle.id), workbench.state.value.bundleTools)
                     await { find(instrumentation.targetContext.getString(R.string.package_confirmation, packages.joinToString(", "))) != null }
                     screenshot("tool-bundles-confirmation")
                     click("取消")
+                    revealBundle("完成", forward = false)
                     click("完成")
                     assertFalse(workbench.state.value.busy)
                 }
+                revealBundle("环境维护", forward = false)
                 click("环境维护")
                 await { find("关闭") != null }
                 screenshot("environment-maintenance")
                 click("关闭")
                 if (workbench.state.value.project != null) {
+                    revealBundle(workbench.state.value.project!!.name)
                     click(workbench.state.value.project!!.name)
                     await { find("配置项目类型") != null }
                     screenshot("environment-types")
@@ -547,6 +553,7 @@ class TerminalInteractionDeviceTest {
                     if (workbench.state.value.installed) {
                         await { !workbench.state.value.checkingTools }
                         val revision = workbench.state.value.toolCheckRevision
+                        revealBundle("检测开发工具", forward = false)
                         click("检测开发工具")
                         assertFalse(workbench.state.value.busy)
                         await { !workbench.state.value.checkingTools && workbench.state.value.toolCheckRevision > revision }
@@ -564,6 +571,7 @@ class TerminalInteractionDeviceTest {
                 click(if (original.terminalFontSp < 28) "减小终端字号" else "增大终端字号")
                 await { !workbench.state.value.busy && workbench.state.value.settings == original }
                 assertEquals(revisionBeforeFont, workbench.state.value.toolCheckRevision)
+                revealBundle("DNS")
                 click("DNS")
                 setText("999.0.0.1")
                 click("保存设置")
@@ -748,6 +756,28 @@ class TerminalInteractionDeviceTest {
         return instrumentation.uiAutomation.windows.asSequence().mapNotNull { it.root }
             .filter { it.packageName?.toString() == instrumentation.targetContext.packageName }
             .mapNotNull(::walk).firstOrNull()
+    }
+    private suspend fun revealBundle(label: String, forward: Boolean = true) {
+        repeat(12) {
+            if (find(label)?.isVisibleToUser == true) return
+            val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            var scroll: AccessibilityNodeInfo? = null
+            var area = 0L
+            fun candidate(node: AccessibilityNodeInfo) {
+                val bounds = android.graphics.Rect(); node.getBoundsInScreen(bounds)
+                val nextArea = bounds.width().toLong() * bounds.height()
+                if (node.isVisibleToUser && node.isScrollable && !node.isEditable &&
+                    bounds.height() > bounds.width() / 2 && nextArea > area &&
+                    node.actionList.any { it.id == action }) { scroll = node; area = nextArea }
+                for (index in 0 until node.childCount) node.getChild(index)?.let(::candidate)
+            }
+            instrumentation.uiAutomation.windows.mapNotNull { it.root }
+                .filter { it.packageName?.toString() == instrumentation.targetContext.packageName }
+                .forEach(::candidate)
+            assertTrue("Page can reveal $label", scroll?.performAction(action) == true)
+            delay(300)
+        }
+        assertTrue("Tool selection visible: $label", find(label)?.isVisibleToUser == true)
     }
     private fun accessibilitySummary(): String {
         val out = mutableListOf<String>()

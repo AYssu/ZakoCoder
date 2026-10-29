@@ -1,0 +1,6 @@
+<resources>
+    <string name="ai_switch_model">切换模型</string>
+    <string name="ai_choose_model">选择模型</string>
+    <string name="ai_manage_models">管理模型配置</string>
+    <string name="ai_permission_current">默认权限：%1$s，%2$d 项例外规则</string>
+</resources>

@@ -21,6 +21,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,9 +33,10 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 
 @Composable
-internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit) {
+internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
+    val extensions by workbench.mcp.state.collectAsStateWithLifecycle()
     var commands by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     var commandsTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
     var checkpoints by remember { mutableStateOf(false) }
@@ -70,35 +74,45 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     val uriHandler = LocalUriHandler.current
     var permissions by remember { mutableStateOf(false) }
     var choose by remember { mutableStateOf(false) }
-    var changes by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     var panel by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
+    var detailPanel by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(panel) { if (panel !in 0..1) panel = 0 }
     val composerState = rememberSaveableStateHolder()
+    val detailState = rememberSaveableStateHolder()
     val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     var more by remember { mutableStateOf(false) }
+    var modelPicker by remember { mutableStateOf(false) }
     LaunchedEffect(workbenchState.selectedId) { if (state.projectId == null) workbench.ai.select(workbenchState.selectedId) }
     val project = workbenchState.projects.singleOrNull { it.id == state.projectId }
-    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PageHeading(stringResource(R.string.nav_ai)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { choose = true }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving,
+                modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(R.string.extensions_context), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(project?.name ?: stringResource(R.string.select_project), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                }
+                WorkbenchIcon(Glyph.ChevronDown, Modifier.padding(start = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             IconButton(onClick = { history = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) { WorkbenchIcon(Glyph.History, description = stringResource(R.string.ai_history)) }
             IconButton(onClick = { workbench.ai.conversation(); follow = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
             Box {
                 IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_requests)) }, leadingIcon = { WorkbenchIcon(Glyph.Info) },
+                        onClick = { more = false; detailPanel = "requests" })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.project_validation)) }, leadingIcon = { WorkbenchIcon(Glyph.Check) },
+                        onClick = { more = false; detailPanel = "validation" })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_extensions)) }, leadingIcon = { WorkbenchIcon(Glyph.Extensions) },
+                        onClick = { more = false; onExtensions() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_checkpoints)) }, leadingIcon = { WorkbenchIcon(Glyph.Undo) }, enabled = project != null && !state.active && !state.restoring,
                         onClick = { more = false; checkpoints = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_permissions)) }, leadingIcon = { WorkbenchIcon(Glyph.Shield) }, enabled = project != null,
                         onClick = { more = false; permissions = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_settings)) }, leadingIcon = { WorkbenchIcon(Glyph.Settings) }, onClick = { more = false; onModels() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_data_details)) }, leadingIcon = { WorkbenchIcon(Glyph.Info) }, onClick = { more = false; disclosure = true })
                 }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            TextButton(onClick = { choose = true }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.weight(1f)) {
-                Text(project?.name ?: stringResource(R.string.select_project), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            }
-            TextButton(onClick = onModels, modifier = Modifier.weight(1f)) {
-                Text(models.catalog.active?.name ?: stringResource(R.string.ai_not_configured), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = 12.sp)
-                WorkbenchIcon(Glyph.Down, Modifier.padding(start = 5.dp).size(14.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -107,29 +121,27 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             Text(stringResource(R.string.ai_history_retry_save))
         }
         if (!keyboardOpen) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        if (state.active || state.round > 0 || state.permissionsLoading) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (state.active) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(6.dp))
             Text(stringResource(if (state.permissionsLoading) R.string.ai_loading_conversation else state.phase.label), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
             if (state.round > 0) Text(stringResource(R.string.ai_task_budget, state.round, state.toolCount), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (state.contextChars > 0) Text(stringResource(R.string.ai_context_status, state.contextChars, state.contextCompactions), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         AiTaskPlanPanel(state, panel, visible = !keyboardOpen)
         if (!keyboardOpen) {
-        SecondaryScrollableTabRow(selectedTabIndex = panel, minTabWidth = 0.dp, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-            listOf(stringResource(R.string.ai_process), stringResource(R.string.ai_changes_title),
-                stringResource(R.string.ai_requests), stringResource(R.string.ai_skills), stringResource(R.string.project_validation)).forEachIndexed { index, label ->
-                Tab(selected = panel == index, onClick = { panel = index; changes = index == 1 }, text = { Text(label, maxLines = 1, fontSize = 12.sp) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SecondaryTabRow(selectedTabIndex = panel.coerceIn(0, 1), modifier = Modifier.weight(1f), containerColor = androidx.compose.ui.graphics.Color.Transparent) {
+                listOf(stringResource(R.string.ai_conversation), stringResource(R.string.ai_changes_title)).forEachIndexed { index, label ->
+                    Tab(selected = panel == index, onClick = { panel = index }, text = { Text(label, maxLines = 1, fontSize = 12.sp) },
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         }
         if (state.recoveryNotes.isNotEmpty()) Text(stringResource(R.string.ai_recovery_available), style = MaterialTheme.typography.labelSmall)
         if (state.historyTrimmed) Text(stringResource(R.string.ai_history_trimmed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (panel == 4) AiValidationPanel(workbench, Modifier.weight(1f), onCommands = { turn -> commandsTurn = turn; commands = true }, onReference = { changes = false; panel = 0; follow = true })
-        else if (panel == 2) AiRequestsPanel(state, Modifier.weight(1f))
-        else if (panel == 3) AiSkillsPanel(state, workbench.ai, Modifier.weight(1f))
-        else if (changes) AiChangesPanel(state, workbench.editor.languages, workbench.ai::undo, { checkpoints = true },
+        if (panel == 1) AiChangesPanel(state, workbench.editor.languages, workbench.ai::undo, { checkpoints = true },
             workbench.ai::checkpointList, workbench.ai::checkpointChanges, Modifier.weight(1f)) else Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
             if (state.timeline.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WorkbenchIcon(Glyph.Ai, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
@@ -156,7 +168,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             } }
             item(key = "conversation-bottom") { Spacer(Modifier.height(1.dp)) }
         }
-            if (!atBottom && !changes) FilledTonalButton(onClick = {
+            if (!atBottom && panel == 0) FilledTonalButton(onClick = {
                 follow = true
                 uiScope.launch {
                     automaticScroll = true
@@ -166,10 +178,6 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 WorkbenchIcon(Glyph.Down, Modifier.size(15.dp)); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_latest), fontSize = 12.sp)
             }
         }
-        if (!keyboardOpen) Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text(stringResource(if (state.contextTurns.isEmpty()) R.string.ai_history_local else R.string.ai_context_count, state.contextTurns.size), Modifier.weight(1f), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            IconButton(onClick = { disclosure = true }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Info, Modifier.size(16.dp), description = stringResource(R.string.ai_data_details)) }
-        }
         if (state.references.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active,
                 label = { Text(if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference) else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "", modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
@@ -177,21 +185,62 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }
         Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.padding(bottom = 10.dp)) {
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
-                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active, modifier = Modifier.padding(bottom = 5.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
+                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
                 TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(R.string.ai_prompt), fontSize = 13.sp) },
                     modifier = Modifier.weight(1f), maxLines = 4, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp),
                     colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface, disabledContainerColor = MaterialTheme.colorScheme.surface,
                         focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent))
-                IconButton(onClick = { if (state.active) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; changes = false; panel = 0; follow = true } },
+                IconButton(onClick = { if (state.active) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; panel = 0; follow = true } },
                     enabled = if (state.active) state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && input.isNotBlank() && !workbenchState.busy,
-                    modifier = Modifier.padding(bottom = 5.dp)) {
+                    modifier = Modifier.padding(bottom = 4.dp)) {
                     WorkbenchIcon(if (state.active) Glyph.Close else Glyph.Send, description = stringResource(if (state.active) R.string.ai_stop else R.string.ai_send), tint = if (state.active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 }
             }
         }
+        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val switchDescription = stringResource(R.string.ai_switch_model)
+            TextButton(onClick = { modelPicker = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = switchDescription },
+                contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(models.catalog.active?.model ?: stringResource(R.string.ai_choose_model), Modifier.weight(1f), maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(4.dp))
+                WorkbenchIcon(Glyph.ChevronDown, Modifier.size(16.dp))
+            }
+            val permissionState = stringResource(R.string.ai_permission_current, stringResource(state.policy.default.label), state.policy.overrides.size)
+            val permissionDescription = stringResource(R.string.ai_permissions)
+            TextButton(onClick = { permissions = true }, enabled = project != null,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = permissionDescription; stateDescription = permissionState }) {
+                WorkbenchIcon(Glyph.Shield, Modifier.size(20.dp), description = stringResource(R.string.ai_permissions),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(state.policy.default.label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val extensionSummary = stringResource(R.string.ai_extensions_summary, state.enabledSkills.size, extensions.servers.count { it.enabled })
+            IconButton(onClick = onExtensions, modifier = Modifier.semantics { stateDescription = extensionSummary }) {
+                WorkbenchIcon(Glyph.Extensions, Modifier.size(20.dp), description = stringResource(R.string.ai_extensions))
+            }
+        }
     }
+    }
+    if (modelPicker) AiModelPicker(workbench.ai, { modelPicker = false },
+        onAdd = { modelPicker = false; onAddModel() }, onManage = { modelPicker = false; onModels() })
+    if (detailPanel == "requests") AiFullScreen(stringResource(R.string.ai_requests), { detailPanel = null }) {
+        detailState.SaveableStateProvider("${state.projectId}:${state.conversationId}:requests") {
+            Box(Modifier.padding(horizontal = 20.dp)) { AiTaskPlanPanel(state, 2, visible = !keyboardOpen) }
+            AiRequestsPanel(state, Modifier.weight(1f).padding(horizontal = 16.dp))
+        }
+    }
+    if (detailPanel == "validation") AiFullScreen(stringResource(R.string.project_validation), { detailPanel = null }) {
+        detailState.SaveableStateProvider("${state.projectId}:${state.conversationId}:validation") {
+            Box(Modifier.padding(horizontal = 20.dp)) { AiTaskPlanPanel(state, 4, visible = !keyboardOpen) }
+            AiValidationPanel(workbench, Modifier.weight(1f).padding(horizontal = 16.dp),
+                onCommands = { turn -> commandsTurn = turn; commands = true },
+                onReference = { detailPanel = null; panel = 0; follow = true })
+        }
     }
     if (commands && project != null) ProjectTasksPage(workbench, project.id, onAi = { commands = false }, validationConversation = state.conversationId.takeIf { commandsTurn > 0 }, validationTurn = commandsTurn) { commands = false }
     if (checkpoints) AiCheckpointSheet(workbench) { checkpoints = false }
@@ -222,7 +271,13 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
         confirmButton = { TextButton(onClick = { try { uriHandler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { } finally { link = null } }) { Text(stringResource(R.string.ai_open_browser)) } },
         dismissButton = { TextButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } }) }
-    if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = { Text(stringResource(R.string.ai_disclosure)) }, confirmButton = { TextButton(onClick = { disclosure = false }) { Text(stringResource(R.string.close)) } })
+    if (disclosure) AlertDialog(onDismissRequest = { disclosure = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(if (state.contextTurns.isEmpty()) R.string.ai_history_local else R.string.ai_context_count, state.contextTurns.size))
+            if (state.contextChars > 0) Text(stringResource(R.string.ai_context_status, state.contextChars, state.contextCompactions))
+            Text(stringResource(R.string.ai_disclosure))
+        }
+    }, confirmButton = { TextButton(onClick = { disclosure = false }) { Text(stringResource(R.string.close)) } })
     if (state.approval == null) inspecting?.let { review -> AiCodeReview(review, workbench.editor.languages) { inspecting = null } }
     if (choose) WorkbenchSheet(stringResource(R.string.select_project), { choose = false }) {
         if (workbenchState.projects.isEmpty()) {

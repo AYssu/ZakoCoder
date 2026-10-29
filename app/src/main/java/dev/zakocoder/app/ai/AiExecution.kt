@@ -16,6 +16,7 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     StartTerminal("start_terminal", R.string.ai_terminal_start, R.string.ai_terminal_start_desc, true),
     SendTerminalInput("send_terminal_input", R.string.ai_terminal_input, R.string.ai_terminal_input_desc, true),
     CloseTerminal("close_terminal", R.string.ai_terminal_close, R.string.ai_terminal_close_desc, true),
+    UseMcp("use_mcp", R.string.ai_tool_mcp, R.string.ai_tool_mcp_desc, true),
     UpdatePlan("update_plan", R.string.ai_tool_plan, R.string.ai_tool_plan_desc);
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }

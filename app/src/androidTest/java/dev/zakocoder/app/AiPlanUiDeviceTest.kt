@@ -19,6 +19,7 @@ import dev.zakocoder.app.workflow.ProjectCommand
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -26,6 +27,7 @@ import java.util.UUID
 
 /** Native UI fixtures only; never sends a model request or reads provider settings. */
 class AiPlanUiDeviceTest {
+    @Before fun foregroundForDeviceUi() { warmDeviceActivity() }
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val host get() = (context.applicationContext as ZakoApplication).workbench
@@ -50,18 +52,10 @@ class AiPlanUiDeviceTest {
         return instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.firstNotNullOfOrNull(::walk)
     }
     private suspend fun click(label: String) {
-        val tabs = listOf(R.string.ai_process, R.string.ai_requests, R.string.ai_skills, R.string.project_validation).map(context::getString)
-        if (label in tabs && find(label) == null) repeat(3) {
-            if (find(label) == null) {
-                fun scroll(node: AccessibilityNodeInfo): Boolean {
-                    val rect = Rect(); node.getBoundsInScreen(rect)
-                    val action = if (label == context.getString(R.string.ai_process)) AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD else AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                    if (node.isVisibleToUser && node.isScrollable && rect.width() > rect.height() * 3 && node.performAction(action)) return true
-                    return (0 until node.childCount).any { node.getChild(it)?.let(::scroll) == true }
-                }
-                instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.any(::scroll)
-                delay(250)
-            }
+        val details = listOf(R.string.ai_requests, R.string.project_validation).map(context::getString)
+        if (label in details) {
+            if (find(context.getString(R.string.close)) != null) click(context.getString(R.string.close))
+            click(context.getString(R.string.ai_more))
         }
         await("visible $label") { find(label) != null }
         var node = find(label)!!
@@ -209,13 +203,16 @@ class AiPlanUiDeviceTest {
                 scenario.recreate()
                 await("actual app restored validation choice") { find(notice) != null && find(context.getString(R.string.project_validation_commands)) != null }
                 screenshot("plan-validation-recreated")
+                click(context.getString(R.string.close))
+                assertNotNull("Conversation plan expansion survives secondary pages", find(notice))
                 assertTrue(editable()!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 await("actual IME hides header") { find(title) == null }
                 screenshot("plan-validation-ime")
                 instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
                 await("actual IME dismissal restores choice") { find(title) != null && find(notice) != null }
                 click(title); assertNull(find(notice))
-                click(context.getString(R.string.ai_process)); assertNotNull("Process choice retained", find(notice))
+                click(context.getString(R.string.project_validation)); assertNotNull("Validation choice retained", find(notice))
+                click(context.getString(R.string.close)); assertNull("Conversation choice remains independent", find(notice))
                 click(context.getString(R.string.ai_new_conversation))
                 await("new conversation clears old plan") { host.ai.state.value.conversationId != conversation && find(title) == null }
             } finally {

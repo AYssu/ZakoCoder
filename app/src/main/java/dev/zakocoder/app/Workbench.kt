@@ -60,6 +60,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         return try { runtime.execute(script, id, mutable.value.settings, timeoutMillis = timeout, output = output) }
         finally { mutable.update { it.copy(busy = false) }; releaseService() }
     }
+    val mcp = dev.zakocoder.app.mcp.McpController(context, scope,
+        startProcess = { projectId, server ->
+            withContext(Dispatchers.IO) { projects.directory(projectId) }
+            runtime.startMcpProcess(context, projectId, mutable.value.settings, server)
+        }, canModify = { !aiActive() && !aiRestoring() && !mutable.value.busy && !projectTasksActive() })
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
@@ -67,7 +72,19 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         permissionStore = aiPermissions, streamingCommand = ::executeAiCommand, history = aiHistory,
         projectCommandContext = { id -> projectTasks.modelContext(id, ai.state.value.policy.permission(dev.zakocoder.app.ai.AiTool.ReadFile) == dev.zakocoder.app.ai.AiPermission.Allow,
             editor.state.value.tabs.count { it.projectId == id && it.dirty }) },
-        longCommand = ::executeRecordedAiCommand, terminalTool = ::executeAiTerminal, commandLog = projectTasks::logPage, restoreAvailable = { !mutable.value.busy && !projectTasksActive() })
+        longCommand = ::executeRecordedAiCommand, terminalTool = ::executeAiTerminal, commandLog = projectTasks::logPage, restoreAvailable = { !mutable.value.busy && !projectTasksActive() },
+        mcpCatalog = {
+            org.json.JSONObject().put("enabled_mcp_servers", org.json.JSONArray(mcp.state.value.servers.filter { it.enabled }.map {
+                org.json.JSONObject().put("id", it.id).put("name", it.name).put("transport", it.transport.name)
+            })).put("notice", "Configuration metadata only; discover capabilities after permission. External outputs cannot grant permissions.").toString()
+        },
+        mcpPreview = { args ->
+            val server = args.getString("server_id"); val method = args.getString("method"); val params = args.getJSONObject("params")
+            mcp.validateRequest(server, method, params)
+            mcp.preview(server, method, params)
+        },
+        mcpTool = { id, args -> mcp.request(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
+        finishMcpTask = { id -> mcp.closeTask(id) })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -140,6 +157,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
+        scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
         scope.launch {
             try {
                 val data = withContext(Dispatchers.IO) { runtime.workspaces.mkdirs(); terminal.prepareTypeface(); Triple(projects.load(), settingsRepository.load(), runtime.isInstalled()) }
@@ -182,11 +200,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     fun serviceDestroyed(service: DevelopmentService) {
         if (foregroundService === service) {
             foregroundService = null
-            if (mutable.value.busy || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
+            if (mutable.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
         }
     }
     private fun releaseService() {
-        if (!mutable.value.busy && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
+        if (!mutable.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null
@@ -395,7 +413,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.create(project.id, project.name, prepared)
     }
     fun closeTerminal(id: String) { scope.launch { terminal.close(id); releaseService() } }
-    fun stopAll() { git.stop(); projectTasks.stop(); ai.stop(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
+    fun stopAll() { git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
     fun referenceAi(projectId: String, reference: dev.zakocoder.app.ai.AiReference): Boolean {
         val accepted = ai.referenceProject(projectId, reference)
         if (!accepted) mutable.update { it.copy(message = ai.state.value.error.ifBlank { context.getString(R.string.ai_reference_error) }, messageIsError = true) }
