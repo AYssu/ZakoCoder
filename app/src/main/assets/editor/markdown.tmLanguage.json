@@ -1,0 +1,36 @@
+{
+  "name": "markdown",
+  "scopeName": "source.zako.markdown",
+  "patterns": [
+    {
+      "name": "keyword.control",
+      "match": "^ {0,3}#{1,6}(?:\\s|$).*$"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "^\\s*```",
+      "end": "^\\s*```\\s*$"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "^\\s*~~~",
+      "end": "^\\s*~~~\\s*$"
+    },
+    {
+      "name": "string.quoted",
+      "match": "`[^`\\r\\n]+`"
+    },
+    {
+      "name": "keyword.control",
+      "match": "^\\s*(?:[-+*>]|[0-9]+[.)])\\s+"
+    },
+    {
+      "name": "string.quoted",
+      "match": "\\[[^\\]\\r\\n]+\\]\\([^\\)\\r\\n]*\\)"
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\*\\*[^*\\r\\n]+\\*\\*|__[^_\\r\\n]+__"
+    }
+  ]
+}

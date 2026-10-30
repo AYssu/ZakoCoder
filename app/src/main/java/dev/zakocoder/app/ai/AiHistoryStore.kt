@@ -82,6 +82,7 @@ open class AiHistoryStore(private val directory: File) {
     private fun encode(state: AiState): JSONObject = JSONObject().put("schemaVersion", 1).put("id", state.conversationId)
         .put("title", (state.conversations.firstOrNull { it.id == state.conversationId }?.title?.takeIf { it.isNotBlank() } ?: state.timeline.firstOrNull { it.role == AiRole.User }?.text)?.replace('\n', ' ')?.take(80).orEmpty())
         .put("checkpointId", state.checkpointId).put("updated", System.currentTimeMillis()).put("turn", state.turn).put("active", state.active)
+        .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
         .put("timeline", JSONArray(state.timeline.map { JSONObject().put("id", it.id).put("text", it.text).put("tool", it.toolId)
@@ -179,7 +180,12 @@ open class AiHistoryStore(private val directory: File) {
         val compactions = json.optInt("contextCompactions"); require(compactions >= 0)
         val contextChars = json.optInt("contextChars"); require(contextChars >= 0)
         val checkpointId = json.optString("checkpointId").takeIf { it.isNotEmpty() && it != "null" }?.also { require(UUID.fromString(it).toString() == it) }
-        val state = AiState(checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
+        val timingArray = json.optJSONArray("turnTimings") ?: JSONArray()
+        require(timingArray.length() <= 512)
+        val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
+            AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
+        } }
+        val state = AiState(turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,
             messages = timeline.filter { it.toolId == null }.takeLast(100).map { it.text }, contextTurns = turns,
             commandChanges = commandChanges, commandReviewLimited = json.optBoolean("commandReviewLimited"),

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_mode_edit">编辑</string>
+    <string name="editor_mode_preview">预览</string>
+    <string name="editor_preview_buffer">预览当前编辑内容，未保存的修改也会显示。</string>
+    <string name="editor_preview_empty">文档为空</string>
+</resources>

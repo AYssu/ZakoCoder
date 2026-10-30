@@ -33,6 +33,7 @@ private enum class Page(val label: Int, val glyph: Glyph) {
 
 @Composable
 fun ZakoCoderApp(workbench: Workbench) {
+    var referencedPath by rememberSaveable { mutableStateOf<String?>(null) }
     val state by workbench.state.collectAsStateWithLifecycle()
     val accessibility = androidx.compose.ui.platform.LocalAccessibilityManager.current
     LaunchedEffect(state.message, state.messageIsError) {
@@ -132,9 +133,9 @@ fun ZakoCoderApp(workbench: Workbench) {
                 }
                 if (extensionsOpen) AiExtensionsPage(workbench, state) { extensionsOpen = false }
                 else if (modelsOpen) AiModelsPage(workbench.ai, startAdding = modelsAdd, onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false } else when (page) {
-                    Page.Project -> ProjectLibraryPage(workbench, state, openedProjectId, { openedProjectId = it },
+                    Page.Project -> ProjectLibraryPage(workbench, state, openedProjectId, { openedProjectId = it; referencedPath = null },
                         onEnvironment = { page = Page.Environment }, onAi = { id -> workbench.ai.select(id); page = Page.Ai },
-                        onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = Page.Terminal })
+                        referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = Page.Terminal })
                     Page.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { terminalOpen = false; page = Page.Terminal }, onProjects = { openedProjectId = null; page = Page.Project }, onAi = { page = Page.Ai }) }
                     Page.Terminal -> if (inTerminal) TerminalPage(workbench, state, terminalId, { terminalId = it }, { terminalOpen = false })
                         else TerminalLibraryPage(workbench, state,
@@ -145,7 +146,11 @@ fun ZakoCoderApp(workbench: Workbench) {
                             focus.clearFocus(); keyboard?.hide(); terminalId = id; terminalOpen = true; page = Page.Terminal
                         }
                     }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
-                        onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true }) }
+                        onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true },
+                        onProjectPath = { projectId, path ->
+                            workbench.select(projectId); referencedPath = path; openedProjectId = projectId
+                            focus.clearFocus(); keyboard?.hide(); page = Page.Project
+                        }) }
                     Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }) }
                 }
             }

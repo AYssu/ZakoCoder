@@ -1,0 +1,17 @@
+<resources>
+    <string name="ai_file_changes_title">文件变更</string>
+    <string name="ai_file_changes_scope">按会话轮次审阅文件；任务检查点在更多菜单独立管理。</string>
+    <string name="ai_file_changes_prompt_missing">此轮需求摘要未保留</string>
+    <string name="ai_file_changes_count">%1$d 个文件或目录</string>
+    <string name="ai_file_changes_added">+%1$d</string>
+    <string name="ai_file_changes_removed">−%1$d</string>
+    <string name="ai_file_changes_observed">当前任务观察记录；非持久检查点</string>
+    <string name="ai_file_changes_directory">目录或权限变更</string>
+    <string name="ai_file_changes_undo_last">撤销此文件的最后一次工具写入</string>
+    <string name="ai_checkpoint_file_only">恢复检查点内的项目文件，不删除对话，也不回滚依赖安装或外部操作。</string>
+    <string name="ai_checkpoint_current_conversation">当前会话</string>
+    <string name="ai_checkpoint_other_conversation">其他会话</string>
+    <string name="ai_checkpoint_fork">从此轮前分叉会话</string>
+    <string name="ai_checkpoint_fork_detail">创建新会话，仅保留第 %1$d 轮之前的历史摘要。原会话保留，当前项目文件不变，也不会重放工具。需要恢复文件时，请单独审阅并恢复检查点。</string>
+    <string name="ai_checkpoint_fork_failed">无法创建分叉会话，原会话及项目文件未被此操作修改。</string>
+</resources>

@@ -1,0 +1,44 @@
+{
+  "name": "makefile",
+  "scopeName": "source.zako.makefile",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "#.*$"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "constant.character.escape",
+      "match": "\\$\\([^\\)]+\\)|\\$\\{[^}]+\\}|\\$[@<^?*%+]"
+    },
+    {
+      "name": "keyword.control",
+      "match": "^[^\\s#:=][^#:=]*(?=\\s*:)|\\b(?:include|sinclude|define|endef|ifdef|ifndef|ifeq|ifneq|else|endif|override|export|unexport|private|vpath)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

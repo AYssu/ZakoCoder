@@ -11,11 +11,11 @@ enum class AptSource(val baseUrl: String) {
 enum class TerminalShell(val executable: String) { Bash("/bin/bash"), Zsh("/usr/bin/zsh") }
 
 data class AppSettings(
-    val aptSource: AptSource = AptSource.Ubuntu,
+    val aptSource: AptSource = AptSource.Tsinghua,
     val terminalFontSp: Int = 11,
     val terminalShell: TerminalShell = TerminalShell.Bash,
     val additionalPath: String = "",
-    val dns: String = "1.1.1.1,8.8.8.8",
+    val dns: String = "223.5.5.5,119.29.29.29",
     val proxy: String = "",
 )
 
@@ -28,11 +28,11 @@ class SettingsRepository(private val context: Context) {
     private val preferences = context.getSharedPreferences("development-settings", Context.MODE_PRIVATE)
     private val credentials = ProxyCredentialsStore(context)
     fun load() = AppSettings(
-        aptSource = AptSource.valueOf(preferences.getString("apt", AptSource.Ubuntu.name)!!),
+        aptSource = AptSource.valueOf(preferences.getString("apt", AppSettings().aptSource.name)!!),
         terminalFontSp = preferences.getInt("font", AppSettings().terminalFontSp),
         terminalShell = TerminalShell.entries.firstOrNull { it.name == preferences.getString("shell", "Bash") } ?: TerminalShell.Bash,
         additionalPath = preferences.getString("path", "")!!,
-        dns = preferences.getString("dns", "1.1.1.1,8.8.8.8")!!,
+        dns = preferences.getString("dns", AppSettings().dns)!!,
         proxy = preferences.getString("proxy", "")!!,
     )
 

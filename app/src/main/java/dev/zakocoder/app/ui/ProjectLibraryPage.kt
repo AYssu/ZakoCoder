@@ -38,7 +38,7 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, openedId: String?, onOpened: (String?) -> Unit,
-                               onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit) {
+                               onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit, referencedPath: String? = null) {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::import) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::export) }
     var cloning by remember { mutableStateOf(false) }
@@ -55,7 +55,7 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     BackHandler(opened != null) { onOpened(null) }
 
     if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null) },
-        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi)
+        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi, referencedPath = referencedPath)
     else Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
@@ -200,15 +200,22 @@ internal fun ProjectKindsText(project: Project) {
 }
 
 @Composable
-private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit) {
+private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit, referencedPath: String? = null) {
+    var showReferencedDirectory by remember(project.id, referencedPath) { mutableStateOf(referencedPath != null) }
     var tasks by rememberSaveable(project.id) { mutableStateOf(false) }
     var git by rememberSaveable(project.id) { mutableStateOf(false) }
-    var directory by rememberSaveable(project.id) { mutableStateOf("") }
+    var directory by rememberSaveable(project.id) { mutableStateOf(referencedPath?.substringBeforeLast('/', "").orEmpty()) }
+    LaunchedEffect(referencedPath) { if (referencedPath != null) directory = referencedPath.substringBeforeLast('/', "") }
     var revision by remember { mutableIntStateOf(0) }
     val listing = rememberDirectoryListing(project.id, directory, revision, state.fileRevision) {
         withContext(Dispatchers.IO) { workbench.projects.files(project.id, directory) }
     }
     val files = listing.entries
+    val linkedListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(files, referencedPath) {
+        val index = files.indexOfFirst { it.relative == referencedPath }
+        if (index >= 0) linkedListState.scrollToItem(index)
+    }
     val failure = listing.failure?.message.orEmpty()
     val loading = listing.loading
     var menu by remember { mutableStateOf(false) }
@@ -234,7 +241,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     fun openFile(file: ProjectFile) {
         if (file.directory) directory = file.relative
         else if (file.name.endsWith(".apk", ignoreCase = true)) installingApk = file
-        else workbench.editor.open(project.id, file.relative)
+        else { showReferencedDirectory = false; workbench.editor.open(project.id, file.relative) }
     }
 
     var fileName by remember { mutableStateOf("") }
@@ -247,7 +254,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     if (tasks) { ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }; return }
     if (git) { ProjectGitPage(workbench, project.id) { git = false }; return }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
-    if (editor.projectId == project.id) {
+    if (editor.projectId == project.id && !showReferencedDirectory) {
         CodeEditorPage(workbench.editor) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
         return
     }
@@ -280,11 +287,14 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             IconButton(onClick = { revision++ }) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.refresh)) }
         }
         if (editor.tabs.any { it.projectId == project.id }) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            TextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
+            TextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { showReferencedDirectory = false; workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
         }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
+        LazyColumn(Modifier.weight(1f), state = linkedListState, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (failure.isNotEmpty()) item { Text(failure, color = MaterialTheme.colorScheme.error) }
+            if (!loading && failure.isEmpty() && referencedPath != null && directory == referencedPath.substringBeforeLast('/', "") && files.none { it.relative == referencedPath }) item {
+                Text(stringResource(R.string.ai_linked_file_missing, referencedPath), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
             if (!loading && files.isEmpty() && failure.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     IconTile(Glyph.Projects)
@@ -295,7 +305,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             items(files, key = { it.relative }) { file ->
                 val first = file == files.first()
                 val last = file == files.last()
-                Surface(color = MaterialTheme.colorScheme.surface, border = cardBorder(), shape = RoundedCornerShape(
+                Surface(color = if (file.relative == referencedPath) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, border = cardBorder(), shape = RoundedCornerShape(
                     topStart = if (first) 18.dp else 0.dp, topEnd = if (first) 18.dp else 0.dp,
                     bottomStart = if (last) 18.dp else 0.dp, bottomEnd = if (last) 18.dp else 0.dp)) {
                     Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openFile(file) }, onLongClick = { fileActions = file })
@@ -303,6 +313,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         IconTile(if (file.directory) Glyph.Projects else Glyph.File, Modifier.size(36.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            if (file.relative == referencedPath) Text(stringResource(R.string.ai_linked_file), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(if (file.modifiedAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(file.modifiedAt))
                                 else stringResource(R.string.file_label), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

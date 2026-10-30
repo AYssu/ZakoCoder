@@ -24,38 +24,52 @@ data class McpState(
 enum class McpProblem { InvalidConfig, Storage, Disabled, Unavailable, Protocol, Limit, Timeout, Closed }
 class McpException(val problem: McpProblem) : Exception("MCP ${problem.name}")
 
-/** Strict standard mcpServers import. Approval and enablement are never imported. */
+/** Imports a server object or an application-style mcpServers map. Neither grants approval or enablement. */
 object McpConfigParser {
     private const val MAX_CONFIG = 512 * 1024
-    fun parse(source: String): List<McpServer> = guarded {
+    const val DEFAULT_IMPORT_NAME = "Imported MCP"
+
+    /** singleName overrides only an unwrapped server's name; wrapped names are never rewritten. */
+    fun parse(source: String, singleName: String = ""): List<McpServer> = guarded {
         require(source.toByteArray(Charsets.UTF_8).size <= MAX_CONFIG)
         McpJson.check(source)
         val root = JSONObject(source)
-        require(root.keys().asSequence().toSet() == setOf("mcpServers"))
-        val servers = root.get("mcpServers") as? JSONObject ?: error("object")
-        require(servers.length() in 1..32)
-        servers.keys().asSequence().map { name ->
-            val entry = servers.get(name) as? JSONObject ?: error("object")
-            val allowed = setOf("type", "transport", "url", "command", "args", "env", "headers", "enabled", "disabled", "autoApprove")
-            require(entry.keys().asSequence().all { it in allowed })
-            for (flag in listOf("enabled", "disabled")) if (entry.has(flag)) require(entry.get(flag) is Boolean)
-            if (entry.has("autoApprove")) strings(entry.get("autoApprove"), 128)
-            val type = optional(entry, "type")
-            val declared = optional(entry, "transport")
-            require(type.isEmpty() || declared.isEmpty() || type == declared)
-            val command = optional(entry, "command")
-            val transport = when ((type.ifEmpty { declared }).lowercase()) {
-                "stdio" -> McpTransport.Stdio
-                "http", "streamable_http", "streamable-http", "streamablehttp" -> McpTransport.StreamableHttp
-                "sse" -> McpTransport.Sse
-                "" -> if (command.isNotEmpty()) McpTransport.Stdio else error("transport")
-                else -> error("transport")
-            }
-            McpServer(name = name, transport = transport, command = command, url = optional(entry, "url"),
-                args = if (entry.has("args")) strings(entry.get("args"), 128) else emptyList(),
-                env = if (entry.has("env")) stringMap(entry.get("env")) else emptyMap(),
-                headers = if (entry.has("headers")) stringMap(entry.get("headers")) else emptyMap()).also(::validate)
-        }.toList()
+        if (root.has("mcpServers")) {
+            require(root.keys().asSequence().toSet() == setOf("mcpServers"))
+            val servers = root.get("mcpServers") as? JSONObject ?: error("object")
+            require(servers.length() in 1..32)
+            servers.keys().asSequence().map { name ->
+                val entry = servers.get(name) as? JSONObject ?: error("object")
+                server(entry, name)
+            }.toList()
+        } else {
+            val name = singleName.trim().ifEmpty { optional(root, "name").ifBlank { DEFAULT_IMPORT_NAME } }
+            listOf(server(root, name, single = true))
+        }
+    }
+    private fun server(entry: JSONObject, name: String, single: Boolean = false): McpServer {
+        val allowed = setOf("type", "transport", "url", "command", "args", "env", "headers", "enabled", "disabled", "autoApprove") +
+            if (single) setOf("name") else emptySet()
+        require(entry.keys().asSequence().all { it in allowed })
+        // Validate even an overridden JSON name rather than accepting malformed configuration.
+        if (entry.has("name")) optional(entry, "name")
+        for (flag in listOf("enabled", "disabled")) if (entry.has(flag)) require(entry.get(flag) is Boolean)
+        if (entry.has("autoApprove")) strings(entry.get("autoApprove"), 128)
+        val type = optional(entry, "type")
+        val declared = optional(entry, "transport")
+        require(type.isEmpty() || declared.isEmpty() || type == declared)
+        val command = optional(entry, "command")
+        val transport = when ((type.ifEmpty { declared }).lowercase()) {
+            "stdio" -> McpTransport.Stdio
+            "http", "streamable_http", "streamable-http", "streamablehttp" -> McpTransport.StreamableHttp
+            "sse" -> McpTransport.Sse
+            "" -> if (command.isNotEmpty()) McpTransport.Stdio else error("transport")
+            else -> error("transport")
+        }
+        return McpServer(name = name, transport = transport, command = command, url = optional(entry, "url"),
+            args = if (entry.has("args")) strings(entry.get("args"), 128) else emptyList(),
+            env = if (entry.has("env")) stringMap(entry.get("env")) else emptyMap(),
+            headers = if (entry.has("headers")) stringMap(entry.get("headers")) else emptyMap()).also(::validate)
     }
     internal fun validate(server: McpServer) = guarded {
         require(server.id.length in 1..80 && server.id.all { it.isLetterOrDigit() || it in "-_" })

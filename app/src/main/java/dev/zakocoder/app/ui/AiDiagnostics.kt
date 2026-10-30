@@ -138,6 +138,7 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                     TextButton(onClick = controller::recommendedSkills, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
                 }
                 Text(stringResource(R.string.ai_skills_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                AiCustomSkillActions(state, controller)
                 val searchLabel = stringResource(R.string.ai_skills_search)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(searchLabel) }, singleLine = true,

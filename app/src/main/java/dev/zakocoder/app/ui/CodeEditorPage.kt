@@ -43,6 +43,9 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
     val state by controller.state.collectAsStateWithLifecycle()
     val document = state.document
+    val language = document?.let { controller.languages.language(state.path, it.content.getLineString(0)) }
+    var preview by rememberSaveable(state.projectId, state.path) { mutableStateOf(false) }
+    val showingPreview = preview && language == "markdown" && document != null && !state.loading
     val editorDescription = stringResource(R.string.editor_content)
     val loadingDescription = stringResource(R.string.loading)
     val dark = LocalWorkbenchDark.current
@@ -76,7 +79,7 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
     var query by rememberSaveable(state.path) { mutableStateOf("") }
     var replacement by rememberSaveable(state.path) { mutableStateOf("") }
     val requestClose = { closeTab = false; if (state.dirty) leave = true else controller.close() }
-    BackHandler { if (searching) { searching = false; editor?.searcher?.stopSearch() } else requestClose() }
+    BackHandler { if (showingPreview) preview = false else if (searching) { searching = false; editor?.searcher?.stopSearch() } else requestClose() }
     LaunchedEffect(searching, query, editor) {
         editor?.searcher?.let { searcher ->
             if (!searching || query.isEmpty()) searcher.stopSearch()
@@ -100,7 +103,7 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
                         maxLines = if (compact) 1 else 2, overflow = TextOverflow.Ellipsis, fontSize = 11.sp,
                         color = if (state.dirty) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { searching = !searching }, enabled = document != null && !state.loading) {
+                IconButton(onClick = { searching = !searching }, enabled = document != null && !state.loading && !showingPreview) {
                     WorkbenchIcon(Glyph.Search, description = stringResource(R.string.editor_search))
                 }
                 TextButton(onClick = { controller.save() }, enabled = state.dirty && !state.saving && !state.loading) { Text(stringResource(R.string.editor_save)) }
@@ -114,6 +117,15 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
             IconButton(onClick = { picking = true }, enabled = !state.loading && !state.saving) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.editor_open_file)) }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (language == "markdown" && document != null && !state.loading) SecondaryTabRow(selectedTabIndex = if (showingPreview) 1 else 0) {
+            Tab(selected = !showingPreview, onClick = { preview = false }, text = { Text(stringResource(R.string.editor_mode_edit)) })
+            Tab(selected = showingPreview, onClick = {
+                searching = false; editor?.searcher?.stopSearch(); editor?.clearFocus()
+                (editor?.context?.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                    ?.hideSoftInputFromWindow(editor?.windowToken, 0)
+                preview = true
+            }, text = { Text(stringResource(R.string.editor_mode_preview)) })
+        }
         if (state.diskChecking) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.diskState == EditorDiskState.Changed || state.diskState == EditorDiskState.Unavailable) Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             if (compact) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -157,7 +169,11 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
             }
         }
         if (state.loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Text(loadingDescription) } }
-        else if (document != null) key(document) {
+        else if (showingPreview) {
+            val snapshot = remember(document, state.revision, showingPreview) { requireNotNull(document).content.toString() }
+            key(document) { EditorMarkdownPreview(snapshot, Modifier.weight(1f).fillMaxWidth()) }
+        }
+        else if (document != null) key(document, language) {
             AndroidView(factory = { viewContext ->
                 ThemeRegistry.getInstance().setTheme(if (dark) "zako-dark" else "zako-light")
                 CodeEditor(viewContext).apply {
@@ -171,7 +187,6 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
                     setLigatureEnabled(false)
                     setDividerMargin(8f * resources.displayMetrics.density, 8f * resources.displayMetrics.density)
                     colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
-                    val language = controller.languages.language(state.path)
                     setEditorLanguage(if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false))
                     setText(document.content, true, null)
                     setLineSeparator(if (document.baseline.text.contains("\r\n")) LineSeparator.CRLF else if (document.baseline.text.contains('\r') && !document.baseline.text.contains('\n')) LineSeparator.CR else LineSeparator.LF)
@@ -193,8 +208,8 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Surface(color = PanelBackground) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { editor?.undo(); controller.changed() }, enabled = state.canUndo && !state.loading) { WorkbenchIcon(Glyph.Undo, description = stringResource(R.string.editor_undo)) }
-                IconButton(onClick = { editor?.redo(); controller.changed() }, enabled = state.canRedo && !state.loading) { WorkbenchIcon(Glyph.Redo, description = stringResource(R.string.editor_redo)) }
+                IconButton(onClick = { editor?.undo(); controller.changed() }, enabled = state.canUndo && !state.loading && !showingPreview) { WorkbenchIcon(Glyph.Undo, description = stringResource(R.string.editor_undo)) }
+                IconButton(onClick = { editor?.redo(); controller.changed() }, enabled = state.canRedo && !state.loading && !showingPreview) { WorkbenchIcon(Glyph.Redo, description = stringResource(R.string.editor_redo)) }
                 if (onReference != null) IconButton(onClick = {
                     val view = editor
                     val doc = document
@@ -204,8 +219,8 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
                         val selected = if (right > left) all.substring(left, right) else all
                         onReference(dev.zakocoder.app.ai.AiReference(state.path, selected.take(6000), if (right > left) "selection" else "file", if (right > left) view.cursor.leftLine + 1 else 1, state.dirty, selected.length > 6000))
                     }
-                }, enabled = document != null && !state.loading) { WorkbenchIcon(Glyph.Ai, description = stringResource(R.string.editor_reference_ai)) }
-                Text(controller.languages.language(state.path)?.let { stringResource(R.string.editor_language, it) } ?: stringResource(R.string.editor_plain_text),
+                }, enabled = document != null && !state.loading && !showingPreview) { WorkbenchIcon(Glyph.Ai, description = stringResource(R.string.editor_reference_ai)) }
+                Text(language?.let { stringResource(R.string.editor_language, it) } ?: stringResource(R.string.editor_plain_text),
                     modifier = Modifier.weight(1f), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.editor_encoding), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 IconButton(onClick = { controller.checkDisk() }, enabled = document != null && !state.loading && !state.saving && !state.diskChecking) { WorkbenchIcon(Glyph.Check, description = stringResource(R.string.editor_disk_check)) }

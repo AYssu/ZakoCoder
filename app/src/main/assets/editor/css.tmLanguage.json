@@ -1,0 +1,41 @@
+{
+  "name": "css",
+  "scopeName": "source.zako.css",
+  "patterns": [
+    {
+      "name": "comment.block",
+      "begin": "/\\*",
+      "end": "\\*/"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "constant.numeric",
+      "match": "#[0-9a-fA-F]{3,8}\\b|\\b[0-9]+(?:\\.[0-9]+)?(?:px|em|rem|vh|vw|s|ms|deg)?\\b"
+    },
+    {
+      "name": "keyword.control",
+      "match": "@[A-Za-z-]+|!important\\b|[A-Za-z-]+(?=\\s*:)"
+    }
+  ]
+}

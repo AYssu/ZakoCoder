@@ -51,8 +51,8 @@ class McpController(
         }
     }
     /** Imports atomically; a conflicting existing name rejects the entire import. */
-    fun importJson(source: String): Job = change {
-        val imported = withContext(Dispatchers.IO) { McpConfigParser.parse(source) }
+    fun importJson(source: String, singleName: String = ""): Job = change {
+        val imported = withContext(Dispatchers.IO) { McpConfigParser.parse(source, singleName) }
         val existing = mutable.value.servers
         if (existing.any { old -> imported.any { it.name == old.name || it.id == old.id } }) throw McpException(McpProblem.InvalidConfig)
         existing + imported

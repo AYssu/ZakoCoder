@@ -35,6 +35,11 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.tool_bundles), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            TextButton(onClick = workbench::doctor,
+                enabled = !state.busy && !state.checkingTools && !state.checkingPlans,
+                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Text(stringResource(R.string.refresh), fontSize = 11.5.sp)
+            }
             TextButton(onClick = { managing = !managing; if (!managing) onSelected(emptyList()) },
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                 Text(stringResource(if (managing) R.string.done else R.string.manage_tools), fontSize = 11.5.sp)
@@ -84,7 +89,15 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
                             }
                         }
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(stringResource(bundle.title), style = MaterialTheme.typography.titleSmall)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(stringResource(bundle.title), modifier = Modifier.weight(1f, fill = false),
+                                    style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (bundle.id in setOf("zsh", "git", "python")) Surface(
+                                    shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                                    Text(stringResource(R.string.environment_bundle_recommended), Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+                            }
                             val version = checks.firstOrNull { it.id == bundle.tools.first() && it.status == ToolStatus.Ready }?.version
                             Text(version ?: stringResource(bundle.description), style = MaterialTheme.typography.bodySmall,
                                 color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)

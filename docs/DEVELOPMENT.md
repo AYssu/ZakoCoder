@@ -8,6 +8,18 @@
 
 构建不得依赖本地参考材料、开发者绝对路径、私有 Maven 仓库或未提交脚本。禁止动态版本与 SNAPSHOT；新增第三方代码、工具和 CI Action 记录准确来源、版本、许可证及必要声明。依赖升级单独审查，网络失败不能通过跳过校验或未经审查的镜像掩盖。
 
+## 从源码构建 Debug APK
+
+在 Android Studio 打开仓库根目录，或配置 `ANDROID_HOME`；也可在不提交的 `local.properties` 中填写 `sdk.dir`。准备好以上工具链后运行：
+
+```sh
+./gradlew :app:assembleDebug
+```
+
+产物为 `app/build/outputs/apk/debug/app-debug.apk`，目前面向 ARM64 真机。Ubuntu 基础系统不内置 APK，用户在环境页另行安装；构建使用的 PRoot 验证制品会按固定来源下载并校验，不依赖本地参考工程。正式 Release 仍受[发布流程](RELEASING.md)中的来源材料门禁约束。
+
+首次安装可通过 Android 系统安装器或明确指定设备的 `adb install`。不同调试签名可能无法覆盖安装；先核对[测试包签名说明](RELEASING.md#手动打包测试-apk)，不要为绕过签名冲突直接卸载并丢弃用户数据。
+
 ## 实现约束
 
 - 类与文件使用 PascalCase，函数／属性 camelCase，包名小写；注释解释契约和边界，不逐行复述代码。

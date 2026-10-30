@@ -762,7 +762,6 @@
     <string name="project_validation_restored">文件发生过恢复，下面的历史退出码仍可查阅，但不能证明当前文件通过检查，请重新验证。</string>
     <string name="project_validation_workspace_unknown">无法确认文件恢复记录，当前验证状态未知。</string>
     <string name="ai_checkpoint_review_again">重新审阅当前文件</string>
-    <string name="ai_checkpoint_scope_short">恢复范围内的文件与目录；依赖安装、网络和数据库操作不会回滚。</string>
     <string name="ai_checkpoint_scope_more">查看范围与限制</string>
     <string name="ai_checkpoint_scope_less">收起范围说明</string>
     <string name="ai_checkpoint_unsealed_row">第 %1$d 轮 · 中断后待审阅</string>
