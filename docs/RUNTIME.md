@@ -4,9 +4,9 @@
 
 ## 安装与发行限制
 
-`runtime/artifacts.json` 固定原生验证制品提交及 Ubuntu 镜像版本、大小、SHA-256 与解包前缀。构建脚本 `scripts/prepare_runtime.py` 校验 PRoot／loader，缺失时下载到忽略目录 `runtime-artifacts/`；构建不依赖本地参考源码。
+`runtime/artifacts.json` 固定自编译原生制品提交及 Ubuntu 镜像版本、大小、SHA-256 与解包前缀。构建脚本 `scripts/prepare_runtime.py` 调用独立 `native-runtime/` 子项目，从仓库内固定源码编译 PRoot／loader，校验产物锁与 ELF 后复制到忽略目录 `runtime-artifacts/`；不下载第三方预编译 PRoot，不依赖本地参考源码。
 
-现有 PRoot／loader 仅用于本地技术验证，Release 打包被阻止，CI 不公开分发验证 APK。正式发行前必须固定可追溯的自编译源码、补丁、工具链、对应许可证和摘要，替换验证制品并重新验证；准确来源和许可缺口以[第三方说明](../THIRD_PARTY.md)为准。
+PRoot／loader 已使用固定 NDK 自编译，完整输入与测试见[独立子项目](../native-runtime/README.md)。Release 打包仍等待维护者审查分发材料和设备覆盖；准确来源和许可见[第三方说明](../THIRD_PARTY.md)。
 
 应用显式下载固定 Ubuntu noble ARM64 基础系统，或通过 SAF 导入摘要相同的离线包，不接受任意 rootfs。安装依次完成下载／校验、暂存解包、guest Bash 自检及就绪标记；失败或取消清理暂存，不能显示已安装。进程中断后下次安装清理遗留暂存，不自动续执行安装。至少需要 600 MiB 可用空间；基础镜像约 60 MiB 下载、280 MiB 解包，额外工具另占空间。
 
@@ -65,11 +65,11 @@ Android NDK 是独立可选工具包，需要 Android 工具包就绪、额外�
 
 其他 NDK 版本／ABI／复杂第三方库、模拟器和正式签名发行不在本阶段验收范围。
 
-### 在手机上构建 ZakoCoder 自身
+### 在手机上构建 ZakoCoder 自身（历史验证）
 
-已在 Android 13 ARM64 真机的应用 PRoot 内，使用上述 Android 和 NDK 工具包完成当前 ZakoCoder 源码的 `:app:assembleDebug`，覆盖 Compose 页面和终端 `ndk-build` JNI 库。首次完整构建（包含依赖下载）耗时约 8 分钟，生成 APK 的签名验证通过；本次未用该包覆盖安装现有应用，不代表任意 Compose 工程都已兼容。
+在切换独立自编译运行时前，曾在 Android 13 ARM64 真机的应用 PRoot 内，使用上述 Android 和 NDK 工具包完成当时 ZakoCoder 源码的 `:app:assembleDebug`，覆盖 Compose 页面和终端 `ndk-build` JNI 库。首次完整构建（包含依赖下载）耗时约 8 分钟，生成 APK 的签名验证通过；本次未用该包覆盖安装现有应用，不代表任意 Compose 工程都已兼容。
 
-将源码克隆或复制到项目目录，在安装工具包后新建的终端中执行：
+当前 `native-runtime/` 固定的运行时构建宿主为 Linux x86_64，手机 ARM64 社区 NDK 尚未适配该配方与产物锁，不能把以下历史命令当作当前仓库手机自构建已通过。历史验证命令为：
 
 ```sh
 python3 scripts/check_repository.py
@@ -78,7 +78,7 @@ gradle --no-daemon :app:assembleDebug --max-workers=2 \
   -Pkotlin.compiler.execution.strategy=in-process --console=plain
 ```
 
-这里使用工具包内与 Wrapper 相同版本的 Gradle 8.13，限制并行和堆大小以降低手机内存压力；仍需要足够可用内存、存储及可访问依赖仓库的网络。本次使用临时 HTTP 代理访问 Google、Maven、GitHub，直连网络未验收。构建还会下载并校验固定 PRoot 验证制品，原有 Release 来源与自编译门槛继续适用。
+这里使用工具包内与 Wrapper 相同版本的 Gradle 8.13，限制并行和堆大小以降低手机内存压力；仍需要足够可用内存、存储及可访问依赖仓库的网络。本次使用临时 HTTP 代理访问 Google、Maven、GitHub，直连网络未验收。当时构建会下载固定 PRoot 验证制品；当前版本改为源码编译，新的宿主限制见上文。
 
 Debug 签名由构建环境生成，手机内生成的签名可能不同于现有安装包或 CI 包。签名不同不能直接覆盖安装；不要为测试自构建而卸载承载项目和会话的应用。
 

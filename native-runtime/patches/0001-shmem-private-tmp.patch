@@ -1,0 +1,27 @@
+--- a/shmem.c
++++ b/shmem.c
+@@ -26 +26 @@
+-#define ASHV_KEY_SYMLINK_PATH _PATH_TMP "ashv_key_%d"
++#define ASHV_KEY_SYMLINK_PATH "%s/ashv_key_%d"
+@@ -352 +352,13 @@
+-		sprintf(symlink_path, ASHV_KEY_SYMLINK_PATH, key);
++		/* ZakoCoder: the host has no writable global /tmp or Termux prefix. */
++		const char *tmp = getenv("PROOT_TMP_DIR");
++		if (!tmp || tmp[0] != '/') {
++			pthread_mutex_unlock(&mutex);
++			errno = EINVAL;
++			return -1;
++		}
++		int path_size = snprintf(symlink_path, sizeof(symlink_path), ASHV_KEY_SYMLINK_PATH, tmp, key);
++		if (path_size < 0 || (size_t)path_size >= sizeof(symlink_path)) {
++			pthread_mutex_unlock(&mutex);
++			errno = ENAMETOOLONG;
++			return -1;
++		}
+@@ -384,0 +397,6 @@
++			if (errno != EEXIST) {
++				int saved_errno = errno;
++				pthread_mutex_unlock(&mutex);
++				errno = saved_errno;
++				return -1;
++			}

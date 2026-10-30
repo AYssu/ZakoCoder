@@ -25,15 +25,22 @@ SIL Open Font License 1.1；原始版权与完整许可证保存在 APK 的 `ass
 | language-textmate-0.23.6.aar | `909576591348f999b318ef601568a208550ee1c0cae375d70626f70f2b7c63ba` |
 | language-textmate-0.23.6-sources.jar | `ca06b725576c3de059d0625d7971803c08046cd4907b3235d88b82baa2d4311b` |
 
-Sora 声明 LGPL-2.1（源码头允许后续版本），原始许可证保存在 APK `assets/licenses/SoraEditor-LGPL-2.1.txt`。language-textmate 内含 TM4E，源文件保留 EPL-2.0 头，完整 EPL 保存在 `assets/licenses/TM4E-EPL-2.0.txt`。对应源码可从以上固定提交及 Maven 同版本 `-sources.jar` 获取，原版权头未改变。公开发行需随本项目构建输入提供依赖对应源码和可重新构建/链接的方法，不将本项目 Apache-2.0 当作第三方代码许可；当前 Release 仍因 PRoot 验证制品阻止。
+Sora 声明 LGPL-2.1（源码头允许后续版本），原始许可证保存在 APK `assets/licenses/SoraEditor-LGPL-2.1.txt`。language-textmate 内含 TM4E，源文件保留 EPL-2.0 头，完整 EPL 保存在 `assets/licenses/TM4E-EPL-2.0.txt`。对应源码可从以上固定提交及 Maven 同版本 `-sources.jar` 获取，原版权头未改变。公开发行需随本项目构建输入提供依赖对应源码和可重新构建/链接的方法，不将本项目 Apache-2.0 当作第三方代码许可；当前 Release 仍等待自编译运行时分发材料与设备覆盖的维护者审查。
 
 TextMate 传递依赖包括 Gson 2.13.1（Apache-2.0）、JCodings 1.0.63、Joni 2.2.6（MIT）、SnakeYAML Engine 2.9（Apache-2.0）、JDT annotations 2.3.100（EPL-2.0）。来源及许可随 Maven POM/JAR 保留；不接入语言服务器或远端补全。新引入的 AndroidX/Kotlin 依赖继续遵循各自声明。
 
-## PRoot 验证制品：不用于公开发行
+## PRoot 与 loader：仓库内源码自行编译
 
-当前调试构建使用固定验证制品，正式发行前需自行编译替换。来源 https://github.com/AAswordman/OperitTerminalCore ，提交 `e4442bc6a047b6165bf59103721ad143149c620d`。固定 ARM64 PRoot、loader 及 SHA-256 见 [runtime/artifacts.json](runtime/artifacts.json)。构建脚本从该固定提交下载到忽略的 `runtime-artifacts/`，每次构建校验，不读取本地参考源码。
+`native-runtime/` 是独立构建子项目，包含完整未修改的源码归档、固定工具链清单、独立补丁、构建脚本、产物锁及测试；无需从 OperitTerminalCore 下载二进制。来源、准确摘要和分发要求见 [子项目说明](native-runtime/README.md)、[工具链锁](native-runtime/toolchain.lock.json) 和 [验证记录](native-runtime/VALIDATION.md)。
 
-来源仓库声明 LGPL-3.0；PRoot 上游为 GPL-2.0。该声明不能替代每个原生制品准确的对应源码、补丁、工具链与构建说明，当前尚未确认完整对应关系。当前仅用于调试验证：Release 任务直接阻止，常规 CI 不上传 APK；维护者可通过[手动打包工作流](docs/RELEASING.md#手动打包测试-apk)生成 Debug 测试 Artifact，不代表正式发行的来源材料与许可要求已经完成。正式发行必须固定并公开自编译输入和构建流程、履行实际组件许可证及对应源码义务，重跑真机验证；不能仅修改包名或改一个许可证标签即发行。来源许可证副本保留在 APK assets/licenses。
+- termux/proot 提交 `b27d81a68d765f3462e807f4a14e01a03f8e89ea`：同一源码树编译 PRoot 与 `src/loader`，源文件为 GPL-2.0-or-later，原始 COPYING 保留。
+- Samba talloc 2.5.0：库为 LGPL-3.0-or-later，包含原始源码和 libreplace 构建输入；构建工具遵循归档内各自声明。
+- termux/libandroid-shmem v0.7，提交 `7f0bd7e25dbdd146265aff7c6a890029e374622d`：BSD-3-Clause。
+- NDK r28c `28.2.13676358`、Android API 26、ARM64；静态链接 talloc/libreplace 和 shmem，动态依赖仅为 Android 系统库。PRoot 组合制品按 GPL-3.0-or-later 分发，loader 保留 GPL-2.0-or-later；不将本项目 Apache-2.0 当作第三方代码许可。
+
+本地修改为 shmem 私有临时目录适配、错误返回及 PRoot 缺失头文件修复，均独立保存在 `native-runtime/patches/`。talloc 交叉编译答案及 PRoot 构建选项参考 termux/termux-packages 固定提交 `b9229f0be3ebdcad3f99ec1860e5512d32efeb02`，保留参考仓库完整许可声明（包脚本随对应包许可，基础设施为 Apache-2.0）。源码归档不引用 `example/`。
+
+APK 的 `assets/licenses/` 保留 PRoot COPYING、GPL v3、talloc LGPL v3 和 shmem BSD 原文。公开分发二进制时，应在同一位置提供 `python3 native-runtime/bundle_sources.py` 生成的完整对应源码包及摘要，覆盖全部源码、补丁和重建输入；不能只给出上游链接。历史 Operit 来源许可副本仅作为原验证制品记录保留，不代表当前使用其二进制。Release 仍等待维护者审查分发材料及设备覆盖，不因本次替换自动发行。
 
 ## Ubuntu 基础系统
 
@@ -104,4 +111,4 @@ APK `assets/skills/` 的 13 个中文指令文件是 ZakoCoder 自有实现，�
 - 文件：<https://github.com/HomuHomu833/android-ndk-custom/releases/download/r28/android-ndk-r28c-aarch64-linux-gnu.tar.xz>，127,882,848 字节；SHA-256 `3e961b2dac764b0e326b271307e7059c2ef1ce3dac5223e75302400727cc046b`。
 - `source.properties` 声明 NDK `28.2.13676358`。制品中的 Clang 19 自述源自 HomuHomu833/llvm-custom 提交 `dbdd29d3ef3c16cda5c80bc6655f2f8f7f076c8a`；这是社区修改工具链，不是 Google 官方 ARM64 Linux NDK，也不是本项目自编译产物。
 - 上游封装工程 MIT 声明保留在 `app/src/main/assets/licenses/Android-ndk-custom-MIT.txt`。该 MIT 不替代 NDK、LLVM、libc++、sysroot 等组件自身的许可证；下载目录中的 `NOTICE`、LLVM `NOTICE` 和其他声明随制品完整保留。APT 提供的 CMake、Ninja、Python 和运行库使用 Ubuntu 包自身的版权材料。
-- 上游包含 ARM64 host 识别及兼容目录链接，项目未复制其产品代码。当前验收范围为 Ubuntu ARM64 中的 CMake/JNI Debug 构建；不据此宣称任意 NDK 项目或 `ndk-build` 已验证。既有 Release 来源材料门槛仍然有效。
+- 上游包含 ARM64 host 识别及兼容目录链接，项目未复制其产品代码。当前验收范围为 Ubuntu ARM64 中的 CMake/JNI Debug 构建；不据此宣称任意 NDK 项目或 `ndk-build` 已验证。Release 分发材料与设备覆盖审查仍然有效。

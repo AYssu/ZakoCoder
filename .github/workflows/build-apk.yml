@@ -50,6 +50,11 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
           mkdir -p apk-output
+          python3 native-runtime/checks/verify.py
+          python3 native-runtime/bundle_sources.py --output apk-output/native-runtime-sources.tar.gz
+          mkdir -p apk-output/native-runtime/arm64-v8a
+          cp native-runtime/build/jniLibs/arm64-v8a/libzakocoder_*.so apk-output/native-runtime/arm64-v8a/
+          cp native-runtime/build/build-record.json native-runtime/artifacts.lock.json native-runtime/toolchain.lock.json native-runtime/VALIDATION.md apk-output/native-runtime/
           apk_name="ZakoCoder-debug-arm64-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           "$signer" sign --ks "$HOME/.android/debug.keystore" \
@@ -64,7 +69,7 @@ jobs:
             exit 1
           fi
           rm -f "apk-output/$apk_name.idsig"
-          (cd apk-output && sha256sum "$apk_name" > SHA256SUMS.txt)
+          (cd apk-output && sha256sum "$apk_name" native-runtime-sources.tar.gz native-runtime/arm64-v8a/*.so native-runtime/*.json native-runtime/VALIDATION.md > SHA256SUMS.txt)
           printf '%s\n' \
             'ZakoCoder ARM64 Debug test build; not a production release.' \
             "Commit: $GITHUB_SHA" \
@@ -87,7 +92,7 @@ jobs:
           APK_ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         shell: bash
         run: |
-          printf '## ARM64 Debug 测试包\n\n[下载 APK、SHA-256 和构建信息](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '## ARM64 Debug 测试包\n\n[下载 APK、运行时产物、对应源码、SHA-256 和构建信息](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '保存 14 天，需要登录 GitHub 下载。这是测试包，不是正式 Release；PRoot 发行门槛保持不变。' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove signing material
         if: always()

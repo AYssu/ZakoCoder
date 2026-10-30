@@ -2,20 +2,23 @@
   "schemaVersion": 1,
   "validationOnly": true,
   "nativeSource": {
-    "repository": "https://github.com/AAswordman/OperitTerminalCore",
-    "commit": "e4442bc6a047b6165bf59103721ad143149c620d",
-    "license": "Upstream LGPL-3.0 declaration; PRoot upstream GPL-2.0. Exact corresponding native build inputs pending self-build."
+    "repository": "https://github.com/termux/proot",
+    "commit": "b27d81a68d765f3462e807f4a14e01a03f8e89ea",
+    "selfBuilt": true,
+    "buildProject": "native-runtime",
+    "toolchainLock": "native-runtime/toolchain.lock.json",
+    "license": "PRoot GPL-2.0-or-later; combined executable distributed under GPL-3.0-or-later with LGPL-3.0-or-later talloc and BSD-3-Clause libandroid-shmem. See native-runtime/README.md."
   },
   "nativeArtifacts": [
     {
       "name": "libzakocoder_proot.so",
-      "path": "src/main/jniLibs/arm64-v8a/liboperit_proot.so",
-      "sha256": "cb40a1ced11cee76569b4008a9e478c87883ce831152be4eb9570763b82e580d"
+      "path": "native-runtime/build/jniLibs/arm64-v8a/libzakocoder_proot.so",
+      "sha256": "e7daf3d5389253950284bcb18b8fb0e5f0f38bca15bd8bfa4d275e3a1420e7ef"
     },
     {
       "name": "libzakocoder_loader.so",
-      "path": "src/main/jniLibs/arm64-v8a/liboperit_loader.so",
-      "sha256": "f149774236db1e69b36cc1e4ed3866c7094db2eee52da0d4956aa63a9bb26929"
+      "path": "native-runtime/build/jniLibs/arm64-v8a/libzakocoder_loader.so",
+      "sha256": "32ac7e2a23ad4170e92c4578f642c65b19fad3830bd0a1c6f37a60e880cc97e7"
     }
   ],
   "rootfs": {

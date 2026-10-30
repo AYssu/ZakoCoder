@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "ndk": "28.2.13676358",
+  "abi": "arm64-v8a",
+  "api": 26,
+  "artifacts": {
+    "libzakocoder_proot.so": "e7daf3d5389253950284bcb18b8fb0e5f0f38bca15bd8bfa4d275e3a1420e7ef",
+    "libzakocoder_loader.so": "32ac7e2a23ad4170e92c4578f642c65b19fad3830bd0a1c6f37a60e880cc97e7"
+  }
+}

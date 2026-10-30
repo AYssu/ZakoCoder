@@ -1,6 +1,6 @@
 # 发布流程
 
-当前没有正式发行或自动发布工作流。常规 CI 只构建与检查；维护者可另行手动打包 Debug 测试 APK，通过 Actions 下载，不创建版本 tag、GitHub Release 或应用商店版本。现有 PRoot／loader 验证制品仍存在发行来源与许可门槛，Release 任务被阻止；仅修改版本或关闭构建检查不能解除该限制。
+当前没有正式发行或自动发布工作流。常规 CI 只构建与检查；维护者可另行手动打包 Debug 测试 APK，通过 Actions 下载，不创建版本 tag、GitHub Release 或应用商店版本。PRoot／loader 已改为仓库内源码自行编译，Release 任务仍等待维护者对完整对应源码分发材料、许可证与设备覆盖证据的审查；仅修改版本或关闭构建检查不能解除该限制。
 
 ## 手动打包测试 APK
 
@@ -9,8 +9,10 @@
 流程检查仓库、构建 `assembleDebug`、执行 Lint，并校验 APK 签名后上传独立 Artifact。成功后从运行摘要的下载链接或页面下方 Artifacts 下载 ZIP，解压得到：
 
 - `ZakoCoder-debug-arm64-<运行编号>-<提交短摘要>.apk`：ARM64 Debug 测试包。
-- `SHA256SUMS.txt`：APK 的 SHA-256，在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
+- `SHA256SUMS.txt`：APK、运行时文件、源码包和构建记录的 SHA-256，在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
 - `BUILD.txt`：提交、分支、运行编号和测试包边界。
+- `native-runtime/arm64-v8a/libzakocoder_proot.so` 与 `libzakocoder_loader.so`：APK 内使用的自编译运行时；`native-runtime/` 同时包含构建记录、工具链锁、产物锁和验证记录。
+- `native-runtime-sources.tar.gz` 及摘要：本 APK 对应的 PRoot／loader、talloc、shmem 源码、补丁、构建配方和许可；与测试包一同提供。
 
 Artifact 保留 14 天，下载需要登录 GitHub，过期后可重新运行。打包工作流不代替 PR 的完整单元测试，不发布正式 Release，不更改 PRoot 发行门槛；不要把测试包当成可公开正式发行的版本。
 
@@ -24,8 +26,8 @@ Artifact 保留 14 天，下载需要登录 GitHub，过期后可重新运行。
 
 ## 解除发行门槛
 
-1. 固定可追溯的 PRoot 源码、补丁、构建工具链和产物摘要，完成可复现自编译并替换验证制品。
-2. 补齐对应源码、许可证、声明及分发义务；以[第三方说明](../THIRD_PARTY.md)为准，不移除上游声明。
+1. 核对 [native-runtime](../native-runtime/README.md) 中固定的源码、补丁、工具链与产物摘要；在干净目录重建并比较摘要。
+2. 使用 `python3 native-runtime/bundle_sources.py` 生成完整对应源码包及摘要，与二进制在同一位置提供；审查许可证、声明及分发义务，以[第三方说明](../THIRD_PARTY.md)为准，不移除上游声明。
 3. 对替换后的制品重新验证安装、归档保护、取消、PTY、派生进程、工作目录与生命周期。
 4. 维护者审查上述证据及实际平台范围后，才调整 Release 构建门槛。
 
