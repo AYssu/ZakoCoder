@@ -93,7 +93,7 @@ object McpConfigParser {
         val uri = URI(value)
         require(uri.userInfo == null && (allowQuery || uri.query == null) && uri.fragment == null && !uri.host.isNullOrBlank())
         require(uri.port == -1 || uri.port in 1..65535)
-        require(uri.scheme == "https" || uri.scheme == "http" && uri.host.lowercase() in setOf("localhost", "127.0.0.1", "[::1]", "::1"))
+        require(uri.scheme == "https" || uri.scheme == "http" && McpCleartextHosts.allowed(uri.host))
         uri
     }
     internal fun sameOrigin(first: String, second: String): Boolean {

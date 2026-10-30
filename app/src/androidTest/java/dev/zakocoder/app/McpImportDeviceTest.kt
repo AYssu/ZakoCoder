@@ -4,6 +4,17 @@ import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.mcp.*
 import kotlinx.coroutines.*
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
@@ -23,6 +34,52 @@ class McpImportDeviceTest {
         assertFalse(server.enabled)
         assertFalse(server.toString().contains("import-test-placeholder"))
         assertFalse(server.name.contains("import-test-placeholder"))
+    }
+
+    @Test fun wrappedPrivateHttpConfigPreservesNameAndHeadersWithoutEnabling() {
+        val source = """{"mcpServers":{"proxypin_mobile":{"type":"http","url":"http://10.0.0.2:9127/mcp","headers":{"Authorization":"Bearer import-test-placeholder"}}}}"""
+        val server = McpConfigParser.parse(source).single()
+        assertEquals("proxypin_mobile", server.name)
+        assertEquals("http://10.0.0.2:9127/mcp", server.url)
+        assertEquals(McpTransport.StreamableHttp, server.transport)
+        assertEquals("Bearer import-test-placeholder", server.headers["Authorization"])
+        assertFalse(server.enabled)
+        assertFalse(server.toString().contains("import-test-placeholder"))
+        assertTrue(android.security.NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("10.0.0.2"))
+        assertTrue(McpConfigParser.sameOrigin(server.url, "http://10.0.0.2:9127/messages?session=fixture"))
+        assertFalse(McpConfigParser.sameOrigin(server.url, "http://10.0.0.3:9127/messages"))
+    }
+
+    @Test(timeout = 30000) fun privateHttpEndpointCompletesProtocolWithFixtureRoutingOnly() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val authenticated = AtomicBoolean(true)
+        MockWebServer().use { http ->
+            http.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    if (request.getHeader("Authorization") != "Bearer import-test-placeholder") authenticated.set(false)
+                    val message = JSONObject(request.body.readUtf8())
+                    if (!message.has("id")) return MockResponse().setResponseCode(202)
+                    val result = if (message.getString("method") == "initialize")
+                        JSONObject().put("protocolVersion", "2025-06-18").put("capabilities", JSONObject().put("tools", JSONObject()))
+                    else JSONObject().put("tools", JSONArray())
+                    return MockResponse().setHeader("Content-Type", "application/json").setBody(
+                        JSONObject().put("jsonrpc", "2.0").put("id", message.get("id")).put("result", result).toString())
+                }
+            }
+            http.start(InetAddress.getByName("127.0.0.1"), 0)
+            val source = """{"mcpServers":{"proxypin_mobile":{"type":"http","url":"http://10.0.0.2:${http.port}/mcp","headers":{"Authorization":"Bearer import-test-placeholder"}}}}"""
+            // A fixed loopback HTTP proxy receives every request; never contact a real LAN service.
+            val client = OkHttpClient.Builder()
+                .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", http.port)))
+                .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
+            val session = McpSession(McpConfigParser.parse(source).single(), scope, { error("No process expected") }, client)
+            try {
+                val result = session.exchange("tools/list", JSONObject())
+                assertEquals(0, result.getJSONArray("tools").length())
+                assertTrue(authenticated.get())
+                assertEquals(3, http.requestCount)
+            } finally { session.close(); scope.cancel() }
+        }
     }
 
     @Test fun explicitSingleNameOverridesJsonNameAndWrappedNamesArePreserved() {
