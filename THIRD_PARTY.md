@@ -120,3 +120,7 @@ APK `assets/skills/` 的 13 个中文指令文件是 ZakoCoder 自有实现，�
 ## 图片方向元数据
 
 图片导入使用 Google Maven 的 `androidx.exifinterface:exifinterface:1.4.2` 读取 EXIF 方向，随后由本项目重新编码 JPEG，不保留来源元数据。官方来源 https://developer.android.com/jetpack/androidx/releases/exifinterface#1.4.2 ，源码对应同版本 Google Maven sources JAR；未修改上游代码，Apache-2.0。AAR SHA-256：`6bb2b68682a2023c55f35f941444ffea0157947b061e4fd7606ba935e2e77425`。通过 Gradle 解析并随 APK 分发；AndroidX 原有许可适用，不替换版权声明。
+
+## SSH 客户端
+
+SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源 https://github.com/mwiede/jsch ，固定标签 `jsch-2.28.8`。原始 BSD 许可证保存在 APK `assets/licenses/JSch-BSD.txt`；未修改或复制上游实现。通过原生 Java SSH 协议连接，不依赖 Operit、QuickJS、宿主 Shell 或 Ubuntu SSH 客户端。主机指纹与认证凭据由原生配置界面管理，库的原始异常不会进入模型工具结果。

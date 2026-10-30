@@ -7,7 +7,7 @@ internal object AiPermissionPresets {
     fun apply(current: AiPolicy, preset: AiPermissionPreset): AiPolicy {
         val baseline = when (preset) {
             AiPermissionPreset.Normal -> AiPolicy()
-            AiPermissionPreset.Elevated -> AiPolicy(AiPermission.Allow, mapOf(AiTool.UseMcp to AiPermission.Ask))
+            AiPermissionPreset.Elevated -> AiPolicy(AiPermission.Allow, mapOf(AiTool.UseMcp to AiPermission.Ask, AiTool.AndroidTest to AiPermission.Ask, AiTool.SshRemote to AiPermission.Ask))
         }
         // A default Deny is also an intentional prohibition. Materialize it before changing the default.
         val denied = AiTool.entries.filter { current.permission(it) == AiPermission.Deny }

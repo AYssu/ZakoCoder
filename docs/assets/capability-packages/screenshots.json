@@ -1,0 +1,254 @@
+{
+  "date": "2026-10-30",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "device": "Android 13 ARM64 MIUI",
+  "source": "CapabilityPackagesUiDeviceTest: native Compose render fixtures, 360dp viewport, 130% font; synthetic configuration; no user credentials",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "dark-about-ssh-license-entry.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "1606ece6068e61a5339fc2ac503cc8d8c4708ac570ded1816976a8003a73a381",
+      "captureSha256": "c67547a0e5aae794653f3e9ee3832749bd491124a16c12f46ea30b2049944b44"
+    },
+    {
+      "file": "dark-no-project.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "20daa4931e13d6f83e4b013dd9b41694c57f53c30fc04cd72fc24e0e6763e1db",
+      "captureSha256": "b74f088a4ff880ab88a04353bcfa69f0513ae23dff987deefacab780f4433a44"
+    },
+    {
+      "file": "dark-packages-default-off-360-font130.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "dd3c6377dabf1e7a06cb1858d5cf80e819cc6a74c7ce684f4e46664635e2a1e6",
+      "captureSha256": "edc6b1cc03f069289944d31cc6d8f3b36577751647018425813d6503041449eb"
+    },
+    {
+      "file": "dark-screen-enabled.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "54d244b422f772b5e594495b4280c7dfb54f883bce92ee8de84cd4e2970ef2fc",
+      "captureSha256": "4b857a3b9dbf58b074329d8564ddab70eae5e2691b29fc6fa3873dc9f627b56e"
+    },
+    {
+      "file": "dark-ssh-bsd-license.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bbc711ca6047b85dea1fdf41a4eee4114bbec8d80dbe3688e65762a0364a9e17",
+      "captureSha256": "2ee3008350e12a4716dec78ab88927de387ca0a9ff282108c5602fe913c5305d"
+    },
+    {
+      "file": "dark-ssh-connected-tmux.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bf86e31e7711b5c2f9c501d6bc9fc5786cc0098d0d2f57adbb1d94579fd6d5c6",
+      "captureSha256": "ba1f063b0fadd2395716d28d4ca0453d34201436160d8e9f157ea0a2d4697ba4"
+    },
+    {
+      "file": "dark-ssh-connecting-cancel.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ddfe4b237fd39d83fc1a125beb6c1c63cbb357c3d18199db1200c9697d52471e",
+      "captureSha256": "e9a327fa40318c4d6e7a908067693dd480a52a222fb144c4ae37f6eb8376f38f"
+    },
+    {
+      "file": "dark-ssh-connection-status.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d793eef553b7cfd1022199f9a0ec3620b02749284b3f62725dfef34d2bf31879",
+      "captureSha256": "913961202b8cb8e036ebc14b19902f3339a4c5a278f3c90c7db13c9b58646553"
+    },
+    {
+      "file": "dark-ssh-empty.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ae52747595fe8cb59c1baf73f9c2df5f72c8c13c0a4528a3fc80afe598970459",
+      "captureSha256": "8363976490564d02c6c5b3acb05e7be5f049ab3f518f86bb85c24f2084016fd7"
+    },
+    {
+      "file": "dark-ssh-enabled.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "54d244b422f772b5e594495b4280c7dfb54f883bce92ee8de84cd4e2970ef2fc",
+      "captureSha256": "396dbf776875f8a6c32a2228ec1436878186f7bcc4cae3bc2cb0dc5c5fb5d1ad"
+    },
+    {
+      "file": "dark-ssh-first-host-confirmation.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "cdc97e8286dc5130d8e745a80806fbf3dc59d225fea1ba60b21036b870ba2c3b",
+      "captureSha256": "4da9e2ee1484dda305ba9503b612edfc718e6b55c826781c8354ee3a93857f66"
+    },
+    {
+      "file": "dark-ssh-host-key-changed.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e7f9cda51f0b9ef59936fe270bab02078f406e74f4fc8f9900146759d1bd7f26",
+      "captureSha256": "e4c57afa24b9838d730f8105165d78c66c0abed74332ed82bbb55f9d19941eb3"
+    },
+    {
+      "file": "dark-ssh-password-configured.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e2977600e4680483e5bbb51bf6d5b9f48b5e5da4fdda8fd75d3e8bbf40c8db90",
+      "captureSha256": "1eb5ee92554914cdb286de7e1d35134f10946fa99720c8628cfdd8c674d81c78"
+    },
+    {
+      "file": "dark-ssh-private-key.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "adda3422fb0d24cf3788479fb6292fb40bce4a65e2490d36bce58039f46a7600",
+      "captureSha256": "70f99497ceac879bc0749e33771c7c020b245d9138b1202c37d5aeb2777e3742"
+    },
+    {
+      "file": "dark-ssh-validation.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "2ad9f4bae8d5671b6b5f18c6f637d0c3f6e0b34101eb92fa7c7f6e5e41b7ccb0",
+      "captureSha256": "f2bb176b1ffa08ae48121f98538a52e00049378ccec96c0ed3563d738d069f87"
+    },
+    {
+      "file": "light-about-ssh-license-entry.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "00cdbc1d1b32e715c6500178c1dee94ec8e8a927486c10900bec2f4433289154",
+      "captureSha256": "18fb5a74effaa31c3f3ab73e2faef871b0dcea8f1995c05054d63cdabb3e1e39"
+    },
+    {
+      "file": "light-no-project.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "6a08e554b20d1b13fdc0a617fe2fcd2f42b421f2964c66c9de33b7f65fa0b087",
+      "captureSha256": "29c7fc0ed97232aa0ed34f27c8b2f3805e8c51031f068685a011759987f1dbba"
+    },
+    {
+      "file": "light-packages-default-off-360-font130.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "8db437e806e65cffdaa820d3285771474101ea4b48b96aa7ec41bbd04c46e816",
+      "captureSha256": "950b7c47d6a28cc818ea1b752e95b803edbfb53b371debe316abc45c16c51de1"
+    },
+    {
+      "file": "light-screen-enabled.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ea1255f5b348ea014bbda13720c57b07419b50f2c65f08a998ff0788e3a72069",
+      "captureSha256": "2cdcff3c966f6c945d2f825b8c1a0ba80e6b264c675e1f5b757458aa71660d0a"
+    },
+    {
+      "file": "light-ssh-bsd-license.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e3be13b8e22791dbe897547559fc23b22f979a3a301fae8b9023db9abb81e9f9",
+      "captureSha256": "0ca97d1eab945e6333239744a5385b2271e4e9104a6d628a02d459d0aa31da26"
+    },
+    {
+      "file": "light-ssh-connected-tmux.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "fc46c1e0292c6652841f070b59a08b3be1f67391c73eac78ea12066e4dc02b9b",
+      "captureSha256": "b4faa38f61184fc76237fa1b4c3fa564ba111a568760cd479888243397ccafa6"
+    },
+    {
+      "file": "light-ssh-connecting-cancel.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f77a54a8105e9e3bbdabcdba07b24c6e5e51276d6c60b2bdfc50cd2e2c8211e4",
+      "captureSha256": "abc4ae7006a54c6ba487e86cde32c1741458682e125b35c2fcb29502d38fa2b5"
+    },
+    {
+      "file": "light-ssh-connection-status.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7e8508173aa633e0888d86d567aa837b36a374dee9486fbcb9fd245ab8d63433",
+      "captureSha256": "e4dbef58e3a6074e7d328882de9d826cd9fe08d54d6ef7381131ef8d49e5bd25"
+    },
+    {
+      "file": "light-ssh-empty.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e1fc72fe740631a07432dd0b96cae1c4328092f80a13cd7147ce5d285e671309",
+      "captureSha256": "5c30f02bc418ae3faafab5438f01f96470b9fac25c914afb73f175592d341a2d"
+    },
+    {
+      "file": "light-ssh-enabled.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ea1255f5b348ea014bbda13720c57b07419b50f2c65f08a998ff0788e3a72069",
+      "captureSha256": "108ba433861985605ef715b7e812886d0933b852eba79267a54c620fad8a6868"
+    },
+    {
+      "file": "light-ssh-first-host-confirmation.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3a8c245eb372cbc30f43206c00bc6028947b7507f7ea8ba5dee53d373ddb6be1",
+      "captureSha256": "7618a25258947c98f2dbb60a3551d9d16b44cb0072003420cb08e5501fab91b5"
+    },
+    {
+      "file": "light-ssh-host-key-changed.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d12ad4c124b4beaa0e4e6972fb663bd38698d5a6b1a92013eb424ce472ac34a6",
+      "captureSha256": "6067bff1a3d8706c9dfd089d3d0d04d41534e2bfee7f283e5dd7c6e08bc30a4e"
+    },
+    {
+      "file": "light-ssh-password-configured.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "aa1b6d6052645d5d65480874519f186607a81bfdc25d5bfcdb070f53171bae40",
+      "captureSha256": "acd7c37ad285e50dd71a765f6c86a5f0a8382f4983702eb3eb0ead88fb7fbb7d"
+    },
+    {
+      "file": "light-ssh-private-key.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "875f942ba81ce26b6d1f5671ce6e58cc2d835514e549594f7dc6d434020fcc0e",
+      "captureSha256": "d86991c00be088de1af1bd1dd6d04dcb7996a7e210c4b285ba983e725a1949bc"
+    },
+    {
+      "file": "light-ssh-validation.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "62c57e3a772f66256feb898fabcdbd8421626106ce10d0fadfd8af28d66cb1e2",
+      "captureSha256": "cc5a2eaa7ddafefb4dbb771bb8bfa48054319d836c16701cbca9552c8fb73f58"
+    }
+  ]
+}

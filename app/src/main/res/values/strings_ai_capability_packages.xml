@@ -1,0 +1,9 @@
+<resources>
+    <string name="ai_capability_disabled">此项目尚未开启该能力包，或本次任务的能力授权已更改。请在能力包管理中开启后重新发送任务。</string>
+    <string name="ai_ssh_tool">SSH 远程开发</string>
+    <string name="ai_ssh_tool_desc">在用户配置并确认主机指纹的远程机器上执行命令、操作文件及管理 tmux 长任务；远端副作用不属于本地检查点恢复范围。</string>
+    <string name="ai_ssh_warning">远程目标：%1$s\n操作：%2$s\n此操作发生在远程机器。断开连接不代表远端任务停止，本地项目检查点不能撤销远端变更。</string>
+    <string name="capability_packages_storage_error">能力包配置读取或保存失败，已停止可选能力。请重试设置；历史记录不会授予操作权限。</string>
+    <string name="ssh_package_saved">连接配置已保存，请核对主机指纹并测试连接。</string>
+    <string name="ssh_package_test_success">连接验证通过，远端命令正常退出。</string>
+</resources>

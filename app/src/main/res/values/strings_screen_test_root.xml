@@ -1,0 +1,7 @@
+<resources>
+    <string name="screen_test_root_text">Root 输入仅支持已聚焦输入框的可打印 ASCII 文本，且不能包含百分号 s 转义。请先点击输入框；中文或替换文本请使用无障碍方式。</string>
+    <string name="screen_test_root_capture_requires_accessibility">Root 无法保证截图仅含测试应用。请启用无障碍方式获取受保护的窗口截图；本次未采集或发送屏幕。</string>
+    <string name="screen_test_root_timeout">Root 请求或命令等待超时，请检查系统授权后重新执行。</string>
+    <string name="screen_test_root_access_required">Root 测试授权已停止，请在测试面板重新授权。</string>
+    <string name="screen_test_root_window_not_isolated">无法确认目标区域无遮挡，已拒绝 Root 屏幕操作。请关闭悬浮窗、通知面板或遮挡该控件的键盘，再重新观察界面。</string>
+</resources>

@@ -49,6 +49,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         imageTarget = null
     }
     var disclosure by remember { mutableStateOf(false) }
+    var capabilityPackagesOpen by remember(state.projectId) { mutableStateOf(false) }
     var inspecting by remember { mutableStateOf<dev.zakocoder.app.ai.AiReview?>(null) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     var follow by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(true) }
@@ -91,6 +92,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     var modelPicker by remember { mutableStateOf(false) }
     LaunchedEffect(workbenchState.selectedId) { if (state.projectId == null) workbench.ai.select(workbenchState.selectedId) }
     val project = workbenchState.projects.singleOrNull { it.id == state.projectId }
+    if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.projectId, project?.name.orEmpty()) { capabilityPackagesOpen = false }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { choose = true }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
@@ -111,6 +113,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                         onClick = { more = false; detailPanel = "requests" })
                     DropdownMenuItem(text = { Text(stringResource(R.string.project_validation)) }, leadingIcon = { WorkbenchIcon(Glyph.Check) },
                         onClick = { more = false; detailPanel = "validation" })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.capability_packages_title)) }, leadingIcon = { WorkbenchIcon(Glyph.Extensions) },
+                        onClick = { more = false; capabilityPackagesOpen = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_extensions)) }, leadingIcon = { WorkbenchIcon(Glyph.Extensions) },
                         onClick = { more = false; onExtensions() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_checkpoints)) }, leadingIcon = { WorkbenchIcon(Glyph.Undo) }, enabled = project != null && !state.active && !state.restoring,
