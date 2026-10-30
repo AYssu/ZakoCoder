@@ -37,7 +37,7 @@ AI 会话位于 `noBackupFilesDir/ai-history-v1`，检查点与恢复进度独�
 
 AiModelsController 管理配置元数据，AiConfigStore 原子保存配置并通过 Android Keystore AES-GCM 加密密钥。密钥不回显、不写入 SavedState 或项目导出；跨服务源复用要求显式处理。旧单配置兼容读取，首次管理修改写新目录；新目录存在时不复活旧配置。
 
-ChatTransport 处理 HTTPS Chat Completions／SSE，禁止明文 HTTP 和重定向。模型发现与流式工具测试是显式操作；测试使用无项目副作用的探针工具，结果绑定输入及请求代际。活动任务期间禁止切换或修改配置。
+ChatTransport 统一管理 HTTPS 请求、取消、日志与模型请求重试，Chat Completions、Responses、Anthropic Messages 与 Gemini 由独立编解码负责消息转换和结束校验，AiProviderRouting 负责明确协议的路径与认证，禁止明文 HTTP 和重定向。原生签名元数据仅在来源协议重放，日志去除不透明数据与图片编码。模型发现与流式工具测试是显式操作；测试使用无项目副作用的探针工具，结果绑定输入及请求代际。活动任务期间禁止切换或修改配置。
 
 AiController 持有单个活动任务，时间线、模型计划、工具草稿与实际事件分开建模。AiHistoryStore 的保存、切换及删除串行执行；异步历史与文件引用绑定项目、会话及代际，迟到结果不能覆盖新身份。首次请求前保存，运行中周期保存，最终保存失败可重试而不重放模型或工具；加载损坏不能通过重试写入覆盖。
 

@@ -439,9 +439,6 @@
     <string name="ai_models_edit_title">编辑模型配置</string>
     <string name="ai_models_name">配置名称</string>
     <string name="ai_models_connection">服务连接</string>
-    <string name="ai_models_protocol">Chat Completions 兼容</string>
-    <string name="ai_models_protocol_hint">支持 HTTPS 服务的流式工具调用</string>
-    <string name="ai_models_templates">选择服务</string>
     <string name="ai_models_request_url">请求地址：%1$s</string>
     <string name="ai_models_key_cleared">保存后清除原密钥。</string>
     <string name="ai_models_key_retained">已保存密钥；留空保留，输入新值替换。</string>
@@ -463,11 +460,6 @@
     <string name="ai_models_search">搜索模型标识</string>
     <string name="ai_models_refresh">重新获取</string>
     <string name="ai_models_keep_manual">返回手动填写</string>
-    <string name="ai_models_template_hint">仅填写服务地址，不包含模型或密钥。请核对你实际使用的服务地址；不同服务需要对应密钥。</string>
-    <string name="ai_models_custom">自定义兼容服务</string>
-    <string name="ai_models_deepseek">DeepSeek</string>
-    <string name="ai_models_siliconflow">硅基流动</string>
-    <string name="ai_models_openrouter">OpenRouter</string>
     <string name="ai_models_discard_title">放弃未保存的配置？</string>
     <string name="ai_models_discard_hint">本次输入及测试结果不会保存。</string>
     <string name="ai_models_discard">放弃修改</string>

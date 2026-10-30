@@ -77,6 +77,8 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SelectionContainer { Text(stringResource(R.string.ai_request_identity, request.id, request.model, request.origin,
                     java.text.DateFormat.getDateTimeInstance().format(java.util.Date(request.started)), request.finish.ifBlank { "—" }), style = MaterialTheme.typography.bodySmall) }
+                Text(stringResource(R.string.ai_request_protocol, stringResource(protocolLabel(dev.zakocoder.app.ai.AiApiProtocol.entries.firstOrNull { it.name == request.apiProtocol } ?: dev.zakocoder.app.ai.AiApiProtocol.ChatCompletions))),
+                    style = MaterialTheme.typography.bodySmall)
                 val status = stringResource(request.failure?.label ?: if (request.complete) R.string.ai_phase_completed else R.string.ai_phase_receiving)
                 Text(stringResource(R.string.ai_request_state, status, request.status?.toString() ?: "—", requestElapsed(request)), style = MaterialTheme.typography.bodySmall)
                 request.failure?.let { Text(stringResource(it.label), color = MaterialTheme.colorScheme.error) }

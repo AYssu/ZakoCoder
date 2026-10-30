@@ -15,7 +15,9 @@ class AiRetryPolicyTest {
         for (status in listOf(400, 401, 403, 404, 413, 422, 501))
             assertNull(AiRetryPolicy.delayMillis(1, AiTransportException(status, AiFailure.Http), 0))
         for ((kind, diagnostic) in listOf(AiFailure.Network to "connect_failed", AiFailure.Network to "stream_eof",
-            AiFailure.IdleTimeout to "network_read_or_connect_timeout", AiFailure.Protocol to "missing_done"))
+            AiFailure.IdleTimeout to "network_read_or_connect_timeout", AiFailure.Protocol to "missing_done", AiFailure.Protocol to "responses_server_error",
+            AiFailure.Protocol to "responses_rate_limit", AiFailure.Protocol to "anthropic_overloaded",
+            AiFailure.Protocol to "anthropic_rate_limit", AiFailure.Protocol to "gemini_unavailable", AiFailure.Protocol to "gemini_rate_limit"))
             assertNotNull(AiRetryPolicy.delayMillis(1, AiTransportException(kind = kind, diagnostic = diagnostic), 0))
         for ((kind, diagnostic) in listOf(AiFailure.Network to "tls_failed", AiFailure.Network to "invalid_proxy",
             AiFailure.Cancelled to "cancelled", AiFailure.Protocol to "malformed_json", AiFailure.Protocol to "invalid_tool_identity",

@@ -82,7 +82,7 @@ ANDROID_HOME=/path/to/Android/Sdk ./gradlew \
 
 2026-10-31，在上述修订基础上新增当前模型请求的有界重试；不重放任务、工具或已经批准的远端副作用。暂态连接错误、读超时、缺失流结束标记和明确的暂态 HTTP 状态最多尝试三次，等待 1 / 2 秒加少量抖动；尊重不超过 30 秒的 `Retry-After`。永久认证、证书、格式和输出限制错误不会自动重试。等待可取消，新尝试真正收到内容前保留原部分输出；每次请求的失败、等待及关联编号按既有有界规则保存。请求可能重复计费，不宣称断点续传或完整计费审计，详见[模型请求重连](AI_WORKFLOW.md#模型请求重连)。
 
-近期型号参考移除旧 GPT 示例，改为 DeepSeek V4.1 Flash / V4 Pro、GPT-6.1 Sol / Terra、GPT-6 Astra / Luna、Gemini 4 Argon 和 Grok 4.7 八项，按厂商分组，展示 Model ID 与精确容量。Sol / Terra 的官方 Responses 工具协议要求在对应条目明确提示；当前应用仍使用 Chat Completions。容量预设不承诺原生接口或兼容网关已适配，官方来源列于[模型上下文](MODEL_CONTEXT.md)。大上下文的估算、摘要材料构造及 JSON 测量转到工作线程，避免这些扫描直接占用界面线程；不因此宣称所有性能问题已消除。
+近期型号参考移除旧 GPT 示例，改为 DeepSeek V4.1 Flash / V4 Pro、GPT-6.1 Sol / Terra、GPT-6 Astra / Luna、Gemini 4 Argon 和 Grok 4.7 八项，按厂商分组，展示 Model ID 与精确容量。Sol / Terra 的官方 Responses 工具协议要求在对应条目明确提示；当批尚只支持 Chat Completions，后续四协议修订见下文。容量预设不承诺原生接口或兼容网关已适配，官方来源列于[模型上下文](MODEL_CONTEXT.md)。大上下文的估算、摘要材料构造及 JSON 测量转到工作线程，避免这些扫描直接占用界面线程；不因此宣称所有性能问题已消除。
 
 本轮 UI 采用 `mobile-ui-design-kit` 的 360dp、间距与语义层级约束，保留原生 Compose 与现有颜色体系。上下文配置提供 [12 张日夜截图](assets/context-budget/screenshots.json)，重试状态与逐次请求详情提供 [4 张日夜截图](assets/request-retry/screenshots.json)，均为合成数据的真机渲染。按整张模型条目检查滚动可见性，包括 Model ID、容量与协议提示；未完成软键盘弹起后的完整交互专项。
 
@@ -91,3 +91,22 @@ ANDROID_HOME=/path/to/Android/Sdk ./gradlew \
 最终按不同用例去重：**43 项真机测试通过、1 项前置条件不满足而跳过**。通过项为重试传输 6、重试控制器 3、上下文 9、诊断 8、DeepSeek 协议 5、TLS 兼容 2、能力包协议 4、多模态续接 1、日夜 UI 4、实际 AI → 屏幕闭环 1。新增重试验证包括请求快照一致、HTTP / 网络错误、服务端等待、失败次数耗尽、部分输出替换、永久错误拒绝、取消、工具不重放及历史恢复。原屏幕审批、SSH 和未改动终端验证复用前述结果，不重复计入本批。
 
 实际屏幕闭环重新完成并更新证据。测试结束已恢复并核对临时无障碍设置，测试宿主后台启动 app-op 恢复默认；正式包名与签名核对通过，交付 Debug APK 未安装覆盖日常应用。未使用付费模型、未实测提供商真实上下文容量；隔离宿主 Ubuntu sed / Python 集成用例仍待具备环境后单独执行。GitGuardian 历史 UI 标签误报仍需外部控制台处理，与 GitHub Actions 的构建／仓库／标题检查分别报告。
+
+## 四类模型协议与配置界面修订
+
+2026-10-31，补齐 Responses、Anthropic Messages、Gemini GenerateContent，与原 Chat Completions 共四类显式协议。协议层独立实现，共用现有工具审批、取消、重试和日志，不增加 SDK、后端或默认活动模型。新增 11 个常用服务预设；参数及未实现范围见[模型协议](MODEL_PROTOCOLS.md)。旧配置默认 Chat，不按模型名自动选择协议，不在失败时切换服务。
+
+统一 Debug / 设备测试包构建、Lint、**238 项应用单元测试通过**。首批 Lint 发现替换后的 11 个无引用旧字符串资源，清理后原检查通过，未关闭规则。独立批量审查发现的关闭思考与推理强度冲突、原生流内暂态错误缺少重试、Gemini 文本碎片重复复制、非法模型名未完成错误日志均已修复，并由定向用例覆盖。
+
+新增 **43 项协议与集成真机测试通过**：Responses wire 7、Responses transport 4、Responses Controller 1、Anthropic wire 7、Gemini wire 12、共享原生 transport 6、原生 Controller 2、协议配置持久化 4。使用本地 HTTPS 服务与独立项目目录，验证实际路径、认证头、流事件、工具结果、分页、Token 用量、持久会话和签名数据；没有使用商业模型账号。
+
+- Responses 使用 `store: false`，完整本机历史及加密 reasoning 续接，不依赖服务端 response ID。完整 `response.completed` 前不执行工具；HTTP 200 内明确的 server_error / rate_limit 与 HTTP 暂态错误一样有界重试，未知错误不盲目重试。
+- Anthropic、Gemini 实际控制器完成 read_file 工具往返、任务结束、历史落盘、重建及再次续聊；签名原样重放、工具只执行一次，时间线和请求详情不含签名或不透明思考数据。Gemini 无原生调用 ID 的场景保留本地映射，不伪造服务端 ID。
+- 原生图片转换由独立用例核对，诊断移除图片编码；未实测商业模型的视觉语义。细粒度 Gemini 正文和公开思考各 10,000 个碎片可聚合为有限重放片段，保留签名边界；这不是所有设备帧率的性能承诺。
+- 配置验证旧字段缺省、四协议保存与重载、未知协议拒绝、跨来源凭据保护；无效 Gemini 模型路径在网络前返回完整的配置错误记录。
+
+旧协议定向回归 **32 项通过、1 项跳过**，覆盖 Chat 请求重试、DeepSeek、诊断、上下文与多模态历史。包含从首事件持续输出超过 125 秒的真实本地 HTTPS 回复，核对全部内容及结束状态。跳过项为需要 Ubuntu sed / Python 的集成用例，隔离测试宿主没有安装运行时；没有复制用户环境，不计为通过。产品未变后只重编截图测试包，不再重跑后端及单元测试。
+
+本批按不同用例计 **82 项真机测试通过、1 项跳过**（43 新协议 + 32 旧协议回归 + 7 UI/helper），重复截图运行不重复计数。协议与供应商选择采用 `mobile-ui-design-kit`，协议页实际渲染生产模型编辑器与列表，提供 [20 张日夜截图](assets/model-protocol/screenshots.json)；上下文分组列表的 [12 张](assets/context-budget/screenshots.json)和增加协议字段的请求详情 [4 张](assets/request-retry/screenshots.json)同步更新，共 36 张。验证 360dp 视口、130% 字号、四协议切换、完整请求路径、供应商列表滚动、选后模型不变且不发网络、只读状态和协议标签。首次截图捕获过早、面板仍在动画中，且独立测试根容器缺少生产级安全区；修正测试等待、可见边界检查与测试容器安全区后仅重编测试 APK、定向重拍三项协议用例，不沿用旧图。截图均为合成数据，已归档原始捕获和无损文件摘要；软键盘完整交互未单独验证。
+
+设备临时无障碍配置已按测试前快照恢复并核对，两个独立测试包的后台启动 app-op 已恢复默认。正常交付 APK 已校验 `dev.zakocoder.app` 包名和签名，未安装覆盖日常应用。最终独立静态审查未发现新增阻塞项。商业提供商调用、其他 Android 设备及未安装 Ubuntu 的用例仍属于明确限制；GitGuardian 旧提交误报与 Actions 结果分别处理。

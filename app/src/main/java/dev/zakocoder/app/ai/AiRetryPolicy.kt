@@ -13,7 +13,8 @@ internal object AiRetryPolicy {
     const val MAX_SERVER_DELAY_MS = 30_000L
     private val statuses = setOf(408, 429, 500, 502, 503, 504)
     private val transientDiagnostics = setOf("dns_resolution_failed", "connect_failed", "network_read_or_connect_timeout",
-        "request_timeout", "stream_eof", "network_io_failed", "missing_done")
+        "request_timeout", "stream_eof", "network_io_failed", "missing_done", "responses_server_error", "responses_rate_limit",
+        "anthropic_overloaded", "anthropic_rate_limit", "gemini_unavailable", "gemini_rate_limit")
 
     fun delayMillis(failedAttempt: Int, error: AiTransportException, jitterMillis: Long): Long? {
         if (failedAttempt !in 1 until MAX_ATTEMPTS) return null

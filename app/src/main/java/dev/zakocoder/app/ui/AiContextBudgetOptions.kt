@@ -1,12 +1,17 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
@@ -71,18 +76,32 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         contextWindowPresets.groupBy { it.provider }.forEach { (provider, entries) ->
             Text(stringResource(provider), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall)
-            entries.forEach { preset ->
-                OutlinedButton(onClick = { draft.windowTokens = preset.tokens.toString(); changed(); presets = false }, enabled = editable,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), contentPadding = PaddingValues(12.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(preset.label), style = MaterialTheme.typography.labelLarge)
-                        Text(preset.modelId, style = MaterialTheme.typography.bodySmall)
-                        Text(stringResource(R.string.ai_context_preset_exact, java.text.NumberFormat.getIntegerInstance().format(preset.tokens)),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (preset.responsesRequired) Text(stringResource(R.string.ai_context_responses_required),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                Column {
+                    entries.forEachIndexed { index, preset ->
+                        Row(Modifier.fillMaxWidth().clickable(enabled = editable, role = Role.Button) {
+                            draft.windowTokens = preset.tokens.toString(); changed(); presets = false
+                        }.heightIn(min = 64.dp).padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(preset.label), style = MaterialTheme.typography.titleSmall)
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(preset.modelId, style = MaterialTheme.typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(stringResource(R.string.ai_context_preset_exact, java.text.NumberFormat.getIntegerInstance().format(preset.tokens)),
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (preset.responsesRequired) Text(stringResource(R.string.ai_context_responses_required),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            WorkbenchIcon(Glyph.Next, Modifier.padding(top = 4.dp).size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (index < entries.lastIndex) HorizontalDivider(Modifier.padding(horizontal = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    WorkbenchIcon(Glyph.Next, Modifier.size(20.dp))
                 }
             }
         }

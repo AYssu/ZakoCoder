@@ -79,7 +79,7 @@ class AiModelsController(private val context: Context, private val store: AiConf
                             .put("required", JSONArray(listOf("ack"))).put("additionalProperties", false)
                         val tools = JSONArray().put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "connection_probe").put("description", "Acknowledge a connection test; no action is performed").put("parameters", parameters)))
                         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", "Connection test only. Call connection_probe with ack=ok. No project files or commands are involved."))
-                        val reply = transport.request(config, messages, tools, forceTool = "connection_probe", proxy = proxy(), observe = { log ->
+                        val reply = transport.request(config, messages, tools, forceTool = if (config.protocol == AiApiProtocol.Anthropic && config.parameters.thinking == AiThinking.Enabled) null else "connection_probe", proxy = proxy(), observe = { log ->
                             mutable.update { state ->
                                 if (owner == generation) state.copy(probeProgress = AiModelProbeProgress.from(log)) else state
                             }
@@ -96,6 +96,7 @@ class AiModelsController(private val context: Context, private val store: AiConf
     private fun message(error: Exception): String = context.getString(when {
         error is AiProbeUnsupported -> R.string.ai_models_no_tools
         error is AiOriginChanged -> R.string.ai_models_origin_changed
+        error is AiTransportException && error.kind == AiFailure.RequestConfiguration -> R.string.ai_protocol_parameters_invalid
         error is AiTransportException -> when (error.status) {
             401, 403 -> R.string.ai_models_auth_error
             404 -> R.string.ai_models_not_found

@@ -1,0 +1,4 @@
+<resources>
+    <string name="ai_failure_request_configuration">当前参数不受所选接口支持，请调整模型配置后重试</string>
+    <string name="ai_request_protocol">接口协议：%1$s</string>
+</resources>

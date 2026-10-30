@@ -75,6 +75,7 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
                         }
                         Text(item.model, fontFamily = FontFamily.Monospace, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(URI(item.endpoint).host, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(protocolLabel(item.protocol)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { ai.models.activate(item.id) }, enabled = !selected && !task.active && !state.saving) { Text(stringResource(if (selected) R.string.ai_models_in_use else R.string.ai_models_use)) }
                             Spacer(Modifier.weight(1f))
@@ -106,12 +107,13 @@ private fun ModelNavigation(title: String, back: () -> Unit, actions: @Composabl
 }
 
 @Composable
-private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> Unit) {
+internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> Unit) {
     val state by ai.models.state.collectAsStateWithLifecycle()
     val task by ai.state.collectAsStateWithLifecycle()
     var name by remember(original?.id) { mutableStateOf(original?.name.orEmpty()) }
     var endpoint by remember(original?.id) { mutableStateOf(original?.endpoint.orEmpty()) }
     var model by remember(original?.id) { mutableStateOf(original?.model.orEmpty()) }
+    var protocol by remember(original?.id) { mutableStateOf(original?.protocol ?: AiApiProtocol.ChatCompletions) }
     var key by remember { mutableStateOf("") }
     var clearKey by remember { mutableStateOf(false) }
     var maxEnabled by remember { mutableStateOf(original?.parameters?.maxTokens != null) }
@@ -127,13 +129,16 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
     val options = remember(original?.id) { ModelOptionsDraft(original) }
     val baseParameters = AiParameters(if (maxEnabled) maxTokens.toIntOrNull() else null, if (tempEnabled) temperature.toDoubleOrNull() else null, if (topEnabled) topP.toDoubleOrNull() else null)
     val parameters = runCatching { options.parameters(baseParameters) }.getOrDefault(baseParameters)
-    val parametersValid = options.valid() && (!maxEnabled || maxTokens.toIntOrNull() != null) && (!tempEnabled || temperature.toDoubleOrNull() != null) && (!topEnabled || topP.toDoubleOrNull() != null) && runCatching { parameters.validate() }.isSuccess
+    val protocolParametersValid = protocolParametersSupported(protocol, parameters)
+    val parametersValid = protocolParametersValid && options.valid() && (!maxEnabled || maxTokens.toIntOrNull() != null) && (!tempEnabled || temperature.toDoubleOrNull() != null) && (!topEnabled || topP.toDoubleOrNull() != null) && runCatching { parameters.validate() }.isSuccess
     val normalized = runCatching { AiConfigStore.endpoint(endpoint) }.getOrNull()
-    val valid = name.isNotBlank() && name.length <= 80 && normalized != null && model.isNotBlank() && model.length <= 200 && parametersValid
-    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid || options.dirty(original)
+    val modelValid = model.isNotBlank() && model.length <= 200 &&
+        (protocol != AiApiProtocol.Gemini || normalized != null && runCatching { AiProviderRouting.requestAddress(normalized, protocol, model) }.isSuccess)
+    val valid = name.isNotBlank() && name.length <= 80 && normalized != null && modelValid && parametersValid
+    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
-    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers())
+    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol)
     fun leave() { if (state.saving) return; if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
@@ -149,11 +154,19 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
             ModelField(name, { name = it; changed() }, R.string.ai_models_name, enabled = editable)
             ModelSection(stringResource(R.string.ai_models_connection)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(stringResource(R.string.ai_models_protocol), fontSize = 13.sp, fontWeight = FontWeight.Medium); Text(stringResource(R.string.ai_models_protocol_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    TextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_models_templates)) }
+                    Text(stringResource(R.string.ai_protocol_heading), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    TextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_provider_choose)) }
                 }
+                AiProtocolOptions(protocol, editable, { protocol = it; changed() })
+                if (!protocolParametersValid) Text(stringResource(R.string.ai_protocol_parameters_invalid),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ModelField(endpoint, { endpoint = it; changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
-                if (normalized != null) Text(stringResource(R.string.ai_models_request_url, "$normalized/chat/completions"), fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model)
+                if (original != null && normalized != null && runCatching { !sameModelOrigin(original.endpoint, normalized) }.getOrDefault(false) &&
+                    (original.hasKey || original.headerNames.isNotEmpty())) Text(stringResource(R.string.ai_provider_origin_hint),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(key, { key = it; clearKey = false; changed() }, label = { Text(stringResource(if (original?.hasKey == true) R.string.ai_key_replace else R.string.ai_key)) },
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                     singleLine = true, enabled = editable, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth(),
@@ -161,7 +174,7 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
                 if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(clearKey, { clearKey = it; key = ""; changed() }, enabled = editable); Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp) }
             }
             ModelSection(stringResource(R.string.ai_models_model_section)) {
-                ModelField(model, { model = it; changed() }, R.string.ai_model, enabled = editable)
+                ModelField(model, { model = it; changed() }, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_models_manual_hint), Modifier.weight(1f), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { picker = true; ai.models.discover(draft()) }, enabled = editable && normalized != null && parametersValid) { WorkbenchIcon(Glyph.Refresh, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_models_fetch)) }
@@ -179,7 +192,7 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 if (!picker && state.probeProgress != null) AiModelProbeProgressContent(state)
                 if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); TextButton(onClick = ai.models::stopProbe) { Text(stringResource(R.string.cancel)) } }
-                else OutlinedButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && model.isNotBlank() && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
+                else OutlinedButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && modelValid && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -205,14 +218,20 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
         }
         }
     }
-    if (templates) WorkbenchSheet(stringResource(R.string.ai_models_templates), { templates = false }) {
-        Text(stringResource(R.string.ai_models_template_hint), style = MaterialTheme.typography.bodySmall)
-        listOf(R.string.ai_models_custom to "", R.string.ai_models_deepseek to "https://api.deepseek.com/v1", R.string.ai_models_siliconflow to "https://api.siliconflow.cn/v1", R.string.ai_models_openrouter to "https://openrouter.ai/api/v1").forEach { (label, address) ->
-            TextButton(onClick = { if (address.isNotEmpty()) { endpoint = address; changed() }; templates = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(label), Modifier.weight(1f)); WorkbenchIcon(Glyph.Next) }
+    if (templates) WorkbenchSheet(stringResource(R.string.ai_provider_choose), { templates = false }) {
+        AiProviderPresetList(editable) { preset ->
+            endpoint = preset.endpoint; protocol = preset.protocol; changed(); templates = false
         }
     }
     if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },
         confirmButton = { TextButton(onClick = { key = ""; close() }) { Text(stringResource(R.string.ai_models_discard)) } }, dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.ai_models_keep_editing)) } })
+}
+
+private fun sameModelOrigin(first: String, second: String): Boolean {
+    fun origin(value: String): Pair<String, Int> = URI(AiConfigStore.endpoint(value)).let {
+        it.host.lowercase(java.util.Locale.ROOT) to if (it.port == -1) 443 else it.port
+    }
+    return origin(first) == origin(second)
 }
 
 @Composable

@@ -17,7 +17,7 @@
     <string name="ai_context_preset_terra">GPT-6.1 Terra</string>
     <string name="ai_context_preset_astra">GPT-6 Astra</string>
     <string name="ai_context_preset_luna">GPT-6 Luna</string>
-    <string name="ai_context_responses_required">官方工具调用需 Responses API；本应用当前使用 Chat Completions，兼容网关请确认支持。</string>
+    <string name="ai_context_responses_required">官方工具调用需 Responses API，请在模型配置中选择对应协议。</string>
     <string name="ai_context_preset_gemini">Gemini 4 Argon</string>
     <string name="ai_context_preset_grok">Grok 4.7</string>
     <string name="ai_context_reserve_status">输出预留 %1$s Token · 上下文为本地估算，计费用量见请求详情</string>

@@ -76,7 +76,7 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | 设备 | Android 8.0+，ARM64 真机；当前设备验证覆盖 Android 13。x86_64 / 模拟器尚未适配。 |
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
-| 模型服务 | Chat Completions 兼容接口、SSE 工具调用与 `image_url` 图片请求；包含 DeepSeek 推理字段续接和公开思考内容展示。图片语义理解、参数与网关兼容性需按所选服务验证，不含本地模型推理。 |
+| 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
 | 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，暂不提供 LSP 或跨文件语义补全。 |
 | Git | 公开 HTTPS 克隆、状态、暂存和本地提交；私有仓库认证、分支合并与冲突界面尚未提供。 |
 

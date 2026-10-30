@@ -24,13 +24,15 @@ internal const val AI_RESPONSE_TEXT_LIMIT = 256000
 
 data class AiCall(val id: String, val name: String, val arguments: String)
 /** Provider reasoning is opaque protocol context, never an assistant's displayed answer. */
-data class AiReply(val text: String, val calls: List<AiCall>, val reasoningContent: String? = null) {
+data class AiReply(val text: String, val calls: List<AiCall>, val reasoningContent: String? = null, val responsesOutput: String? = null, val providerOutput: String? = null, val providerProtocol: String? = null) {
     fun asAssistantMessage(): JSONObject = JSONObject().put("role", "assistant").put("content", text).apply {
         reasoningContent?.let { put("reasoning_content", it) }
         if (calls.isNotEmpty()) put("tool_calls", JSONArray(calls.map { call ->
             JSONObject().put("id", call.id).put("type", "function")
                 .put("function", JSONObject().put("name", call.name).put("arguments", call.arguments))
         }))
+        responsesOutput?.let { put(RESPONSES_OUTPUT_KEY, JSONArray(it)) }
+        providerOutput?.let { put(PROVIDER_OUTPUT_KEY, JSONObject().put("protocol", requireNotNull(providerProtocol)).put("output", JSONArray(it))) }
     }
 }
 class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response", val retryAfterMillis: Long? = null) : IOException("AI request failed: ${kind.name}")
@@ -122,7 +124,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         val started = System.nanoTime()
         fun elapsed() = (System.nanoTime() - started) / 1000000
         var record = AiRequestLog(model = clean(config.model), origin = AiConfigStore.endpoint(config.endpoint).toHttpUrl().let { "${it.scheme}://${it.host}:${it.port}" },
-            retryGroup = retryGroup, attempt = attempt, maxAttempts = maxAttempts, retryDelayMs = retryDelayMs, retryReason = retryReason,
+            retryGroup = retryGroup, attempt = attempt, maxAttempts = maxAttempts, retryDelayMs = retryDelayMs, retryReason = retryReason, apiProtocol = config.protocol.name,
             contextChars = messages.toString().length, estimatedContextTokens = tokenBudget(config, messages, tools).inputTokens,
             contextWindowTokens = config.context.contextWindowTokens, contextOutputReserveTokens = config.parameters.maxTokens ?: minOf(8192, config.context.contextWindowTokens / 4))
         val lock = Any()
@@ -148,7 +150,26 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             else -> "invalid_response_structure"
         }
         val imageMessages = wireImageMessages(messages, imageData)
-        val body = JSONObject().put("model", config.model).put("messages", imageMessages.messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
+        // Opaque protocol data belongs only to its originating API. Public text/tool pairs survive switches.
+        listOf(imageMessages.messages, imageMessages.diagnosticMessages).forEach { array ->
+            repeat(array.length()) {
+                val message = array.getJSONObject(it)
+                if (config.protocol != AiApiProtocol.Responses && message.remove(RESPONSES_OUTPUT_KEY) != null)
+                    message.remove("reasoning_content")
+                val metadata = message.optJSONObject(PROVIDER_OUTPUT_KEY)
+                if (metadata != null && metadata.optString("protocol") != config.protocol.name) {
+                    message.remove(PROVIDER_OUTPUT_KEY); message.remove("reasoning_content")
+                }
+            }
+        }
+        var address = ""
+        val body = try {
+            address = AiProviderRouting.requestUrl(config)
+            when (config.protocol) {
+            AiApiProtocol.Responses -> AiResponsesWire.request(config, imageMessages.messages, tools, forceTool)
+            AiApiProtocol.Anthropic -> AiAnthropicWire.request(config, imageMessages.messages, tools, forceTool)
+            AiApiProtocol.Gemini -> AiGeminiWire.request(config, imageMessages.messages, tools, forceTool)
+            AiApiProtocol.ChatCompletions -> JSONObject().put("model", config.model).put("messages", imageMessages.messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
             .put("stream_options", JSONObject().put("include_usage", true)).apply {
             config.parameters.validate()
             config.parameters.maxTokens?.let { put("max_tokens", it) }
@@ -168,8 +189,19 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                 }
             }
         }
+        } } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            val mapped = if (error is AiTransportException) error else AiTransportException(kind = AiFailure.RequestConfiguration, diagnostic = "invalid_request_configuration")
+            update { it.copy(complete = true, failure = mapped.kind, diagnostic = mapped.diagnostic) }
+            throw mapped
+        }
         val payload = body.toString()
-        val diagnosticPayload = JSONObject(body.toString()).put("messages", imageMessages.diagnosticMessages).toString()
+        val diagnosticPayload = when (config.protocol) {
+            AiApiProtocol.Responses -> AiResponsesWire.diagnostic(AiResponsesWire.request(config, imageMessages.diagnosticMessages, tools, forceTool))
+            AiApiProtocol.Anthropic -> AiAnthropicWire.diagnostic(body)
+            AiApiProtocol.Gemini -> AiGeminiWire.diagnostic(body)
+            AiApiProtocol.ChatCompletions -> JSONObject(body.toString()).put("messages", imageMessages.diagnosticMessages)
+        }.toString()
         update { it.copy(request = clean(diagnosticPayload).take(240000), requestBytes = payload.toByteArray().size,
             truncated = diagnosticPayload.length > 240000 || imageMessages.omitted > 0) }
         if (payload.toByteArray().size > AI_REQUEST_MAX_BYTES) { update { it.copy(complete = true, failure = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit") }; throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit") }
@@ -178,8 +210,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             update { it.copy(complete = true, failure = AiFailure.Network, diagnostic = "invalid_proxy") }
             throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
         }
-        val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/chat/completions")
-            .apply { AiRequestHeaders.validate(config.requestHeaders); config.requestHeaders.forEach { (name, value) -> header(name, value) }; if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }
+        val request = AiProviderRouting.headers(Request.Builder().url(address), config)
             .post(payload.toRequestBody("application/json".toMediaType())).build()
         suspendCancellableCoroutine { continuation ->
             val call = http.newCall(request)
@@ -200,6 +231,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             update { item -> item.copy(status = it.code) }
                             if (!it.isSuccessful) throw AiTransportException(it.code, AiFailure.Http, "http_status_${it.code}", AiRetryPolicy.retryAfterMillis(it.header("Retry-After")))
                             val source = it.body?.source() ?: throw AiTransportException(diagnostic = "missing_body")
+                            if (config.protocol != AiApiProtocol.ChatCompletions) return@use readProvider(source, call, config, ::elapsed, ::clean, ::update,
+                                delta, reasoningDelta, toolDelta)
                             val text = StringBuilder(); var reasoning: StringBuilder? = null; val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
                             var bytes = 0L; var finish = ""; var done = false
                             var events = 0; var lastPublished = -100L
@@ -308,13 +341,91 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             })
         }
     }
+    /** Typed provider events share request ownership, logging, cancellation and retry boundaries. */
+    private fun readProvider(source: okio.BufferedSource, call: Call, config: AiConfig, elapsed: () -> Long,
+        clean: (String) -> String, update: ((AiRequestLog) -> AiRequestLog) -> Unit,
+        delta: (String) -> Unit, reasoningDelta: (String) -> Unit, toolDelta: (List<AiCallDraft>) -> Unit): AiReply {
+        var firstEvent: Long? = null; var firstText: Long? = null
+        var events = 0; var bytes = 0L; var lastPublished = -100L
+        var drafts = emptyList<AiCallDraft>()
+        val textDelta: (String) -> Unit = { fragment ->
+            if (fragment.isNotEmpty()) { firstText = firstText ?: elapsed(); delta(fragment) }
+        }
+        val draftDelta: (List<AiCallDraft>) -> Unit = { drafts = it }
+        val stream: AiProviderStream = when (config.protocol) {
+            AiApiProtocol.Responses -> AiResponsesStream(textDelta, reasoningDelta, draftDelta)
+            AiApiProtocol.Anthropic -> AiAnthropicStream(textDelta, reasoningDelta, draftDelta)
+            AiApiProtocol.Gemini -> AiGeminiStream(textDelta, reasoningDelta, draftDelta)
+            AiApiProtocol.ChatCompletions -> error("Chat has its own stream decoder")
+        }
+        fun publish(force: Boolean = false) {
+            val now = elapsed()
+            if (!force && now - lastPublished < 100) return
+            lastPublished = now
+            toolDelta(drafts)
+            val preview = stream.text.take(16000 + ((config.requestHeaders.values + config.key).maxOfOrNull { it.length * 2 } ?: 0) + 1024)
+            update { record ->
+                val point = AiStreamPoint(now, events, stream.textChars + stream.argumentChars, bytes)
+                val points = if (record.points.lastOrNull()?.ms?.let { ms -> now / 1000 > ms / 1000 } != false)
+                    (record.points + point).takeLast(256) else record.points.dropLast(1) + point
+                record.copy(firstEvent = firstEvent, firstText = firstText, events = events, textChars = stream.textChars,
+                    argumentChars = stream.argumentChars, bytes = bytes, inputTokens = stream.inputTokens,
+                    outputTokens = stream.outputTokens, cachedTokens = stream.cachedTokens, finish = stream.finish,
+                    response = clean(preview).take(16000), truncated = record.truncated || stream.textChars + stream.argumentChars > 16000 || record.points.size >= 256,
+                    points = points)
+            }
+        }
+        val pending = StringBuilder(); var pendingBytes = 0
+        fun dispatch() {
+            if (pending.isEmpty()) return
+            val data = pending.toString(); pending.setLength(0); pendingBytes = 0
+            bytes += data.toByteArray().size
+            if (data == "[DONE]") {
+                if (!stream.done) throw AiTransportException(diagnostic = "missing_done")
+                return
+            }
+            firstEvent = firstEvent ?: elapsed(); events++
+            val hadDrafts = drafts.isNotEmpty()
+            stream.accept(JSONObject(data))
+            if (call.isCanceled()) throw AiTransportException(kind = AiFailure.Cancelled, diagnostic = "cancelled")
+            publish(force = !hadDrafts && drafts.isNotEmpty())
+        }
+        try {
+            while (!stream.done && !source.exhausted()) {
+                val line = try { source.readUtf8LineStrict(8L * 1024 * 1024) }
+                catch (error: java.io.EOFException) {
+                    if (source.buffer.size > 8L * 1024 * 1024)
+                        throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_event_limit")
+                    throw error
+                }
+                if (line.isEmpty()) { dispatch(); continue }
+                if (!line.startsWith("data:")) continue
+                val data = line.removePrefix("data:").removePrefix(" ")
+                pendingBytes += data.toByteArray().size + 1
+                if (pendingBytes > 8 * 1024 * 1024)
+                    throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_event_limit")
+                if (pending.isNotEmpty()) pending.append('\n')
+                pending.append(data)
+            }
+            if (!stream.done) dispatch()
+            return stream.reply()
+        } finally { publish(force = true) }
+    }
+
     suspend fun models(config: AiConfig, proxy: String = ""): List<String> = withContext(Dispatchers.IO) {
         val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {
             throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
         }
-        val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/models")
-            .apply { AiRequestHeaders.validate(config.requestHeaders); config.requestHeaders.forEach { (name, value) -> header(name, value) }; if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }.build()
-        suspendCancellableCoroutine { continuation ->
+        val found = linkedSetOf<String>()
+        val seenPages = mutableSetOf<String>()
+        var page: String? = null
+        repeat(10) {
+            currentCoroutineContext().ensureActive()
+            val url = AiProviderRouting.modelsUrl(config).newBuilder().apply {
+                page?.let { token -> addQueryParameter(if (config.protocol == AiApiProtocol.Gemini) "pageToken" else "after_id", token) }
+            }.build()
+            val request = AiProviderRouting.headers(Request.Builder().url(url), config).build()
+            val json: JSONObject =         suspendCancellableCoroutine { continuation ->
             val call = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build().newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
@@ -326,16 +437,19 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             val source = it.body?.source() ?: throw AiTransportException()
                             source.request(1024 * 1024 + 1L)
                             if (source.buffer.size > 1024 * 1024) throw AiTransportException()
-                            val data = JSONObject(source.readUtf8()).getJSONArray("data")
-                            require(data.length() <= 5000)
-                            (0 until data.length()).map { index -> data.getJSONObject(index).getString("id") }
-                                .filter { id -> id.isNotBlank() && id.length <= 200 && !id.any(Char::isISOControl) }.distinct().sorted().take(2000)
+                            JSONObject(source.readUtf8())
                         }
                         if (continuation.isActive) continuation.resume(result)
                     } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(if (error is AiTransportException) error else AiTransportException()) }
                 }
             })
+            }
+            found += AiProviderRouting.modelIds(json, config.protocol)
+            if (found.size > 5000) throw AiTransportException(diagnostic = "model_catalog_limit")
+            page = AiProviderRouting.nextPage(json, config.protocol) ?: return@withContext found.sorted().take(2000)
+            if (!seenPages.add(requireNotNull(page))) throw AiTransportException(diagnostic = "model_catalog_pagination_loop")
         }
+        throw AiTransportException(diagnostic = "model_catalog_page_limit")
     }
 
 }
