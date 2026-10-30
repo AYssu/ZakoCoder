@@ -40,4 +40,12 @@ class AiRecoveryTest {
         assertFalse(redactor.toString().contains(key))
         assertEquals("safe source code", redactor.clean("safe source code"))
     }
+    @Test fun headerSecretsAreRedactedInPlaintextAndJsonEscapedDiagnostics() {
+        val redactor = AiLogRedactor("primary-fixture", listOf("header-fixture", "prefix-header-fixture", ""))
+        val cleaned = redactor.clean("primary-fixture header-fixture prefix-header-fixture")
+        assertEquals("[REDACTED] [REDACTED] [REDACTED]", cleaned)
+        assertFalse(redactor.toString().contains("header-fixture"))
+        val quoted = AiLogRedactor("", listOf("fixture\"quote\\slash"))
+        assertEquals("{\"value\":\"[REDACTED]\"}", quoted.clean("{\"value\":\"fixture\\\"quote\\\\slash\"}"))
+    }
 }

@@ -8,6 +8,10 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
+import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.NoSuchFileException
+import java.nio.file.attribute.BasicFileAttributes
 
 /** Blocking storage boundary. Call only on IO; no provider settings or authorization grants enter this store.
  * Operations are replaceable for isolated storage faults; the owning controller serializes access.
@@ -77,6 +81,66 @@ open class AiHistoryStore(private val directory: File) {
         metadata.remove(projectId)
     }
     open fun deleteProject(projectId: String) { metadata.remove(projectId); check(!project(projectId).exists() || project(projectId).deleteRecursively()) }
+
+    /** Blocking fail-closed scan. The owner must hold its history mutex through scan and pruning.
+     * Read every physical committed/recovery JSON conservatively: a backup can still own pixels.
+     * No partial reference set is returned on corruption, links, unknown layout or resource limits.
+     */
+    fun imageReferences(): Set<String> {
+        val attributes = try { Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java, NOFOLLOW_LINKS) }
+        catch (_: NoSuchFileException) { return emptySet() }
+        require(attributes.isDirectory && !attributes.isSymbolicLink)
+        val projects = requireNotNull(directory.listFiles())
+        require(projects.size <= 1024)
+        val references = linkedSetOf<String>()
+        var bytes = 0L
+        var files = 0
+        projects.forEach { root ->
+            require(root.name.matches(Regex("[a-f0-9]{64}")) && Files.isDirectory(root.toPath(), NOFOLLOW_LINKS))
+            val entries = requireNotNull(root.listFiles())
+            require(entries.size <= 64)
+            entries.forEach { file ->
+                require(++files <= 8192 && Files.isRegularFile(file.toPath(), NOFOLLOW_LINKS))
+                val name = file.name.removeSuffix(".bak").removeSuffix(".new")
+                require(file.name in setOf(name, "$name.bak", "$name.new"))
+                require(name == "selected.json" || (name.endsWith(".json") && AiImages.validId(name.removeSuffix(".json"))))
+                val size = Files.size(file.toPath())
+                require(size in 1..(8L * 1024 * 1024))
+                bytes += size
+                require(bytes <= 256L * 1024 * 1024)
+                val json = Files.newInputStream(file.toPath(), NOFOLLOW_LINKS).use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        require(output.size() + count <= 8 * 1024 * 1024)
+                        output.write(buffer, 0, count)
+                    }
+                    require(output.size().toLong() == size)
+                    JSONObject(output.toString(Charsets.UTF_8.name()))
+                }
+                require(json.getInt("schemaVersion") == 1 && AiImages.validId(json.getString("id")))
+                if (name != "selected.json") {
+                    require(json.getString("id") == name.removeSuffix(".json"))
+                    val state = decode(json)
+                    state.timeline.forEach { entry -> references += entry.images.map { it.id } }
+                    val turns = json.getJSONArray("context")
+                    for (index in 0 until turns.length()) {
+                        val messages = turns.getJSONArray(index)
+                        for (messageIndex in 0 until messages.length()) {
+                            val message = messages.getJSONObject(messageIndex)
+                            if (message.has("zako_images")) {
+                                require(message.getString("role") == "user")
+                                references += decodeAiImages(message.getJSONArray("zako_images")).map { it.id }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return references
+    }
     private val sources = listOf(R.string.ai_permission_default_rule, R.string.ai_permission_tool_rule,
         R.string.ai_permission_task_rule, R.string.ai_permission_rejected_rule, R.string.ai_permission_once_rule)
     private fun encode(state: AiState): JSONObject = JSONObject().put("schemaVersion", 1).put("id", state.conversationId)
@@ -86,7 +150,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
         .put("timeline", JSONArray(state.timeline.map { JSONObject().put("id", it.id).put("text", it.text).put("tool", it.toolId)
-            .put("role", it.role.name).put("turn", it.turn) }))
+            .put("role", it.role.name).put("turn", it.turn).put("reasoning", it.reasoning).put("reasoningTruncated", it.reasoningTruncated).put("images", JSONArray(it.images.map(::encodeAiImage))) }))
         .put("events", JSONArray(state.events.map { e -> JSONObject().put("id", e.id).put("call", e.callId).put("name", e.name)
             .put("input", e.input).put("reason", e.reason).put("target", e.target).put("status", e.status.name)
             .put("turn", e.turn).put("permission", e.permission.name).put("source", sources.indexOf(e.permissionSource))
@@ -99,6 +163,17 @@ open class AiHistoryStore(private val directory: File) {
         .put("contextSummary", state.contextSummary).put("contextCompactions", state.contextCompactions).put("contextChars", state.contextChars)
         .put("taskRecovery", state.taskRecovery).put("taskPrompt", state.taskPrompt).put("enabledSkills", JSONArray(state.enabledSkills))
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
+        .also { validateTimeline(state.timeline) }
+    private fun validateTimeline(timeline: List<AiEntry>) {
+        require(timeline.size <= 512 && timeline.map { it.id }.distinct().size == timeline.size)
+        require(timeline.sumOf { it.text.length + it.reasoning.length } <= 512000)
+        timeline.forEach {
+            require(it.reasoning.length <= AI_REASONING_DISPLAY_LIMIT)
+            require(it.role == AiRole.Assistant || (it.reasoning.isEmpty() && !it.reasoningTruncated))
+            require(it.role == AiRole.User || it.images.isEmpty())
+            if (it.images.isNotEmpty()) AiImages.validateBatch(it.images)
+        }
+    }
     private fun decode(json: JSONObject): AiState {
         // Additive v1 field: old records contain no plan; old readers ignore this field.
         val planArray = json.optJSONArray("plan") ?: JSONArray()
@@ -115,9 +190,12 @@ open class AiHistoryStore(private val directory: File) {
             val role = AiRole.valueOf(it.getString("role"))
             AiEntry(it.getString("id").take(100), it.getString("text").also { text ->
                 require(text.length <= if (role == AiRole.Assistant) AI_RESPONSE_TEXT_LIMIT else 64000)
-            }, if (it.isNull("tool")) null else it.getString("tool").take(100), role, it.getInt("turn"))
+            }, if (it.isNull("tool")) null else it.getString("tool").take(100), role, it.getInt("turn"),
+                if (it.has("reasoning")) it.getString("reasoning") else "",
+                if (it.has("reasoningTruncated")) it.getBoolean("reasoningTruncated") else false,
+                if (it.has("images")) decodeAiImages(it.getJSONArray("images")) else emptyList())
         } }
-        require(timeline.sumOf { it.text.length } <= 512000 && timeline.map { it.id }.distinct().size == timeline.size)
+        validateTimeline(timeline)
         require(json.getInt("turn") in 0..1000000)
         val events = json.getJSONArray("events"); require(events.length() <= 64)
         val restored = (0 until events.length()).map { index -> events.getJSONObject(index).let { e ->
@@ -131,10 +209,10 @@ open class AiHistoryStore(private val directory: File) {
         } }
         require(restored.map { it.id }.distinct().size == restored.size)
         require(restored.sumOf { it.input.length + it.preview.length + it.output.length + it.reason.length + it.target.length } <= 512000)
-        val context = json.getJSONArray("context"); require(context.length() <= 8)
+        val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..128 && turn.getJSONObject(0).getString("role") == "user")
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user")
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
@@ -157,7 +235,7 @@ open class AiHistoryStore(private val directory: File) {
             }
             require(pending.isEmpty() && turn.getJSONObject(turn.length() - 1).getString("role") == "assistant")
             turn.toString()
-        }; require(turns.sumOf { it.length } <= 96000)
+        }; require(turns.sumOf { it.length } <= AI_RETAINED_CONTEXT_CHARS)
         val requestArray = json.optJSONArray("requests") ?: JSONArray(); require(requestArray.length() <= 32)
         val requests = (0 until requestArray.length()).map { index -> AiRequestLog.decode(requestArray.getJSONObject(index)).let {
             if (!it.complete) it.copy(complete = true, failure = AiFailure.Interrupted) else it

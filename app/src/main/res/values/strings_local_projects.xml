@@ -1,0 +1,11 @@
+<resources>
+    <string name="local_project_path_invalid">无法绑定该目录。请选择可读写的本地项目文件夹，避免系统目录、Android 私有目录、符号链接和已绑定的重叠目录。</string>
+    <string name="local_project_unavailable">本地项目目录暂不可访问。请检查文件权限、存储设备与目录是否仍在原位置。</string>
+    <string name="local_project_bind">绑定本地目录</string>
+    <string name="local_project_bind_hint">直接开发原目录，编辑器、AI 和终端共享同一份文件。</string>
+    <string name="local_project_storage_error">无法打开系统授权页面，请在系统设置中检查文件访问权限。</string>
+    <string name="local_project_unbind_confirmation">将解除“%1$s”的目录绑定并移除本应用的会话及运行记录，原目录与源码保留。</string>
+    <string name="local_project_managed_label">应用内副本</string>
+    <string name="local_project_bound_label">本地绑定 · 直接修改原文件</string>
+    <string name="local_project_source_hint">选择创建项目、导入副本、绑定本地目录或克隆仓库。</string>
+</resources>

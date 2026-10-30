@@ -38,7 +38,10 @@ data class AiToolEvent(val id: String, val callId: String, val tool: AiTool?, va
     val permissionSource: Int = R.string.ai_permission_default_rule, val preview: String = "", val output: String = "", val truncated: Boolean = false,
     val exitCode: Int? = null, val started: Long? = null, val finished: Long? = null, val turn: Int = 0)
 enum class AiRole { User, Assistant, Notice }
-data class AiEntry(val id: String, val text: String = "", val toolId: String? = null, val role: AiRole = AiRole.Notice, val turn: Int = 0)
+internal const val AI_REASONING_DISPLAY_LIMIT = 64000
+
+data class AiEntry(val id: String, val text: String = "", val toolId: String? = null, val role: AiRole = AiRole.Notice, val turn: Int = 0,
+    val reasoning: String = "", val reasoningTruncated: Boolean = false, val images: List<AiImageAttachment> = emptyList())
 data class AiConversation(val id: String, val title: String, val updated: Long, val turns: Int)
 data class AiPlanStep(val title: String, val status: String)
 data class AiCallDraft(val index: Int, val name: String, val arguments: String)

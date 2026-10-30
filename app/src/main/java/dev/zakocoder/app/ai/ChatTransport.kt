@@ -32,6 +32,7 @@ data class AiReply(val text: String, val calls: List<AiCall>, val reasoningConte
 class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response") : IOException("AI request failed: ${kind.name}")
 class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
     .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()) {
+    private val safeClient = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
     // Settings change rarely, so cache the last (raw -> client) mapping instead of cloning per request.
     // Guarded because requests run on the IO dispatcher and can overlap across model probes/tasks.
     private val proxyLock = Any()
@@ -48,14 +49,14 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             // Disabling the proxy must clear the process-wide binding immediately; otherwise a
             // later SOCKS5 authentication elsewhere could still receive the old pair.
             NetworkProxy.configureSocksAuthentication(null)
-            return client
+            return safeClient
         }
         synchronized(proxyLock) {
             // OkHttp delegates SOCKS5 username/password authentication to the JDK global
             // authenticator. Bind it to this exact endpoint on every call (never a previous pair).
             NetworkProxy.configureSocksAuthentication(raw)
             if (proxyRaw == raw) return requireNotNull(proxyClient)
-            val derived = client.newBuilder().proxy(NetworkProxy.javaProxy(raw)).build()
+            val derived = safeClient.newBuilder().proxy(NetworkProxy.javaProxy(raw)).build()
             proxyRaw = raw
             proxyClient = derived
             return derived
@@ -63,11 +64,13 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     }
 
     suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null, proxy: String = "",
-        toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
-        val redactor = AiLogRedactor(config.key)
+        imageData: (suspend (AiImageAttachment) -> String)? = null, toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        AiRequestHeaders.validate(config.requestHeaders)
+        val redactor = AiLogRedactor(config.key, config.requestHeaders.values)
+        fun clean(value: String): String = redactor.clean(value)
         val started = System.nanoTime()
         fun elapsed() = (System.nanoTime() - started) / 1000000
-        var record = AiRequestLog(model = redactor.clean(config.model), origin = AiConfigStore.endpoint(config.endpoint).toHttpUrl().let { "${it.scheme}://${it.host}:${it.port}" },
+        var record = AiRequestLog(model = clean(config.model), origin = AiConfigStore.endpoint(config.endpoint).toHttpUrl().let { "${it.scheme}://${it.host}:${it.port}" },
             contextChars = messages.toString().length)
         val lock = Any()
         fun update(change: (AiRequestLog) -> AiRequestLog) = synchronized(lock) {
@@ -91,12 +94,18 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             is IOException -> "network_io_failed"
             else -> "invalid_response_structure"
         }
-        val payload = JSONObject().put("model", config.model).put("messages", messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
+        val imageMessages = wireImageMessages(messages, imageData)
+        val body = JSONObject().put("model", config.model).put("messages", imageMessages.messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
             .put("stream_options", JSONObject().put("include_usage", true)).apply {
             config.parameters.validate()
             config.parameters.maxTokens?.let { put("max_tokens", it) }
             config.parameters.temperature?.let { put("temperature", it) }
             config.parameters.topP?.let { put("top_p", it) }
+            config.parameters.frequencyPenalty?.let { put("frequency_penalty", it) }
+            config.parameters.presencePenalty?.let { put("presence_penalty", it) }
+            config.parameters.seed?.let { put("seed", it) }
+            config.parameters.reasoningEffort?.let { put("reasoning_effort", it.wire) }
+            if (config.parameters.thinking != AiThinking.Default) put("thinking", JSONObject().put("type", if (config.parameters.thinking == AiThinking.Enabled) "enabled" else "disabled"))
             forceTool?.let {
                 put("tool_choice", JSONObject().put("type", "function").put("function", JSONObject().put("name", it)))
                 // DeepSeek thinking rejects forced tools; this applies only to the explicit probe.
@@ -105,8 +114,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                     put("thinking", JSONObject().put("type", "disabled"))
                 }
             }
-        }.toString()
-        update { it.copy(request = redactor.clean(payload).take(240000), requestBytes = payload.toByteArray().size, truncated = payload.length > 240000) }
+        }
+        val payload = body.toString()
+        val diagnosticPayload = JSONObject(body.toString()).put("messages", imageMessages.diagnosticMessages).toString()
+        update { it.copy(request = clean(diagnosticPayload).take(240000), requestBytes = payload.toByteArray().size,
+            truncated = diagnosticPayload.length > 240000 || imageMessages.omitted > 0) }
         if (payload.length > 8 * 1024 * 1024) { update { it.copy(complete = true, failure = AiFailure.ContextLimit, diagnostic = "request_size_limit") }; throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "request_size_limit") }
         // Resolve before enqueueing: transport errors are classified by the existing failure kinds.
         val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {
@@ -114,7 +126,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
         }
         val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/chat/completions")
-            .apply { if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }
+            .apply { AiRequestHeaders.validate(config.requestHeaders); config.requestHeaders.forEach { (name, value) -> header(name, value) }; if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }
             .post(payload.toRequestBody("application/json".toMediaType())).build()
         suspendCancellableCoroutine { continuation ->
             val call = http.newCall(request)
@@ -146,7 +158,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                 val argumentChars = calls.values.sumOf { value -> value.third.length }
                                 // Only UI previews are copied repeatedly; execution retains complete arguments below.
                                 toolDelta(calls.map { (index, value) -> AiCallDraft(index, value.second.toString(), value.third.substring(0, minOf(value.third.length, 64000))) })
-                                val previewLimit = 16000 + config.key.length + 1024
+                                val previewLimit = 16000 + ((config.requestHeaders.values + config.key).maxOfOrNull { it.length * 2 } ?: 0) + 1024
                                 val preview = buildString {
                                     append(text.substring(0, minOf(text.length, previewLimit)))
                                     for (value in calls.values) {
@@ -163,7 +175,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                         textChars = text.length, argumentChars = argumentChars, bytes = bytes,
                                         inputTokens = inputTokens, outputTokens = outputTokens, cachedTokens = cachedTokens,
                                         finish = finish.takeIf { value -> value in setOf("stop", "length", "tool_calls", "content_filter", "function_call") } ?: "other",
-                                        response = redactor.clean(preview).take(16000),
+                                        response = clean(preview).take(16000),
                                         truncated = item.truncated || text.length + argumentChars > 16000 || item.points.size >= 256, points = points)
                                 }
                             }
@@ -201,6 +213,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                         val target = reasoning ?: StringBuilder().also { reasoning = it }
                                         if (fragment.length > AI_RESPONSE_TEXT_LIMIT - target.length) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_reasoning_limit")
                                         target.append(fragment)
+                                        if (fragment.isNotEmpty()) reasoningDelta(fragment)
                                     }
                                     val content = part?.optString("content", "")?.takeUnless { value -> value == "null" }.orEmpty()
                                     if (content.length > AI_RESPONSE_TEXT_LIMIT - text.length) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_text_limit")
@@ -208,6 +221,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                     if (call.isCanceled()) throw AiTransportException(kind = AiFailure.Cancelled)
                                     if (content.isNotEmpty()) { firstText = firstText ?: now; delta(content) }
                                     val toolParts = part?.optJSONArray("tool_calls")
+                                    val firstTool = calls.isEmpty() && toolParts != null && toolParts.length() > 0
                                     if (toolParts != null) for (index in 0 until toolParts.length()) {
                                         val tool = toolParts.getJSONObject(index); val position = tool.getInt("index")
                                         if (position !in 0..7) throw AiTransportException(kind = AiFailure.ToolLimit)
@@ -217,7 +231,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                         if (target.first.length > 200 || target.second.length > 100) throw AiTransportException(diagnostic = "invalid_tool_identity")
                                         if (calls.values.sumOf { it.third.length } > 8 * 1024 * 1024) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "tool_arguments_limit")
                                     }
-                                    publish()
+                                    publish(force = firstTool)
                                 }
                             } finally { publish(force = true) }
                             if (finish == "length") throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "finish_length")
@@ -245,7 +259,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             throw AiTransportException(kind = AiFailure.Network, diagnostic = "invalid_proxy")
         }
         val request = Request.Builder().url(AiConfigStore.endpoint(config.endpoint) + "/models")
-            .apply { if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }.build()
+            .apply { AiRequestHeaders.validate(config.requestHeaders); config.requestHeaders.forEach { (name, value) -> header(name, value) }; if (config.key.isNotEmpty()) header("Authorization", "Bearer ${config.key}") }.build()
         suspendCancellableCoroutine { continuation ->
             val call = http.newBuilder().callTimeout(20, TimeUnit.SECONDS).build().newCall(request)
             continuation.invokeOnCancellation { call.cancel() }

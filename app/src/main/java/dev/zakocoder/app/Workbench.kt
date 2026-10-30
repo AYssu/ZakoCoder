@@ -31,6 +31,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val runtime = LinuxRuntime(context) { settingsRepository.loadProxyCredentials() }
     val projects = ProjectRepository(context, runtime.workspaces)
+    init { runtime.projectDirectory = projects::directory }
     val editor = dev.zakocoder.app.editor.EditorController(context, projects, savedFile = {
         mutable.update { it.copy(fileRevision = it.fileRevision + 1) }
         refreshDependencies()
@@ -232,8 +233,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }
         }
     }
-    private suspend fun persist(list: List<Project>, selected: String?) {
-        withContext(Dispatchers.IO) { projects.save(list); projects.select(selected) }
+    private suspend fun persist(list: List<Project>, selected: String?, afterSave: () -> Unit = {}) {
+        withContext(Dispatchers.IO) { projects.save(list); afterSave(); projects.select(selected) }
         mutable.update { it.copy(projects = list, selectedId = selected, tools = it.bundleTools.filter { check ->
             DevelopmentTools.required(list.singleOrNull { project -> project.id == selected }?.kinds.orEmpty()).any { tool -> tool.id == check.id }
         }) }
@@ -275,6 +276,22 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         val project = withContext(Dispatchers.IO) { projects.import(tree) { count -> mutable.update { it.copy(operation = context.getString(R.string.import_progress, count)) } } }
         persist(mutable.value.projects + project, project.id)
     }
+    fun bindLocalProject(path: String) = run(R.string.local_project_bind) {
+        // Protect the short local registration transaction, including the IO result handoff.
+        withContext(NonCancellable) {
+            val project = withContext(Dispatchers.IO) { projects.bindLocal(path) }
+            var registered = false
+            try {
+                persist(mutable.value.projects + project, project.id) { registered = true }
+            } catch (failure: Throwable) {
+                if (!registered) withContext(Dispatchers.IO) {
+                    try { projects.removeBinding(project.id) }
+                    catch (cleanup: Exception) { failure.addSuppressed(cleanup) }
+                }
+                throw failure
+            }
+        }
+    }
     fun select(id: String) = run(R.string.select_project) { persist(mutable.value.projects, id) }
     fun removeProject(id: String) = run(R.string.remove_project) {
         check((!aiActive() && !aiRestoring() && !ai.state.value.permissionsLoading) || ai.state.value.projectId != id) { context.getString(R.string.ai_project_busy) }
@@ -282,12 +299,26 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         val project = mutable.value.projects.single { it.id == id }
         check(terminal.sessions.none { it.projectId == id && it.session.isRunning }) { context.getString(R.string.close_project_terminals) }
         terminal.sessions.filter { it.projectId == id }.toList().forEach { terminal.close(it.id) }
-        withContext(Dispatchers.IO) { PrivateFiles.deleteTree(projects.directory(project.id)) }
+        val bound = projects.isBound(project.id)
+        val previous = mutable.value.projects
+        val remaining = previous.filterNot { it.id == id }
+        if (bound) {
+            withContext(NonCancellable) {
+                persist(remaining, remaining.firstOrNull()?.id) {
+                    try { projects.removeBinding(id) }
+                    catch (failure: Exception) {
+                        // Keep a failed detach discoverable; never remove the external directory.
+                        try { projects.save(previous) }
+                        catch (rollback: Exception) { failure.addSuppressed(rollback) }
+                        throw failure
+                    }
+                }
+            }
+        } else withContext(Dispatchers.IO) { PrivateFiles.deleteTree(projects.directory(project.id)) }
         ai.deleteProjectHistory(id)
         withContext(Dispatchers.IO) { projectTasks.deleteProject(id) }
         if (ai.state.value.projectId == id) ai.select(null)
-        val remaining = mutable.value.projects.filterNot { it.id == id }
-        persist(remaining, remaining.firstOrNull()?.id)
+        if (!bound) persist(remaining, remaining.firstOrNull()?.id)
     }
     fun redetect() = run(R.string.detect_project, recheckTools = true) {
         val project = mutable.value.project ?: return@run

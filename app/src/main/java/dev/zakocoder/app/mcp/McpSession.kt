@@ -82,10 +82,10 @@ internal class McpSession(
                         val source = launched.inputStream.source().buffer()
                         while (isActive && !closed.get()) {
                             val line = source.readUtf8LineStrict(MAX_MESSAGE)
-                            if (line.isNotBlank()) { McpJson.check(line); publish(JSONObject(line)) }
+                            if (line.isNotBlank()) publish(parseMessage(line))
                         }
                     } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { messages.close(McpException(McpProblem.Unavailable)) }
+                    catch (failure: Exception) { messages.close(failure as? McpException ?: McpException(McpProblem.Unavailable)) }
                 }
                 launchReader {
                     // Drain stderr without retaining or logging environment, tokens, or server errors.
@@ -98,10 +98,14 @@ internal class McpSession(
                 launchReader {
                     try {
                         val response = executeAsync(request(server.url).get().build())
-                        if (!response.isSuccessful || response.header("Content-Type")?.substringBefore(';') != "text/event-stream") throw McpException(McpProblem.Protocol)
+                        checkHttp(response)
+                        if (response.header("Content-Type")?.substringBefore(';') != "text/event-stream") throw McpException(McpProblem.Protocol)
                         readEvents(response, true)
                     } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { endpoint.completeExceptionally(McpException(McpProblem.Unavailable)); messages.close(McpException(McpProblem.Unavailable)) }
+                    catch (failure: Exception) {
+                        val diagnostic = failure as? McpException ?: (failure as? java.io.IOException)?.let(McpDiagnostics::network) ?: McpException(McpProblem.Protocol)
+                        endpoint.completeExceptionally(diagnostic); messages.close(diagnostic)
+                    }
                 }
                 endpoint.await()
             }
@@ -142,7 +146,7 @@ internal class McpSession(
         val target = if (server.transport == McpTransport.Sse) endpoint.await() else server.url
         val response = executeAsync(request(target).post(text.toRequestBody("application/json".toMediaType())).build())
         try {
-            if (!response.isSuccessful) throw McpException(McpProblem.Unavailable)
+            checkHttp(response)
             response.header("Mcp-Session-Id")?.let { value ->
                 if (value.length !in 1..1024 || value.any { it.code !in 33..126 } || sessionId != null && sessionId != value) throw McpException(McpProblem.Protocol)
                 sessionId = value
@@ -159,15 +163,14 @@ internal class McpSession(
                         if (out.size > MAX_MESSAGE) throw McpException(McpProblem.Limit)
                     }
                     val raw = out.readUtf8()
-                    McpJson.check(raw)
-                    publish(JSONObject(raw))
+                    publish(parseMessage(raw))
                 }
                 "text/event-stream" -> {
                     // Keep reading concurrently so a response can arrive before the SSE stream closes.
                     launchReader {
                         try { readEvents(response, false) }
                         catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { messages.close(McpException(McpProblem.Unavailable)) }
+                        catch (failure: Exception) { messages.close(failure as? McpException ?: (failure as? java.io.IOException)?.let(McpDiagnostics::network) ?: McpException(McpProblem.Protocol)) }
                     }
                     return
                 }
@@ -177,6 +180,10 @@ internal class McpSession(
             // An SSE body belongs to its reader until EOF/close; other responses are consumed here.
             if (server.transport == McpTransport.Sse || response.header("Content-Type")?.substringBefore(';')?.trim() != "text/event-stream" || !expectsResponse) release(response)
         }
+    }
+    private fun checkHttp(response: Response) {
+        if (response.code in 300..399) throw McpException(McpProblem.Unavailable, McpFailureReason.Redirect)
+        if (!response.isSuccessful) throw McpException(McpProblem.Unavailable, McpFailureReason.HttpStatus, response.code)
     }
     private fun request(target: String): Request.Builder {
         if (!McpConfigParser.sameOrigin(server.url, target)) throw McpException(McpProblem.Protocol)
@@ -200,7 +207,7 @@ internal class McpSession(
                 if (continuation.isActive) continuation.resume(result)
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) {
-                if (continuation.isActive) continuation.resumeWithException(if (failure is McpException) failure else McpException(McpProblem.Unavailable))
+                if (continuation.isActive) continuation.resumeWithException(failure as? McpException ?: (failure as? java.io.IOException)?.let(McpDiagnostics::network) ?: McpException(McpProblem.Unavailable))
             }
         }
         continuation.invokeOnCancellation {
@@ -215,12 +222,12 @@ internal class McpSession(
         call.enqueue(object : okhttp3.Callback {
             override fun onFailure(call: Call, error: java.io.IOException) {
                 calls -= call
-                if (continuation.isActive) continuation.resumeWithException(McpException(McpProblem.Unavailable))
+                if (continuation.isActive) continuation.resumeWithException(McpDiagnostics.network(error))
             }
             override fun onResponse(call: Call, response: Response) {
                 calls -= call; responses += response
-                if (!continuation.isActive || closed.get()) release(response)
-                else continuation.resume(response) { _, value, _ -> release(value) }
+                if (!continuation.isActive || closed.get()) releaseFromCallback(response)
+                else continuation.resume(response) { _, value, _ -> releaseFromCallback(value) }
             }
         })
     }
@@ -245,8 +252,7 @@ internal class McpSession(
                                 if (!McpConfigParser.sameOrigin(server.url, address)) throw McpException(McpProblem.Protocol)
                                 endpoint.complete(address)
                             } else if (event == "message") {
-                                McpJson.check(payload)
-                                val incoming = JSONObject(payload); publish(incoming)
+                                val incoming = parseMessage(payload); publish(incoming)
                                 if (!legacy && incoming.has("id") && !incoming.has("method")) return
                             }
                         }
@@ -258,11 +264,24 @@ internal class McpSession(
             }
         } finally { release(response) }
     }
+    private fun parseMessage(raw: String): JSONObject = try {
+        McpJson.check(raw)
+        JSONObject(raw)
+    } catch (_: Exception) { throw McpException(McpProblem.Protocol) }
     private fun publish(message: JSONObject) {
         if (message.optString("jsonrpc") != "2.0") throw McpException(McpProblem.Protocol)
         if (!messages.trySend(message).isSuccess) throw McpException(McpProblem.Limit)
     }
-    private fun release(response: Response) { responses -= response; response.close() }
+    // Closing an unread error body can drain the socket. Keep cleanup off Main and never let
+    // a cleanup exception replace the useful HTTP/protocol failure we are already reporting.
+    private suspend fun release(response: Response) = withContext(NonCancellable + Dispatchers.IO) {
+        responses -= response
+        runCatching { response.close() }
+        Unit
+    }
+    private fun releaseFromCallback(response: Response) {
+        scope.launch(NonCancellable + Dispatchers.IO) { release(response) }
+    }
     private fun checkOpen() { if (closed.get()) throw McpException(McpProblem.Closed) }
     suspend fun close() {
         if (!closed.compareAndSet(false, true)) return

@@ -1,0 +1,8 @@
+<resources>
+    <string name="ai_images_add">添加图片</string>
+    <string name="ai_images_maximum">每轮最多添加 4 张图片，请先移除已有图片。</string>
+    <string name="ai_images_loading">正在处理图片…</string>
+    <string name="ai_images_remove">移除图片：%1$s</string>
+    <string name="ai_images_preview_unavailable">图片预览不可用</string>
+    <string name="ai_failure_image">附加图片不可读取，请重新添加后发送。</string>
+</resources>

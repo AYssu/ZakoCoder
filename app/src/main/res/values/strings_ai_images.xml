@@ -1,0 +1,7 @@
+<resources>
+    <string name="ai_image_invalid">无法读取图片。请选择有效的 JPEG、PNG 或 WebP 文件。</string>
+    <string name="ai_image_too_large">图片过大。原文件最多 12 MiB、1 亿像素；导入后最长边为 1600 像素，最多 1 MiB。</string>
+    <string name="ai_image_capacity">图片存储已满：最多 256 张、合计 128 MiB。仍被会话引用的图片不会自动删除。</string>
+    <string name="ai_image_missing">图片已丢失或损坏，无法发送。请重新添加图片。</string>
+    <string name="ai_image_storage">无法保存或读取本机图片，请检查存储空间与文件访问权限。</string>
+</resources>

@@ -14,9 +14,11 @@ import java.io.File
 data class AiReview(val path: String, val before: String?, val after: String?, val directory: Boolean = false, val beforeMode: String? = null, val afterMode: String? = null)
 data class AiApproval(val title: String, val detail: String, val eventId: String? = null, val review: AiReview? = null)
 data class AiChange(val path: String, val before: FileBaseline?, val after: FileBaseline)
-data class AiState(val projectId: String? = null, val checkpointId: String? = null, val references: List<AiReference> = emptyList(), val ruleSources: List<String> = emptyList(), val rulesLimited: Boolean = false, val restoring: Boolean = false, val workspaceRevision: Int = 0, val active: Boolean = false, val messages: List<String> = emptyList(),
+data class AiState(val projectId: String? = null, val checkpointId: String? = null, val references: List<AiReference> = emptyList(), val pendingImages: List<AiImageAttachment> = emptyList(), val imagesLoading: Boolean = false, val ruleSources: List<String> = emptyList(), val rulesLimited: Boolean = false, val restoring: Boolean = false, val workspaceRevision: Int = 0, val active: Boolean = false, val messages: List<String> = emptyList(),
     val conversationId: String = java.util.UUID.randomUUID().toString(), val turn: Int = 0,
     val turnTimings: List<AiTurnTiming> = emptyList(),
+    /** Transient streaming ownership; history never reopens an ended reasoning section. */
+    val reasoningEntryId: String? = null,
     val contextSummary: String = "", val contextCompactions: Int = 0, val contextChars: Int = 0,
     val conversations: List<AiConversation> = emptyList(), val contextTurns: List<String> = emptyList(),
     val commandChanges: List<AiCommandChange> = emptyList(), val commandReviewLimited: Boolean = false,
@@ -49,21 +51,53 @@ class AiController(private val context: Context, root: (String) -> File, private
     private val mutable = MutableStateFlow(AiState())
     val state = mutable.asStateFlow()
     private val files = AiProjectFiles(root)
+    private val imageStore = AiImageStore(context)
     private val checkpoints = AiCheckpoints(history.checkpointDirectory, root)
     private val taskContext = AiTaskContext(root)
     private val skillStore = AiSkills(files, AiBuiltinSkills(context))
     private val threads = linkedMapOf<String, AiState>()
     private val draftReferences = linkedMapOf<Pair<String, String>, List<AiReference>>()
+    private val draftImages = linkedMapOf<Pair<String, String>, List<AiImageAttachment>>()
     private fun retainDraftReferences() {
         val current = mutable.value
         val project = current.projectId ?: return
         val owner = project to current.conversationId
+        draftImages.remove(owner)
+        if (current.pendingImages.isNotEmpty()) draftImages[owner] = current.pendingImages
         draftReferences.remove(owner)
         if (current.references.isNotEmpty()) draftReferences[owner] = current.references.toList()
         while (draftReferences.size > 20) draftReferences.remove(draftReferences.keys.first())
     }
     private var task: Job? = null
     private val historyMutex = kotlinx.coroutines.sync.Mutex()
+    private var imageImports = 0
+    private var imageMaintenance = false
+    private var imageCollectionPending = false
+    private fun collectUnusedImages() {
+        imageCollectionPending = true
+        if (imageMaintenance || imageImports > 0 || mutable.value.imagesLoading || mutable.value.active || mutable.value.restoring) return
+        imageMaintenance = true
+        imageCollectionPending = false
+        scope.launch {
+            try {
+                historyMutex.withLock {
+                    val live = (draftImages.values.flatten() + mutable.value.pendingImages +
+                        mutable.value.timeline.flatMap { it.images } +
+                        threads.values.flatMap { it.pendingImages + it.timeline.flatMap { entry -> entry.images } })
+                        .map { it.id }.toSet()
+                    val retained = withContext(Dispatchers.IO) { history.imageReferences() } + live
+                    imageStore.pruneUnreferenced(retained)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                // A damaged or unreadable history prevents collection altogether. Never
+                // replace failed reference discovery with an empty keep set.
+            } finally {
+                imageMaintenance = false
+                if (imageCollectionPending && imageImports == 0 && !mutable.value.active && !mutable.value.restoring) collectUnusedImages()
+            }
+        }
+    }
     private var decision: CompletableDeferred<AiDecision>? = null
     private val grants = mutableSetOf<Pair<AiTool, String>>()
     private val toolGrants = mutableSetOf<AiTool>()
@@ -108,12 +142,14 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (it.skillsInitialized) it else it.copy(enabledSkills = it.enabledSkills.ifEmpty { AiBuiltinSkills.defaults }, skillsInitialized = true)
         }
         val savedReferences = draftReferences[current.projectId to restored.conversationId].orEmpty()
+        val savedImages = draftImages[current.projectId to restored.conversationId].orEmpty()
+        val images = if (current.conversationId == restored.conversationId) current.pendingImages else savedImages
         // Attachments accepted while the initial project history loads belong to its resolved session.
         // Conversation switches use only their own saved draft references.
         val references = if (projectSelection) {
             (savedReferences + current.references).asReversed().distinctBy { it.kind to it.path }.take(4).asReversed()
         } else if (current.conversationId == restored.conversationId) current.references else savedReferences
-        mutable.value = restored.copy(projectId = current.projectId, references = references, policy = policy,
+        mutable.value = restored.copy(projectId = current.projectId, references = references, pendingImages = images, policy = policy,
             endpoint = current.endpoint, model = current.model, hasKey = current.hasKey, configured = current.configured,
             configurationRevision = current.configurationRevision, conversations = loaded.conversations,
             changes = cached?.takeIf { it.conversationId == restored.conversationId }?.changes.orEmpty())
@@ -200,6 +236,9 @@ class AiController(private val context: Context, root: (String) -> File, private
                     history.load(project, current.conversationId.takeUnless { it == id })
                 } }
                 if (sessionGeneration == generation && mutable.value.projectId == project) restore(loaded, current.policy)
+                draftImages.remove(project to id)
+                threads.remove(project)
+                collectUnusedImages()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { if (sessionGeneration == generation && mutable.value.projectId == project) mutable.update { it.copy(permissionsLoading = false, historyError = true, error = context.getString(R.string.ai_history_save_error)) } }
         }
@@ -209,6 +248,13 @@ class AiController(private val context: Context, root: (String) -> File, private
         historyMutex.withLock { withContext(Dispatchers.IO) { history.deleteProject(id); checkpoints.deleteProject(id) } }
         threads.remove(id)
         draftReferences.keys.removeAll { it.first == id }
+        draftImages.keys.removeAll { it.first == id }
+        if (mutable.value.projectId == id) {
+            permissionLoad?.cancel()
+            mutable.update { AiState(endpoint = it.endpoint, model = it.model, hasKey = it.hasKey,
+                configured = it.configured, configurationRevision = it.configurationRevision) }
+        }
+        collectUnusedImages()
     }
     private suspend fun persist(final: Boolean = false) {
         // Capture the owner before waiting: a queued old save must never save a newly selected session.
@@ -362,7 +408,7 @@ class AiController(private val context: Context, root: (String) -> File, private
     private fun failure(kind: AiFailure, diagnostic: String = kind.name) {
         val request = mutable.value.requests.lastOrNull { it.turn == mutable.value.turn }
         val message = context.getString(kind.label) + (request?.status?.let { " (HTTP $it)" } ?: "") + (request?.id?.let { " · ${it.take(8)}" } ?: "")
-        mutable.update { it.copy(error = if (it.historyError) it.error else message, failureKind = kind, taskDiagnostic = diagnostic.take(2048), phase = if (kind == AiFailure.Cancelled) AiPhase.Cancelled else AiPhase.Failed) }
+        mutable.update { it.copy(error = if (it.historyError) it.error else message, failureKind = kind, taskDiagnostic = diagnostic.take(2048), phase = if (kind == AiFailure.Cancelled) AiPhase.Cancelled else AiPhase.Failed, reasoningEntryId = null) }
     }
 
     fun setPolicy(policy: AiPolicy) {
@@ -383,18 +429,18 @@ class AiController(private val context: Context, root: (String) -> File, private
     }
     fun approve(value: Boolean) = approve(if (value) AiDecision.Once else AiDecision.Reject)
     fun approve(value: AiDecision) { decision?.complete(value) }
-    fun stop() { if (mutable.value.active) mutable.update { it.copy(phase = AiPhase.Stopping) }; task?.cancel() }
+    fun stop() { if (mutable.value.active) mutable.update { it.copy(phase = AiPhase.Stopping, reasoningEntryId = null) }; task?.cancel() }
     private suspend fun requestApproval(title: String, detail: String, eventId: String? = null, review: AiReview? = null): AiDecision {
         val pending = CompletableDeferred<AiDecision>(); decision = pending
         mutable.update { it.copy(approval = AiApproval(title, detail, eventId, review), phase = AiPhase.Waiting) }
         return try { pending.await() } finally { decision = null; mutable.update { it.copy(approval = null) } }
     }
-    private fun append(text: String, visible: Boolean = true, role: AiRole = AiRole.Notice) { mutable.update {
+    private fun append(text: String, visible: Boolean = true, role: AiRole = AiRole.Notice, images: List<AiImageAttachment> = emptyList()) { mutable.update {
         val messages = (it.messages + text.take(64000)).takeLast(100).toMutableList()
         var count = messages.sumOf(String::length)
         while (count > 256000 && messages.size > 1) count -= messages.removeAt(0).length
-        var timeline = if (visible) (it.timeline + AiEntry(java.util.UUID.randomUUID().toString(), text.take(64000), role = role, turn = it.turn)).takeLast(512) else it.timeline
-        while (timeline.sumOf { entry -> entry.text.length } > 512000) timeline = timeline.drop(1)
+        var timeline = if (visible) (it.timeline + AiEntry(java.util.UUID.randomUUID().toString(), text.take(64000), role = role, turn = it.turn, images = images)).takeLast(512) else it.timeline
+        while (timeline.sumOf { entry -> entry.text.length + entry.reasoning.length } > 512000) timeline = timeline.drop(1)
         it.copy(messages = messages, timeline = timeline, historyTrimmed = it.historyTrimmed || (visible && timeline.size < it.timeline.size + 1))
     } }
     suspend fun checkpointList(): List<AiCheckpoint> {
@@ -473,16 +519,61 @@ class AiController(private val context: Context, root: (String) -> File, private
         return true
     }
     fun removeReference(index: Int) { if (!mutable.value.active && !mutable.value.restoring) mutable.update { it.copy(references = it.references.filterIndexed { i, _ -> i != index }) } }
+    fun addImages(uris: List<android.net.Uri>, expectedProject: String?, expectedConversation: String) {
+        val current = mutable.value
+        if (expectedProject == null || current.projectId != expectedProject || current.conversationId != expectedConversation ||
+            imageMaintenance || current.active || current.restoring || current.imagesLoading || current.permissionsLoading || current.permissionsSaving) return
+        if (uris.size > AiImages.MAX_PER_TURN - current.pendingImages.size) {
+            mutable.update { it.copy(error = context.getString(R.string.ai_images_maximum)) }; return
+        }
+        if (uris.isEmpty()) return
+        val generation = sessionGeneration
+        mutable.update { it.copy(imagesLoading = true, error = "") }
+        imageImports++
+        scope.launch {
+            try {
+                for (uri in uris) {
+                    val image = imageStore.import(uri)
+                    if (sessionGeneration != generation || mutable.value.projectId != expectedProject || mutable.value.conversationId != expectedConversation) {
+                        imageStore.delete(image); return@launch
+                    }
+                    mutable.update { it.copy(pendingImages = it.pendingImages + image) }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                if (sessionGeneration == generation) mutable.update {
+                    it.copy(error = context.getString((failure as? AiImageException)?.reason?.label ?: R.string.ai_image_invalid))
+                }
+            } finally {
+                imageImports--
+                if (sessionGeneration == generation) mutable.update { it.copy(imagesLoading = false) }
+                if (imageCollectionPending) collectUnusedImages()
+            }
+        }
+    }
+    fun removeImage(id: String) {
+        if (mutable.value.active || mutable.value.imagesLoading) return
+        val image = mutable.value.pendingImages.singleOrNull { it.id == id } ?: return
+        mutable.update { it.copy(pendingImages = it.pendingImages.filterNot { item -> item.id == id }) }
+        draftImages[requireNotNull(mutable.value.projectId) to mutable.value.conversationId] = mutable.value.pendingImages
+        collectUnusedImages()
+    }
+    suspend fun imageThumbnail(image: AiImageAttachment): android.graphics.Bitmap = imageStore.thumbnail(image)
     fun send(text: String): Boolean {
         val id = mutable.value.projectId ?: return false
-        if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || models.state.value.loading || models.state.value.saving || text.isBlank() || text.length > 16000) return false
+        if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
         if (mutable.value.conversations.size >= 20 && mutable.value.conversations.none { it.id == mutable.value.conversationId }) {
             mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }; return false
         }
+        val images = mutable.value.pendingImages.ifEmpty {
+            if (mutable.value.recoveryNotes.isNotEmpty()) mutable.value.timeline.lastOrNull { it.role == AiRole.User }?.images.orEmpty()
+            else emptyList()
+        }
         sessionGeneration++
-        mutable.update { it.copy(active = true, interrupted = false, error = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User)
+        mutable.update { it.copy(active = true, interrupted = false, error = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images)
+        draftImages.remove(id to mutable.value.conversationId)
         val references = mutable.value.references.toList()
-        mutable.update { it.copy(references = emptyList()) }
+        mutable.update { it.copy(references = emptyList(), pendingImages = emptyList()) }
         grants.clear(); toolGrants.clear(); epoch++
         task = scope.launch {
             var checkpoint: Job? = null
@@ -501,12 +592,12 @@ class AiController(private val context: Context, root: (String) -> File, private
                 mutable.update { it.copy(checkpointId = key) }
                 append(context.getString(R.string.ai_checkpoint_created))
                 withContext(Dispatchers.IO) { val stream = marker.startWrite(); try { stream.write(JSONObject().put("project", id).put("time", System.currentTimeMillis()).toString().toByteArray()); marker.finishWrite(stream) } catch (error: Exception) { marker.failWrite(stream); throw error } }
-                runTask(id, text, references)
+                runTask(id, text, references, images)
                 append(context.getString(R.string.ai_finished), visible = false); mutable.update { it.copy(phase = AiPhase.Completed) }
             } catch (_: TimeoutCancellationException) { failure(AiFailure.TaskTimeout) }
             catch (cancelled: CancellationException) { append(context.getString(R.string.ai_stopped)); failure(AiFailure.Cancelled); throw cancelled }
             catch (error: Exception) {
-                val kind = when (error) { is AiTransportException -> error.kind; is AiBudgetException -> error.kind; else -> AiFailure.Internal }
+                val kind = when (error) { is AiTransportException -> error.kind; is AiBudgetException -> error.kind; is AiImageException -> AiFailure.Image; else -> AiFailure.Internal }
                 // Exception messages/bodies may contain secrets. Retain only type and static source frames.
                 val diagnostic = error.javaClass.name + "\n" + error.stackTrace.take(12).joinToString("\n") { "${it.className}.${it.methodName} (${it.fileName}:${it.lineNumber})" }
                 failure(kind, diagnostic)
@@ -524,17 +615,19 @@ class AiController(private val context: Context, root: (String) -> File, private
                     }
                     mutable.update { snapshot ->
                         val reason = snapshot.failureKind ?: AiFailure.Internal
-                        snapshot.copy(turnTimings = snapshot.turnTimings.map { if (it.turn == snapshot.turn) it.copy(finished = System.currentTimeMillis()) else it }, approval = null, taskRecovery = "", taskPrompt = "", recoveryNotes = if (snapshot.phase == AiPhase.Completed) emptyList() else boundedRecovery(snapshot.recoveryNotes + recoveryNote(snapshot, reason)))
+                        snapshot.copy(reasoningEntryId = null, turnTimings = snapshot.turnTimings.map { if (it.turn == snapshot.turn) it.copy(finished = System.currentTimeMillis()) else it }, approval = null, taskRecovery = "", taskPrompt = "", recoveryNotes = if (snapshot.phase == AiPhase.Completed) emptyList() else boundedRecovery(snapshot.recoveryNotes + recoveryNote(snapshot, reason)))
                     }
                     try { persist(final = true) }
                     catch (_: Exception) { /* persist exposes the owning session failure. */ }
                     mutable.update { it.copy(active = false) }; grants.clear(); toolGrants.clear(); activityChanged()
+                    if (imageCollectionPending) collectUnusedImages()
                 }
             }
         }
         return true
     }
-    private suspend fun runTask(id: String, text: String, references: List<AiReference>) {
+    private suspend fun runTask(id: String, text: String, references: List<AiReference>, images: List<AiImageAttachment>) {
+        val taskImages = images
         val discovered = AiDiscoveredRules(taskContext, id, references.filter { it.kind != "error" }.map { it.path })
         if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) withContext(Dispatchers.IO) { discovered.refresh(emptyList()) }
         mutable.update { it.copy(ruleSources = discovered.current.sources, rulesLimited = discovered.current.limited) }
@@ -573,7 +666,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 JSONObject().put("executed", false).put("project_rules_updated", true).put("instruction", context.getString(R.string.ai_rules_deferred)).toString()
             else null
         }
-        messages.put(JSONObject().put("role", "user").put("content", pinnedPrompt))
+        messages.put(imageMessage(pinnedPrompt, taskImages))
         val baselines = linkedMapOf<String, FileBaseline>(); val refused = mutableSetOf<String>(); var count = 0
         while (true) {
             currentCoroutineContext().ensureActive()
@@ -584,43 +677,73 @@ class AiController(private val context: Context, root: (String) -> File, private
                 catch (_: Exception) { "[Current task change evidence unavailable; do not infer no changes or reuse a previous sample.]" }
             } else "[Automatic task change evidence disabled by current read permission; do not infer no changes.]"
             refreshRules(emptyList())
-            if (messages.toString().length > 96000 || messages.length() > 96) {
+            messages.getJSONObject(0).put("content", SYSTEM + "\nCurrent app permissions: " + AiTool.entries.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
+            val options = settings.context
+            val beforeChars = messages.toString().length
+            if (options.autoCompress && (beforeChars > options.compressionThresholdChars || messages.length() > 96)) {
                 val skill = skillMessageIndex?.let { messages.getJSONObject(it) }
-                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart)
+                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, taskImages)
                 skillMessageIndex = if (skill == null) null else 2
                 turnStart = if (skill == null) 2 else 3
             }
+            // Compression may still leave oversized pinned rules/prompt; never loop or send over budget.
+            if (messages.toString().length > options.maxContextChars || messages.length() > 96) throw AiBudgetException(AiFailure.ContextLimit)
             val round = mutable.value.round + 1
-            mutable.update { it.copy(phase = AiPhase.Requesting, round = round, contextChars = messages.toString().length) }
+            mutable.update { it.copy(phase = AiPhase.Requesting, round = round, contextChars = messages.toString().length, reasoningEntryId = null) }
             append("", role = AiRole.Assistant)
             val requestEpoch = epoch
-            messages.getJSONObject(0).put("content", SYSTEM + "\nCurrent app permissions: " + AiTool.entries.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
+            val assistantId = mutable.value.timeline.last().id
             val ruleDelivery = discovered.delivery()
-            val reply = transport.request(settings, messages, schemas(), proxy = proxy(), toolDelta = { drafts ->
-                mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving) else it }
+            // Once answer/tool output begins, later provider reasoning fragments remain retained
+            // but must not reopen this round's reasoning panel.
+            var responseStarted = false
+            val reply = transport.request(settings, messages, schemas(), proxy = proxy(), imageData = imageStore::dataUrl, reasoningDelta = { fragment ->
+                mutable.update { current ->
+                    if (epoch != requestEpoch || !current.active || current.phase == AiPhase.Stopping) current else {
+                        var entries = current.timeline.map { entry ->
+                            if (entry.id != assistantId) entry else {
+                                val remaining = (AI_REASONING_DISPLAY_LIMIT - entry.reasoning.length).coerceAtLeast(0)
+                                entry.copy(reasoning = entry.reasoning + fragment.take(remaining), reasoningTruncated = entry.reasoningTruncated || fragment.length > remaining)
+                            }
+                        }
+                        while (entries.sumOf { it.text.length + it.reasoning.length } > 512000 && entries.size > 1) entries = entries.drop(1)
+                        current.copy(timeline = entries, historyTrimmed = current.historyTrimmed || entries.size < current.timeline.size, phase = AiPhase.Receiving,
+                            reasoningEntryId = assistantId.takeUnless { responseStarted })
+                    }
+                }
+            }, toolDelta = { drafts ->
+                if (drafts.isNotEmpty()) responseStarted = true
+                mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving,
+                    reasoningEntryId = it.reasoningEntryId.takeUnless { responseStarted }) else it }
             }, observe = { record -> mutable.update { current ->
                 if (epoch != requestEpoch || !current.active || current.projectId != id) current else current.copy(requests = boundedRequests(current.requests.filterNot { it.id == record.id } + record.copy(turn = current.turn, round = round)))
-            } }) { fragment -> mutable.update { state ->
-                if (!state.active || epoch != requestEpoch || state.phase == AiPhase.Stopping) state else {
-                    var timeline = state.timeline.dropLast(1) + state.timeline.last().copy(text = state.timeline.last().text + fragment)
-                    while (timeline.sumOf { it.text.length } > 512000 && timeline.size > 1) timeline = timeline.drop(1)
-                    state.copy(phase = AiPhase.Receiving,
-                        messages = state.messages.dropLast(1) + (state.messages.lastOrNull().orEmpty() + fragment),
-                        timeline = timeline, historyTrimmed = state.historyTrimmed || timeline.size < state.timeline.size)
+            } }) { fragment ->
+                responseStarted = true
+                mutable.update { state ->
+                    if (!state.active || epoch != requestEpoch || state.phase == AiPhase.Stopping) state else {
+                        var timeline = state.timeline.dropLast(1) + state.timeline.last().copy(text = state.timeline.last().text + fragment)
+                        while (timeline.sumOf { it.text.length + it.reasoning.length } > 512000 && timeline.size > 1) timeline = timeline.drop(1)
+                        state.copy(phase = AiPhase.Receiving, reasoningEntryId = null,
+                            messages = state.messages.dropLast(1) + (state.messages.lastOrNull().orEmpty() + fragment),
+                            timeline = timeline, historyTrimmed = state.historyTrimmed || timeline.size < state.timeline.size)
+                    }
                 }
-            } }
+            }
 
             discovered.received(ruleDelivery)
-            mutable.update { it.copy(drafts = emptyList()) }
+            mutable.update { it.copy(drafts = emptyList(), reasoningEntryId = null) }
             val assistant = reply.asAssistantMessage()
             messages.put(assistant)
             if (reply.calls.isEmpty()) {
                 var completed = JSONArray()
                 for (index in turnStart until messages.length()) if (index != skillMessageIndex) completed.put(messages.getJSONObject(index))
-                if (completed.toString().length > 80000 || completed.length() > 120 || mutable.value.contextTurns.size >= 8 || mutable.value.contextTurns.sumOf { it.length } + completed.toString().length > 90000) {
+                if (completed.length() > AI_RETAINED_TURN_MESSAGES || mutable.value.contextTurns.size >= AI_RETAINED_CONTEXT_TURNS ||
+                    mutable.value.contextTurns.sumOf { it.length } + completed.toString().length > AI_RETAINED_CONTEXT_CHARS ||
+                    (options.autoCompress && messages.toString().length > options.compressionThresholdChars)) {
+                    if (!options.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
                     // Summarize complete evidence first; never persist detached calls/results.
-                    compactContext(settings, messages, pinnedPrompt, null, messages.length())
-                    completed = JSONArray().put(JSONObject().put("role", "user").put("content", pinnedPrompt))
+                    compactContext(settings, messages, pinnedPrompt, null, messages.length(), taskImages)
+                    completed = JSONArray().put(imageMessage(pinnedPrompt, taskImages))
                         .put(JSONObject().put("role", "assistant").put("content", contextExcerpt(reply.text, 12000)).apply {
                             // A synthetic summary is a new protocol message, never a truncated reasoning trace.
                             if (reply.reasoningContent != null) put("reasoning_content", "")
@@ -628,7 +751,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 }
                 mutable.update { state ->
                     val turns = state.contextTurns + completed.toString()
-                    if (turns.size > 8 || turns.sumOf { it.length } > 96000) throw AiBudgetException(AiFailure.ContextLimit)
+                    if (turns.size > AI_RETAINED_CONTEXT_TURNS || turns.sumOf { it.length } > AI_RETAINED_CONTEXT_CHARS) throw AiBudgetException(AiFailure.ContextLimit)
                     state.copy(contextTurns = turns)
                 }
                 return
@@ -697,7 +820,8 @@ class AiController(private val context: Context, root: (String) -> File, private
             }
         }
     }
-    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int): JSONArray {
+    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int, images: List<AiImageAttachment> = emptyList()): JSONArray {
+        if (!settings.context.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
         mutable.update { it.copy(phase = AiPhase.Compacting) }
         append(context.getString(R.string.ai_context_compacting))
         val evidence = JSONArray()
@@ -708,18 +832,18 @@ class AiController(private val context: Context, root: (String) -> File, private
         val round = mutable.value.round + 1
         mutable.update { it.copy(round = round) }
         val requestEpoch = epoch
-        val summary = transport.request(settings.copy(parameters = settings.parameters.copy(maxTokens = minOf(settings.parameters.maxTokens ?: 2048, 2048))),
-            JSONArray().put(JSONObject().put("role", "system").put("content", CONTEXT_SUMMARY_PROMPT))
+        val summary = transport.request(settings.copy(parameters = settings.parameters.copy(maxTokens = minOf(settings.parameters.maxTokens ?: 8192, (settings.context.summaryMaxChars * 2 / 3).coerceIn(1024, 8192)))),
+            JSONArray().put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars)))
                 .put(JSONObject().put("role", "user").put("content", evidence.toString())), JSONArray(),
             proxy = proxy(),
             observe = { record -> mutable.update { state ->
                 if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
             } }, delta = {})
-        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > 12000) throw AiBudgetException(AiFailure.Compaction)
+        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > settings.context.summaryMaxChars) throw AiBudgetException(AiFailure.Compaction)
         val tail = contextTail(messages, taskStart)
         val result = JSONArray().put(messages.getJSONObject(0)).put(contextMemory(summary.text))
         if (skill != null) result.put(skill)
-        result.put(JSONObject().put("role", "user").put("content", prompt))
+        result.put(imageMessage(prompt, images))
         tail.forEach(result::put)
         mutable.update { it.copy(contextSummary = summary.text, contextTurns = emptyList(), contextCompactions = it.contextCompactions + 1, contextChars = result.toString().length) }
         persist()

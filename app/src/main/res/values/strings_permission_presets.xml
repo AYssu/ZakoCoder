@@ -1,0 +1,12 @@
+<resources>
+    <string name="ai_permission_preset_current">当前：%1$s</string>
+    <string name="ai_permission_preset_normal">普通权限</string>
+    <string name="ai_permission_preset_elevated">高权限</string>
+    <string name="ai_permission_preset_custom">自定义规则</string>
+    <string name="ai_permission_preset_normal_desc">安全只读工具自动允许，文件修改、命令和 MCP 等操作询问。</string>
+    <string name="ai_permission_preset_elevated_desc">项目工具自动执行；MCP 仍询问，已有禁止项保留。</string>
+    <string name="ai_permission_preset_denied">保留 %1$d 项禁止规则；切换预设不会解除禁止，可在高级规则中单独修改。</string>
+    <string name="ai_permission_advanced_show">展开高级工具规则</string>
+    <string name="ai_permission_advanced_hide">收起高级工具规则</string>
+    <string name="ai_permission_preset_warning">将为项目“%1$s”保存高权限，重启后仍生效。除禁止项与 MCP 外，工具可自动修改文件、运行命令和管理终端。命令能访问 Ubuntu 及其他挂载项目；PRoot 不是安全沙箱。高权限不代表 Android root，也不会绕过路径保护或文件冲突检查。确认只在信任项目与任务时开启。</string>
+</resources>

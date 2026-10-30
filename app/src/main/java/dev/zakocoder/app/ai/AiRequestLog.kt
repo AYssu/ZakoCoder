@@ -6,6 +6,7 @@ import org.json.JSONObject
 
 /** Only stable, allow-listed diagnostics enter history. Never retain Throwable, headers or provider error bodies. */
 enum class AiFailure(val label: Int) {
+    Image(R.string.ai_failure_image),
     Compaction(R.string.ai_failure_compaction), Skill(R.string.ai_failure_skill), Http(R.string.ai_failure_http), IdleTimeout(R.string.ai_failure_idle), Network(R.string.ai_failure_network),
     Protocol(R.string.ai_failure_protocol), OutputLimit(R.string.ai_failure_output), ContextLimit(R.string.ai_failure_context),
     RoundLimit(R.string.ai_failure_round), ToolLimit(R.string.ai_failure_tools), TaskTimeout(R.string.ai_failure_task),
@@ -49,9 +50,14 @@ data class AiRequestLog(
 }
 
 /** Redact the active credential even if echoed by a service or accidentally present in a prompt. */
-class AiLogRedactor(private val key: String) {
+class AiLogRedactor(key: String, additionalSecrets: Collection<String> = emptyList()) {
+    private val secrets = (additionalSecrets + key).filter(String::isNotEmpty).flatMap { secret ->
+        // Diagnostics include serialized JSON; header values may legally contain quotes/backslashes.
+        val escaped = secret.replace("\\", "\\\\").replace("\"", "\\\"")
+        listOf(secret, escaped, escaped.replace("/", "\\/"), escaped.replace("</", "<\\/"))
+    }.distinct().sortedByDescending(String::length)
     fun clean(value: String): String {
-        val withoutKey = if (key.isNotEmpty()) value.replace(key, "[REDACTED]") else value
+        val withoutKey = secrets.fold(value) { text, secret -> text.replace(secret, "[REDACTED]") }
         return withoutKey.replace(bearer, "$1[REDACTED]").replace(secretShape, "[REDACTED]")
     }
     override fun toString() = "AiLogRedactor(<redacted>)"

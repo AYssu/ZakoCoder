@@ -57,10 +57,12 @@ class DeepSeekTransportDeviceTest {
             val messages = messages()
             fixture.enqueue(listOf("first ", "reasoning"), tool = true)
             val display = StringBuilder()
+            val reasoningDisplay = StringBuilder()
             var observed: AiRequestLog? = null
-            val first = fixture.transport.request(config, messages, tools, observe = { observed = it }) { display.append(it) }
+            val first = fixture.transport.request(config, messages, tools, observe = { observed = it }, reasoningDelta = { reasoningDisplay.append(it) }) { display.append(it) }
             assertEquals("answer", display.toString())
             assertEquals("first reasoning", first.reasoningContent)
+            assertEquals("first reasoning", reasoningDisplay.toString())
             assertEquals(7L, observed?.cachedTokens)
             assertFalse(fixture.request().has("thinking"))
             messages.put(first.asAssistantMessage())

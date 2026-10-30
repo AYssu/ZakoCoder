@@ -112,3 +112,7 @@ APK `assets/skills/` 的 13 个中文指令文件是 ZakoCoder 自有实现，�
 - `source.properties` 声明 NDK `28.2.13676358`。制品中的 Clang 19 自述源自 HomuHomu833/llvm-custom 提交 `dbdd29d3ef3c16cda5c80bc6655f2f8f7f076c8a`；这是社区修改工具链，不是 Google 官方 ARM64 Linux NDK，也不是本项目自编译产物。
 - 上游封装工程 MIT 声明保留在 `app/src/main/assets/licenses/Android-ndk-custom-MIT.txt`。该 MIT 不替代 NDK、LLVM、libc++、sysroot 等组件自身的许可证；下载目录中的 `NOTICE`、LLVM `NOTICE` 和其他声明随制品完整保留。APT 提供的 CMake、Ninja、Python 和运行库使用 Ubuntu 包自身的版权材料。
 - 上游包含 ARM64 host 识别及兼容目录链接，项目未复制其产品代码。当前验收范围为 Ubuntu ARM64 中的 CMake/JNI Debug 构建；不据此宣称任意 NDK 项目或 `ndk-build` 已验证。Release 分发材料与设备覆盖审查仍然有效。
+
+## 图片方向元数据
+
+图片导入使用 Google Maven 的 `androidx.exifinterface:exifinterface:1.4.2` 读取 EXIF 方向，随后由本项目重新编码 JPEG，不保留来源元数据。官方来源 https://developer.android.com/jetpack/androidx/releases/exifinterface#1.4.2 ，源码对应同版本 Google Maven sources JAR；未修改上游代码，Apache-2.0。AAR SHA-256：`6bb2b68682a2023c55f35f941444ffea0157947b061e4fd7606ba935e2e77425`。通过 Gradle 解析并随 APK 分发；AndroidX 原有许可适用，不替换版权声明。

@@ -43,6 +43,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     var commandsTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
     var checkpoints by remember { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
+    var imageTarget by remember { mutableStateOf<Pair<String?, String>?>(null) }
+    val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        imageTarget?.let { (projectId, conversationId) -> workbench.ai.addImages(uris, projectId, conversationId) }
+        imageTarget = null
+    }
     var disclosure by remember { mutableStateOf(false) }
     var inspecting by remember { mutableStateOf<dev.zakocoder.app.ai.AiReview?>(null) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -88,7 +93,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     val project = workbenchState.projects.singleOrNull { it.id == state.projectId }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { choose = true }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving,
+            TextButton(onClick = { choose = true }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
                 modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.extensions_context), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -97,8 +102,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 }
                 WorkbenchIcon(Glyph.ChevronDown, Modifier.padding(start = 8.dp).size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { history = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) { WorkbenchIcon(Glyph.History, description = stringResource(R.string.ai_history)) }
-            IconButton(onClick = { workbench.ai.conversation(); follow = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
+            IconButton(onClick = { history = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving) { WorkbenchIcon(Glyph.History, description = stringResource(R.string.ai_history)) }
+            IconButton(onClick = { workbench.ai.conversation(); follow = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
             Box {
                 IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
                 DropdownMenu(expanded = more, onDismissRequest = { more = false }) {
@@ -154,7 +159,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             } }
             itemsIndexed(state.timeline, key = { _, entry -> entry.id }) { index, entry ->
                 if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
-                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it })
+                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, reasoningStreaming = state.active && state.reasoningEntryId == entry.id)
                 }
                 else state.events.find { it.id == entry.toolId }?.let { event ->
                     val terminalId = if (event.tool in setOf(dev.zakocoder.app.ai.AiTool.StartTerminal, dev.zakocoder.app.ai.AiTool.ReadTerminal, dev.zakocoder.app.ai.AiTool.SendTerminalInput) && event.status == dev.zakocoder.app.ai.AiToolStatus.Succeeded)
@@ -182,6 +187,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 WorkbenchIcon(Glyph.Down, Modifier.size(15.dp)); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_latest), fontSize = 12.sp)
             }
         }
+        AiImageAttachments(state.pendingImages, workbench.ai::imageThumbnail, enabled = !state.active && !state.imagesLoading, onRemove = workbench.ai::removeImage)
+        if (state.imagesLoading) Text(stringResource(R.string.ai_images_loading), style = MaterialTheme.typography.labelSmall)
         if (state.references.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active,
                 label = { Text(if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference) else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "", modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
@@ -193,13 +200,13 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             Column {
             if (state.active && state.turn > 0) Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { AiTurnFooter(state, state.turn) }
             Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
-                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
-                TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(R.string.ai_prompt), fontSize = 13.sp) },
+                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
+                TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(R.string.ai_prompt), fontSize = 13.sp) },
                     modifier = Modifier.weight(1f), maxLines = 4, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp),
                     colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface, disabledContainerColor = MaterialTheme.colorScheme.surface,
                         focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent))
                 IconButton(onClick = { if (state.active) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; panel = 0; follow = true } },
-                    enabled = if (state.active) state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && input.isNotBlank() && !workbenchState.busy,
+                    enabled = if (state.active) state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && !workbenchState.busy,
                     modifier = Modifier.padding(bottom = 4.dp)) {
                     WorkbenchIcon(if (state.active) Glyph.Close else Glyph.Send, description = stringResource(if (state.active) R.string.ai_stop else R.string.ai_send), tint = if (state.active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 }
@@ -251,7 +258,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     }
     if (commands && project != null) ProjectTasksPage(workbench, project.id, onAi = { commands = false }, validationConversation = state.conversationId.takeIf { commandsTurn > 0 }, validationTurn = commandsTurn) { commands = false }
     if (checkpoints) AiCheckpointSheet(workbench, close = { checkpoints = false }, onFork = workbench.ai::forkConversation)
-    if (attaching) AiContextSheet(workbench.ai, state) { attaching = false }
+    if (attaching) AiContextSheet(workbench.ai, state, onImages = {
+        attaching = false
+        imageTarget = state.projectId to state.conversationId
+        imagePicker.launch(arrayOf("image/*"))
+    }) { attaching = false }
     if (history) WorkbenchSheet(stringResource(R.string.ai_history), { history = false }) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.conversations.isEmpty()) item { Text(stringResource(R.string.ai_history_empty), Modifier.padding(16.dp)) }
@@ -335,26 +346,30 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 
 @Suppress("DEPRECATION")
 @Composable
-internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit) {
+internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false) {
     val clipboard = LocalClipboardManager.current
     when (entry.role) {
         AiRole.User -> Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.ai_turn, entry.turn), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (imageLoader != null) AiImageAttachments(entry.images, imageLoader)
+            else entry.images.forEach { Text(it.displayName, style = MaterialTheme.typography.labelSmall) }
+            // Sent image metadata remains attached to this user turn after restart.
             var actions by remember(entry.id) { mutableStateOf(false) }
-            Box {
+            if (entry.text.isNotEmpty()) Box {
                 Surface(onClick = { actions = true }, shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
                     color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.widthIn(max = 300.dp)) {
                     androidx.compose.foundation.text.selection.SelectionContainer {
-                        Text(entry.text, Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 13.sp, lineHeight = 21.sp)
+                        if (entry.text.isNotEmpty()) Text(entry.text, Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 13.sp, lineHeight = 21.sp)
                     }
                 }
                 if (actions) MessageCopyPopup(onDismiss = { actions = false },
                     onCopy = { clipboard.setText(AnnotatedString(entry.text)); actions = false })
             }
         }
-        AiRole.Assistant -> if (entry.text.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AiMarkdown(entry.text, projectId = projectId, onOpenProjectPath = onProjectPath, onLink = onLink)
-            IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }, modifier = Modifier.size(36.dp)) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            AiReasoningContent(entry, streaming = reasoningStreaming)
+            if (entry.text.isNotEmpty()) AiMarkdown(entry.text, projectId = projectId, onOpenProjectPath = onProjectPath, onLink = onLink)
+            if (entry.text.isNotEmpty()) IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }, modifier = Modifier.size(36.dp)) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         AiRole.Notice -> Text(entry.text, Modifier.padding(vertical = 4.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

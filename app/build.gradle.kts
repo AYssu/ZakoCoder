@@ -67,6 +67,7 @@ dependencies {
     androidTestImplementation(libs.test.core)
     androidTestImplementation(libs.junit)
     implementation(libs.androidx.core)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

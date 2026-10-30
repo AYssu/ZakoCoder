@@ -9,9 +9,10 @@ import org.json.JSONObject
 
 private class AiProbeUnsupported : Exception()
 
-enum class AiProbe { Idle, Models, Testing, Passed, Failed }
+enum class AiProbe { Idle, Models, Testing, Passed, Failed, Cancelled }
 data class AiModelsState(val catalog: AiCatalog = AiCatalog(), val loading: Boolean = true, val saving: Boolean = false,
-    val revision: Int = 0, val error: String = "", val probe: AiProbe = AiProbe.Idle, val probeMessage: String = "", val available: List<String> = emptyList()) {
+    val revision: Int = 0, val error: String = "", val probe: AiProbe = AiProbe.Idle, val probeMessage: String = "", val available: List<String> = emptyList(),
+    val probeProgress: AiModelProbeProgress? = null) {
     val probing get() = probe == AiProbe.Models || probe == AiProbe.Testing
 }
 /** Owns configuration IO/network. UI only holds unsaved fields and replacement credentials. */
@@ -23,7 +24,7 @@ class AiModelsController(private val context: Context, private val store: AiConf
     private val mutable = MutableStateFlow(AiModelsState())
     val state = mutable.asStateFlow()
     private var probe: Job? = null
-    private var generation = 0L
+    @Volatile private var generation = 0L
     init { scope.launch { reload() } }
     private suspend fun reload(): Boolean {
         try {
@@ -34,7 +35,15 @@ class AiModelsController(private val context: Context, private val store: AiConf
         catch (_: Exception) { mutable.update { it.copy(loading = false, error = context.getString(R.string.ai_models_load_error)) }; changed(null); return false }
     }
     fun retry() { if (!mutable.value.loading && !mutable.value.saving) { mutable.update { it.copy(loading = true) }; scope.launch { reload() } } }
-    fun cancelProbe() { generation++; probe?.cancel(); mutable.update { it.copy(probe = AiProbe.Idle, probeMessage = "", available = emptyList()) } }
+    fun cancelProbe() { generation++; probe?.cancel(); mutable.update { it.copy(probe = AiProbe.Idle, probeMessage = "", available = emptyList(), probeProgress = null) } }
+    /** Explicit stop keeps the already received, redacted test output visible. Editing resets it. */
+    fun stopProbe() {
+        val wasTesting = mutable.value.probe == AiProbe.Testing
+        generation++; probe?.cancel()
+        mutable.update { it.copy(probe = if (wasTesting) AiProbe.Cancelled else AiProbe.Idle,
+            probeMessage = if (wasTesting) context.getString(R.string.ai_probe_cancelled) else "",
+            probeProgress = it.probeProgress?.let { progress -> progress.copy(elapsedMs = (System.currentTimeMillis() - progress.startedAt).coerceAtLeast(progress.elapsedMs)) }) }
+    }
     private fun mutation(block: () -> Unit) {
         if (taskActive() || mutable.value.loading || mutable.value.saving || mutable.value.error.isNotEmpty()) return
         cancelProbe(); mutable.update { it.copy(saving = true, error = "") }
@@ -56,7 +65,8 @@ class AiModelsController(private val context: Context, private val store: AiConf
     private fun probe(draft: AiModelDraft, testing: Boolean) {
         if (taskActive() || mutable.value.loading || mutable.value.saving) return
         cancelProbe(); val owner = generation
-        mutable.update { it.copy(probe = if (testing) AiProbe.Testing else AiProbe.Models) }
+        mutable.update { it.copy(probe = if (testing) AiProbe.Testing else AiProbe.Models,
+            probeProgress = if (testing) AiModelProbeProgress() else null) }
         probe = scope.launch {
             try {
                 val config = withContext(Dispatchers.IO) { store.resolve(draft, requireModel = testing) }
@@ -69,7 +79,11 @@ class AiModelsController(private val context: Context, private val store: AiConf
                             .put("required", JSONArray(listOf("ack"))).put("additionalProperties", false)
                         val tools = JSONArray().put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "connection_probe").put("description", "Acknowledge a connection test; no action is performed").put("parameters", parameters)))
                         val messages = JSONArray().put(JSONObject().put("role", "user").put("content", "Connection test only. Call connection_probe with ack=ok. No project files or commands are involved."))
-                        val reply = transport.request(config, messages, tools, forceTool = "connection_probe", proxy = proxy()) {}
+                        val reply = transport.request(config, messages, tools, forceTool = "connection_probe", proxy = proxy(), observe = { log ->
+                            mutable.update { state ->
+                                if (owner == generation) state.copy(probeProgress = AiModelProbeProgress.from(log)) else state
+                            }
+                        }) {}
                         if (!runCatching { reply.calls.size == 1 && reply.calls[0].name == "connection_probe" && JSONObject(reply.calls[0].arguments).optString("ack") == "ok" }.getOrDefault(false)) throw AiProbeUnsupported()
                     }
                     if (owner == generation) mutable.update { it.copy(probe = AiProbe.Passed, probeMessage = context.getString(R.string.ai_models_test_passed)) }
