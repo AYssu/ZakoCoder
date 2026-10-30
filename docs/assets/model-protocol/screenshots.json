@@ -1,0 +1,174 @@
+{
+  "date": "2026-10-31",
+  "device": "Android 13 ARM64",
+  "source": "AiProtocolUiDeviceTest: actual production AiModelEditor and AiModelsPage, native protocol and provider selection sheets; isolated synthetic model catalog, no provider requests; 360dp viewport and 130% font scale; keyboard interaction not covered",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-editor-anthropic.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "725c78dbfc2e950a320fdfd5f2afbd5528161dde082eafdaa92ecf81bca49db9",
+      "captureSha256": "722c5c76f1717592b12e32d1196ce8378243dec82b6f590dc72d7c872e4ad6e2"
+    },
+    {
+      "file": "day-editor-chatcompletions.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e7a58472be73f13f59972ff39ce17a0f7346c1115313783b5b0e0f2b484b780c",
+      "captureSha256": "03288817aadacf0d3d1258ce3d3b1739040fa346b2914e6fa05b2fa5068a3947"
+    },
+    {
+      "file": "day-editor-gemini.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5ba9fd597d74445aa8e5757cf252de7f2aa3c6a476ed0577965cfc5b5d63da67",
+      "captureSha256": "930709c4d1551ab6ccaa8a3dc74366807b42bd843159bea406229fab43cc82ad"
+    },
+    {
+      "file": "day-editor-responses.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "57e6ef40b2ef29b3912931f27251476c63dfbbb1223ae776e36fd8d88021e1a8",
+      "captureSha256": "4aa709af3f009b558bf1d644bf88cb5a6b39300ab5f9f6c1adb21ae253d1e4d4"
+    },
+    {
+      "file": "day-model-catalog.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e26b9f12fd04f06f9c9d0fc913d2d3dd5e8af023bfeb2b96a285242b2d7ff515",
+      "captureSha256": "9e72ced5b40a97b512d1170067f6372a84ca849698a8918fbed1e0e2a410a847"
+    },
+    {
+      "file": "day-preset-selected.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "638e49e7f0a85ffce183082d3ba0ece376bcefde001a400afb335ac4f7037e3e",
+      "captureSha256": "a72c3cb39604acf501fe414a645a9dfc4e3bd8789b19681f342c70c5aae56f32"
+    },
+    {
+      "file": "day-protocol-picker.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4c27d719b103e37b932aeb00961161d49aecca09e673a8cd806daffaa1c8c29e",
+      "captureSha256": "84e4f458a6b8cf7b2637a5418e1d1210ed833e15187244d37fc5cf07dada8152"
+    },
+    {
+      "file": "day-provider-presets-bottom.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "93b313f50ba415dec39a2a11dc22f2e1a3d79beda00fbabddd5b99b17cf24a38",
+      "captureSha256": "355ff9b93b5677e8810e36df3b6b9021d7a053522329f8e5318fcd9d540db446"
+    },
+    {
+      "file": "day-provider-presets.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3fbf0fd1a8b70b05775eeb90bb3f3eda935c027858e59574f9bdc9e2553c86b4",
+      "captureSha256": "080c2d925da1c70a90fa56284846868e41b999a78e8fb2ff647b5ebdc041c271"
+    },
+    {
+      "file": "day-task-locked.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "51126b00c74f9da6fdeacae51c06357f93845b44f4fd8eaa03dcb0b143dd61fa",
+      "captureSha256": "700d1e07bb7114b440cf50a5e92e4350331de434618829bd5214e4a9caf189aa"
+    },
+    {
+      "file": "night-editor-anthropic.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4c37f4d30ad0b8d5c24a400003ad206673b0adf86d5c4ebcd8110ce540adb72b",
+      "captureSha256": "c156e37befc21d41b730105f9dc345ef0d4402cc576b5f7ffdefc2400880a134"
+    },
+    {
+      "file": "night-editor-chatcompletions.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5d96af4aa94a36f60055c35b0c240936afddb32c847c940b2e4ae14613050061",
+      "captureSha256": "1e63c6c3b128ce128925f46927a6929a7d1dd9a737cbafd144f6c789bdd652e3"
+    },
+    {
+      "file": "night-editor-gemini.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f371a290f3517d46ff295cb8566b52aae248855efbca5fc5ab8a75afddf6b1cf",
+      "captureSha256": "a801324613d96e81be38a9926cb196c0459a01ebbda2e425632e47174d752416"
+    },
+    {
+      "file": "night-editor-responses.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "c7caca36a0de333ba3867e8187188feb13a395ae64ecccd248a49824547a0be2",
+      "captureSha256": "e88dda768c16cbda5d9fa406e4ba7502170a0a9a56c88dd6cb0bf24f4a201e76"
+    },
+    {
+      "file": "night-model-catalog.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "203c1fcc96677c614a6c29ccfb77ff245e1a903ecf5d56f30fc824005517faf9",
+      "captureSha256": "889bf77abdab16db0763d66440c182a48d0c40491fc0fbd969214efb3798f894"
+    },
+    {
+      "file": "night-preset-selected.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "1dc68cf2674f6aa2c5c511e1262498b52765402b2baf0bc115ee7a8ce6e73a15",
+      "captureSha256": "c68af5e77b6ed8a78100c82c4698935987a9e305354ec34bfcc5533780ebd74c"
+    },
+    {
+      "file": "night-protocol-picker.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ef27c99ba62b50837ac66e9a6d04a2e4575e7bf493d41a4c67ca81756e92a91a",
+      "captureSha256": "5c54dc1da97f349cc3251e20abe568d3c7ab3d8afe84a6bd5a0573fc1c76a425"
+    },
+    {
+      "file": "night-provider-presets-bottom.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7c4f9a54ab8d8a6cfcac278599ec77ea58a422d328b6e73ecad3509a26cad993",
+      "captureSha256": "93da1407854c10434527f4c3f299e4d82c988465acc36cbc1068a1f41ce5b45c"
+    },
+    {
+      "file": "night-provider-presets.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f3bae18eadc80c9745cdff7b6b37e37633d5b9e46adef88586e11d372dee06ed",
+      "captureSha256": "4d37ca671ad8e6ce4cf0ed8519e6c58a01e37b2bbcbe06834d7245dfef834112"
+    },
+    {
+      "file": "night-task-locked.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b8c232326adf0fec1904c6aa96c016a0e0a6672259000319b5a39b3ac32a49bd",
+      "captureSha256": "13e0aa59a637b0d5bc83b74ec520a896f5f62807b459e21967179c39284dddc7"
+    }
+  ]
+}

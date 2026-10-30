@@ -182,21 +182,40 @@ class AiDiagnosticsDeviceTest {
         }
     }
 
-    @Test(timeout = 210000) fun continuouslyStreamingReplySurvivesTheOldTwoMinuteDeadline() = runBlocking {
+    @Test(timeout = 300000) fun continuouslyStreamingReplySurvivesTheOldTwoMinuteDeadline() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
-            AiDeviceTest.Fixture(context, timeoutSeconds = 0).use { f ->
+            // MockWebServer applies throttleBody to reading the request as well as writing
+            // its response. Full tool schemas can take >10 s before response headers arrive.
+            // Match the production idle timeout; keep the overall call deadline disabled.
+            AiDeviceTest.Fixture(context, timeoutSeconds = 0, readTimeoutSeconds = 120).use { f ->
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("long-stream") }; ready(ai)
                 val event = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n"
                 val body = event.repeat(3000) + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"
                 f.server.enqueue(MockResponse().setBody(body).throttleBody(1024, 1, TimeUnit.SECONDS))
                 main { ai.send("验证持续流超过旧的 120 秒截止，不访问真实模型。") }
-                withTimeout(180000) { while (ai.state.value.requests.lastOrNull()?.elapsed?.let { it >= 125000 } != true) { assertTrue(ai.state.value.active); delay(250) } }
-                assertTrue("The response must still be active after 125 seconds", ai.state.value.active)
+                fun metadata(): String {
+                    val state = ai.state.value
+                    return "phase=${state.phase}, active=${state.active}, failure=${state.failureKind}, requests=" +
+                        state.requests.joinToString { record ->
+                            "status=${record.status}, diagnostic=${record.diagnostic}, failure=${record.failure}, events=${record.events}, textChars=${record.textChars}, elapsed=${record.elapsed}ms"
+                        }
+                }
+                withTimeout(240000) {
+                    // Require 125 s of actual response streaming, not time draining the request.
+                    while (ai.state.value.requests.lastOrNull()?.let { record ->
+                            record.firstEvent?.let { first -> record.elapsed - first >= 125000 } == true
+                        } != true) {
+                        assertTrue("Stream ended before the deadline check: ${metadata()}", ai.state.value.active)
+                        delay(250)
+                    }
+                }
+                assertTrue("The response must still be active after 125 seconds: ${metadata()}", ai.state.value.active)
                 withTimeout(40000) { while (ai.state.value.active) delay(100) }
-                assertEquals(ai.state.value.error, AiPhase.Completed, ai.state.value.phase)
+                assertEquals(metadata(), AiPhase.Completed, ai.state.value.phase)
                 val log = ai.state.value.requests.single()
-                assertTrue(log.elapsed > 125000); assertEquals(3000, log.textChars); assertEquals(3001, log.events)
+                assertTrue(metadata(), log.elapsed - requireNotNull(log.firstEvent) >= 125000)
+                assertEquals(3000, log.textChars); assertEquals(3001, log.events)
                 assertNull(log.failure); assertTrue(log.points.size > 100)
             }
         }
@@ -206,6 +225,11 @@ class AiDiagnosticsDeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             val w = (context.applicationContext as ZakoApplication).workbench
             await { !w.state.value.loading && !w.state.value.busy }
+            val prerequisitesAvailable = withContext(Dispatchers.IO) {
+                w.runtime.isInstalled() && File(w.runtime.root, "usr/bin/sed").isFile &&
+                    File(w.runtime.root, "usr/bin/python3").isFile
+            }
+            org.junit.Assume.assumeTrue("Unavailable: this isolated test host requires an installed Ubuntu runtime with sed and Python; no environment is installed or copied by this test", prerequisitesAvailable)
             AiDeviceTest.Fixture(context).use { f ->
                 val project = withContext(Dispatchers.IO) { w.projects.create(f.token) }
                 val root = w.projects.directory(project.id)

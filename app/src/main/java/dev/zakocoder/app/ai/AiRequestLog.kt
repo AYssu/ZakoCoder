@@ -6,7 +6,8 @@ import org.json.JSONObject
 
 /** Only stable, allow-listed diagnostics enter history. Never retain Throwable, headers or provider error bodies. */
 enum class AiFailure(val label: Int) {
-    Image(R.string.ai_failure_image),
+    RequestConfiguration(R.string.ai_failure_request_configuration),
+    Image(R.string.ai_failure_image), LocalResourceLimit(R.string.ai_failure_local_capacity), ContextConfiguration(R.string.ai_failure_context_configuration),
     Compaction(R.string.ai_failure_compaction), Skill(R.string.ai_failure_skill), Http(R.string.ai_failure_http), IdleTimeout(R.string.ai_failure_idle), Network(R.string.ai_failure_network),
     Protocol(R.string.ai_failure_protocol), OutputLimit(R.string.ai_failure_output), ContextLimit(R.string.ai_failure_context),
     RoundLimit(R.string.ai_failure_round), ToolLimit(R.string.ai_failure_tools), TaskTimeout(R.string.ai_failure_task),
@@ -20,7 +21,10 @@ data class AiRequestLog(
     val requestBytes: Int = 0, val events: Int = 0, val textChars: Int = 0, val argumentChars: Int = 0, val bytes: Long = 0,
     val inputTokens: Long? = null, val outputTokens: Long? = null, val cachedTokens: Long? = null,
     val finish: String = "", val diagnostic: String = "", val failure: AiFailure? = null, val complete: Boolean = false,
-    val compaction: Boolean = false, val request: String = "", val response: String = "", val truncated: Boolean = false, val points: List<AiStreamPoint> = emptyList()
+    val compaction: Boolean = false, val request: String = "", val response: String = "", val truncated: Boolean = false, val points: List<AiStreamPoint> = emptyList(),
+    val estimatedContextTokens: Long = 0, val contextWindowTokens: Int = 128000, val contextOutputReserveTokens: Int = 8192,
+    val retryGroup: String = "", val attempt: Int = 1, val maxAttempts: Int = 1, val retryDelayMs: Long = 0, val retryReason: String = "",
+    val apiProtocol: String = "ChatCompletions"
 ) {
     fun encode(): JSONObject = JSONObject().put("id", id).put("turn", turn).put("round", round).put("started", started)
         .put("elapsed", elapsed).put("firstEvent", firstEvent).put("firstText", firstText).put("status", status)
@@ -29,6 +33,9 @@ data class AiRequestLog(
         .put("inputTokens", inputTokens).put("outputTokens", outputTokens).put("cachedTokens", cachedTokens)
         .put("finish", finish).put("diagnostic", diagnostic).put("failure", failure?.name).put("complete", complete).put("compaction", compaction).put("request", request)
         .put("response", response).put("truncated", truncated)
+        .put("estimatedContextTokens", estimatedContextTokens).put("contextWindowTokens", contextWindowTokens).put("contextOutputReserveTokens", contextOutputReserveTokens)
+        .put("retryGroup", retryGroup).put("attempt", attempt).put("maxAttempts", maxAttempts).put("retryDelayMs", retryDelayMs).put("retryReason", retryReason)
+        .put("apiProtocol", apiProtocol)
         .put("points", JSONArray(points.map { JSONArray(listOf(it.ms, it.events, it.chars, it.bytes)) }))
     companion object {
         fun decode(j: JSONObject): AiRequestLog {
@@ -44,7 +51,9 @@ data class AiRequestLog(
                 if (j.isNull("failure")) null else AiFailure.valueOf(j.getString("failure")), j.getBoolean("complete"),
                 j.optBoolean("compaction"), request, response, j.getBoolean("truncated"), (0 until points.length()).map { n -> points.getJSONArray(n).let {
                     AiStreamPoint(it.getLong(0), it.getInt(1), it.getInt(2), it.getLong(3))
-                } })
+                } }, j.optLong("estimatedContextTokens", 0), j.optInt("contextWindowTokens", 128000), j.optInt("contextOutputReserveTokens", 8192),
+                j.optString("retryGroup").take(64), j.optInt("attempt", 1).coerceIn(1, 3), j.optInt("maxAttempts", 1).coerceIn(1, 3),
+                j.optLong("retryDelayMs", 0).coerceIn(0, 30000), j.optString("retryReason").take(100), j.optString("apiProtocol", "ChatCompletions").take(32))
         }
     }
 }

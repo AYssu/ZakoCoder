@@ -5,6 +5,9 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -119,6 +122,22 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         notificationStatus = notifications.status()
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    var sshLicenseOpen by remember { mutableStateOf(false) }
+    if (sshLicenseOpen) {
+        var licenseFailed by remember { mutableStateOf(false) }
+        val license by produceState<String?>(initialValue = null) {
+            try {
+                value = withContext(Dispatchers.IO) {
+                    context.assets.open("licenses/JSch-BSD.txt").bufferedReader().use { it.readText() }
+                }
+            } catch (_: java.io.IOException) { licenseFailed = true }
+        }
+        WorkbenchSheet(stringResource(R.string.ssh_license_title), { sshLicenseOpen = false }) {
+            SshLicensePanel(license, licenseFailed)
+        }
+    }
+    var capabilityPackagesOpen by remember { mutableStateOf(false) }
+    if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.selectedId, state.project?.name.orEmpty()) { capabilityPackagesOpen = false }
     var aiPermissions by remember { mutableStateOf(false) }
     if (aiPermissions) AiPermissionsSheet(workbench, state.projects.find { it.id == workbench.ai.state.value.projectId }?.name.orEmpty(), { aiPermissions = false })
     var editing by remember { mutableStateOf<String?>(null) }
@@ -139,6 +158,10 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             SettingsRow(stringResource(R.string.ai_permissions), state.project?.name ?: stringResource(R.string.select_project_first),
                 glyph = Glyph.Shield, enabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
                 onClick = { workbench.ai.select(state.selectedId); if (workbench.ai.state.value.projectId == state.selectedId) aiPermissions = true })
+        } }
+        item { SettingsGroup(stringResource(R.string.screen_test_development_group)) {
+            SettingsRow(stringResource(R.string.capability_packages_title), stringResource(R.string.capability_packages_settings_hint),
+                glyph = Glyph.Extensions, onClick = { capabilityPackagesOpen = true })
         } }
         item { SettingsGroup(stringResource(R.string.nav_terminal)) {
             Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -255,6 +278,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                         Text(stringResource(R.string.about_description))
                         Text(stringResource(R.string.validation_artifacts_notice), color = MaterialTheme.colorScheme.error)
                         Text(stringResource(R.string.licenses_description))
+                        SshLicenseEntry { sshLicenseOpen = true }
                     }
                     "notifications" -> {
                         Text(stringResource(notificationStatus.label()), color = if (notificationStatus == RunningNotificationStatus.Available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
@@ -296,4 +320,24 @@ internal fun RunningNotificationStatus.label(): Int = when (this) {
     RunningNotificationStatus.ChannelBlocked -> R.string.notification_channel_blocked
     RunningNotificationStatus.Available -> R.string.notifications_granted
     RunningNotificationStatus.Unknown -> R.string.notification_status_unknown
+}
+
+
+@Composable
+internal fun SshLicenseEntry(onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Text(stringResource(R.string.ssh_license_entry))
+    }
+}
+
+@Composable
+internal fun SshLicensePanel(license: String?, failed: Boolean = false) {
+    Text(stringResource(R.string.ssh_license_component), style = MaterialTheme.typography.bodyMedium)
+    Text(stringResource(R.string.ssh_license_location), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    when {
+        failed -> CapabilityNotice(stringResource(R.string.ssh_license_failed), error = true)
+        license == null -> Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodySmall)
+        else -> SelectionContainer { Text(license, style = MaterialTheme.typography.bodySmall) }
+    }
 }

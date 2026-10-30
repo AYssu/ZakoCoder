@@ -51,6 +51,7 @@ tasks.matching { it.name.contains("Release") }.configureEach {
 dependencies {
     implementation(project(":terminal-view"))
     implementation(libs.okhttp)
+    implementation(libs.jsch)
     implementation(libs.commonmark)
     implementation(libs.commonmark.tables)
     androidTestImplementation(libs.okhttp.mock)

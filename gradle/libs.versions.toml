@@ -16,8 +16,10 @@ test-core = "1.6.1"
 
 sora = "0.23.6"
 okhttp = "5.5.1"
+jsch = "2.28.8"
 
 [libraries]
+jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
 commonmark = { module = "org.commonmark:commonmark", version = "0.31.0" }
 commonmark-tables = { module = "org.commonmark:commonmark-ext-gfm-tables", version = "0.31.0" }

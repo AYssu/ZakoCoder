@@ -10,8 +10,8 @@
     <string name="ai_options_presence">主题重复惩罚（−2～2，留空不发送）</string>
     <string name="ai_options_seed">随机种子（整数，可留空）</string>
     <string name="ai_options_context">上下文与总结</string>
-    <string name="ai_options_context_hint">按字符管理应用请求预算，不等于模型 Token 上限。总结有损，原始会话仍保留；关闭自动总结后，超出预算将停止请求并提示。</string>
-    <string name="ai_options_context_chars">上下文字符预算（32000～256000）</string>
+    <string name="ai_options_context_hint">窗口以 Token 配置，并预留输出空间。输入含系统说明、历史和工具定义，本地估算不等于计费用量。仅在下一次请求接近阈值时压缩，不按对话轮数提前总结。总结有损。</string>
+    <string name="ai_options_context_tokens">上下文窗口（Token）</string>
     <string name="ai_options_auto">自动压缩上下文</string>
     <string name="ai_options_threshold">压缩触发比例（50～95%）</string>
     <string name="ai_options_summary_chars">总结字符上限（2000～12000）</string>

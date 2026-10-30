@@ -19,7 +19,7 @@ class AiPermissionPresetsTest {
         val elevated = AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Elevated)
         assertEquals(AiPermission.Allow, elevated.default)
         AiTool.entries.forEach { tool ->
-            assertEquals(if (tool == AiTool.UseMcp) AiPermission.Ask else AiPermission.Allow, elevated.permission(tool))
+            assertEquals(if (tool == AiTool.UseMcp || tool == AiTool.AndroidTest || tool == AiTool.SshRemote) AiPermission.Ask else AiPermission.Allow, elevated.permission(tool))
         }
         assertEquals(AiPermissionPreset.Elevated, AiPermissionPresets.matching(elevated))
         assertEquals(AiPermission.Ask, AiPermissionPresets.apply(AiPolicy(AiPermission.Allow, emptyMap()), AiPermissionPreset.Elevated).permission(AiTool.UseMcp))

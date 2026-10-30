@@ -68,6 +68,16 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             withContext(Dispatchers.IO) { projects.directory(projectId) }
             runtime.startMcpProcess(context, projectId, mutable.value.settings, server)
         }, canModify = { !aiActive() && !aiRestoring() && !mutable.value.busy && !projectTasksActive() })
+    val capabilityPackages = dev.zakocoder.app.capabilities.CapabilityPackages(context, ::capabilityChanged)
+    val ssh = dev.zakocoder.app.ssh.SshController(context)
+    private fun capabilityChanged(id: String, kind: dev.zakocoder.app.capabilities.CapabilityPackage) {
+        if (ai.state.value.projectId == id && ai.state.value.active) ai.stop()
+        when (kind) {
+            dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> if (screenTests.state.value.projectId == id) screenTests.stop()
+            dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> ssh.stop()
+        }
+    }
+    val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
@@ -87,7 +97,38 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             mcp.preview(server, method, params)
         },
         mcpTool = { id, args -> mcp.request(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
-        finishMcpTask = { id -> mcp.closeTask(id) }, proxy = { settingsRepository.proxyForRuntime() })
+        finishMcpTask = { id -> mcp.closeTask(id) },
+        capabilitySnapshot = { id -> capabilityPackages.snapshot(id).mapValues { (kind, token) ->
+            if (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Ssh) token + "|" + (ssh.configurationLease(id) ?: "unconfigured") else token
+        } },
+        sshDescription = { id -> ssh.state.value.profiles.singleOrNull { it.id == id }?.let { "${it.username}@${it.host}:${it.port} · ${it.workingDirectory}" } ?: id },
+        sshTool = { id, args, approved ->
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(mutable.value.projects.any { it.id == id })
+            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Ssh))
+            val current = capabilityPackages.snapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.Ssh]
+            check(approved != null && approved.substringBefore('|') == current)
+            ssh.execute(id, args, expectedConfiguration = approved.substringAfter('|'))
+        },
+        screenTestTool = { id, args, lease ->
+            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(mutable.value.projects.any { it.id == id })
+            screenTests.execute(id, args, expectedSession = lease)
+        }, screenTestLease = screenTests::taskLease,
+        screenTestDescription = { id ->
+            val current = screenTests.state.value
+            val project = mutable.value.projects.singleOrNull { it.id == id }
+            context.getString(R.string.ai_screen_test_target_description, project?.name ?: id,
+                current.packageName?.takeIf { current.projectId == id } ?: context.getString(R.string.screen_test_target_none),
+                context.getString(when (current.access) {
+                    dev.zakocoder.app.screentest.ScreenTestAccess.Normal -> R.string.screen_test_access_normal
+                    dev.zakocoder.app.screentest.ScreenTestAccess.Accessibility -> R.string.screen_test_access_accessibility
+                    dev.zakocoder.app.screentest.ScreenTestAccess.Root -> R.string.screen_test_access_root
+                }))
+        },
+        finishScreenTestTask = { id, lease -> screenTests.finishTask(id, lease) }, stopScreenTest = { screenTests.stop() },
+        shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -160,6 +201,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
+        scope.launch { ssh.load() }
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
         scope.launch {
             try {
@@ -492,7 +534,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.create(project.id, project.name, prepared)
     }
     fun closeTerminal(id: String) { scope.launch { terminal.close(id); releaseService() } }
-    fun stopAll() { git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
+    fun stopAll() { ssh.stop(); screenTests.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
     fun referenceAi(projectId: String, reference: dev.zakocoder.app.ai.AiReference): Boolean {
         val accepted = ai.referenceProject(projectId, reference)
         if (!accepted) mutable.update { it.copy(message = ai.state.value.error.ifBlank { context.getString(R.string.ai_reference_error) }, messageIsError = true) }

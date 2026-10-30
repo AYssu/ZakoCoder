@@ -30,15 +30,15 @@ open class AiHistoryStore(private val directory: File) {
     private fun read(file: File): JSONObject {
         val bytes = AtomicFile(file).openRead().use { input -> java.io.ByteArrayOutputStream().use { output ->
             val buffer = ByteArray(8192)
-            while (true) { val count = input.read(buffer); if (count < 0) break; output.write(buffer, 0, count); require(output.size() <= 8 * 1024 * 1024) }
+            while (true) { val count = input.read(buffer); if (count < 0) break; output.write(buffer, 0, count); require(output.size() <= 64 * 1024 * 1024) }
             output.toByteArray()
         } }
-        require(bytes.size <= 8 * 1024 * 1024)
+        require(bytes.size <= 64 * 1024 * 1024)
         return JSONObject(bytes.toString(Charsets.UTF_8)).also { require(it.getInt("schemaVersion") == 1) }
     }
     private fun write(file: File, json: JSONObject) {
         require(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
-        val bytes = json.toString().toByteArray(); require(bytes.size <= 8 * 1024 * 1024)
+        val bytes = json.toString().toByteArray(); if (bytes.size > 64 * 1024 * 1024) throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_history_64mib_limit")
         val atomic = AtomicFile(file); val output = atomic.startWrite()
         try { output.write(bytes); atomic.finishWrite(output) } catch (error: Exception) { atomic.failWrite(output); throw error }
     }
@@ -105,7 +105,7 @@ open class AiHistoryStore(private val directory: File) {
                 require(file.name in setOf(name, "$name.bak", "$name.new"))
                 require(name == "selected.json" || (name.endsWith(".json") && AiImages.validId(name.removeSuffix(".json"))))
                 val size = Files.size(file.toPath())
-                require(size in 1..(8L * 1024 * 1024))
+                require(size in 1..(64L * 1024 * 1024))
                 bytes += size
                 require(bytes <= 256L * 1024 * 1024)
                 val json = Files.newInputStream(file.toPath(), NOFOLLOW_LINKS).use { input ->
@@ -114,7 +114,7 @@ open class AiHistoryStore(private val directory: File) {
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
-                        require(output.size() + count <= 8 * 1024 * 1024)
+                        require(output.size() + count <= 64 * 1024 * 1024)
                         output.write(buffer, 0, count)
                     }
                     require(output.size().toLong() == size)
@@ -160,6 +160,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("commandChanges", JSONArray(state.commandChanges.map { it.encode() })).put("commandReviewLimited", state.commandReviewLimited)
         .put("requests", JSONArray(state.requests.map { it.encode() })).put("recovery", JSONArray(state.recoveryNotes))
         .put("skillsInitialized", state.skillsInitialized)
+        .put("estimatedContextTokens", state.estimatedContextTokens).put("contextWindowTokens", state.contextWindowTokens).put("contextOutputReserveTokens", state.contextOutputReserveTokens)
         .put("contextSummary", state.contextSummary).put("contextCompactions", state.contextCompactions).put("contextChars", state.contextChars)
         .put("taskRecovery", state.taskRecovery).put("taskPrompt", state.taskPrompt).put("enabledSkills", JSONArray(state.enabledSkills))
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
@@ -265,6 +266,8 @@ open class AiHistoryStore(private val directory: File) {
         } }
         val state = AiState(turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,
+            estimatedContextTokens = json.optLong("estimatedContextTokens", 0).coerceAtLeast(0), contextWindowTokens = json.optInt("contextWindowTokens", 128000).coerceIn(8192, 2097152),
+            contextOutputReserveTokens = json.optInt("contextOutputReserveTokens", 8192).coerceAtLeast(0),
             messages = timeline.filter { it.toolId == null }.takeLast(100).map { it.text }, contextTurns = turns,
             commandChanges = commandChanges, commandReviewLimited = json.optBoolean("commandReviewLimited"),
             requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),

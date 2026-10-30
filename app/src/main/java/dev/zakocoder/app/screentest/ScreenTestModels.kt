@@ -1,0 +1,61 @@
+package dev.zakocoder.app.screentest
+
+import android.net.Uri
+
+data class ScreenTestApk(
+    val relativePath: String,
+    val packageName: String,
+    val label: String,
+    val versionName: String,
+    val debuggable: Boolean,
+)
+
+enum class ScreenTestAccess { Normal, Accessibility, Root }
+
+data class ScreenTestState(
+    val projectId: String? = null,
+    val packageName: String? = null,
+    val apkPath: String? = null,
+    val enabled: Boolean = false,
+    val connected: Boolean = false,
+    val active: Boolean = false,
+    val access: ScreenTestAccess = ScreenTestAccess.Normal,
+    val shareScreenshots: Boolean = false,
+    val rootGranted: Boolean = false,
+    val installAllowed: Boolean = false,
+    val busy: Boolean = false,
+    val summary: String = "",
+    val reportPath: String? = null,
+)
+
+data class ScreenTestResult(val output: String, val imageUri: Uri? = null)
+
+interface ScreenTestBackend {
+    suspend fun execute(packageName: String, args: org.json.JSONObject): ScreenTestResult
+    fun stop()
+}
+
+class ScreenTestException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
+
+/** A complete JSON response; budgets include escaping and UTF-8, never a substring of JSON. */
+internal data class ScreenTestObservationOutput(val output: String, val exposedCount: Int)
+
+internal fun boundedScreenObservation(
+    packageName: String?, token: String, nodes: List<org.json.JSONObject>, truncated: Boolean = false,
+): ScreenTestObservationOutput {
+    val exposed = org.json.JSONArray()
+    val payload = org.json.JSONObject().put("snapshot", token).put("package", packageName)
+        .put("nodes", exposed).put("truncated", truncated)
+    var count = 0
+    for (node in nodes.take(80)) {
+        exposed.put(node)
+        val candidate = payload.toString()
+        if (candidate.length > 60_000 || candidate.toByteArray(Charsets.UTF_8).size > 60_000) {
+            exposed.remove(exposed.length() - 1)
+            break
+        }
+        count++
+    }
+    payload.put("truncated", truncated || count < nodes.size)
+    return ScreenTestObservationOutput(payload.toString(), count)
+}

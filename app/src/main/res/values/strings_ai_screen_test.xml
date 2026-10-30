@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_screen_test_tool">Android 屏幕测试</string>
+    <string name="ai_screen_test_tool_desc">经审批操作当前项目选定的测试应用，读取界面、点击、输入、断言并保存测试报告。</string>
+    <string name="ai_screen_test_warning">当前项目：%1$s
+操作：%2$s
+%3$s
+仅操作你在测试面板选择的应用。任务授权不会授予系统无障碍或安装权限；安装仍需系统确认。</string>
+    <string name="ai_screen_test_unavailable">屏幕测试暂不可用，请先在项目测试面板选择 APK 并完成系统授权。</string>
+    <string name="ai_screen_test_cleanup_failed">屏幕测试清理未完成，请在测试面板停止并检查报告。</string>
+    <string name="ai_screen_test_image_disabled">当前未允许发送截图或测试目标会话已变更。截图仅保存在本地报告，未发送像素给模型；不能声称已看过截图。</string>
+    <string name="ai_screen_test_session_changed">测试目标会话已由用户更换，本任务不会接管新目标。请结束本任务后重新开始测试。</string>
+    <string name="ai_screen_test_target_description">%1$s\n应用：%2$s\n测试方式：%3$s</string>
+    <string name="ai_screen_test_task_approval_hint">连续测试可选择“本任务允许此工具”，避免反复切回工作台审批；单次批准后需让目标应用回到前台，才可继续观察和操作。</string>
+</resources>

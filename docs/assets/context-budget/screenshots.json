@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-31",
+  "device": "Android 13 ARM64",
+  "source": "ContextBudgetUiDeviceTest: production native capacity panels and request details; synthetic configuration and actual-usage fixture; 360dp viewport and 130% font scale; keyboard interaction not covered",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-model-presets-end.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "56a0c01c7dad18d05f606a14ad41ea71c1b95e79337577c51c9bb80c4e3ee9f7",
+      "captureSha256": "df306d0f246a841f1b1d92b1c0067aeedead352cfe1e88d116a6b9ea94e22d9f"
+    },
+    {
+      "file": "day-model-presets-openai-bottom.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bb3d751de74b192e6b0741770f91d8e9d0549794ce2c94160080adb984799234",
+      "captureSha256": "b0212c101b5325296c781082f889b082cc68f58499e5dde7c8b1e3c44ae34131"
+    },
+    {
+      "file": "day-model-presets-openai-top.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bb3d751de74b192e6b0741770f91d8e9d0549794ce2c94160080adb984799234",
+      "captureSha256": "226794a4056d3d0958a6d43556676ef5fd164772168bc3ba67ec57ac50d616bf"
+    },
+    {
+      "file": "day-model-presets.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bb3d751de74b192e6b0741770f91d8e9d0549794ce2c94160080adb984799234",
+      "captureSha256": "226794a4056d3d0958a6d43556676ef5fd164772168bc3ba67ec57ac50d616bf"
+    },
+    {
+      "file": "day-request-budget.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "fbd5eda44011f05b63a102af09dec82197987861790d8f6be823f60a48aebf0b",
+      "captureSha256": "73fd12a470ad7b21ee197cc7c82a6386b6abd441b2207c9e45f729ac516672a4"
+    },
+    {
+      "file": "day-window-panel.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3e8240349803b97f9eb9bdb9f3833a0545381adccdc1d4ddcdca04c83cec015b",
+      "captureSha256": "a8355bf75e34b4ca1b91683aaf6d989351630ac4c608dedcbc8974d378ee5dcb"
+    },
+    {
+      "file": "night-model-presets-end.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b17e1c71bd02d979ac697c424a4bd1252b0998b173d8d8c35fef744e461a533b",
+      "captureSha256": "221876b846712797449894159fed4135a9bfe8d3cafe9824bb48d85f01f83327"
+    },
+    {
+      "file": "night-model-presets-openai-bottom.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0f369f6ec87c3ec3f0d341207d7bef36fbb83a13b1d2be14303f7c4965840b2f",
+      "captureSha256": "65a895f333b8ac27bba9b3502f5c1e14b645c3f88dc816716e17c56e624dcd82"
+    },
+    {
+      "file": "night-model-presets-openai-top.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0f369f6ec87c3ec3f0d341207d7bef36fbb83a13b1d2be14303f7c4965840b2f",
+      "captureSha256": "67e6dbdd580cfb086c389de5079376dd76fd620a6a86cd7d8030283d7b3ffce6"
+    },
+    {
+      "file": "night-model-presets.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0f369f6ec87c3ec3f0d341207d7bef36fbb83a13b1d2be14303f7c4965840b2f",
+      "captureSha256": "b4901f25d8c0fdb15049f480edaf7d4934d252e8cc8575681cffc1e4cbf390f5"
+    },
+    {
+      "file": "night-request-budget.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "6548b00e9241ac8c9e236656ce781214c045e63b230e17de344921a88e106743",
+      "captureSha256": "0b5966a73956dfbf438d4497e64edbd0f40d651dfe68b65f90f041515a42075f"
+    },
+    {
+      "file": "night-window-panel.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4474d08b4627dfbc1fb19de2de7206440e8915f5545d20262c1e704892e72726",
+      "captureSha256": "706eee4177567e63bfef4cecf398b5dafbd79f357d2f127a1461452b4ceaeb5e"
+    }
+  ]
+}

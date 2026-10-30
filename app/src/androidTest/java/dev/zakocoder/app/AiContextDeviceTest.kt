@@ -51,6 +51,7 @@ class AiContextDeviceTest {
     @Test(timeout = 180000) fun unlimitedRoundsToolsRepeatedCompactionAndRestartKeepContext() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
+                configure(f, AiContextOptions(contextWindowTokens = 64000, compressionThresholdPercent = 70))
                 val normal = AtomicInteger(); val summaries = AtomicInteger()
                 val prompt = "ORIGINAL_TASK_KEEP_EXACT: inspect only; no edits"
                 f.server.dispatcher = object : Dispatcher() {
@@ -102,6 +103,7 @@ class AiContextDeviceTest {
     @Test(timeout = 120000) fun failedSummaryPreservesProgressAndDoesNotReplayTools() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
+                configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
                 val calls = AtomicInteger(); val summaries = AtomicInteger()
                 f.server.dispatcher = object : Dispatcher() {
@@ -129,6 +131,7 @@ class AiContextDeviceTest {
     @Test(timeout = 120000) fun invalidSummaryCannotExecuteTools() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
+                configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
                 f.server.dispatcher = object : Dispatcher() {
                     override fun dispatch(request: RecordedRequest): MockResponse =
@@ -150,6 +153,7 @@ class AiContextDeviceTest {
     @Test(timeout = 120000) fun stopCancelsPendingSummaryWithoutExecutingItsToolCalls() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
+                configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
                 f.server.dispatcher = object : Dispatcher() {
                     override fun dispatch(request: RecordedRequest): MockResponse =
@@ -176,15 +180,17 @@ class AiContextDeviceTest {
     }
     @Test(timeout = 100000) fun disabledAutomaticCompressionStopsAtConfiguredBudgetWithoutSummaryRequest() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
-            configure(f, AiContextOptions(32000, false, 50, 2000))
+            configure(f, AiContextOptions(autoCompress = false, contextWindowTokens = 24000, summaryMaxChars = 2000))
             val requests = AtomicInteger()
             f.server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     val body = JSONObject(request.body.readUtf8())
                     assertFalse(isSummary(body))
-                    assertTrue(body.getJSONArray("messages").toString().length <= 32000)
+                    assertTrue(tokenBudget(AiConfig(context = AiContextOptions(contextWindowTokens = 24000)), body.getJSONArray("messages"), body.getJSONArray("tools")).fits)
                     requests.incrementAndGet()
-                    return response("large evidence " + "z".repeat(30000), listOf(AiCall("inspect-once", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}")))
+                    // 60k ASCII characters alone estimate to 20k tokens: larger than
+                    // this window's 18k input capacity, independent of prompt/schema size.
+                    return response("large evidence " + "z".repeat(60000), listOf(AiCall("inspect-once", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}")))
                 }
             }
             lateinit var ai: AiController
@@ -198,7 +204,7 @@ class AiContextDeviceTest {
     }
     @Test(timeout = 100000) fun configuredThresholdAndSummaryLengthAreAppliedToRealSummaryRequests() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
-            configure(f, AiContextOptions(64000, true, 50, 2000))
+            configure(f, AiContextOptions(contextWindowTokens = 36000, compressionThresholdPercent = 50, summaryMaxChars = 2000))
             val normal = AtomicInteger(); val summaries = AtomicInteger()
             f.server.dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
@@ -244,4 +250,94 @@ class AiContextDeviceTest {
             assertTrue(body.toString().contains("a".repeat(100000)))
         }
     }
+    @Test(timeout = 120000) fun nearThresholdEscapedCodeCompactsWithoutDoubleJsonExpansion() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val options = AiContextOptions(contextWindowTokens = 48000, compressionThresholdPercent = 90)
+            configure(f, options)
+            val prompt = "Inspect prior code without replaying actions"
+            f.server.enqueue(response("baseline"))
+            lateinit var baseline: AiController
+            main { baseline = controller(f); baseline.select("calibration") }; ready(baseline); withoutSkills(baseline)
+            main { baseline.send(prompt) }; await { !baseline.state.value.active }
+            assertEquals(AiPhase.Completed, baseline.state.value.phase)
+            val wire = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
+            val settings = f.config.load()
+            val original = wire.getJSONArray("messages")
+            val tools = wire.getJSONArray("tools")
+            val codeLine = "const payload = \"C:\\\\tmp\\\\\"quoted\\\\\"\\\\file\";\n"
+            fun candidate(repeats: Int): JSONArray {
+                val trial = JSONArray().put(original.getJSONObject(0))
+                    .put(JSONObject().put("role", "user").put("content", "EARLIEST_CODE_REQUEST"))
+                    .put(JSONObject().put("role", "assistant").put("content", codeLine.repeat(repeats)))
+                for (i in 1 until original.length()) trial.put(original.getJSONObject(i))
+                return trial
+            }
+            val target = (options.contextWindowTokens - 8192) * 95L / 100
+            var low = 1; var high = 20000
+            while (low < high) {
+                val middle = (low + high) / 2
+                if (tokenBudget(settings, candidate(middle), tools).inputTokens < target) low = middle + 1 else high = middle
+            }
+            val trial = candidate(low)
+            assertTrue(tokenBudget(settings, trial, tools).fits)
+            assertTrue(tokenBudget(settings, trial, tools).shouldCompress)
+            val oldEvidence = JSONArray()
+            for (i in 1 until trial.length()) oldEvidence.put(trial.getJSONObject(i))
+            val doubleEncodedSummary = JSONArray()
+                .put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(options.summaryMaxChars)))
+                .put(JSONObject().put("role", "user").put("content", oldEvidence.toString()))
+            assertFalse(tokenBudget(settings.copy(parameters = AiParameters(maxTokens = 4000)), doubleEncodedSummary, JSONArray()).fits)
+            val retained = JSONArray().put(trial.getJSONObject(1)).put(trial.getJSONObject(2)).toString()
+            f.history.save("quoted-code", AiState(turn = 1, contextTurns = listOf(retained), skillsInitialized = true))
+            val summaries = AtomicInteger(); val normals = AtomicInteger()
+            f.server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val body = JSONObject(request.body.readUtf8())
+                    if (isSummary(body)) {
+                        summaries.incrementAndGet()
+                        val evidence = body.getJSONArray("messages").getJSONObject(1).getString("content")
+                        assertTrue(evidence.contains(codeLine))
+                        assertTrue(evidence.contains("EARLIEST_CODE_REQUEST"))
+                        assertTrue(body.getInt("max_tokens") <= 8192)
+                        return response("QUOTED_CODE_MEMORY: inspect existing files; no prior actions authorized for replay.")
+                    }
+                    normals.incrementAndGet(); return response("review complete")
+                }
+            }
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("quoted-code") }; ready(ai)
+            main { ai.send(prompt) }; await { !ai.state.value.active }
+            assertEquals(AiPhase.Completed, ai.state.value.phase)
+            assertEquals(1, summaries.get()); assertEquals(1, normals.get())
+            assertTrue(f.history.load("quoted-code").state!!.contextSummary.contains("QUOTED_CODE_MEMORY"))
+        }
+    }
+
+    @Test(timeout = 120000) fun millionTokenControllerSendsLongHistoryWithoutEarlySummaryAndRestarts() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(contextWindowTokens = 1048576))
+            val turns = (1..60).map { index -> JSONArray()
+                .put(JSONObject().put("role", "user").put("content", "ORIGINAL_TURN_$index"))
+                .put(JSONObject().put("role", "assistant").put("content", "answer $index " + "a".repeat(10000))).toString() }
+            f.history.save("million-window", AiState(turn = 60, contextTurns = turns, skillsInitialized = true))
+            f.server.enqueue(response("long context retained"))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("million-window") }; ready(ai)
+            main { ai.send("Continue using the earliest turn") }; await { !ai.state.value.active }
+            assertEquals(AiPhase.Completed, ai.state.value.phase)
+            assertEquals(0, ai.state.value.contextCompactions)
+            val request = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
+            assertFalse(isSummary(request)); assertEquals(1, f.server.requestCount)
+            assertTrue(request.getJSONArray("messages").length() > 96)
+            assertTrue(request.toString().contains("ORIGINAL_TURN_1"))
+            assertTrue(ai.state.value.estimatedContextTokens > 128000)
+            lateinit var restarted: AiController
+            main { restarted = controller(f); restarted.select("million-window") }; ready(restarted)
+            assertFalse(restarted.state.value.historyError)
+            assertEquals(61, restarted.state.value.contextTurns.size)
+            assertEquals(turns.first(), restarted.state.value.contextTurns.first())
+            assertEquals(0, restarted.state.value.contextCompactions)
+        }
+    }
+
 }

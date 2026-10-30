@@ -19,7 +19,7 @@ import dev.zakocoder.app.ai.AiEntry
 
 /** Only publicly returned provider reasoning, never inferred or reconstructed hidden thoughts. */
 @Composable
-internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, streaming: Boolean = false) {
+internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, streaming: Boolean = false, displayedReasoning: String = entry.reasoning) {
     if (entry.reasoning.isEmpty() && !entry.reasoningTruncated) return
     var expanded by remember(entry.id) { mutableStateOf(streaming) }
     LaunchedEffect(streaming) { expanded = streaming }
@@ -38,7 +38,7 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
             if (expanded) {
                 Text(stringResource(R.string.ai_reasoning_provider_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (entry.reasoning.isNotEmpty()) SelectionContainer {
-                    Text(if (streaming) entry.reasoning.takeLast(12000) else entry.reasoning.take(12000), Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
+                    Text(if (streaming) displayedReasoning.takeLast(12000) else displayedReasoning.take(12000), Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (entry.reasoning.length > 12000) Text(stringResource(if (streaming) R.string.ai_reasoning_live_preview_limited else R.string.ai_reasoning_preview_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

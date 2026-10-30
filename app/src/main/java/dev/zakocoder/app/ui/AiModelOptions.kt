@@ -20,15 +20,16 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
     var frequency by mutableStateOf(profile?.parameters?.frequencyPenalty?.toString().orEmpty())
     var presence by mutableStateOf(profile?.parameters?.presencePenalty?.toString().orEmpty())
     var seed by mutableStateOf(profile?.parameters?.seed?.toString().orEmpty())
-    var contextChars by mutableStateOf((profile?.context?.maxContextChars ?: 96000).toString())
+    private val legacyContextChars = profile?.context?.maxContextChars ?: 96000
+    var windowTokens by mutableStateOf((profile?.context?.contextWindowTokens ?: 128000).toString())
     var automatic by mutableStateOf(profile?.context?.autoCompress ?: true)
-    var threshold by mutableStateOf((profile?.context?.compressionThresholdPercent ?: 80).toString())
+    var threshold by mutableStateOf((profile?.context?.compressionThresholdPercent ?: 90).toString())
     var summaryChars by mutableStateOf((profile?.context?.summaryMaxChars ?: 6000).toString())
     var replaceHeaders by mutableStateOf(false)
     var headersText by mutableStateOf("")
     fun parameters(base: AiParameters) = base.copy(thinking = thinking, reasoningEffort = effort,
         frequencyPenalty = frequency.takeIf(String::isNotBlank)?.toDouble(), presencePenalty = presence.takeIf(String::isNotBlank)?.toDouble(), seed = seed.takeIf(String::isNotBlank)?.toInt())
-    fun context() = AiContextOptions(contextChars.toInt(), automatic, threshold.toInt(), summaryChars.toInt()).also { it.validate() }
+    fun context() = AiContextOptions(legacyContextChars, automatic, threshold.toInt(), summaryChars.toInt(), windowTokens.toInt()).also { it.validate() }
     fun headers(): Map<String, String>? = if (!replaceHeaders) null else {
         val pairs = headersText.lineSequence().filter(String::isNotBlank).map { line ->
             val colon = line.indexOf(':'); require(colon > 0)
@@ -74,14 +75,7 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
         OptionField(draft.presence, { draft.presence = it; changed() }, R.string.ai_options_presence, editable)
         OptionField(draft.seed, { draft.seed = it; changed() }, R.string.ai_options_seed, editable)
         HorizontalDivider()
-        Text(stringResource(R.string.ai_options_context), style = MaterialTheme.typography.titleSmall)
-        Text(stringResource(R.string.ai_options_context_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OptionField(draft.contextChars, { draft.contextChars = it; changed() }, R.string.ai_options_context_chars, editable)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ai_options_auto), Modifier.weight(1f)); Switch(draft.automatic, { draft.automatic = it; changed() }, enabled = editable)
-        }
-        OptionField(draft.threshold, { draft.threshold = it; changed() }, R.string.ai_options_threshold, editable)
-        OptionField(draft.summaryChars, { draft.summaryChars = it; changed() }, R.string.ai_options_summary_chars, editable)
+        ContextBudgetOptions(draft, editable, changed)
         HorizontalDivider()
         Text(stringResource(R.string.ai_options_headers), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.ai_options_headers_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

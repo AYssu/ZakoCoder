@@ -37,11 +37,11 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 | **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情。 |
-| **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务。 |
+| **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
 | **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
-| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；查看 Git 状态、选择暂存并创建本地提交。 |
+| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；选择项目 Debug APK，通过系统安装及受限屏幕测试验证界面；查看 Git 状态、选择暂存并创建本地提交。 |
 
-图片从附件入口添加，可单独发送或配合文字描述，需使用支持图片输入的模型服务；真实服务的视觉理解效果仍待验证。服务公开返回的思考内容在当前轮实时展开，开始正式回答或工具调用后自动收起；历史可展开和复制；不会推测或补造模型内部思考。工具权限提供普通、高权限和高级逐工具规则：高权限需确认，保留禁止项，MCP 仍询问，不获得 Android root。
+图片从附件入口添加，可单独发送或配合文字描述，需使用支持图片输入的模型服务；真实服务的视觉理解效果仍待验证。服务公开返回的思考内容在当前轮实时展开，开始正式回答或工具调用后自动收起；历史可展开和复制；不会推测或补造模型内部思考。工具权限提供普通、高权限和高级逐工具规则：高权限需确认，保留禁止项，MCP、Android 屏幕操作与 SSH 仍询问，不获得 Android root。
 
 AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD、HTML/CSS、YAML、SQL、Go、Rust 等常见文件提供基础语法高亮，完整编辑范围见[编辑器说明](docs/EDITOR.md)。
 
@@ -76,9 +76,13 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | 设备 | Android 8.0+，ARM64 真机；当前设备验证覆盖 Android 13。x86_64 / 模拟器尚未适配。 |
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
-| 模型服务 | Chat Completions 兼容接口、SSE 工具调用与 `image_url` 图片请求；包含 DeepSeek 推理字段续接和公开思考内容展示。图片语义理解、参数与网关兼容性需按所选服务验证，不含本地模型推理。 |
+| 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
 | 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，暂不提供 LSP 或跨文件语义补全。 |
 | Git | 公开 HTTPS 克隆、状态、暂存和本地提交；私有仓库认证、分支合并与冲突界面尚未提供。 |
+
+「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包，按项目启用且默认关闭。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；普通、无障碍和 Root 方式的权限分别授权，截图分享默认关闭，目标仍限用户选择的项目调试 APK。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
+
+SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文件操作及可选 tmux 长任务。首次连接需确认主机指纹，认证凭据由设备 Keystore 加密保存，不回填或发给模型。远程项目目录只是工作目录，不限制获批 Shell 命令的访问范围；取消连接不保证远程后台进程退出，tmux 任务可以保留并重新接管。算法兼容性、并发写入等限制见[产品范围](docs/PRODUCT.md#可选能力包)。
 
 完整限制与未完成项见[产品范围](docs/PRODUCT.md)、[运行环境](docs/RUNTIME.md)和[路线图](docs/ROADMAP.md)。
 
@@ -128,7 +132,7 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 <details>
 <summary><strong>开发者快速构建</strong></summary>
 
-准备 JDK 17、Android SDK Platform 36、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3，配置 `ANDROID_HOME` 或本地 `local.properties`，然后运行：
+准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3，配置 `ANDROID_HOME` 或本地 `local.properties`，然后运行：
 
 ```sh
 python3 scripts/check_repository.py
@@ -151,6 +155,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需�
 | [termux/proot](https://github.com/termux/proot) · [talloc](https://talloc.samba.org/) · [libandroid-shmem](https://github.com/termux/libandroid-shmem) | 仓库内保留源码，自行编译 PRoot 与 loader；见 [独立子项目](native-runtime/README.md)。 |
 | [android-arm-build-tools](https://github.com/Commit451/android-arm-build-tools) · [android-ndk-custom](https://github.com/HomuHomu833/android-ndk-custom) | 可选手机 Android / NDK 构建工具链。 |
 | [CommonMark Java](https://github.com/commonmark/commonmark-java) · [OkHttp](https://github.com/square/okhttp) | Markdown 解析和网络传输。 |
+| [JSch](https://github.com/mwiede/jsch) | 原生 SSH 与 SFTP 传输。 |
 | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | 随应用离线提供的等宽字体。 |
 
 各组件的准确版本、来源、许可证、修改与分发方式以[第三方材料](THIRD_PARTY.md)为准；上表不替代原始许可证声明。

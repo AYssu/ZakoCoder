@@ -439,9 +439,6 @@
     <string name="ai_models_edit_title">编辑模型配置</string>
     <string name="ai_models_name">配置名称</string>
     <string name="ai_models_connection">服务连接</string>
-    <string name="ai_models_protocol">Chat Completions 兼容</string>
-    <string name="ai_models_protocol_hint">支持 HTTPS 服务的流式工具调用</string>
-    <string name="ai_models_templates">选择服务</string>
     <string name="ai_models_request_url">请求地址：%1$s</string>
     <string name="ai_models_key_cleared">保存后清除原密钥。</string>
     <string name="ai_models_key_retained">已保存密钥；留空保留，输入新值替换。</string>
@@ -463,11 +460,6 @@
     <string name="ai_models_search">搜索模型标识</string>
     <string name="ai_models_refresh">重新获取</string>
     <string name="ai_models_keep_manual">返回手动填写</string>
-    <string name="ai_models_template_hint">仅填写服务地址，不包含模型或密钥。请核对你实际使用的服务地址；不同服务需要对应密钥。</string>
-    <string name="ai_models_custom">自定义兼容服务</string>
-    <string name="ai_models_deepseek">DeepSeek</string>
-    <string name="ai_models_siliconflow">硅基流动</string>
-    <string name="ai_models_openrouter">OpenRouter</string>
     <string name="ai_models_discard_title">放弃未保存的配置？</string>
     <string name="ai_models_discard_hint">本次输入及测试结果不会保存。</string>
     <string name="ai_models_discard">放弃修改</string>
@@ -539,7 +531,7 @@
     <string name="ai_request_body">请求正文（脱敏）</string>
     <string name="ai_response_body">响应摘要（不含内部思考）</string>
     <string name="ai_request_timeline">实时累计变化（秒 / 事件 / 正文与参数字符 / 数据字节）</string>
-    <string name="ai_log_limits">本地有界记录：最多 32 次请求与 768k 正文字符；过旧记录会裁剪。认证信息已脱敏，项目正文仍属于敏感数据。Token 以服务返回为准；未提供时不估造。上下文字符含消息 JSON，不含工具定义；模型窗口占用率未知。</string>
+    <string name="ai_log_limits">本地有界记录：最多 32 次请求与 768k 正文字符；过旧记录会裁剪。认证信息已脱敏，项目正文仍属于敏感数据。计费 Token 以服务返回为准，未提供时显示未知。上下文 Token 为含系统说明、历史和工具定义的本地估算，不等于实际计费用量；模型窗口与输出预留可在模型配置中调整。</string>
     <string name="ai_log_truncated">该记录正文已截断，统计计数仍保留。</string>
     <string name="ai_log_copy">复制脱敏详情</string>
     <string name="ai_recovery_available">下一次发送会带上中断进度与失败原因，不会自动重放操作。</string>
@@ -604,8 +596,7 @@
     <string name="ai_skills_project_hint">项目 .zakocoder/skills/ 下的 SKILL.md；与内置项合计最多 16 项 / 32k 字符，权限审批保持不变。</string>
     <string name="ai_phase_compacting">正在压缩上下文</string>
     <string name="ai_context_compacting">上下文较长，正在生成续接摘要；此请求计入模型用量。</string>
-    <string name="ai_context_compacted">上下文已压缩：%1$d → %2$d 字符。原始会话仍按本地保留规则保存。</string>
-    <string name="ai_context_status">上下文 %1$d 字符 · 已压缩 %2$d 次</string>
+    <string name="ai_context_status">上下文约 %1$s / %2$s Token · 已压缩 %3$d 次</string>
     <string name="ai_failure_compaction">上下文摘要不完整或不符合大小要求，任务已停止；原始进度保留，请检查后继续。</string>
     <string name="ai_context_attach">引用项目内容</string>
     <string name="ai_context_add">添加引用</string>

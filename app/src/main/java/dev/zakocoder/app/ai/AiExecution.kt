@@ -16,13 +16,18 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     StartTerminal("start_terminal", R.string.ai_terminal_start, R.string.ai_terminal_start_desc, true),
     SendTerminalInput("send_terminal_input", R.string.ai_terminal_input, R.string.ai_terminal_input_desc, true),
     CloseTerminal("close_terminal", R.string.ai_terminal_close, R.string.ai_terminal_close_desc, true),
+    SshRemote("ssh_remote", R.string.ai_ssh_tool, R.string.ai_ssh_tool_desc, true),
+    AndroidTest("android_test", R.string.ai_screen_test_tool, R.string.ai_screen_test_tool_desc, true),
     UseMcp("use_mcp", R.string.ai_tool_mcp, R.string.ai_tool_mcp_desc, true),
     UpdatePlan("update_plan", R.string.ai_tool_plan, R.string.ai_tool_plan_desc);
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }
 enum class AiPermission(val label: Int) { Allow(R.string.ai_permission_allow), Ask(R.string.ai_permission_ask), Deny(R.string.ai_permission_deny) }
 data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }) {
-    fun permission(tool: AiTool) = overrides[tool] ?: default
+    fun permission(tool: AiTool): AiPermission {
+        val configured = overrides[tool] ?: default
+        return if ((tool == AiTool.AndroidTest || tool == AiTool.SshRemote) && configured == AiPermission.Allow) AiPermission.Ask else configured
+    }
     fun source(tool: AiTool) = if (tool in overrides) R.string.ai_permission_tool_rule else R.string.ai_permission_default_rule
 }
 enum class AiToolStatus(val label: Int) {

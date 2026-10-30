@@ -1,0 +1,235 @@
+{
+  "date": "2026-10-30",
+  "device": "Android 13 ARM64",
+  "source": "ScreenTestUiDeviceTest: real native Compose UI; isolated synthetic fixtures; 360dp viewport and 130% font scale; no user projects or credentials",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "dark-accessibility-target.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e0c6042af2359314a8fc46b68b22d1c99602d93c368984ae12f781a18a4e17a0",
+      "captureSha256": "986d230a35c928bee0bdae67c0592e4c3afc49f93e4a1115005d40ce22800ea2"
+    },
+    {
+      "file": "dark-activity-error-report.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "00bb80daa21bcfee3be403465edc7c5df677f696c3ad5b016a27b5cbb6b7cfe3",
+      "captureSha256": "5106d255c8c39ba11a20ddad89718f624a2d29df5410b3b9ebada16e56dcafdf"
+    },
+    {
+      "file": "dark-apk-empty.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3bf02e329a3f29062c325fed2e85c904efa94b249c94f1b121f83e36a1cfda32",
+      "captureSha256": "8581112ff8f6f469ace3087952bf705f3158cb920435da4f7cba5d41a3e1098a"
+    },
+    {
+      "file": "dark-apk-selection.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "9a3b8b58f55555a89dd8d2d175689c62f78c11b1686e4a960ef4a0787407ecd6",
+      "captureSha256": "f3e2e39e6a24774049c82d7dac2e897e7fbc8e93c2bdbd8b9e2ce80e133f8afa"
+    },
+    {
+      "file": "dark-no-project.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "33721a95336253e7c0bd2a482af3d186c7d4644c6b934efd8405c4deb3d2037f",
+      "captureSha256": "6be576c940b9f1ff533d7d038f3708cf3cdaa84b72ff9ea59646538b790ebf84"
+    },
+    {
+      "file": "dark-normal-360-font130.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "36764492578f395906c57fcb8f0745ffd65de0eec2f165c55d6672f7cb9f4c8a",
+      "captureSha256": "7b275793304618cfcceb9edd2737ed482703fc035bacb6845643598c65e934a6"
+    },
+    {
+      "file": "dark-normal-install-allowed.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ccce339075f0449df7d587f0b948bbf66d3c38c9e69176b0782e7cc8ddb611b9",
+      "captureSha256": "5cea6a51a6dfbd80e012dea88d909388ca611b09e09e75670a163eae2ba9cbe5"
+    },
+    {
+      "file": "dark-report-content.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ed54c36f048d42194285403fa2f87cec94df62294900dd23a832f7eff8015b01",
+      "captureSha256": "e95e961d1c968036e252f2b39d7e41ba80293147dd25bc4fca5c68c04899ee66"
+    },
+    {
+      "file": "dark-root-accessibility-entry.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "269fdd3a7204ff23354290fd8ae413522a5f4dd12600f7be8911cc541e102c5d",
+      "captureSha256": "376da4ec76ddcf80c91a596a74e619b388f9d879df41619ea4f11a08b8106cf0"
+    },
+    {
+      "file": "dark-root-capabilities.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b924e34265f26f5b47549c0843a91f7609771627b3c2f1752365b30ad79d5d1b",
+      "captureSha256": "f7b44edac03a19bb679b306a2591468aa10b5c086d06c8c30497fb91f19779da"
+    },
+    {
+      "file": "dark-root-permission-guidance.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "2e36199083b0c27cf1c7bafed37c029058375e0deddd5fd9ad4641d0d4eccfd6",
+      "captureSha256": "a52dffc56596cb5ac748585088fce8397bbc7fcb6c5a0086b946b82abf14716e"
+    },
+    {
+      "file": "dark-root-share-stop.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5ca1a2cb68eacd5d72198d44857860b1ece354653f05a25d0a9e104d8850e429",
+      "captureSha256": "4fb8357ba329062d0726923c7adc353eaaa9c9d9519f0a0da47ffab6120be82a"
+    },
+    {
+      "file": "dark-screenshot-consent.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "92284d8ec2c2e26f7418bc0ead1cc5f630247af1b71f2d84cf74a04c3309bbd7",
+      "captureSha256": "5a2a79f474abeead42fc57bfed32cc13f4d9490581d456b7ed0d983740141ab3"
+    },
+    {
+      "file": "light-accessibility-target.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "572a4777f1ebe17db65cb61d51a39779d83112510c2489f2ec9a7dd471b512ce",
+      "captureSha256": "e586adb977ac5661eda18deb92985b7d2b0b9b8f56ea0b31c1d31623f522346a"
+    },
+    {
+      "file": "light-activity-error-report.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "970d078baa1810876ff993168a12b7ad5dec85763c24c22c390f60623bd2f16c",
+      "captureSha256": "3f3e5652707ef39b49c3b5ead7cdf43882d49c695e262b52c1bd46f861fe1bdc"
+    },
+    {
+      "file": "light-apk-empty.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "1cf7639b1394f32d66ea47a9fb86bf8a1c664abb74fab8e0241f1f4e5fbdc1ec",
+      "captureSha256": "8685aebd8a3beab9991e86bb39490e2b76766aca7707d4ab5d279c58f7e80df2"
+    },
+    {
+      "file": "light-apk-selection.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "923ec6a59f063088b3ccf039914e9c39dadb4b4938e4e8aa20af83bf4b053af9",
+      "captureSha256": "70e2ca6b75e3db07c11926f9315afb67c606a4c9c03a2383f023dd090ccd154d"
+    },
+    {
+      "file": "light-no-project.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3a485ec1629fabb10fa9c5045670a124a09c4ce7e3cea08ff633bbe0d8300ec7",
+      "captureSha256": "0e0b94db36064b90f651fb833d28bed701768f97edded407bb276c1c9e5a0fe8"
+    },
+    {
+      "file": "light-normal-360-font130.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "38ea2ff72e8f8e93fbf2ab0f41253653acb7aa1b21cdf43c7f50fc7883a75b26",
+      "captureSha256": "8b8f2bd43d54bba24d21625f6e5abd3163bfcbe792779dffa15ca6e6d590cdbf"
+    },
+    {
+      "file": "light-normal-install-allowed.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "63f5f81fb63e05ab3979952ed6baaa41621e2cfdfc365cea83fd8b1ff8c4d4ed",
+      "captureSha256": "9e60593504d9c3925dcfa85b06ef5bdb697c6c1392b640d67df2ea9f5ad4fb73"
+    },
+    {
+      "file": "light-report-content.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d511b9a82c07b016982b2b595b10083f10ca719d93e5efb7d72c0724f4498340",
+      "captureSha256": "b7e14c8ba45183b158d0b66b35d996c01fb3a96ecec25a753412f726611de258"
+    },
+    {
+      "file": "light-root-accessibility-entry.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7e8a06739a6bc75f8ebc4dfd674caf01c75f746c285ab4679b348c23957a143c",
+      "captureSha256": "733c9e8f376da5493be73ca6767a864e8b4b370967bcafef5b7881a2c68cf79b"
+    },
+    {
+      "file": "light-root-capabilities.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "8d2e973d2df88f963035f3441d3e36fd4a94243ce19babab8fb4e8399cf1aed3",
+      "captureSha256": "07533adc107358040e6a0ae628e8e88bacd703ef564ec540e64f9e1bf95fa295"
+    },
+    {
+      "file": "light-root-permission-guidance.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "350beb4cb5ba71fce444349f391e3fd9fe068ca0bab95b5d15d549074ea56e1c",
+      "captureSha256": "ba73c986693a34bb0af874f258a00e9905768046ff1475f27ade44c4698b33df"
+    },
+    {
+      "file": "light-root-share-stop.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d1c855b3f568b4298558946e80815dadbc36eb2adf93a00f1175c37e3f4fbb2a",
+      "captureSha256": "c6454466a0dd83c972b3ad54ed8f91fe7b6f07626c43aecb5935eb844206da7c"
+    },
+    {
+      "file": "light-screenshot-consent.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5e9a0734cbd546158ce7f743f4dcd16c43009fc3270a04aae6946884c6fe8194",
+      "captureSha256": "9a7283808d6d5ab34bf8566a20029edf2f28fe12bc6386f65db19768e6d2fcc1"
+    }
+  ],
+  "realWorkflow": {
+    "source": "AiAndroidWorkflowDeviceTest, 2026-10-31 retry/controller revision regression; actual installed fixture and local HTTPS model protocol; separate from render-only UI states",
+    "artifacts": [
+      {
+        "file": "ai-workflow-target.webp",
+        "sha256": "4ea03ed514cb5b2d9f458df31cfcf1671a51f9a78ae88ee3156fc32308151753"
+      },
+      {
+        "file": "ai-workflow-report.jsonl",
+        "sha256": "5a7d26e70e0f55648391ab54739a14e450bebc3fde906ae70e47981208864841"
+      }
+    ]
+  }
+}

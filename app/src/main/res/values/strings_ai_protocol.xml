@@ -1,0 +1,32 @@
+<resources>
+    <string name="ai_protocol_heading">请求协议</string>
+    <string name="ai_protocol_choose">选择请求协议</string>
+    <string name="ai_protocol_chat">Chat Completions</string>
+    <string name="ai_protocol_responses">Responses</string>
+    <string name="ai_protocol_anthropic">Anthropic Messages</string>
+    <string name="ai_protocol_gemini">Gemini GenerateContent</string>
+    <string name="ai_protocol_group_openai">OpenAI 兼容</string>
+    <string name="ai_protocol_group_anthropic">Anthropic 兼容</string>
+    <string name="ai_protocol_group_google">Google 兼容</string>
+    <string name="ai_protocol_support_hint">无需额外安装，请按服务支持选择。切换只改变请求格式，保留模型与密钥；连接失败不会自动换协议。</string>
+    <string name="ai_protocol_chat_parameters_hint">参数是否可用取决于所选模型与服务。</string>
+    <string name="ai_protocol_responses_parameters_hint">不支持 seed、frequency_penalty、presence_penalty。关闭思考时，推理强度需选“服务默认”。切换不会自动清除参数。</string>
+    <string name="ai_protocol_anthropic_parameters_hint">不支持 seed 和两项 penalty；温度上限为 1。开启思考时请关闭温度和 top_p，输出上限需大于 1024。关闭思考时推理强度需选“服务默认”。</string>
+    <string name="ai_protocol_gemini_parameters_hint">推理强度支持 low、medium、high，暂不支持 max。关闭思考时推理强度需选“服务默认”；具体能力取决于模型。</string>
+    <string name="ai_protocol_parameters_invalid">参数与当前协议不兼容，请按下方说明调整后再保存或测试。</string>
+    <string name="ai_protocol_address_needs_model">填写有效的模型 ID 后显示完整请求地址。</string>
+    <string name="ai_provider_choose">常用服务</string>
+    <string name="ai_provider_presets_hint">选中后只填写地址与协议，保留模型和密钥。更换服务来源时，需要重新填写该服务的密钥及私密请求头；不会自动发送请求。</string>
+    <string name="ai_provider_origin_hint">此地址与原配置来源不同。原密钥或私密请求头不能直接复用，请在保存或测试前替换或清除。</string>
+    <string name="ai_provider_openai_responses">OpenAI · Responses</string>
+    <string name="ai_provider_openai_chat">OpenAI · Chat Completions</string>
+    <string name="ai_provider_anthropic">Anthropic · Claude</string>
+    <string name="ai_provider_google">Google · Gemini</string>
+    <string name="ai_provider_deepseek">DeepSeek</string>
+    <string name="ai_provider_qwen">通义千问 · 中国内地</string>
+    <string name="ai_provider_siliconflow">硅基流动 · 中国区</string>
+    <string name="ai_provider_kimi">Kimi · 中国区</string>
+    <string name="ai_provider_zhipu">智谱 · 标准接口</string>
+    <string name="ai_provider_openrouter">OpenRouter</string>
+    <string name="ai_provider_xai">xAI · Responses</string>
+</resources>

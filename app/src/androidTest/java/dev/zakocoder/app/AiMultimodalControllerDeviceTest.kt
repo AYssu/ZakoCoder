@@ -270,11 +270,11 @@ class AiMultimodalControllerDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun completionCompressionPreservesImageMetadataForRestartedFollowup() = runBlocking {
+    @Test(timeout = 120000) fun nextRequestCompressionPreservesImageMetadataForRestartedFollowup() = runBlocking {
         fixture { f, uri ->
             val profile = f.config.catalog().active!!
             f.config.saveProfile(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null,
-                profile.parameters, AiContextOptions(64000, true, 80, 2000)))
+                profile.parameters, AiContextOptions(contextWindowTokens = 48000, compressionThresholdPercent = 70, summaryMaxChars = 2000)))
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("compressed-image") }; ready(ai)
             for (skill in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(skill, false) }
@@ -284,14 +284,11 @@ class AiMultimodalControllerDeviceTest {
             f.enqueue("IMAGE_REVIEW_SUMMARY: screenshot inspected; retain it for the user's followup; no files modified.")
             main { assertTrue(ai.send("Inspect this screenshot carefully")) }; await { !ai.state.value.active }
             assertEquals(AiPhase.Completed, ai.state.value.phase)
-            assertTrue(ai.state.value.contextCompactions >= 1)
-            assertTrue(ai.state.value.contextSummary.contains("IMAGE_REVIEW_SUMMARY"))
+            assertEquals(0, ai.state.value.contextCompactions)
             val contextTurn = JSONArray(ai.state.value.contextTurns.single())
             assertEquals(listOf(image), decodeAiImages(contextTurn.getJSONObject(0).getJSONArray("zako_images")))
             val normalRequest = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
             assertEquals(1, imageUrls(normalRequest).size)
-            val summaryRequest = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
-            assertTrue(summaryRequest.getJSONArray("messages").getJSONObject(0).getString("content").startsWith("Summarize the supplied conversation/tool JSON"))
             lateinit var reopened: AiController
             main { reopened = controller(f); reopened.select("compressed-image") }; ready(reopened)
             assertFalse(reopened.state.value.historyError)
@@ -299,6 +296,9 @@ class AiMultimodalControllerDeviceTest {
             f.enqueue("followup image remains available")
             main { assertTrue(reopened.send("Continue reviewing the same screenshot")) }; await { !reopened.state.value.active }
             assertEquals(AiPhase.Completed, reopened.state.value.phase)
+            val summaryRequest = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
+            assertTrue(summaryRequest.getJSONArray("messages").getJSONObject(0).getString("content").startsWith("Summarize the supplied conversation/tool JSON"))
+            assertTrue(reopened.state.value.contextSummary.contains("IMAGE_REVIEW_SUMMARY"))
             assertEquals(1, imageUrls(JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())).size)
         }
     }

@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-31",
+  "device": "Android 13 ARM64",
+  "source": "AiRetryUiDeviceTest: production retry notice and request details; synthetic request/retry fixture; 360dp viewport and 130% font scale; keyboard interaction not covered",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-retry-request.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "869f110bf97bee1d7750c45d0f29b4305ac4f7d337d63f79b46bc38912d4e48e",
+      "captureSha256": "e30ea98bd3931e82758966d3604a06f348b0aa6cb7efc9c72fd5f04697bc1f43"
+    },
+    {
+      "file": "day-retrying.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ce883a3964c1f1e31024e92606118ed4c5a5497cc8b003c03d3a772ae3e8fbb3",
+      "captureSha256": "d76e711dc1191d96f202dd76566e1b2da58ec8fed025ec8cfc7bc8230580d3f3"
+    },
+    {
+      "file": "night-retry-request.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ce1e9a51b7a1fd14342368a208b9b962e65758616fe41ed0149989226d6d363b",
+      "captureSha256": "3a487d585b90fc748242915c0ae00def4dc9637013a9c749b2944dbee78d7a35"
+    },
+    {
+      "file": "night-retrying.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e7100363f24cc6f7f076f0511c944de9bcb1d1593c7a556dc9a51fcf5f1cd86a",
+      "captureSha256": "78e3c4501be5fa25e6782c8f8ad99ff6ae18b2250f75dfd312238eb7293d31e0"
+    }
+  ]
+}

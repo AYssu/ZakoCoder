@@ -22,7 +22,8 @@ import androidx.compose.ui.unit.sp
 import dev.zakocoder.app.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.withContext
 import org.commonmark.ext.gfm.tables.*
@@ -65,7 +66,8 @@ internal fun AiMarkdown(
     var fullTextLength by rememberSaveable { mutableStateOf<Int?>(null) }
     val current by rememberUpdatedState(text)
     LaunchedEffect(Unit) {
-        snapshotFlow { current }.sample(80).collectLatest { source ->
+        // Parsing is decoupled from the 32 ms reveal clock and never runs on the UI thread.
+        snapshotFlow { current.take(AiTextPages.MARKDOWN_LIMIT) }.sample(64).conflate().collect { source ->
             document = withContext(Dispatchers.Default) { AiMarkdownDocument.parse(source.take(AiTextPages.MARKDOWN_LIMIT)) }
         }
     }

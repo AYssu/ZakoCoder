@@ -27,7 +27,7 @@ class DeepSeekTransportDeviceTest {
             transport = ChatTransport(OkHttpClient.Builder().sslSocketFactory(trust.sslSocketFactory(), trust.trustManager)
                 // Retain the provider URL seen by ChatTransport but route every test to this fixture.
                 .addInterceptor { chain -> chain.proceed(chain.request().newBuilder().url(server.url("/v1/chat/completions")).build()) }
-                .callTimeout(15, TimeUnit.SECONDS).build())
+                .callTimeout(15, TimeUnit.SECONDS).build(), maxAttempts = 1)
         }
         fun enqueue(reasoning: List<String>?, content: String = "answer", tool: Boolean = false, done: Boolean = true) {
             val chunks = mutableListOf<JSONObject>()
