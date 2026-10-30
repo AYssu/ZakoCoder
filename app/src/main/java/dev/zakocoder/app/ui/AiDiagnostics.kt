@@ -51,6 +51,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier) {
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), description = stringResource(R.string.ai_request_details))
                     }
                     if (request.compaction) Text(stringResource(R.string.ai_phase_compacting), style = MaterialTheme.typography.labelSmall)
+                    if (request.attempt > 1) Text(stringResource(R.string.ai_request_retry_badge, request.attempt, request.maxAttempts), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     val elapsed = requestElapsed(request)
                     val status = stringResource(request.failure?.label ?: if (request.complete) R.string.ai_phase_completed else R.string.ai_phase_receiving)
                     Text(stringResource(R.string.ai_request_state, status, request.status?.toString() ?: "—", elapsed),
@@ -79,6 +80,10 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier) {
                 val status = stringResource(request.failure?.label ?: if (request.complete) R.string.ai_phase_completed else R.string.ai_phase_receiving)
                 Text(stringResource(R.string.ai_request_state, status, request.status?.toString() ?: "—", requestElapsed(request)), style = MaterialTheme.typography.bodySmall)
                 request.failure?.let { Text(stringResource(it.label), color = MaterialTheme.colorScheme.error) }
+                if (request.maxAttempts > 1) {
+                    Text(stringResource(R.string.ai_request_retry_attempt, request.attempt, request.maxAttempts, request.retryDelayMs), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.ai_request_retry_group, request.retryGroup, request.retryReason.ifBlank { "—" }), style = MaterialTheme.typography.bodySmall)
+                }
                 if (request.diagnostic.isNotEmpty()) Text(stringResource(R.string.ai_request_diagnostic, request.diagnostic), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                 if (request.estimatedContextTokens > 0) Text(stringResource(R.string.ai_context_estimated_request, tokenWindowLabel(request.estimatedContextTokens), tokenWindowLabel(request.contextWindowTokens.toLong()), tokenWindowLabel(request.contextOutputReserveTokens.toLong())), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.ai_request_metrics, request.contextChars, request.requestBytes, request.textChars, request.argumentChars, request.events, request.bytes), style = MaterialTheme.typography.bodySmall)

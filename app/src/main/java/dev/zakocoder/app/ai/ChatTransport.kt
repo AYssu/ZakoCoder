@@ -1,6 +1,10 @@
 package dev.zakocoder.app.ai
 
 import dev.zakocoder.app.settings.NetworkProxy
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -29,10 +33,12 @@ data class AiReply(val text: String, val calls: List<AiCall>, val reasoningConte
         }))
     }
 }
-class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response") : IOException("AI request failed: ${kind.name}")
+class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response", val retryAfterMillis: Long? = null) : IOException("AI request failed: ${kind.name}")
 class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
-    .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()) {
-    private val safeClient = client.newBuilder().followRedirects(false).followSslRedirects(false).build()
+    .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build(),
+    private val retryDelay: suspend (Long) -> Unit = { delay(it) }, private val maxAttempts: Int = AiRetryPolicy.MAX_ATTEMPTS) {
+    init { require(maxAttempts in 1..AiRetryPolicy.MAX_ATTEMPTS) }
+    private val safeClient = client.newBuilder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
     // Settings change rarely, so cache the last (raw -> client) mapping instead of cloning per request.
     // Guarded because requests run on the IO dispatcher and can overlap across model probes/tasks.
     private val proxyLock = Any()
@@ -64,13 +70,59 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     }
 
     suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null, proxy: String = "",
-        imageData: (suspend (AiImageAttachment) -> String)? = null, toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        imageData: (suspend (AiImageAttachment) -> String)? = null, toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {},
+        onRetry: (AiRetryEvent) -> Unit = {}, onRetryReset: () -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        val frozenMessages = messages.toString()
+        val frozenTools = tools.toString()
+        val frozenConfig = config.copy(requestHeaders = config.requestHeaders.toMap())
+        val group = java.util.UUID.randomUUID().toString()
+        var attempt = 1
+        var precedingDelay = 0L
+        var precedingReason = ""
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            var replacementStarted = false
+            fun beginReplacement() {
+                if (attempt > 1 && !replacementStarted) { onRetryReset(); replacementStarted = true }
+            }
+            try {
+                val reply = requestAttempt(frozenConfig, JSONArray(frozenMessages), JSONArray(frozenTools), forceTool, proxy,
+                    imageData, { drafts ->
+                        if (drafts.any { it.name.isNotEmpty() || it.arguments.isNotEmpty() }) beginReplacement()
+                        if (attempt == 1 || replacementStarted) toolDelta(drafts)
+                    },
+                    observe,
+                    { fragment -> if (fragment.isNotEmpty()) beginReplacement(); reasoningDelta(fragment) },
+                    group, attempt, precedingDelay, precedingReason,
+                    { fragment -> if (fragment.isNotEmpty()) beginReplacement(); delta(fragment) })
+                // A successful empty replacement must not leave an earlier failed answer visible.
+                beginReplacement()
+                return@withContext reply
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: AiTransportException) {
+                currentCoroutineContext().ensureActive()
+                val wait = if (attempt >= maxAttempts) null else AiRetryPolicy.delayMillis(attempt, error, kotlin.random.Random.nextLong(251))
+                if (wait == null) throw error
+                onRetry(AiRetryEvent(attempt + 1, maxAttempts, wait, error.diagnostic, error.status))
+                retryDelay(wait)
+                currentCoroutineContext().ensureActive()
+                precedingDelay = wait; precedingReason = error.diagnostic; attempt++
+            }
+        }
+        @Suppress("UNREACHABLE_CODE")
+        error("Unreachable retry state")
+    }
+
+    private suspend fun requestAttempt(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String?, proxy: String,
+        imageData: (suspend (AiImageAttachment) -> String)?, toolDelta: (List<AiCallDraft>) -> Unit, observe: (AiRequestLog) -> Unit, reasoningDelta: (String) -> Unit,
+        retryGroup: String, attempt: Int, retryDelayMs: Long, retryReason: String, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
         AiRequestHeaders.validate(config.requestHeaders)
         val redactor = AiLogRedactor(config.key, config.requestHeaders.values)
         fun clean(value: String): String = redactor.clean(value)
         val started = System.nanoTime()
         fun elapsed() = (System.nanoTime() - started) / 1000000
         var record = AiRequestLog(model = clean(config.model), origin = AiConfigStore.endpoint(config.endpoint).toHttpUrl().let { "${it.scheme}://${it.host}:${it.port}" },
+            retryGroup = retryGroup, attempt = attempt, maxAttempts = maxAttempts, retryDelayMs = retryDelayMs, retryReason = retryReason,
             contextChars = messages.toString().length, estimatedContextTokens = tokenBudget(config, messages, tools).inputTokens,
             contextWindowTokens = config.context.contextWindowTokens, contextOutputReserveTokens = config.parameters.maxTokens ?: minOf(8192, config.context.contextWindowTokens / 4))
         val lock = Any()
@@ -132,20 +184,21 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         suspendCancellableCoroutine { continuation ->
             val call = http.newCall(request)
             continuation.invokeOnCancellation {
-                call.cancel()
+                // Publish ownership cancellation before socket callbacks can report its IOException.
                 update { if (it.complete) it else it.copy(complete = true, failure = AiFailure.Cancelled, diagnostic = "cancelled") }
+                call.cancel()
             }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
                     val kind = classify(e)
                     update { if (it.complete) it else it.copy(complete = true, failure = kind, diagnostic = diagnostic(e)) }
-                    if (continuation.isActive) continuation.resumeWithException(AiTransportException(kind = kind))
+                    if (continuation.isActive) continuation.resumeWithException(AiTransportException(kind = kind, diagnostic = diagnostic(e)))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val reply = response.use {
                             update { item -> item.copy(status = it.code) }
-                            if (!it.isSuccessful) throw AiTransportException(it.code, AiFailure.Http, "http_status_${it.code}")
+                            if (!it.isSuccessful) throw AiTransportException(it.code, AiFailure.Http, "http_status_${it.code}", AiRetryPolicy.retryAfterMillis(it.header("Retry-After")))
                             val source = it.body?.source() ?: throw AiTransportException(diagnostic = "missing_body")
                             val text = StringBuilder(); var reasoning: StringBuilder? = null; val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
                             var bytes = 0L; var finish = ""; var done = false
@@ -249,7 +302,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                     } catch (error: Exception) {
                         val kind = classify(error)
                         update { if (it.complete) it else it.copy(complete = true, failure = kind, diagnostic = diagnostic(error)) }
-                        if (continuation.isActive) continuation.resumeWithException(if (error is AiTransportException) error else AiTransportException(kind = kind))
+                        if (continuation.isActive) continuation.resumeWithException(if (error is AiTransportException) error else AiTransportException(kind = kind, diagnostic = diagnostic(error)))
                     }
                 }
             })

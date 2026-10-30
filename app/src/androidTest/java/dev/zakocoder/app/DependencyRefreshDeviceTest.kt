@@ -90,7 +90,7 @@ class DependencyRefreshDeviceTest {
     private fun transport(calls: AtomicInteger) = ChatTransport(OkHttpClient.Builder()
         .eventListener(object : EventListener() {
             override fun callStart(call: Call) { calls.incrementAndGet(); call.cancel() }
-        }).build())
+        }).build(), maxAttempts = 1)
 
     @Test(timeout = 90000) fun rootManifestRefreshWorksWithoutUbuntuAndDoesNotInstallOrContactConfiguredProxy() = runBlocking {
         Owned(base).use { o ->

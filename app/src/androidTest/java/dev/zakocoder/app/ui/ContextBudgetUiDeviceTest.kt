@@ -77,6 +77,38 @@ class ContextBudgetUiDeviceTest {
         nodes { assertTrue(actionNode(it, label).config[SemanticsActions.OnClick].action?.invoke() == true) }
     }
 
+    private fun reveal(label: String) {
+        await("composed: $label") { has(label) }
+        repeat(40) {
+            val visible = nodes { all ->
+                // The whole clickable row must fit: its label alone can be visible while
+                // the model ID, exact capacity or protocol hint is below the viewport.
+                val node = actionNode(all, label)
+                var root = node
+                while (root.parent != null) root = requireNotNull(root.parent)
+                var scroll = node.parent
+                while (scroll != null && scroll.config.getOrNull(SemanticsActions.ScrollBy) == null) scroll = scroll.parent
+                val container = requireNotNull(scroll)
+                val y = node.layoutInfo.coordinates.localToWindow(Offset.Zero).y
+                val rootTop = root.layoutInfo.coordinates.localToWindow(Offset.Zero).y
+                val viewportTop = container.layoutInfo.coordinates.localToWindow(Offset.Zero).y
+                val top = maxOf(rootTop + 80, viewportTop)
+                val bottom = minOf(rootTop + root.layoutInfo.coordinates.size.height - 40,
+                    viewportTop + container.layoutInfo.coordinates.size.height)
+                if (y >= top && y + node.layoutInfo.coordinates.size.height <= bottom) {
+                    assertTrue("complete preset row visible: $label", node.layoutInfo.coordinates.size.height > 0)
+                    true
+                } else {
+                    container.config[SemanticsActions.ScrollBy].action?.invoke(0f, if (y < top) -400f else 400f)
+                    false
+                }
+            }
+            if (visible) return
+            Thread.sleep(100)
+        }
+        error("not visible after scrolling: $label")
+    }
+
     private fun render(dark: Boolean) {
         val title = context.getString(R.string.ai_options_context)
         val draft = ModelOptionsDraft(null).apply { seed = "42"; frequency = "0.25" }
@@ -122,11 +154,19 @@ class ContextBudgetUiDeviceTest {
             assertEquals(90, draft.context().compressionThresholdPercent)
             capture(dark, "window-panel")
             click(context.getString(R.string.ai_context_choose_model_window))
-            for (preset in contextWindowPresets) await("preset ${preset.tokens}") { has(context.getString(preset.label)) }
+            assertEquals(8, contextWindowPresets.size)
+            for (preset in contextWindowPresets) await("preset ${preset.modelId}") { has(context.getString(preset.label)) && has(preset.modelId) }
             capture(dark, "model-presets")
-            click(context.getString(R.string.ai_context_preset_gpt54))
-            await("GPT window committed and sheet dismissed") {
-                renderedTokens.get() == "1050000" && !has(context.getString(R.string.ai_context_preset_gpt54))
+            reveal(context.getString(R.string.ai_context_preset_sol))
+            capture(dark, "model-presets-openai-top")
+            reveal(context.getString(R.string.ai_context_preset_luna))
+            capture(dark, "model-presets-openai-bottom")
+            reveal(context.getString(R.string.ai_context_preset_grok))
+            capture(dark, "model-presets-end")
+            reveal(context.getString(R.string.ai_context_preset_sol))
+            click(context.getString(R.string.ai_context_preset_sol))
+            await("Sol window committed and sheet dismissed") {
+                renderedTokens.get() == "1050000" && !has(context.getString(R.string.ai_context_preset_sol))
             }
             assertEquals(1050000, draft.context().contextWindowTokens)
             assertEquals(before, draft.parameters(AiParameters()))

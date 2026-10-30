@@ -12,16 +12,19 @@ import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
 import java.util.Locale
 
-internal data class ContextWindowPreset(val label: Int, val tokens: Int)
+internal data class ContextWindowPreset(val label: Int, val tokens: Int, val provider: Int, val modelId: String, val responsesRequired: Boolean = false)
 
-/** Version-specific reference windows, checked against official API docs on 2026-10-30.
+/** Recent primary-model reference windows, checked against official API docs on 2026-10-31.
  * Selecting a window never changes the selected model, endpoint or credentials. */
 internal val contextWindowPresets = listOf(
-    ContextWindowPreset(R.string.ai_context_preset_deepseek, 1_000_000),
-    ContextWindowPreset(R.string.ai_context_preset_gpt54, 1_050_000),
-    ContextWindowPreset(R.string.ai_context_preset_gpt41, 1_047_576),
-    ContextWindowPreset(R.string.ai_context_preset_gemini, 1_000_000),
-    ContextWindowPreset(R.string.ai_context_preset_grok, 500_000),
+    ContextWindowPreset(R.string.ai_context_preset_deepseek_flash, 1_000_000, R.string.ai_context_provider_deepseek, "deepseek-flash"),
+    ContextWindowPreset(R.string.ai_context_preset_deepseek_pro, 1_000_000, R.string.ai_context_provider_deepseek, "deepseek-v4-pro"),
+    ContextWindowPreset(R.string.ai_context_preset_sol, 1_050_000, R.string.ai_context_provider_openai, "gpt-6.1-sol", true),
+    ContextWindowPreset(R.string.ai_context_preset_terra, 1_050_000, R.string.ai_context_provider_openai, "gpt-6.1-terra", true),
+    ContextWindowPreset(R.string.ai_context_preset_astra, 1_050_000, R.string.ai_context_provider_openai, "gpt-6-astra"),
+    ContextWindowPreset(R.string.ai_context_preset_luna, 1_050_000, R.string.ai_context_provider_openai, "gpt-6-luna"),
+    ContextWindowPreset(R.string.ai_context_preset_gemini, 1_000_000, R.string.ai_context_provider_google, "gemini-4-argon"),
+    ContextWindowPreset(R.string.ai_context_preset_grok, 500_000, R.string.ai_context_provider_xai, "grok-4.7"),
 )
 
 internal fun tokenWindowLabel(tokens: Long): String {
@@ -66,15 +69,21 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         subtitle = stringResource(R.string.ai_context_presets_checked)) {
         Text(stringResource(R.string.ai_context_presets_scope), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        contextWindowPresets.forEach { preset ->
-            OutlinedButton(onClick = { draft.windowTokens = preset.tokens.toString(); changed(); presets = false }, enabled = editable,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), contentPadding = PaddingValues(12.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(preset.label), style = MaterialTheme.typography.labelLarge)
-                    Text(stringResource(R.string.ai_context_preset_exact, java.text.NumberFormat.getIntegerInstance().format(preset.tokens)),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        contextWindowPresets.groupBy { it.provider }.forEach { (provider, entries) ->
+            Text(stringResource(provider), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall)
+            entries.forEach { preset ->
+                OutlinedButton(onClick = { draft.windowTokens = preset.tokens.toString(); changed(); presets = false }, enabled = editable,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), contentPadding = PaddingValues(12.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(preset.label), style = MaterialTheme.typography.labelLarge)
+                        Text(preset.modelId, style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.ai_context_preset_exact, java.text.NumberFormat.getIntegerInstance().format(preset.tokens)),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (preset.responsesRequired) Text(stringResource(R.string.ai_context_responses_required),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    WorkbenchIcon(Glyph.Next, Modifier.size(20.dp))
                 }
-                WorkbenchIcon(Glyph.Next, Modifier.size(20.dp))
             }
         }
     }

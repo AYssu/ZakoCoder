@@ -130,6 +130,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (state.active) AiRetryStatus(state.retryNotice)
         if (state.historyError && workbench.ai.canRetryHistorySave) TextButton(onClick = { workbench.ai.retryHistorySave() }) {
             Text(stringResource(R.string.ai_history_retry_save))
         }

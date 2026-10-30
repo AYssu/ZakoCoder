@@ -19,7 +19,7 @@ data class AiState(val projectId: String? = null, val checkpointId: String? = nu
     val conversationId: String = java.util.UUID.randomUUID().toString(), val turn: Int = 0,
     val turnTimings: List<AiTurnTiming> = emptyList(),
     /** Transient streaming ownership; history never reopens an ended reasoning section. */
-    val reasoningEntryId: String? = null,
+    val reasoningEntryId: String? = null, val retryNotice: String = "",
     val contextSummary: String = "", val contextCompactions: Int = 0, val contextChars: Int = 0,
     val estimatedContextTokens: Long = 0, val contextWindowTokens: Int = 128000,
     val contextEstimateApproximate: Boolean = true, val contextOutputReserveTokens: Int = 8192,
@@ -427,7 +427,7 @@ class AiController(private val context: Context, root: (String) -> File, private
     private fun failure(kind: AiFailure, diagnostic: String = kind.name) {
         val request = mutable.value.requests.lastOrNull { it.turn == mutable.value.turn }
         val message = context.getString(kind.label) + (request?.status?.let { " (HTTP $it)" } ?: "") + (request?.id?.let { " · ${it.take(8)}" } ?: "")
-        mutable.update { it.copy(error = if (it.historyError) it.error else message, failureKind = kind, taskDiagnostic = diagnostic.take(2048), phase = if (kind == AiFailure.Cancelled) AiPhase.Cancelled else AiPhase.Failed, reasoningEntryId = null) }
+        mutable.update { it.copy(error = if (it.historyError) it.error else message, failureKind = kind, taskDiagnostic = diagnostic.take(2048), phase = if (kind == AiFailure.Cancelled) AiPhase.Cancelled else AiPhase.Failed, reasoningEntryId = null, retryNotice = "") }
     }
 
     fun setPolicy(policy: AiPolicy) {
@@ -448,7 +448,7 @@ class AiController(private val context: Context, root: (String) -> File, private
     }
     fun approve(value: Boolean) = approve(if (value) AiDecision.Once else AiDecision.Reject)
     fun approve(value: AiDecision) { decision?.complete(value) }
-    fun stop() { stopScreenTest?.invoke(); if (mutable.value.active) mutable.update { it.copy(phase = AiPhase.Stopping, reasoningEntryId = null) }; task?.cancel() }
+    fun stop() { stopScreenTest?.invoke(); if (mutable.value.active) mutable.update { it.copy(phase = AiPhase.Stopping, reasoningEntryId = null, retryNotice = "") }; task?.cancel() }
     private suspend fun requestApproval(title: String, detail: String, eventId: String? = null, review: AiReview? = null): AiDecision {
         val pending = CompletableDeferred<AiDecision>(); decision = pending
         mutable.update { it.copy(approval = AiApproval(title, detail, eventId, review), phase = AiPhase.Waiting) }
@@ -589,7 +589,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             else emptyList()
         }
         sessionGeneration++
-        mutable.update { it.copy(active = true, interrupted = false, error = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images)
+        mutable.update { it.copy(active = true, interrupted = false, error = "", retryNotice = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images)
         draftImages.remove(id to mutable.value.conversationId)
         val references = mutable.value.references.toList()
         mutable.update { it.copy(references = emptyList(), pendingImages = emptyList()) }
@@ -645,7 +645,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                         try { pruneUnusedImages() }
                         catch (_: Exception) { imageCollectionPending = true }
                     }
-                    mutable.update { it.copy(active = false) }; grants.clear(); toolGrants.clear(); activityChanged()
+                    mutable.update { it.copy(active = false, retryNotice = "") }; grants.clear(); toolGrants.clear(); activityChanged()
                 }
             }
         }
@@ -740,23 +740,28 @@ class AiController(private val context: Context, root: (String) -> File, private
             }
             val options = settings.context
             val activeSchemas = schemas(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh))
-            var budget = tokenBudget(settings, messages, activeSchemas)
+            // The task exclusively owns these JSON objects. Suspend its mutation while a
+            // worker measures large context; cancellation returns before state publication.
+            var measured = measureContext(settings, messages, activeSchemas)
+            var budget = measured.first
             if (budget.outputReserveTokens >= budget.windowTokens) throw AiTransportException(kind = AiFailure.ContextConfiguration, diagnostic = "output_reserve_exceeds_context_window")
             if (options.autoCompress && budget.shouldCompress) {
                 val skill = skillMessageIndex?.let { messages.getJSONObject(it) }
-                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, taskImages, activeSchemas)
+                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, budget.inputTokens, taskImages, activeSchemas)
                 if (screenImages.isNotEmpty()) messages.put(imageMessage(SCREEN_TEST_IMAGE_EVIDENCE, screenImages.toList()))
                 skillMessageIndex = if (skill == null) null else 2
                 turnStart = if (skill == null) 2 else 3
+                measured = measureContext(settings, messages, activeSchemas)
+                budget = measured.first
             }
             // Compression may still leave oversized pinned rules/prompt; never loop or send over budget.
-            budget = tokenBudget(settings, messages, activeSchemas)
             if (!budget.fits) throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "estimated_context_token_window_exceeded")
             val round = mutable.value.round + 1
-            mutable.update { it.copy(phase = AiPhase.Requesting, round = round, contextChars = messages.toString().length, estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, reasoningEntryId = null) }
+            mutable.update { it.copy(phase = AiPhase.Requesting, round = round, contextChars = measured.second, estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, reasoningEntryId = null) }
             append("", role = AiRole.Assistant)
             val requestEpoch = epoch
             val assistantId = mutable.value.timeline.last().id
+            val assistantMessageIndex = mutable.value.messages.lastIndex
             val ruleDelivery = discovered.delivery()
             // Once answer/tool output begins, later provider reasoning fragments remain retained
             // but must not reopen this round's reasoning panel.
@@ -768,6 +773,20 @@ class AiController(private val context: Context, root: (String) -> File, private
                     if (image.id in screenImageIds && !screenSharingAllowed())
                         throw AiImageException(AiImageException.Reason.Invalid)
                 }
+            }, onRetry = { retry ->
+                mutable.update { current ->
+                    if (epoch != requestEpoch || !current.active || current.phase == AiPhase.Stopping) current
+                    else current.copy(retryNotice = context.getString(R.string.ai_retry_wait, retry.attempt, retry.maxAttempts, retry.delayMillis), reasoningEntryId = null)
+                }
+            }, onRetryReset = {
+                responseStarted = false
+                mutable.update { current ->
+                    if (epoch != requestEpoch || !current.active || current.phase == AiPhase.Stopping) current
+                    else current.copy(retryNotice = "", reasoningEntryId = null, drafts = emptyList(),
+                        timeline = current.timeline.map { entry ->
+                            if (entry.id == assistantId) entry.copy(text = "", reasoning = "", reasoningTruncated = false) else entry
+                        }, messages = current.messages.mapIndexed { index, value -> if (index == assistantMessageIndex) "" else value })
+                }
             }, reasoningDelta = { fragment ->
                 mutable.update { current ->
                     if (epoch != requestEpoch || !current.active || current.phase == AiPhase.Stopping) current else {
@@ -778,13 +797,13 @@ class AiController(private val context: Context, root: (String) -> File, private
                             }
                         }
                         while (entries.sumOf { it.text.length + it.reasoning.length } > 512000 && entries.size > 1) entries = entries.drop(1)
-                        current.copy(timeline = entries, historyTrimmed = current.historyTrimmed || entries.size < current.timeline.size, phase = AiPhase.Receiving,
+                        current.copy(timeline = entries, historyTrimmed = current.historyTrimmed || entries.size < current.timeline.size, phase = AiPhase.Receiving, retryNotice = "",
                             reasoningEntryId = assistantId.takeUnless { responseStarted })
                     }
                 }
             }, toolDelta = { drafts ->
                 if (drafts.isNotEmpty()) responseStarted = true
-                mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving,
+                mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving, retryNotice = "",
                     reasoningEntryId = it.reasoningEntryId.takeUnless { responseStarted }) else it }
             }, observe = { record -> mutable.update { current ->
                 if (epoch != requestEpoch || !current.active || current.projectId != id) current else current.copy(requests = boundedRequests(current.requests.filterNot { it.id == record.id } + record.copy(turn = current.turn, round = round)))
@@ -794,7 +813,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                     if (!state.active || epoch != requestEpoch || state.phase == AiPhase.Stopping) state else {
                         var timeline = state.timeline.dropLast(1) + state.timeline.last().copy(text = state.timeline.last().text + fragment)
                         while (timeline.sumOf { it.text.length + it.reasoning.length } > 512000 && timeline.size > 1) timeline = timeline.drop(1)
-                        state.copy(phase = AiPhase.Receiving, reasoningEntryId = null,
+                        state.copy(phase = AiPhase.Receiving, reasoningEntryId = null, retryNotice = "",
                             messages = state.messages.dropLast(1) + (state.messages.lastOrNull().orEmpty() + fragment),
                             timeline = timeline, historyTrimmed = state.historyTrimmed || timeline.size < state.timeline.size)
                     }
@@ -802,7 +821,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             }
 
             discovered.received(ruleDelivery)
-            mutable.update { it.copy(drafts = emptyList(), reasoningEntryId = null) }
+            mutable.update { it.copy(drafts = emptyList(), reasoningEntryId = null, retryNotice = "") }
             val assistant = reply.asAssistantMessage()
             messages.put(assistant)
             if (reply.calls.isEmpty()) {
@@ -816,8 +835,12 @@ class AiController(private val context: Context, root: (String) -> File, private
                 }
                 // Keep complete turns until the next request reaches its token threshold. Finishing
                 // a reply does not trigger an extra hidden request or an arbitrary turn-count limit.
+                val encodedTurn = withContext(Dispatchers.Default) {
+                    currentCoroutineContext().ensureActive()
+                    completed.toString().also { currentCoroutineContext().ensureActive() }
+                }
                 mutable.update { state ->
-                    val turns = state.contextTurns + completed.toString()
+                    val turns = state.contextTurns + encodedTurn
                     if (turns.size > AI_RETAINED_CONTEXT_TURNS || turns.sumOf { it.length.toLong() } > AI_RETAINED_CONTEXT_CHARS)
                         throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_retained_context_24mchars_limit")
                     state.copy(contextTurns = turns)
@@ -930,46 +953,75 @@ class AiController(private val context: Context, root: (String) -> File, private
             }
         }
     }
-    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int, images: List<AiImageAttachment> = emptyList(), tools: JSONArray = JSONArray()): JSONArray {
+    private suspend fun measureContext(settings: AiConfig, messages: JSONArray, tools: JSONArray): Pair<AiTokenBudget, Int> =
+        withContext(Dispatchers.Default) {
+            currentCoroutineContext().ensureActive()
+            val measured = tokenBudget(settings, messages, tools) to messages.toString().length
+            currentCoroutineContext().ensureActive()
+            measured
+        }
+
+    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int, beforeTokens: Long, images: List<AiImageAttachment> = emptyList(), tools: JSONArray = JSONArray()): JSONArray {
         if (!settings.context.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
         mutable.update { it.copy(phase = AiPhase.Compacting) }
         append(context.getString(R.string.ai_context_compacting))
-        val evidence = JSONArray()
-        for (index in 1 until messages.length()) {
-            val message = messages.getJSONObject(index)
-            if (message !== skill && !message.optString("content").startsWith("User-selected skills for this task.")) evidence.put(message)
-        }
         val round = mutable.value.round + 1
         mutable.update { it.copy(round = round) }
         val requestEpoch = epoch
         val summarySettings = settings.copy(parameters = settings.parameters.copy(maxTokens = aiSummaryOutputReserve(settings)))
-        val summaryMessages = JSONArray().put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars)))
-            .put(JSONObject().put("role", "user").put("content", contextSummaryEvidence(evidence)))
-        if (!tokenBudget(summarySettings, summaryMessages, JSONArray()).fits)
-            throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "summary_request_exceeds_token_window")
+        val summaryMessages = withContext(Dispatchers.Default) {
+            currentCoroutineContext().ensureActive()
+            val evidence = JSONArray()
+            for (index in 1 until messages.length()) {
+                val message = messages.getJSONObject(index)
+                if (message !== skill && !message.optString("content").startsWith("User-selected skills for this task.")) evidence.put(message)
+            }
+            val input = JSONArray().put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars)))
+                .put(JSONObject().put("role", "user").put("content", contextSummaryEvidence(evidence)))
+            if (!tokenBudget(summarySettings, input, JSONArray()).fits)
+                throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "summary_request_exceeds_token_window")
+            currentCoroutineContext().ensureActive()
+            input
+        }
         val summary = transport.request(summarySettings, summaryMessages, JSONArray(),
-            proxy = proxy(),
+            proxy = proxy(), onRetry = { retry ->
+                mutable.update { state ->
+                    if (epoch != requestEpoch || !state.active || state.phase == AiPhase.Stopping) state
+                    else state.copy(retryNotice = context.getString(R.string.ai_retry_wait, retry.attempt, retry.maxAttempts, retry.delayMillis))
+                }
+            }, onRetryReset = {
+                mutable.update { if (epoch == requestEpoch && it.active) it.copy(retryNotice = "") else it }
+            },
             observe = { record -> mutable.update { state ->
                 if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
             } }, delta = {})
+        mutable.update { if (epoch == requestEpoch) it.copy(retryNotice = "") else it }
         if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > settings.context.summaryMaxChars) throw AiBudgetException(AiFailure.Compaction)
-        val tail = contextTail(messages, taskStart)
-        val result = JSONArray().put(messages.getJSONObject(0)).put(contextMemory(summary.text))
-        if (skill != null) result.put(skill)
-        // Keep the most recent user attachments across request-time compaction. Screen-test
-        // captures are task-only evidence and must never become persistent user attachments.
-        val retainedImages = ((0 until messages.length()).flatMap { index ->
-            val message = messages.getJSONObject(index)
-            if (message.optString("role") == "user" && message.optString("content") != SCREEN_TEST_IMAGE_EVIDENCE)
-                decodeAiImages(message.optJSONArray("zako_images") ?: JSONArray()) else emptyList()
-        } + images).distinctBy { it.id }.takeLast(AiImages.MAX_PER_TURN)
-        result.put(imageMessage(prompt, retainedImages))
-        tail.forEach(result::put)
-        val budget = tokenBudget(settings, result, tools)
-        if (!budget.fits || budget.shouldCompress) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
-        mutable.update { it.copy(estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, contextSummary = summary.text, contextTurns = emptyList(), contextCompactions = it.contextCompactions + 1, contextChars = result.toString().length) }
+        val compacted = withContext(Dispatchers.Default) {
+            currentCoroutineContext().ensureActive()
+            val tail = contextTail(messages, taskStart)
+            val result = JSONArray().put(messages.getJSONObject(0)).put(contextMemory(summary.text))
+            if (skill != null) result.put(skill)
+            // Keep the most recent user attachments across request-time compaction. Screen-test
+            // captures are task-only evidence and must never become persistent user attachments.
+            val retainedImages = ((0 until messages.length()).flatMap { index ->
+                val message = messages.getJSONObject(index)
+                if (message.optString("role") == "user" && message.optString("content") != SCREEN_TEST_IMAGE_EVIDENCE)
+                    decodeAiImages(message.optJSONArray("zako_images") ?: JSONArray()) else emptyList()
+            } + images).distinctBy { it.id }.takeLast(AiImages.MAX_PER_TURN)
+            result.put(imageMessage(prompt, retainedImages))
+            tail.forEach(result::put)
+            val budget = tokenBudget(settings, result, tools)
+            if (!budget.fits || budget.shouldCompress) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
+            val chars = result.toString().length
+            currentCoroutineContext().ensureActive()
+            Triple(result, budget, chars)
+        }
+        val result = compacted.first
+        val budget = compacted.second
+        mutable.update { it.copy(estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, contextSummary = summary.text, contextTurns = emptyList(), contextCompactions = it.contextCompactions + 1, contextChars = compacted.third) }
         persist()
-        append(context.getString(R.string.ai_context_compacted_tokens, tokenBudget(settings, messages, tools).inputTokens, budget.inputTokens))
+        append(context.getString(R.string.ai_context_compacted_tokens, beforeTokens, budget.inputTokens))
         return result
     }
     private fun now() = android.os.SystemClock.elapsedRealtime()

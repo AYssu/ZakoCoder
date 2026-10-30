@@ -220,7 +220,7 @@
     }
   ],
   "realWorkflow": {
-    "source": "AiAndroidWorkflowDeviceTest, 2026-10-30 Token/context revision regression; actual installed fixture and local HTTPS model protocol; separate from render-only UI states",
+    "source": "AiAndroidWorkflowDeviceTest, 2026-10-31 retry/controller revision regression; actual installed fixture and local HTTPS model protocol; separate from render-only UI states",
     "artifacts": [
       {
         "file": "ai-workflow-target.webp",
@@ -228,7 +228,7 @@
       },
       {
         "file": "ai-workflow-report.jsonl",
-        "sha256": "7e57cdedad58ef81333eaa33eb2d46ea047186dd4aeb260b621d93f1e1eec09a"
+        "sha256": "5a7d26e70e0f55648391ab54739a14e450bebc3fde906ae70e47981208864841"
       }
     ]
   }

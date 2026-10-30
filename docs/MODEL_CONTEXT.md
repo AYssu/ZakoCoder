@@ -20,15 +20,22 @@
 
 ## 具体模型参考窗口
 
-以下预设核对于 2026-10-30，按具体版本列出，不代表同品牌所有模型。服务版本、订阅与代理网关可能提供更低限制；使用时应以当前接口文档及实际错误为准。
+以下为核对于 2026-10-31 的近期主力型号参考，不是所有型号的完整列表，也不代表同品牌所有模型。服务版本、订阅与代理网关可能提供更低限制；使用时应以当前接口文档及实际错误为准。
 
-| 预设 | Token 窗口 | 官方来源 |
-| --- | ---: | --- |
-| DeepSeek Flash / V4 Pro | 1,000,000 | [DeepSeek 模型与价格](https://api-docs.deepseek.com/quick_start/pricing/) |
-| GPT-5.4 | 1,050,000 | [GPT-5.4](https://developers.openai.com/api/docs/models/gpt-5.4) |
-| GPT-4.1 | 1,047,576 | [GPT-4.1](https://developers.openai.com/api/docs/models/gpt-4.1) |
-| Gemini 4 Argon | 1,000,000 | [Gemini 模型](https://ai.google.dev/gemini-api/docs/models) |
-| Grok 4.7 | 500,000 | [xAI 模型](https://docs.x.ai/developers/models) |
+| 预设 | Model ID | Token 窗口 | 官方来源 |
+| --- | --- | ---: | --- |
+| DeepSeek V4.1 Flash | `deepseek-flash` | 1,000,000 | [模型与价格](https://api-docs.deepseek.com/quick_start/pricing/) · [更新记录](https://api-docs.deepseek.com/updates/) |
+| DeepSeek V4 Pro | `deepseek-v4-pro` | 1,000,000 | [模型与价格](https://api-docs.deepseek.com/quick_start/pricing/) |
+| GPT-6.1 Sol | `gpt-6.1-sol` | 1,050,000 | [模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-sol) |
+| GPT-6.1 Terra | `gpt-6.1-terra` | 1,050,000 | [模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-terra) |
+| GPT-6 Astra | `gpt-6-astra` | 1,050,000 | [模型说明](https://developers.openai.com/api/docs/models/gpt-6-astra) |
+| GPT-6 Luna | `gpt-6-luna` | 1,050,000 | [模型说明](https://developers.openai.com/api/docs/models/gpt-6-luna) |
+| Gemini 4 Argon | `gemini-4-argon` | 1,000,000 | [Gemini 模型](https://ai.google.dev/gemini-api/docs/models) |
+| Grok 4.7 | `grok-4.7` | 500,000 | [xAI 模型](https://docs.x.ai/developers/models) |
+
+界面按厂商分组并可滚动，显示完整版本与 Model ID；常用容量按钮独立保留，不使用旧型号凑出不同容量。选择任何一项都只更新本地容量，不会切换已配置的模型。
+
+**协议边界：** GPT-6.1 Sol / Terra 的官方工具调用要求 Responses API；应用当前使用 Chat Completions，尚未实现 Responses。容量参考不等于模型或工具调用已适配。通过兼容网关使用时，应确认该网关实际支持当前协议及工具调用；预设不会自动修改模型、端点或协议。
 
 界面容量缩写 K = 1,000，M = 1,000,000；具体模型预设同时显示完整数值。预设只填入窗口，不自动选择输出长度或请求参数。
 

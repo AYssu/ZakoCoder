@@ -4,12 +4,20 @@
     <string name="ai_context_window_range">支持 8,192～2,097,152 Token；K = 1,000，M = 1,000,000。</string>
     <string name="ai_context_gateway_hint">窗口应与实际模型和网关限制一致。选择 1M 不会让不支持长上下文的服务获得该能力；这些设置只控制本地预算。</string>
     <string name="ai_context_summary_hint">默认在可用输入预算的 90% 触发，并为输出预留空间。关闭后到达预算会停止并说明原因；总结长度仍以字符计，不是 Token。</string>
-    <string name="ai_context_presets_checked">按具体版本列出参考窗口 · 核对于 2026 年 10 月 30 日</string>
-    <string name="ai_context_presets_scope">仅填入上下文窗口，不更换当前模型或服务。不同版本和代理网关可能有更低限制，可返回手动调整。</string>
+    <string name="ai_context_presets_checked">近期主力参考 · 核对于 2026 年 10 月 31 日</string>
+    <string name="ai_context_presets_scope">近期主力型号参考，不是完整型号列表。仅填入上下文窗口，不更换模型或服务，也不代表协议已经适配；实际容量与兼容性以所用接口为准。</string>
     <string name="ai_context_preset_exact">%1$s Token</string>
-    <string name="ai_context_preset_deepseek">DeepSeek Flash / V4 Pro</string>
-    <string name="ai_context_preset_gpt54">GPT-5.4</string>
-    <string name="ai_context_preset_gpt41">GPT-4.1</string>
+    <string name="ai_context_provider_deepseek">DeepSeek</string>
+    <string name="ai_context_provider_openai">OpenAI</string>
+    <string name="ai_context_provider_google">Google</string>
+    <string name="ai_context_provider_xai">xAI</string>
+    <string name="ai_context_preset_deepseek_flash">DeepSeek V4.1 Flash</string>
+    <string name="ai_context_preset_deepseek_pro">DeepSeek V4 Pro</string>
+    <string name="ai_context_preset_sol">GPT-6.1 Sol</string>
+    <string name="ai_context_preset_terra">GPT-6.1 Terra</string>
+    <string name="ai_context_preset_astra">GPT-6 Astra</string>
+    <string name="ai_context_preset_luna">GPT-6 Luna</string>
+    <string name="ai_context_responses_required">官方工具调用需 Responses API；本应用当前使用 Chat Completions，兼容网关请确认支持。</string>
     <string name="ai_context_preset_gemini">Gemini 4 Argon</string>
     <string name="ai_context_preset_grok">Grok 4.7</string>
     <string name="ai_context_reserve_status">输出预留 %1$s Token · 上下文为本地估算，计费用量见请求详情</string>

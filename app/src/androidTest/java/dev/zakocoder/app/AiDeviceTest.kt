@@ -24,7 +24,7 @@ class AiDeviceTest {
     private val context = instrumentation.targetContext
     private suspend fun await(condition: () -> Boolean) = withTimeout(20000) { while (!condition()) delay(50) }
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
-    class Fixture(val context: android.content.Context, timeoutSeconds: Long = 15, responseOnly: Boolean = false, readTimeoutSeconds: Long = 10) : AutoCloseable {
+    class Fixture(val context: android.content.Context, timeoutSeconds: Long = 15, responseOnly: Boolean = false, readTimeoutSeconds: Long = 10, maxAttempts: Int = 1) : AutoCloseable {
         val token = "ai-test-${UUID.randomUUID()}"
         val root = File(context.cacheDir, token).apply { mkdirs() }
         val history = AiHistoryStore(File(root, "history"))
@@ -40,7 +40,7 @@ class AiDeviceTest {
             server.useHttps(serverCertificates.sslSocketFactory(), false); server.start()
             transport = ChatTransport(OkHttpClient.Builder().sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager)
                 .followRedirects(false).followSslRedirects(false).readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
-                .callTimeout(timeoutSeconds, TimeUnit.SECONDS).build())
+                .callTimeout(timeoutSeconds, TimeUnit.SECONDS).build(), maxAttempts = maxAttempts)
             config.save(server.url("/v1").toString(), "fixture-model", "test-only-placeholder")
         }
         fun enqueue(text: String = "", calls: List<AiCall> = emptyList(), finish: String = if (calls.isEmpty()) "stop" else "tool_calls", done: Boolean = true, delayMillis: Long = 1) {

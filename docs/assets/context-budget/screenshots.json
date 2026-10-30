@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-30",
+  "date": "2026-10-31",
   "device": "Android 13 ARM64",
   "source": "ContextBudgetUiDeviceTest: real native Compose window/preset panels and request details; synthetic configuration and API usage fixture; 360dp viewport and 130% font scale; keyboard interaction not covered",
   "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
@@ -11,20 +11,44 @@
   "format": "lossless WebP",
   "screenshots": [
     {
+      "file": "day-model-presets-end.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "297d4ea813465cde44011d3ba73087b50b7fe65c9c27a9897365518dff7b9a28",
+      "captureSha256": "848a6eb51a92edaa2c4cdcc9179f1af433083b8bfec25f4caaa3f0c08986ad69"
+    },
+    {
+      "file": "day-model-presets-openai-bottom.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "6e537e87f63b0027a15b0f087a4fdb555a433ce6b40a6e9abd8e0237c5c81f0f",
+      "captureSha256": "baafcf2bdaaccf2671c83f79bd99ed2059901c92512dc11a3552aa716b8f9083"
+    },
+    {
+      "file": "day-model-presets-openai-top.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "87dbc84d57b4670616c5722f83633f594b00ed886aba67203cc774535e0f77e7",
+      "captureSha256": "a205277e649a70647b59b051a8dd12b16a5c81f3b6e27ee145804faac896ebac"
+    },
+    {
       "file": "day-model-presets.webp",
       "theme": "light",
       "width": 1080,
       "height": 2262,
-      "sha256": "5de1dd3ecc8c38a589c0f900b8bef21e4dfa5c6103c70aef4ed8b40799a2071e",
-      "captureSha256": "b716299663ea70e0950ed3fa06fb40f3a1ec5b90b4a6357f742201ac575beecc"
+      "sha256": "87dbc84d57b4670616c5722f83633f594b00ed886aba67203cc774535e0f77e7",
+      "captureSha256": "d201d49657e2214ed3115a18fc914d1acf1aefc7abe3bb96dce5ebd247bfdaea"
     },
     {
       "file": "day-request-budget.webp",
       "theme": "light",
       "width": 1080,
       "height": 2262,
-      "sha256": "8f276fe21a06ce2ddebb23ca7467aa910bef2312a2d4538e0ccfb637ff05dca4",
-      "captureSha256": "d733e59cc3cc78ca2480675ff5348f2d7326065498c9700f0d6b34f157a9a9ab"
+      "sha256": "3f0f91fad498d318e9c98504614e229a84b6c9e0b033490bc1e10d6e0e419dca",
+      "captureSha256": "f31c7dc2929b7771a30bc677ceb1ee66884753eee6c24ab8474c5a2d9bff7a8a"
     },
     {
       "file": "day-window-panel.webp",
@@ -32,23 +56,47 @@
       "width": 1080,
       "height": 2262,
       "sha256": "3e8240349803b97f9eb9bdb9f3833a0545381adccdc1d4ddcdca04c83cec015b",
-      "captureSha256": "5b7905dee1a2c3b092fd2f207230930737abd0cf23e735089d7b4f28d9069e17"
+      "captureSha256": "c1eebb4594a571a2ee6f0e4c4857f57ed32acfcd06d912cdcee3d9603e77ecc5"
+    },
+    {
+      "file": "night-model-presets-end.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f66d6ff0b990c1b4142d14972f28965b0ed0ca163e4e211eaa4cc3e18e0d23b3",
+      "captureSha256": "da005b55f51c1b144993f73fdb13da9bc5e087c1f243e3943c6d73459861b03d"
+    },
+    {
+      "file": "night-model-presets-openai-bottom.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0eb28a71a5b0972ffa988279baaf6be94834ddc9786726971cfab03a68173dac",
+      "captureSha256": "c9ab0b71c8a7493011063b804109a68f729810b5097a1e8034a3c79598905937"
+    },
+    {
+      "file": "night-model-presets-openai-top.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ae30b334c81fc3f031e76e743e4813f23683cb7214df4e9d63fe5cfdcbc308d3",
+      "captureSha256": "d0d86de5fbe873feeb59f0a55fb1e5931ee73e9b1b6580156363af321c6e5c6c"
     },
     {
       "file": "night-model-presets.webp",
       "theme": "dark",
       "width": 1080,
       "height": 2262,
-      "sha256": "e1435873ee46b682870874cff016dc39944edd3a2a43a91d9d201c3fd84ba282",
-      "captureSha256": "7b8a0507f7a09de9a3e21174a9a874c0ddd9b802a6ec8d309b6e805e9f115ee6"
+      "sha256": "ae30b334c81fc3f031e76e743e4813f23683cb7214df4e9d63fe5cfdcbc308d3",
+      "captureSha256": "762120f5cedad14011d92e8dc1b02cabbd92891254082496c0d40aab16ad20b8"
     },
     {
       "file": "night-request-budget.webp",
       "theme": "dark",
       "width": 1080,
       "height": 2262,
-      "sha256": "dfae930522c30c58e884792c1e534fb255edb4528f41b8c3846cb0fdf6c8c9aa",
-      "captureSha256": "8a69b1e499ffc58ab6409710fd34c6d70a3d22010dcafcf4256f279371ca8705"
+      "sha256": "44cf04dc70144301feecd8140bde16d24cd86a0188461bbd2d8ac9d322782824",
+      "captureSha256": "6ce6c9c2aca9f48d273fdb33b161e48d35e6ea9d4267d7b688d7cd763e30f1ce"
     },
     {
       "file": "night-window-panel.webp",
@@ -56,7 +104,7 @@
       "width": 1080,
       "height": 2262,
       "sha256": "4474d08b4627dfbc1fb19de2de7206440e8915f5545d20262c1e704892e72726",
-      "captureSha256": "19b86d66c9148e3ae1d0b0415ddaf2f6d7bf48f9608c3ad18de0e06d977ae41a"
+      "captureSha256": "2afe74ba89917bebf03e05810f43754b12cd18ea8445608b82b20520f7d50129"
     }
   ]
 }
