@@ -40,6 +40,12 @@ manifest = ROOT / 'runtime/artifacts.json'
 packaged = ROOT / 'app/src/main/assets/runtime-artifacts.json'
 if json.loads(manifest.read_text()) != json.loads(packaged.read_text()):
     errors.append('Runtime manifest and packaged metadata differ')
+runtime = json.loads(manifest.read_text())
+native_lock = ROOT / 'native-runtime/artifacts.lock.json'
+if not native_lock.is_file():
+    errors.append('Missing independent native-runtime artifact lock')
+elif {a['name']: a['sha256'] for a in runtime['nativeArtifacts']} != json.loads(native_lock.read_text())['artifacts']:
+    errors.append('App runtime metadata differs from native-runtime artifact lock')
 
 ignore_lines = (ROOT / '.gitignore').read_text().splitlines()
 for rule in ('/example/', '/参考源码/', 'local.properties', '*.keystore', '*.jks', '/.local/', '/outputs/', '/AGENTS.md'):

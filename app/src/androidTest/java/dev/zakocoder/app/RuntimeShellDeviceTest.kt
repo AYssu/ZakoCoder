@@ -61,6 +61,7 @@ class RuntimeShellDeviceTest {
                 assertEquals("# preserved user config\n", userConfig.readText())
                 assertTrue(File(runtime.root, "etc/zakocoder/zsh/.zshrc").readText().contains("source /root/.zshrc"))
                 val projectId = UUID.randomUUID().toString()
+                assertTrue(File(runtime.workspaces, projectId).mkdirs())
                 val interactive = runtime.command(projectId, settings, null, projectName = "project;$(invalid)%")
                 assertEquals(listOf("/usr/bin/zsh", "-i"), interactive.arguments.takeLast(2))
                 assertTrue(interactive.arguments.contains("SHELL=/usr/bin/zsh"))

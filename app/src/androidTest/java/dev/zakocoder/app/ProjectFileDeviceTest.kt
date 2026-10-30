@@ -29,7 +29,7 @@ class ProjectFileDeviceTest {
             await { !workbench.state.value.busy && workbench.state.value.project != null }
             val id = workbench.state.value.project!!.id
             val root = withContext(Dispatchers.IO) { workbench.projects.directory(id) }
-            val imported = Uri.parse("content://dev.zakocoder.app.test.import-fixture/normal")
+            val imported = Uri.parse("content://${instrumentation.context.packageName}.import-fixture/normal")
             instrumentation.runOnMainSync { workbench.importFile(id, "", imported) }
             await { !workbench.state.value.busy }
             assertTrue(workbench.state.value.message, workbench.state.value.message.isEmpty())
@@ -39,11 +39,11 @@ class ProjectFileDeviceTest {
             await { !workbench.state.value.busy }
             assertTrue(workbench.state.value.message.contains(base.getString(R.string.file_already_exists)))
             assertEquals("KEEP", withContext(Dispatchers.IO) { File(root, "imported.txt").readText() })
-            instrumentation.runOnMainSync { workbench.importFile(id, "", Uri.parse("content://dev.zakocoder.app.test.import-fixture/invalid")) }
+            instrumentation.runOnMainSync { workbench.importFile(id, "", Uri.parse("content://${instrumentation.context.packageName}.import-fixture/invalid")) }
             await { !workbench.state.value.busy }
             assertFalse(withContext(Dispatchers.IO) { File(root.parentFile, "outside.txt").exists() })
             assertTrue(workbench.state.value.message.contains(base.getString(R.string.file_name_invalid)))
-            instrumentation.runOnMainSync { workbench.importFile(id, "", Uri.parse("content://dev.zakocoder.app.test.import-fixture/slow")) }
+            instrumentation.runOnMainSync { workbench.importFile(id, "", Uri.parse("content://${instrumentation.context.packageName}.import-fixture/slow")) }
             await { withContext(Dispatchers.IO) { root.listFiles()!!.any { it.name.startsWith(".zakocoder-import-") } } }
             instrumentation.runOnMainSync { workbench.cancel() }
             await { !workbench.state.value.busy }
