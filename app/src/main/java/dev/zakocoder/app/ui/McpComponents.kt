@@ -18,6 +18,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -71,8 +73,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
             if (state.error.isNotEmpty()) item {
                 McpDesignCard {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        WorkbenchIcon(Glyph.Info, tint = MaterialTheme.colorScheme.error)
-                        Text(state.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        McpFormError(state.error)
                     }
                     TextButton(onClick = { controller.load() }, enabled = !state.busy && editable, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(R.string.mcp_reload))
@@ -323,7 +324,7 @@ private fun McpServerEditor(controller: McpController, initial: McpServer?, edit
 }
 
 @Composable
-private fun McpImportDialog(controller: McpController, editable: Boolean, close: () -> Unit) {
+internal fun McpImportDialog(controller: McpController, editable: Boolean, close: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var source by remember { mutableStateOf("") }
@@ -358,8 +359,27 @@ private fun McpSecretField(value: String, change: (String) -> Unit, label: Int, 
 
 @Composable
 private fun McpFormError(message: String) {
-    if (message.isNotEmpty()) Text(message, modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    if (message.isEmpty()) return
+    val clipboard = LocalClipboard.current
+    val copyScope = rememberCoroutineScope()
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.mcp_error_title), Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = { copyScope.launch { clipboard.setClipEntry(ClipEntry(android.content.ClipData.newPlainText("MCP", message))) } }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    WorkbenchIcon(Glyph.Copy, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onErrorContainer)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.mcp_error_copy), color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+            SelectionContainer {
+                Text(message, modifier = Modifier.fillMaxWidth().heightIn(max = 160.dp)
+                    .verticalScroll(rememberScrollState()).semantics { liveRegion = LiveRegionMode.Polite },
+                    color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
 }
 
 private fun remoteTarget(value: String): String = runCatching {

@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-30",
+  "device": "Android 13 ARM64",
+  "source": "McpFailureUiDeviceTest; native import form / management panel, isolated controller, local HTTP test server, placeholder credentials",
+  "systemBarsCropped": true,
+  "screenshots": [
+    {
+      "file": "dark-connection-401.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "96954bc5a9fbdc5e5b9babaf1e442814d1b2458ff676ef15b6729138c432ad1a"
+    },
+    {
+      "file": "dark-import-HttpNotAllowed.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "831f8567937ddd9219d950ab38a73bd180b0575ea4d6971cc7c29ed6f9466cd3"
+    },
+    {
+      "file": "dark-import-JsonSyntax.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "bad80e511c7c92d003c753f3a151fff98e24574fb47d22cdd4c7244b5aa635fe"
+    },
+    {
+      "file": "light-connection-401.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4f5526c65a96f61aaa8e924c04570f10fb0b543983191934b2e98fc14cc2f02e"
+    },
+    {
+      "file": "light-import-HttpNotAllowed.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ecd51bacb839462123cf480b7c491bd886d392710609c50b93b143ebfc63a7e3"
+    },
+    {
+      "file": "light-import-JsonSyntax.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f829a07950e629379b1837d14f4dd5a9543aeb33602f6eed7ff7a6615d148ff5"
+    }
+  ]
+}

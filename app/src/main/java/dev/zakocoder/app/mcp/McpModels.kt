@@ -22,7 +22,8 @@ data class McpState(
 )
 
 enum class McpProblem { InvalidConfig, Storage, Disabled, Unavailable, Protocol, Limit, Timeout, Closed }
-class McpException(val problem: McpProblem) : Exception("MCP ${problem.name}")
+class McpException(val problem: McpProblem, val reason: McpFailureReason? = null, val httpStatus: Int? = null) :
+    Exception("MCP ${problem.name}${reason?.let { ":${it.name}" }.orEmpty()}")
 
 /** Imports a server object or an application-style mcpServers map. Neither grants approval or enablement. */
 object McpConfigParser {
@@ -31,15 +32,15 @@ object McpConfigParser {
 
     /** singleName overrides only an unwrapped server's name; wrapped names are never rewritten. */
     fun parse(source: String, singleName: String = ""): List<McpServer> = guarded {
-        require(source.toByteArray(Charsets.UTF_8).size <= MAX_CONFIG)
+        checkConfig(source.toByteArray(Charsets.UTF_8).size <= MAX_CONFIG, McpFailureReason.ConfigSize)
         McpJson.check(source)
-        val root = JSONObject(source)
+        val root = guarded(McpFailureReason.ConfigShape) { JSONObject(source) }
         if (root.has("mcpServers")) {
-            require(root.keys().asSequence().toSet() == setOf("mcpServers"))
-            val servers = root.get("mcpServers") as? JSONObject ?: error("object")
-            require(servers.length() in 1..32)
+            checkConfig(root.keys().asSequence().toSet() == setOf("mcpServers"), McpFailureReason.ConfigShape)
+            val servers = root.get("mcpServers") as? JSONObject ?: throw McpException(McpProblem.InvalidConfig, McpFailureReason.ConfigShape)
+            checkConfig(servers.length() in 1..32, McpFailureReason.ServerCount)
             servers.keys().asSequence().map { name ->
-                val entry = servers.get(name) as? JSONObject ?: error("object")
+                val entry = servers.get(name) as? JSONObject ?: throw McpException(McpProblem.InvalidConfig, McpFailureReason.ConfigShape)
                 server(entry, name)
             }.toList()
         } else {
@@ -50,21 +51,21 @@ object McpConfigParser {
     private fun server(entry: JSONObject, name: String, single: Boolean = false): McpServer {
         val allowed = setOf("type", "transport", "url", "command", "args", "env", "headers", "enabled", "disabled", "autoApprove") +
             if (single) setOf("name") else emptySet()
-        require(entry.keys().asSequence().all { it in allowed })
+        checkConfig(entry.keys().asSequence().all { it in allowed }, McpFailureReason.UnknownField)
         // Validate even an overridden JSON name rather than accepting malformed configuration.
         if (entry.has("name")) optional(entry, "name")
         for (flag in listOf("enabled", "disabled")) if (entry.has(flag)) require(entry.get(flag) is Boolean)
         if (entry.has("autoApprove")) strings(entry.get("autoApprove"), 128)
         val type = optional(entry, "type")
         val declared = optional(entry, "transport")
-        require(type.isEmpty() || declared.isEmpty() || type == declared)
+        checkConfig(type.isEmpty() || declared.isEmpty() || type == declared, McpFailureReason.Transport)
         val command = optional(entry, "command")
         val transport = when ((type.ifEmpty { declared }).lowercase()) {
             "stdio" -> McpTransport.Stdio
             "http", "streamable_http", "streamable-http", "streamablehttp" -> McpTransport.StreamableHttp
             "sse" -> McpTransport.Sse
-            "" -> if (command.isNotEmpty()) McpTransport.Stdio else error("transport")
-            else -> error("transport")
+            "" -> if (command.isNotEmpty()) McpTransport.Stdio else throw McpException(McpProblem.InvalidConfig, McpFailureReason.Transport)
+            else -> throw McpException(McpProblem.InvalidConfig, McpFailureReason.Transport)
         }
         return McpServer(name = name, transport = transport, command = command, url = optional(entry, "url"),
             args = if (entry.has("args")) strings(entry.get("args"), 128) else emptyList(),
@@ -78,8 +79,8 @@ object McpConfigParser {
         require(server.env.size <= 64 && server.headers.size <= 64)
         require(server.env.all { (key, value) -> key.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) && value.length <= 8192 && '\u0000' !in value })
         val reserved = setOf("host", "content-length", "content-type", "accept", "connection", "mcp-session-id", "mcp-protocol-version", "origin")
-        require(server.headers.all { (key, value) -> key.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) && key.lowercase() !in reserved && value.length <= 8192 && value.none { it == '\r' || it == '\n' || it == '\u0000' } })
-        require(server.headers.keys.map(String::lowercase).distinct().size == server.headers.size)
+        checkConfig(server.headers.all { (key, value) -> key.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) && key.lowercase() !in reserved && value.length <= 8192 && value.none { it == '\r' || it == '\n' || it == '\u0000' } }, McpFailureReason.Headers)
+        checkConfig(server.headers.keys.map(String::lowercase).distinct().size == server.headers.size, McpFailureReason.Headers)
         if (server.transport == McpTransport.Stdio) {
             require(server.command.isNotBlank() && !server.command.startsWith('-') && server.command.length <= 2048 && server.command.none(Char::isISOControl))
             require(server.url.isEmpty() && server.headers.isEmpty())
@@ -88,12 +89,14 @@ object McpConfigParser {
             require(server.command.isEmpty() && server.args.isEmpty() && server.env.isEmpty())
         }
     }
-    fun endpoint(value: String, allowQuery: Boolean = false): URI = guarded {
+    fun endpoint(value: String, allowQuery: Boolean = false): URI = guarded(McpFailureReason.Url) {
         require(value.length in 1..2048 && value.none(Char::isISOControl))
         val uri = URI(value)
-        require(uri.userInfo == null && (allowQuery || uri.query == null) && uri.fragment == null && !uri.host.isNullOrBlank())
+        checkConfig(uri.userInfo == null && (allowQuery || uri.query == null) && uri.fragment == null, McpFailureReason.UrlSecrets)
+        require(!uri.host.isNullOrBlank())
         require(uri.port == -1 || uri.port in 1..65535)
-        require(uri.scheme == "https" || uri.scheme == "http" && McpCleartextHosts.allowed(uri.host))
+        checkConfig(uri.scheme in setOf("https", "http"), McpFailureReason.Url)
+        checkConfig(uri.scheme != "http" || McpCleartextHosts.allowed(uri.host), McpFailureReason.HttpNotAllowed)
         uri
     }
     internal fun sameOrigin(first: String, second: String): Boolean {
@@ -108,11 +111,14 @@ object McpConfigParser {
         return (0 until values.length()).map { values.get(it) as? String ?: error("string") }
     }
     private fun stringMap(value: Any): Map<String, String> {
-        val fields = value as? JSONObject ?: error("object")
+        val fields = value as? JSONObject ?: throw McpException(McpProblem.InvalidConfig, McpFailureReason.ConfigShape)
         require(fields.length() <= 64)
         return fields.keys().asSequence().associateWith { fields.get(it) as? String ?: error("string") }
     }
-    private inline fun <T> guarded(block: () -> T): T = try { block() }
+    private fun checkConfig(condition: Boolean, reason: McpFailureReason) {
+        if (!condition) throw McpException(McpProblem.InvalidConfig, reason)
+    }
+    private inline fun <T> guarded(reason: McpFailureReason = McpFailureReason.Fields, block: () -> T): T = try { block() }
         catch (failure: McpException) { throw failure }
-        catch (_: Exception) { throw McpException(McpProblem.InvalidConfig) }
+        catch (_: Exception) { throw McpException(McpProblem.InvalidConfig, reason) }
 }

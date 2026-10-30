@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_error_json">JSON 语法不正确。请检查双引号、逗号和括号，粘贴纯 JSON，不要包含 Markdown 代码围栏。未保存。</string>
+    <string name="mcp_error_json_duplicate">JSON 中存在重复键。请删除重复字段或服务名后重新导入。未保存。</string>
+    <string name="mcp_error_shape">配置结构不正确。请使用单个服务对象，或仅含 mcpServers 服务映射的对象；每个服务必须是对象。未保存。</string>
+    <string name="mcp_error_size">配置超过 512 KiB。请拆分配置后重新导入。未保存。</string>
+    <string name="mcp_error_count">一次导入需要包含 1–32 个服务。请检查 mcpServers 是否为空，或拆分配置。未保存。</string>
+    <string name="mcp_error_unknown_field">配置包含不支持的字段。支持 type、transport、url、command、args、env、headers、enabled、disabled 和 autoApprove；单服务还可包含 name。未保存。</string>
+    <string name="mcp_error_transport">连接方式缺失、冲突或不受支持。请使用 stdio、http（Streamable HTTP）或 sse；type 与 transport 同时填写时须一致。未保存。</string>
+    <string name="mcp_error_fields">配置字段类型、长度或组合不正确。args 应为字符串数组，env 与 headers 应为字符串映射；网络服务不能同时填写 command、args 或 env。未保存。</string>
+    <string name="mcp_error_headers">请求头不合法。名称不能重复（忽略大小写），值不能包含换行；Host、Content-Type、Accept 等协议头由应用管理。未保存。</string>
+    <string name="mcp_error_url">服务地址不合法。请填写完整的 http:// 或 https:// 地址，并检查主机及端口（1–65535）。未保存。</string>
+    <string name="mcp_error_url_secrets">服务地址不能包含用户名、密码、查询参数或片段。请将认证信息放在 headers 中。未保存。</string>
+    <string name="mcp_error_http_blocked">此地址不允许使用明文 HTTP。公网 MCP 请使用 HTTPS；HTTP 仅支持回环和 10.*、172.16–31.*、192.168.* 内网 IPv4，不支持内网域名。未保存。</string>
+    <string name="mcp_error_duplicate_server">已存在同名 MCP 服务。请编辑已有服务，或修改配置中的服务名后重新导入。原配置未覆盖。</string>
+    <string name="mcp_error_dns">无法解析 MCP 服务域名。请检查域名、手机网络和 DNS 设置；未自动重试。</string>
+    <string name="mcp_error_connect">无法连接 MCP 服务。请检查服务是否启动、监听地址、端口、防火墙，以及手机是否能访问该网络；未自动重试。</string>
+    <string name="mcp_error_tls">HTTPS 安全连接失败。请检查证书有效期、证书与域名是否匹配及手机时间；不会跳过证书校验。</string>
+    <string name="mcp_error_network">MCP 连接中断或响应读取失败。请检查网络与服务日志；远端可能已执行，未自动重试。</string>
+    <string name="mcp_error_auth">MCP 服务返回 HTTP %1$d：认证失败或无权访问。请检查 Authorization 等认证头及服务权限；未自动重试。</string>
+    <string name="mcp_error_not_found">MCP 服务返回 HTTP %1$d：接口不存在。请核对 MCP 路径，而非网站首页地址；未自动重试。</string>
+    <string name="mcp_error_method">MCP 服务返回 HTTP %1$d：不支持当前请求方式。请确认选择的是 Streamable HTTP 还是旧 SSE，并核对服务路径；未自动重试。</string>
+    <string name="mcp_error_rate_limit">MCP 服务返回 HTTP %1$d：请求受到限流。请稍后再试并核对服务配额；未自动重试。</string>
+    <string name="mcp_error_http_status">MCP 服务返回 HTTP %1$d。请检查服务状态与日志；远端可能已执行，未自动重试。</string>
+    <string name="mcp_error_redirect">MCP 服务返回重定向。应用不会携带认证头跟随跳转；请核实并直接配置最终 MCP 地址。</string>
+    <string name="mcp_error_protocol">MCP 响应不符合协议。请核对连接方式、MCP 路径、协议版本和服务日志；返回网页或普通 API 不代表 MCP 连接成功。</string>
+    <string name="mcp_error_limit">MCP 配置、响应或目录超过安全容量限制。请减少服务数量、缩小响应或分批操作；未自动重试。</string>
+    <string name="mcp_error_closed">当前 MCP 连接已结束或项目配置已变化。请回到当前项目重新连接；未重放之前的操作。</string>
+    <string name="mcp_error_code">错误代码：%1$s</string>
+    <string name="mcp_error_title">操作未完成</string>
+    <string name="mcp_error_copy">复制错误</string>
+</resources>

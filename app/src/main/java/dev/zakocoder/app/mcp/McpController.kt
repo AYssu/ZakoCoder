@@ -54,13 +54,13 @@ class McpController(
     fun importJson(source: String, singleName: String = ""): Job = change {
         val imported = withContext(Dispatchers.IO) { McpConfigParser.parse(source, singleName) }
         val existing = mutable.value.servers
-        if (existing.any { old -> imported.any { it.name == old.name || it.id == old.id } }) throw McpException(McpProblem.InvalidConfig)
+        if (existing.any { old -> imported.any { it.name == old.name || it.id == old.id } }) throw McpException(McpProblem.InvalidConfig, McpFailureReason.DuplicateServer)
         existing + imported
     }
     fun save(server: McpServer): Job = change {
         McpConfigParser.validate(server)
         val existing = mutable.value.servers
-        if (existing.any { it.id != server.id && it.name == server.name }) throw McpException(McpProblem.InvalidConfig)
+        if (existing.any { it.id != server.id && it.name == server.name }) throw McpException(McpProblem.InvalidConfig, McpFailureReason.DuplicateServer)
         if (existing.any { it.id == server.id }) existing.map { if (it.id == server.id) snapshot(server) else it }
         else existing + snapshot(server)
     }
@@ -246,13 +246,7 @@ class McpController(
         begin(external)
         try { block() }
         catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) { mutable.update { it.copy(error = context.getString(when ((failure as? McpException)?.problem) {
-            McpProblem.InvalidConfig -> R.string.mcp_config_invalid
-            McpProblem.Storage -> R.string.mcp_storage_error
-            McpProblem.Disabled -> R.string.mcp_disabled
-            McpProblem.Timeout -> R.string.mcp_timeout
-            else -> R.string.mcp_operation_failed
-        }), probeResult = "", probeServerId = "", probeProjectId = "") } }
+        catch (failure: Exception) { mutable.update { it.copy(error = McpDiagnostics.message(context, failure), probeResult = "", probeServerId = "", probeProjectId = "") } }
         finally { end(external) }
     }
 }

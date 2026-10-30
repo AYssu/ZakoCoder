@@ -31,7 +31,8 @@ internal object McpJson {
                         at++; space(); val keys = mutableSetOf<String>()
                         if (at < source.length && source[at] == '}') { at++; return }
                         while (true) {
-                            require(keys.add(string())); expect(':'); value(depth + 1); space()
+                            if (!keys.add(string())) throw McpException(McpProblem.InvalidConfig, McpFailureReason.DuplicateJsonKey)
+                            expect(':'); value(depth + 1); space()
                             require(at < source.length)
                             if (source[at++] == '}') return
                             require(source[at - 1] == ',')
@@ -56,6 +57,7 @@ internal object McpJson {
             }
         }
         try { Reader().apply { value(0); space(); require(at == source.length) } }
-        catch (_: Exception) { throw McpException(McpProblem.InvalidConfig) }
+        catch (failure: McpException) { throw failure }
+        catch (_: Exception) { throw McpException(McpProblem.InvalidConfig, McpFailureReason.JsonSyntax) }
     }
 }
