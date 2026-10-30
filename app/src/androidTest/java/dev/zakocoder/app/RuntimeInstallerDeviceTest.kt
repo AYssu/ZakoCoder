@@ -16,7 +16,8 @@ import java.util.UUID
 class RuntimeInstallerDeviceTest {
     @Test fun rejectCorruptOfflineImageCancelAndRetryFreshInstall() = runBlocking {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
-        val image = File(base.cacheDir, "runtime-download/rootfs.tar.xz")
+        val image = File(base.cacheDir, if (InstrumentationRegistry.getArguments().getString("nativeRuntimeImage") == "true")
+            "native-runtime-verification/rootfs.tar.xz" else "runtime-download/rootfs.tar.xz")
         assertTrue("Keep the verified download cache until this installer test has run", image.isFile)
         val temporary = File(base.filesDir, "installer-check-${UUID.randomUUID()}")
         val context = object : ContextWrapper(base) {
@@ -45,6 +46,9 @@ class RuntimeInstallerDeviceTest {
                 withContext(Dispatchers.IO) { installing.cancelAndJoin() }
                 assertFalse(withContext(Dispatchers.IO) { runtime.isInstalled() })
                 assertFalse(withContext(Dispatchers.IO) { File(runtime.home, "installing").exists() })
+                // The cancelled offline install retains its verified archive in this isolated cache.
+                // Retry from that cache so this compatibility check does not depend on network access.
+                assertTrue(withContext(Dispatchers.IO) { File(context.cacheDir, "runtime-download/rootfs.tar.xz").isFile })
                 withTimeout(3 * 60 * 1000L) { runtime.install(AppSettings()) {} }
                 assertTrue(withContext(Dispatchers.IO) { runtime.isInstalled() })
                 val result = runtime.execute("set -e; test \"${'$'}(/bin/pwd)\" = /root; printf 'FRESH_INSTALL_OK\\n'", null, AppSettings())

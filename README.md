@@ -49,9 +49,9 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 获取测试安装包
 
-测试 APK 由维护者通过 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动构建。成功运行的 **Artifacts** 中包含 ARM64 Debug APK、校验摘要和构建信息；产物保留 14 天。没有可用产物时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+测试 APK 由维护者通过 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动构建。成功运行的 **Artifacts** 中包含 ARM64 Debug APK、自编译 PRoot／loader、运行时对应源码包、校验摘要和构建信息；产物保留 14 天。没有可用产物时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
-当前尚无正式 Release APK。PRoot 制品的自编译与完整来源材料仍需补齐，正式发布构建保持阻止；测试包入口与签名兼容性见[打包说明](docs/RELEASING.md#手动打包测试-apk)。
+当前尚无正式 Release APK。PRoot 与 loader 已改为仓库内源码自行编译，正式发布构建仍等待分发材料与设备覆盖审查；测试包入口与签名兼容性见[打包说明](docs/RELEASING.md#手动打包测试-apk)。
 
 ### 完成第一个项目
 
@@ -75,7 +75,7 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | --- | --- |
 | 设备 | Android 8.0+，ARM64 真机；当前设备验证覆盖 Android 13。x86_64 / 模拟器尚未适配。 |
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
-| Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。已在手机上验证 ZakoCoder 自身的 Compose + JNI 构建，其他工程兼容性取决于依赖与工具链。 |
+| Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
 | 模型服务 | Chat Completions 兼容接口、SSE 工具调用与 `image_url` 图片请求；包含 DeepSeek 推理字段续接和公开思考内容展示。图片语义理解、参数与网关兼容性需按所选服务验证，不含本地模型推理。 |
 | 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，暂不提供 LSP 或跨文件语义补全。 |
 | Git | 公开 HTTPS 克隆、状态、暂存和本地提交；私有仓库认证、分支合并与冲突界面尚未提供。 |
@@ -135,7 +135,7 @@ python3 scripts/check_repository.py
 ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取依赖及校验后的运行验证制品；不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 使用仓库内源码和固定 NDK 离线编译；不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
 
 </details>
 
@@ -148,7 +148,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需�
 | [Sora Editor](https://github.com/Rosemoe/sora-editor) | 原生代码编辑器与 TextMate 接入。 |
 | [Termux](https://github.com/termux/termux-app) | 终端模拟与视图基础库。 |
 | [PRoot](https://github.com/proot-me/PRoot) · [proot-distro](https://github.com/termux/proot-distro) · [Ubuntu](https://ubuntu.com/) | Linux 用户空间运行基础。 |
-| [OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore) | 当前调试版 PRoot 验证制品来源；完整材料与发行限制见第三方说明。 |
+| [termux/proot](https://github.com/termux/proot) · [talloc](https://talloc.samba.org/) · [libandroid-shmem](https://github.com/termux/libandroid-shmem) | 仓库内保留源码，自行编译 PRoot 与 loader；见 [独立子项目](native-runtime/README.md)。 |
 | [android-arm-build-tools](https://github.com/Commit451/android-arm-build-tools) · [android-ndk-custom](https://github.com/HomuHomu833/android-ndk-custom) | 可选手机 Android / NDK 构建工具链。 |
 | [CommonMark Java](https://github.com/commonmark/commonmark-java) · [OkHttp](https://github.com/square/okhttp) | Markdown 解析和网络传输。 |
 | [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | 随应用离线提供的等宽字体。 |

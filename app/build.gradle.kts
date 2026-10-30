@@ -10,7 +10,8 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "dev.zakocoder.app"
+        applicationId = if (providers.gradleProperty("runtimeVerification").orNull == "true")
+            "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -39,14 +40,14 @@ android {
 
 val prepareRuntime by tasks.registering(Exec::class) {
     workingDir(rootProject.projectDir)
-    commandLine("python3", "scripts/prepare_runtime.py")
+    commandLine("python3", "scripts/prepare_runtime.py", "--ndk", android.ndkDirectory.absolutePath)
     inputs.file(rootProject.file("runtime/artifacts.json"))
     inputs.file(rootProject.file("scripts/prepare_runtime.py"))
     // Always verify, including files already present. No unverified local override.
 }
 tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
 tasks.matching { it.name.contains("Release") }.configureEach {
-    doFirst { error("Validation-only PRoot binaries: complete self-build provenance before release packaging") }
+    doFirst { error("Release requires maintainer review of self-built runtime evidence and distribution materials; see docs/RELEASING.md") }
 }
 
 dependencies {
