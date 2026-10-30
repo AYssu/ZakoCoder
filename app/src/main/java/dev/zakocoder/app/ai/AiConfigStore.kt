@@ -16,8 +16,9 @@ import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class AiConfig(val endpoint: String = "", val model: String = "", val key: String = "", val parameters: AiParameters = AiParameters()) {
-    override fun toString() = "AiConfig(model=$model, key=<redacted>)"
+data class AiConfig(val endpoint: String = "", val model: String = "", val key: String = "", val parameters: AiParameters = AiParameters(),
+    val context: AiContextOptions = AiContextOptions(), val requestHeaders: Map<String, String> = emptyMap()) {
+    override fun toString() = "AiConfig(model=$model, key=<redacted>, headers=<redacted>)"
 }
 
 /** Blocking IO. v1 is retained for rollback; v2 never stores plaintext credentials. */
@@ -62,8 +63,9 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         if (id != null) cipher.updateAAD(id.toByteArray())
         return cipher.doFinal(Base64.decode(json.getString("key"), Base64.NO_WRAP)).toString(Charsets.UTF_8)
     }
-    private fun encrypt(json: JSONObject, key: String, id: String? = null): JSONObject {
-        require(key.length <= 8192 && !key.any(Char::isISOControl))
+    private fun encrypt(json: JSONObject, key: String, id: String? = null, headerPayload: Boolean = false): JSONObject {
+        require(key.length <= if (headerPayload) 50000 else 8192)
+        require(!key.any(Char::isISOControl))
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secret()) }
         if (id != null) cipher.updateAAD(id.toByteArray())
         return json.put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).put("key", Base64.encodeToString(cipher.doFinal(key.toByteArray()), Base64.NO_WRAP))
@@ -71,8 +73,27 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
     private fun parameters(json: JSONObject): AiParameters = AiParameters(
         if (json.has("maxTokens")) json.getInt("maxTokens") else null,
         if (json.has("temperature")) json.getDouble("temperature") else null,
-        if (json.has("topP")) json.getDouble("topP") else null).also { it.validate() }
-    private fun summary(json: JSONObject) = AiProfile(json.getString("id"), json.getString("name"), endpoint(json.getString("endpoint")), json.getString("model"), json.getBoolean("hasKey"), parameters(json))
+        if (json.has("topP")) json.getDouble("topP") else null,
+        if (json.has("thinking")) AiThinking.valueOf(json.getString("thinking")) else AiThinking.Default,
+        if (json.has("reasoningEffort")) AiReasoningEffort.valueOf(json.getString("reasoningEffort")) else null,
+        if (json.has("frequencyPenalty")) json.getDouble("frequencyPenalty") else null,
+        if (json.has("presencePenalty")) json.getDouble("presencePenalty") else null,
+        if (json.has("seed")) json.getInt("seed") else null).also { it.validate() }
+    private fun contextOptions(json: JSONObject): AiContextOptions = json.optJSONObject("context")?.let {
+        AiContextOptions(it.getInt("maxContextChars"), it.getBoolean("autoCompress"), it.getInt("compressionThresholdPercent"), it.getInt("summaryMaxChars"))
+    }?.also { it.validate() } ?: AiContextOptions()
+    private fun headers(json: JSONObject): Map<String, String> {
+        val encrypted = json.optJSONObject("requestHeaders") ?: return emptyMap()
+        val decoded = JSONObject(decrypt(encrypted, json.getString("id") + ":headers"))
+        return decoded.keys().asSequence().associateWith { decoded.getString(it) }.also(AiRequestHeaders::validate)
+    }
+    private fun summary(json: JSONObject): AiProfile {
+        val names = json.optJSONArray("headerNames") ?: JSONArray()
+        require(names.length() <= 16)
+        val headerNames = (0 until names.length()).map { names.getString(it) }
+        AiRequestHeaders.validate(headerNames.associateWith { "" })
+        return AiProfile(json.getString("id"), json.getString("name"), endpoint(json.getString("endpoint")), json.getString("model"), json.getBoolean("hasKey"), parameters(json), contextOptions(json), headerNames)
+    }
     private fun rawCatalog(): JSONObject {
         if (exists(catalogFile)) return read(catalogFile).also { json ->
             require(json.getInt("schemaVersion") == 2)
@@ -92,8 +113,10 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         return JSONObject().put("schemaVersion", 2).put("activeId", if (profiles.length() == 0) JSONObject.NULL else "legacy").put("profiles", profiles)
     }
     private fun write(target: AtomicFile, json: JSONObject) {
+        val bytes = json.toString().toByteArray()
+        require(bytes.size <= 1024 * 1024)
         val stream = target.startWrite()
-        try { stream.write(json.toString().toByteArray()); target.finishWrite(stream) }
+        try { stream.write(bytes); target.finishWrite(stream) }
         catch (error: Exception) { target.failWrite(stream); throw error }
     }
     @Synchronized fun catalog(): AiCatalog {
@@ -108,13 +131,15 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         }
         val json = rawCatalog(); val profiles = json.getJSONArray("profiles"); val id = json.optString("activeId")
         val profile = (0 until profiles.length()).map { profiles.getJSONObject(it) }.singleOrNull { it.getString("id") == id } ?: return AiConfig()
-        return AiConfig(profile.getString("endpoint"), profile.getString("model"), decrypt(profile, id), parameters(profile))
+        return AiConfig(profile.getString("endpoint"), profile.getString("model"), decrypt(profile, id), parameters(profile), contextOptions(profile), headers(profile))
     }
     @Synchronized fun resolve(draft: AiModelDraft, requireModel: Boolean = true): AiConfig {
         val normalized = endpoint(draft.endpoint)
         require(!requireModel || draft.model.isNotBlank())
         require(draft.model.length <= 200 && !draft.model.any(Char::isISOControl))
         draft.parameters.validate()
+        draft.context.validate()
+        draft.replacementHeaders?.let(AiRequestHeaders::validate)
         val profiles = rawCatalog().getJSONArray("profiles")
         val old = (0 until profiles.length()).map { profiles.getJSONObject(it) }.singleOrNull { it.getString("id") == draft.id }
         require(draft.id == null || old != null)
@@ -124,7 +149,12 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
             previous
         }
         require(key.length <= 8192 && !key.any(Char::isISOControl))
-        return AiConfig(normalized, draft.model.trim(), key, draft.parameters)
+        val requestHeaders = draft.replacementHeaders ?: old?.let {
+            val previous = headers(it)
+            if (previous.isNotEmpty() && origin(it.getString("endpoint")) != origin(normalized)) throw AiOriginChanged()
+            previous
+        }.orEmpty()
+        return AiConfig(normalized, draft.model.trim(), key, draft.parameters, draft.context, requestHeaders)
     }
     @Synchronized fun saveProfile(draft: AiModelDraft) {
         require(draft.name.isNotBlank() && draft.name.length <= 80 && !draft.name.any(Char::isISOControl))
@@ -135,6 +165,15 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val item = encrypt(JSONObject().put("id", id).put("name", draft.name.trim()).put("endpoint", resolved.endpoint)
             .put("model", resolved.model).put("hasKey", resolved.key.isNotEmpty()), resolved.key, id)
         resolved.parameters.maxTokens?.let { item.put("maxTokens", it) }; resolved.parameters.temperature?.let { item.put("temperature", it) }; resolved.parameters.topP?.let { item.put("topP", it) }
+        item.put("thinking", resolved.parameters.thinking.name)
+        resolved.parameters.reasoningEffort?.let { item.put("reasoningEffort", it.name) }
+        resolved.parameters.frequencyPenalty?.let { item.put("frequencyPenalty", it) }
+        resolved.parameters.presencePenalty?.let { item.put("presencePenalty", it) }
+        resolved.parameters.seed?.let { item.put("seed", it) }
+        item.put("context", JSONObject().put("maxContextChars", resolved.context.maxContextChars).put("autoCompress", resolved.context.autoCompress)
+            .put("compressionThresholdPercent", resolved.context.compressionThresholdPercent).put("summaryMaxChars", resolved.context.summaryMaxChars))
+        item.put("headerNames", JSONArray(resolved.requestHeaders.keys.toList()))
+        item.put("requestHeaders", encrypt(JSONObject(), JSONObject(resolved.requestHeaders).toString(), id + ":headers", headerPayload = true))
         val index = (0 until profiles.length()).singleOrNull { profiles.getJSONObject(it).getString("id") == id }
         if (index == null) profiles.put(item) else profiles.put(index, item)
         if (json.isNull("activeId")) json.put("activeId", id)
@@ -156,7 +195,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
     @Synchronized fun save(endpoint: String, model: String, replacement: String?) {
         if (exists(catalogFile)) {
             val active = catalog().active
-            saveProfile(AiModelDraft(active?.id, active?.name ?: model.trim(), endpoint, model, replacement, active?.parameters ?: AiParameters()))
+            saveProfile(AiModelDraft(active?.id, active?.name ?: model.trim(), endpoint, model, replacement, active?.parameters ?: AiParameters(), active?.context ?: AiContextOptions()))
             return
         }
         val normalized = endpoint(endpoint)

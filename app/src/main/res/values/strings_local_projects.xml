@@ -1,0 +1,17 @@
+<resources>
+    <string name="local_project_path_invalid">无法绑定该目录。请选择可读写的本地项目文件夹，避免系统目录、Android 私有目录、符号链接和已绑定的重叠目录。</string>
+    <string name="local_project_unavailable">本地项目目录暂不可访问。请检查文件权限、存储设备与目录是否仍在原位置。</string>
+    <string name="local_project_bind">绑定本地目录</string>
+    <string name="local_project_bind_hint">直接开发原目录，编辑器、AI 和终端共享同一份文件。</string>
+    <string name="local_project_path">项目的绝对路径</string>
+    <string name="local_project_path_example">/storage/emulated/0/Projects/my-app</string>
+    <string name="local_project_path_help">输入真实磁盘目录，不是 content URI。云盘与仅支持文档提供者的目录请使用导入副本。</string>
+    <string name="local_project_storage_help">访问共享存储需要系统文件权限。该授权与 AI 工具权限相互独立，不自动授予模型任何操作权限。</string>
+    <string name="local_project_storage_grant">授权访问本地文件</string>
+    <string name="local_project_storage_error">无法打开系统授权页面，请在系统设置中检查文件访问权限。</string>
+    <string name="local_project_direct_warning">绑定不会复制文件。保存、AI 修改和命令会直接作用于原目录；移除项目仅解除绑定，源码保留。</string>
+    <string name="local_project_unbind_confirmation">将解除“%1$s”的目录绑定并移除本应用的会话及运行记录，原目录与源码保留。</string>
+    <string name="local_project_managed_label">应用内副本</string>
+    <string name="local_project_bound_label">本地绑定 · 直接修改原文件</string>
+    <string name="local_project_source_hint">选择创建项目、导入副本、绑定本地目录或克隆仓库。</string>
+</resources>

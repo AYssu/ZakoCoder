@@ -30,6 +30,8 @@ data class CommandResult(val exitCode: Int, val output: String, val runId: Strin
 data class RuntimeCommand(val executable: String, val arguments: List<String>, val environment: Map<String, String>)
 
 class LinuxRuntime(private val context: Context, private val proxyCredentials: () -> NetworkProxy.Credentials? = { null }) {
+    /** Installed by Workbench; invoked on IO before every project process. */
+    var projectDirectory: ((String) -> File)? = null
     val home = File(context.filesDir, "linux-runtime")
     val root = File(home, "rootfs")
     val workspaces = File(context.filesDir, "workspaces")
@@ -270,6 +272,15 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             "/usr/bin/env", "-i", "HOME=/root", "TERM=xterm-256color", "LANG=C.UTF-8",
             "PATH=$path", "TMPDIR=/tmp", "DEBIAN_FRONTEND=noninteractive",
         )
+        if (projectId != null) {
+            val source = projectDirectory?.invoke(projectId) ?: File(workspaces, projectId).also {
+                require(it.isDirectory && !Files.isSymbolicLink(it.toPath()) &&
+                    it.canonicalFile.toPath().startsWith(workspaces.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
+            }
+            // Insert the explicit project bind before argv of /usr/bin/env, never into shell text.
+            val envIndex = args.indexOf("/usr/bin/env")
+            args.addAll(envIndex, listOf("-b", "${source.absolutePath}:/workspace/$projectId"))
+        }
         if (projectId != null && script == null) {
             // A friendly prompt is display-only. Do not interpolate project names into shell source.
             val label = projectName.orEmpty().map { if (it.isLetterOrDigit() || it in " ._-") it else '_' }
@@ -302,10 +313,11 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
     ): CommandResult = withTimeout(timeoutMillis) {
         withContext(Dispatchers.IO) {
             if (projectId != null) {
-                val directory = File(workspaces, projectId)
                 require(java.util.UUID.fromString(projectId).toString() == projectId)
-                require(directory.isDirectory && !Files.isSymbolicLink(directory.toPath()) &&
-                    directory.canonicalFile.toPath().startsWith(workspaces.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
+                projectDirectory?.invoke(projectId) ?: File(workspaces, projectId).also { directory ->
+                    require(directory.isDirectory && !Files.isSymbolicLink(directory.toPath()) &&
+                        directory.canonicalFile.toPath().startsWith(workspaces.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
+                }
             }
             val command = command(projectId, settings, script, target)
             // Fixed host wrapper reports its own PID, then replaces itself with PRoot.

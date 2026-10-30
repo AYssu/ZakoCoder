@@ -167,4 +167,81 @@ class AiContextDeviceTest {
             }
         }
     }
+    private fun configure(f: AiDeviceTest.Fixture, options: AiContextOptions) {
+        val profile = f.config.catalog().active!!
+        f.config.saveProfile(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null, profile.parameters, options))
+    }
+    private suspend fun withoutSkills(ai: AiController) {
+        for (skill in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(skill, false) }
+    }
+    @Test(timeout = 100000) fun disabledAutomaticCompressionStopsAtConfiguredBudgetWithoutSummaryRequest() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(32000, false, 50, 2000))
+            val requests = AtomicInteger()
+            f.server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val body = JSONObject(request.body.readUtf8())
+                    assertFalse(isSummary(body))
+                    assertTrue(body.getJSONArray("messages").toString().length <= 32000)
+                    requests.incrementAndGet()
+                    return response("large evidence " + "z".repeat(30000), listOf(AiCall("inspect-once", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}")))
+                }
+            }
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("off-budget") }; ready(ai); withoutSkills(ai)
+            main { ai.send("Inspect without summarizing") }; await { !ai.state.value.active }
+            assertEquals(AiFailure.ContextLimit, ai.state.value.failureKind)
+            assertEquals(1, requests.get()); assertEquals(0, ai.state.value.contextCompactions)
+            assertEquals(1, ai.state.value.toolCount)
+            assertTrue(f.history.load("off-budget").state!!.recoveryNotes.isNotEmpty())
+        }
+    }
+    @Test(timeout = 100000) fun configuredThresholdAndSummaryLengthAreAppliedToRealSummaryRequests() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(64000, true, 50, 2000))
+            val normal = AtomicInteger(); val summaries = AtomicInteger()
+            f.server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val body = JSONObject(request.body.readUtf8())
+                    if (isSummary(body)) {
+                        summaries.incrementAndGet()
+                        assertTrue(body.getJSONArray("messages").getJSONObject(0).getString("content").contains("at most 2000 characters"))
+                        return response("s".repeat(2001))
+                    }
+                    normal.incrementAndGet()
+                    return response("large evidence " + "z".repeat(30000), listOf(AiCall("inspect-once", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}")))
+                }
+            }
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("configured-summary") }; ready(ai); withoutSkills(ai)
+            main { ai.send("Inspect with a short summary") }; await { !ai.state.value.active }
+            assertEquals(AiFailure.Compaction, ai.state.value.failureKind)
+            assertEquals(1, normal.get()); assertEquals(1, summaries.get())
+            assertTrue(ai.state.value.contextSummary.isEmpty())
+        }
+    }
+    @Test(timeout = 100000) fun largerConfiguredContextSurvivesRestartBeyondLegacyRetentionLimit() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(256000, false, 95, 12000))
+            f.server.enqueue(response("large answer " + "a".repeat(100000)))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("large-budget") }; ready(ai); withoutSkills(ai)
+            main { ai.send("Keep this complete answer") }; await { !ai.state.value.active }
+            assertEquals(AiPhase.Completed, ai.state.value.phase)
+            val saved = f.history.load("large-budget").state!!
+            assertTrue(saved.contextTurns.sumOf { it.length } > 96000)
+            assertEquals(0, saved.contextCompactions)
+            f.server.takeRequest(2, TimeUnit.SECONDS)
+            lateinit var restored: AiController
+            main { restored = controller(f); restored.select("large-budget") }; ready(restored)
+            assertFalse(restored.state.value.historyError)
+            assertEquals(saved.contextTurns, restored.state.value.contextTurns)
+            f.server.enqueue(response("continued"))
+            main { restored.send("Continue with that retained answer") }; await { !restored.state.value.active }
+            assertEquals(AiPhase.Completed, restored.state.value.phase)
+            val body = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
+            assertTrue(body.getJSONArray("messages").toString().length > 96000)
+            assertTrue(body.toString().contains("a".repeat(100000)))
+        }
+    }
 }

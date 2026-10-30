@@ -20,19 +20,34 @@ import java.util.UUID
 /** All methods that touch documents or disk are called by the controller on Dispatchers.IO. */
 class ProjectRepository(private val context: Context, val base: File) {
     private val registry = AtomicFile(File(context.filesDir, "projects-v1.json"))
+    private val bindingRegistry = AtomicFile(File(context.filesDir, "local-project-bindings-v1.json"))
+    private val bindingPolicy = LocalProjectBindings(base, listOf(context.filesDir, context.cacheDir, File(context.applicationInfo.dataDir)))
+    @Volatile private var bindings: Map<String, String> = emptyMap()
+    private var bindingsLoaded = false
     private val preferences = context.getSharedPreferences("projects", Context.MODE_PRIVATE)
-    fun load(): List<Project> {
-        if (!registry.baseFile.exists()) return emptyList()
+    @Synchronized fun load(): List<Project> {
+        loadBindings()
+        if (!registry.baseFile.exists() && !File(registry.baseFile.path + ".bak").exists()) {
+            reconcileBindings(emptySet())
+            return emptyList()
+        }
         val json = JSONObject(registry.openRead().bufferedReader().use { it.readText() })
         require(json.getInt("schemaVersion") == 1)
         val projects = json.getJSONArray("projects")
-        return (0 until projects.length()).map { index ->
+        val loaded = (0 until projects.length()).map { index ->
             val item = projects.getJSONObject(index)
             val id = item.getString("id")
             require(UUID.fromString(id).toString() == id)
             val kinds = item.getJSONArray("kinds")
             Project(id, item.getString("name"), (0 until kinds.length()).map { ProjectKind.valueOf(kinds.getString(it)) }.toSet())
-        }.filter { File(base, it.id).isDirectory }
+        }
+        // Reconcile only after a complete successful parse. A failed registry read must not detach anything.
+        reconcileBindings(loaded.map { it.id }.toSet())
+        return loaded.filter { isBound(it.id) || File(base, it.id).isDirectory }
+    }
+    private fun reconcileBindings(projectIds: Set<String>) {
+        val kept = bindings.filterKeys { it in projectIds }
+        if (kept.size != bindings.size) writeBindings(kept)
     }
     fun save(projects: List<Project>) {
         val json = JSONObject().put("schemaVersion", 1).put("projects", JSONArray().apply {
@@ -47,11 +62,68 @@ class ProjectRepository(private val context: Context, val base: File) {
     fun select(id: String?) { preferences.edit { if (id == null) remove("selected") else putString("selected", id) } }
     fun directory(id: String): File {
         require(UUID.fromString(id).toString() == id)
+        loadBindings()
+        bindings[id]?.let { path ->
+            return try { bindingPolicy.validate(path) }
+            catch (error: Exception) { throw IllegalArgumentException(context.getString(R.string.local_project_unavailable), error) }
+        }
         return File(base, id).also {
             require(it.isDirectory && !Files.isSymbolicLink(it.toPath()) &&
                 it.canonicalFile.toPath().startsWith(base.canonicalFile.toPath())) { context.getString(R.string.directory_unreadable) }
         }
     }
+    /** Metadata only; callers must load the repository on IO before reading these snapshots. */
+    fun bindingPath(id: String): String? = bindings[id]
+    fun isBound(id: String): Boolean = bindings.containsKey(id)
+
+    @Synchronized private fun loadBindings() {
+        if (bindingsLoaded) return
+        if (bindingRegistry.baseFile.exists() || File(bindingRegistry.baseFile.path + ".bak").exists()) {
+            val json = JSONObject(bindingRegistry.openRead().bufferedReader().use { it.readText() })
+            require(json.getInt("schemaVersion") == 1)
+            val values = json.getJSONObject("bindings")
+            val loaded = LinkedHashMap<String, String>()
+            values.keys().forEach { id ->
+                require(LocalProjectBindings.validId(id))
+                val path = values.getString(id)
+                require(File(path).isAbsolute && path.length <= 4096 && path.none(Char::isISOControl))
+                loaded[id] = path
+            }
+            bindings = loaded.toMap()
+        }
+        bindingsLoaded = true
+    }
+
+    @Synchronized private fun writeBindings(values: Map<String, String>) {
+        val json = JSONObject().put("schemaVersion", 1).put("bindings", JSONObject(values))
+        val stream = bindingRegistry.startWrite()
+        try {
+            stream.write(json.toString().toByteArray(Charsets.UTF_8))
+            bindingRegistry.finishWrite(stream)
+            bindings = values.toMap()
+        } catch (error: Exception) {
+            bindingRegistry.failWrite(stream)
+            throw error
+        }
+    }
+
+    @Synchronized fun bindLocal(path: String): Project {
+        loadBindings()
+        val root = try { bindingPolicy.validate(path, bindings.values) }
+        catch (error: Exception) { throw IllegalArgumentException(context.getString(R.string.local_project_path_invalid), error) }
+        require(root.name.length <= 80) { context.getString(R.string.project_name_invalid) }
+        val project = Project(UUID.randomUUID().toString(), root.name, ProjectDetector.detect(root))
+        writeBindings(bindings + (project.id to root.path))
+        return project
+    }
+
+    /** Removing a binding never deletes or modifies the external directory. */
+    @Synchronized fun removeBinding(id: String) {
+        require(LocalProjectBindings.validId(id))
+        loadBindings()
+        if (id in bindings) writeBindings(bindings - id)
+    }
+
     fun create(name: String, templateFiles: Map<String, String> = emptyMap()): Project {
         require(name.isNotBlank() && name.length <= 80 && name.none { it == '/' || it == '\\' || it.isISOControl() }) {
             context.getString(R.string.project_name_invalid)

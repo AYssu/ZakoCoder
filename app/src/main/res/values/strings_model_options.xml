@@ -1,0 +1,25 @@
+<resources>
+    <string name="ai_options_title">思考、上下文与高级配置</string>
+    <string name="ai_options_thinking">深度思考</string>
+    <string name="ai_options_thinking_hint">仅适用于支持 thinking.type 的服务（例如 DeepSeek）。默认不发送；推理强度使用 reasoning_effort。服务不支持时请保留默认。采样参数可能被思考模型忽略。</string>
+    <string name="ai_options_provider_default">服务默认</string>
+    <string name="ai_options_enabled">开启</string>
+    <string name="ai_options_disabled">关闭</string>
+    <string name="ai_options_effort">推理强度</string>
+    <string name="ai_options_frequency">重复频率惩罚（−2～2，留空不发送）</string>
+    <string name="ai_options_presence">主题重复惩罚（−2～2，留空不发送）</string>
+    <string name="ai_options_seed">随机种子（整数，可留空）</string>
+    <string name="ai_options_context">上下文与总结</string>
+    <string name="ai_options_context_hint">按字符管理应用请求预算，不等于模型 Token 上限。总结有损，原始会话仍保留；关闭自动总结后，超出预算将停止请求并提示。</string>
+    <string name="ai_options_context_chars">上下文字符预算（32000～256000）</string>
+    <string name="ai_options_auto">自动压缩上下文</string>
+    <string name="ai_options_threshold">压缩触发比例（50～95%）</string>
+    <string name="ai_options_summary_chars">总结字符上限（2000～12000）</string>
+    <string name="ai_options_headers">自定义请求头</string>
+    <string name="ai_options_headers_hint">用于当前服务的发现模型与对话请求，加密保存在本机，不记录请求头值。禁止覆盖 Authorization 等受控头；修改服务域名后需重新填写或清空。</string>
+    <string name="ai_options_headers_saved">已保存：%1$s（值不回显）</string>
+    <string name="ai_options_headers_replace">替换已有请求头</string>
+    <string name="ai_options_headers_lines">每行 Header-Name: value</string>
+    <string name="ai_options_headers_empty">留空并保存将清空已有请求头。最多 16 项。</string>
+    <string name="ai_options_invalid">请检查数值范围、请求头名称与格式。</string>
+</resources>

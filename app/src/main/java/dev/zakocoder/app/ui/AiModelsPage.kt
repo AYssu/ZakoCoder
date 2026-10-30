@@ -124,14 +124,16 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
     var templates by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     var savingRevision by remember { mutableStateOf<Int?>(null) }
-    val parameters = AiParameters(if (maxEnabled) maxTokens.toIntOrNull() else null, if (tempEnabled) temperature.toDoubleOrNull() else null, if (topEnabled) topP.toDoubleOrNull() else null)
-    val parametersValid = (!maxEnabled || maxTokens.toIntOrNull() != null) && (!tempEnabled || temperature.toDoubleOrNull() != null) && (!topEnabled || topP.toDoubleOrNull() != null) && runCatching { parameters.validate() }.isSuccess
+    val options = remember(original?.id) { ModelOptionsDraft(original) }
+    val baseParameters = AiParameters(if (maxEnabled) maxTokens.toIntOrNull() else null, if (tempEnabled) temperature.toDoubleOrNull() else null, if (topEnabled) topP.toDoubleOrNull() else null)
+    val parameters = runCatching { options.parameters(baseParameters) }.getOrDefault(baseParameters)
+    val parametersValid = options.valid() && (!maxEnabled || maxTokens.toIntOrNull() != null) && (!tempEnabled || temperature.toDoubleOrNull() != null) && (!topEnabled || topP.toDoubleOrNull() != null) && runCatching { parameters.validate() }.isSuccess
     val normalized = runCatching { AiConfigStore.endpoint(endpoint) }.getOrNull()
     val valid = name.isNotBlank() && name.length <= 80 && normalized != null && model.isNotBlank() && model.length <= 200 && parametersValid
-    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid
+    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid || options.dirty(original)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
-    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters)
+    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers())
     fun leave() { if (state.saving) return; if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
@@ -171,6 +173,7 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
                 ParameterInput(R.string.ai_models_temperature, tempEnabled, { tempEnabled = it; changed() }, temperature, { temperature = it; changed() }, editable, temperature.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..2.0 } == true)
                 ParameterInput(R.string.ai_models_top_p, topEnabled, { topEnabled = it; changed() }, topP, { topP = it; changed() }, editable, topP.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true)
             }
+            ModelOptions(options, original, editable, ::changed)
             ModelSection(stringResource(R.string.ai_models_test_title)) {
                 Text(stringResource(R.string.ai_models_test_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)

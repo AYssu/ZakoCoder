@@ -130,7 +130,7 @@ class AiConversationDeviceTest {
                 assertEquals(1, ai.state.value.contextCompactions)
                 assertFalse(ai.state.value.contextTurns.any { it.contains("read-pair") })
                 assertEquals(10, ai.state.value.timeline.count { it.role == AiRole.User })
-                assertTrue(ai.state.value.contextTurns.sumOf { it.length } <= 96000)
+                assertTrue(ai.state.value.contextTurns.sumOf { it.length } <= AI_RETAINED_CONTEXT_CHARS)
             }
         }
     }

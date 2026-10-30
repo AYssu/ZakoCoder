@@ -584,17 +584,21 @@ class AiController(private val context: Context, root: (String) -> File, private
                 catch (_: Exception) { "[Current task change evidence unavailable; do not infer no changes or reuse a previous sample.]" }
             } else "[Automatic task change evidence disabled by current read permission; do not infer no changes.]"
             refreshRules(emptyList())
-            if (messages.toString().length > 96000 || messages.length() > 96) {
+            messages.getJSONObject(0).put("content", SYSTEM + "\nCurrent app permissions: " + AiTool.entries.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
+            val options = settings.context
+            val beforeChars = messages.toString().length
+            if (options.autoCompress && (beforeChars > options.compressionThresholdChars || messages.length() > 96)) {
                 val skill = skillMessageIndex?.let { messages.getJSONObject(it) }
                 messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart)
                 skillMessageIndex = if (skill == null) null else 2
                 turnStart = if (skill == null) 2 else 3
             }
+            // Compression may still leave oversized pinned rules/prompt; never loop or send over budget.
+            if (messages.toString().length > options.maxContextChars || messages.length() > 96) throw AiBudgetException(AiFailure.ContextLimit)
             val round = mutable.value.round + 1
             mutable.update { it.copy(phase = AiPhase.Requesting, round = round, contextChars = messages.toString().length) }
             append("", role = AiRole.Assistant)
             val requestEpoch = epoch
-            messages.getJSONObject(0).put("content", SYSTEM + "\nCurrent app permissions: " + AiTool.entries.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
             val ruleDelivery = discovered.delivery()
             val reply = transport.request(settings, messages, schemas(), proxy = proxy(), toolDelta = { drafts ->
                 mutable.update { if (it.active && epoch == requestEpoch && it.phase != AiPhase.Stopping) it.copy(drafts = drafts, phase = AiPhase.Receiving) else it }
@@ -617,7 +621,10 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (reply.calls.isEmpty()) {
                 var completed = JSONArray()
                 for (index in turnStart until messages.length()) if (index != skillMessageIndex) completed.put(messages.getJSONObject(index))
-                if (completed.toString().length > 80000 || completed.length() > 120 || mutable.value.contextTurns.size >= 8 || mutable.value.contextTurns.sumOf { it.length } + completed.toString().length > 90000) {
+                if (completed.length() > AI_RETAINED_TURN_MESSAGES || mutable.value.contextTurns.size >= AI_RETAINED_CONTEXT_TURNS ||
+                    mutable.value.contextTurns.sumOf { it.length } + completed.toString().length > AI_RETAINED_CONTEXT_CHARS ||
+                    (options.autoCompress && messages.toString().length > options.compressionThresholdChars)) {
+                    if (!options.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
                     // Summarize complete evidence first; never persist detached calls/results.
                     compactContext(settings, messages, pinnedPrompt, null, messages.length())
                     completed = JSONArray().put(JSONObject().put("role", "user").put("content", pinnedPrompt))
@@ -628,7 +635,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 }
                 mutable.update { state ->
                     val turns = state.contextTurns + completed.toString()
-                    if (turns.size > 8 || turns.sumOf { it.length } > 96000) throw AiBudgetException(AiFailure.ContextLimit)
+                    if (turns.size > AI_RETAINED_CONTEXT_TURNS || turns.sumOf { it.length } > AI_RETAINED_CONTEXT_CHARS) throw AiBudgetException(AiFailure.ContextLimit)
                     state.copy(contextTurns = turns)
                 }
                 return
@@ -698,6 +705,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
     }
     private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int): JSONArray {
+        if (!settings.context.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
         mutable.update { it.copy(phase = AiPhase.Compacting) }
         append(context.getString(R.string.ai_context_compacting))
         val evidence = JSONArray()
@@ -708,14 +716,14 @@ class AiController(private val context: Context, root: (String) -> File, private
         val round = mutable.value.round + 1
         mutable.update { it.copy(round = round) }
         val requestEpoch = epoch
-        val summary = transport.request(settings.copy(parameters = settings.parameters.copy(maxTokens = minOf(settings.parameters.maxTokens ?: 2048, 2048))),
-            JSONArray().put(JSONObject().put("role", "system").put("content", CONTEXT_SUMMARY_PROMPT))
+        val summary = transport.request(settings.copy(parameters = settings.parameters.copy(maxTokens = minOf(settings.parameters.maxTokens ?: 8192, (settings.context.summaryMaxChars * 2 / 3).coerceIn(1024, 8192)))),
+            JSONArray().put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars)))
                 .put(JSONObject().put("role", "user").put("content", evidence.toString())), JSONArray(),
             proxy = proxy(),
             observe = { record -> mutable.update { state ->
                 if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
             } }, delta = {})
-        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > 12000) throw AiBudgetException(AiFailure.Compaction)
+        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > settings.context.summaryMaxChars) throw AiBudgetException(AiFailure.Compaction)
         val tail = contextTail(messages, taskStart)
         val result = JSONArray().put(messages.getJSONObject(0)).put(contextMemory(summary.text))
         if (skill != null) result.put(skill)

@@ -131,10 +131,10 @@ open class AiHistoryStore(private val directory: File) {
         } }
         require(restored.map { it.id }.distinct().size == restored.size)
         require(restored.sumOf { it.input.length + it.preview.length + it.output.length + it.reason.length + it.target.length } <= 512000)
-        val context = json.getJSONArray("context"); require(context.length() <= 8)
+        val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..128 && turn.getJSONObject(0).getString("role") == "user")
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user")
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
@@ -157,7 +157,7 @@ open class AiHistoryStore(private val directory: File) {
             }
             require(pending.isEmpty() && turn.getJSONObject(turn.length() - 1).getString("role") == "assistant")
             turn.toString()
-        }; require(turns.sumOf { it.length } <= 96000)
+        }; require(turns.sumOf { it.length } <= AI_RETAINED_CONTEXT_CHARS)
         val requestArray = json.optJSONArray("requests") ?: JSONArray(); require(requestArray.length() <= 32)
         val requests = (0 until requestArray.length()).map { index -> AiRequestLog.decode(requestArray.getJSONObject(index)).let {
             if (!it.complete) it.copy(complete = true, failure = AiFailure.Interrupted) else it

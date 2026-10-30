@@ -44,6 +44,7 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     var cloning by remember { mutableStateOf(false) }
     var cloneUrl by remember { mutableStateOf("") }
     var adding by rememberSaveable { mutableStateOf(false) }
+    var binding by rememberSaveable { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     var templateName by rememberSaveable { mutableStateOf(ProjectTemplate.Other.name) }
@@ -128,6 +129,11 @@ PageHeading(stringResource(R.string.projects_title)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(project.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 ProjectKindsText(project)
+                                val boundPath = workbench.projects.bindingPath(project.id)
+                                Text(stringResource(if (boundPath == null) R.string.local_project_managed_label else R.string.local_project_bound_label),
+                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (boundPath != null) Text(boundPath, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                             IconButton(onClick = { actions = project }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
                         }
@@ -147,7 +153,9 @@ PageHeading(stringResource(R.string.projects_title)) {
     if (adding) AddProjectSheet(enabled = !state.busy, onDismiss = { adding = false },
         onImport = { adding = false; importer.launch(null) },
         onCreate = { adding = false; creating = true },
-        onClone = { adding = false; cloning = true })
+        onClone = { adding = false; cloning = true },
+        onBind = { adding = false; binding = true })
+    if (binding) LocalProjectBindingSheet(!state.busy, { binding = false }, workbench::bindLocalProject)
     if (creating) WorkbenchSheet(stringResource(R.string.create_project), { creating = false }, stringResource(R.string.library_description)) {
         // A restored saveable may name a template that no longer exists; fall back to Other everywhere.
         val selectedTemplate = ProjectTemplates.entries.firstOrNull { it.name == templateName } ?: ProjectTemplate.Other
@@ -186,7 +194,7 @@ PageHeading(stringResource(R.string.projects_title)) {
         }
     } }
     removing?.let { project -> AlertDialog(onDismissRequest = { removing = null }, title = { Text(stringResource(R.string.remove_project)) },
-        text = { Text(stringResource(R.string.remove_confirmation, project.name)) },
+        text = { Text(stringResource(if (workbench.projects.isBound(project.id)) R.string.local_project_unbind_confirmation else R.string.remove_confirmation, project.name)) },
         confirmButton = { TextButton(onClick = { removing = null; onOpened(null); workbench.removeProject(project.id) }) { Text(stringResource(R.string.remove)) } },
         dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
@@ -263,7 +271,9 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             IconButton(onClick = onBack) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_library)) }
             Column(Modifier.weight(1f)) {
                 Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(R.string.working_copy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(workbench.projects.bindingPath(project.id) ?: stringResource(R.string.working_copy),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Box {
                 IconButton(onClick = { menu = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
@@ -398,12 +408,15 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
 /** Existing project entry points, exposed before the name-only creation form. */
 @Composable
 internal fun AddProjectSheet(enabled: Boolean, onDismiss: () -> Unit, onImport: () -> Unit,
-                             onCreate: () -> Unit, onClone: () -> Unit) {
-    WorkbenchSheet(stringResource(R.string.mobile_add_project), onDismiss, stringResource(R.string.library_description)) {
+                             onCreate: () -> Unit, onClone: () -> Unit, onBind: (() -> Unit)? = null) {
+    WorkbenchSheet(stringResource(R.string.mobile_add_project), onDismiss,
+        stringResource(if (onBind == null) R.string.library_description else R.string.local_project_source_hint)) {
         ProjectEntryOption(stringResource(R.string.mobile_import_source), stringResource(R.string.mobile_import_source_hint),
             Glyph.Import, enabled, primary = true, onClick = onImport)
         ProjectEntryOption(stringResource(R.string.mobile_create_empty), stringResource(R.string.mobile_create_empty_hint),
             Glyph.ProjectAdd, enabled, onClick = onCreate)
+        if (onBind != null) ProjectEntryOption(stringResource(R.string.local_project_bind), stringResource(R.string.local_project_bind_hint),
+            Glyph.Projects, enabled, onClick = onBind)
         ProjectEntryOption(stringResource(R.string.git_clone), stringResource(R.string.mobile_clone_hint),
             Glyph.History, enabled, onClick = onClone)
     }

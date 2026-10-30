@@ -22,7 +22,7 @@ UI 展示生命周期感知状态并派发事件，不直接执行网络、安�
 
 ## 文件与存储
 
-项目注册由 AtomicFile 保存，工作副本位于 `files/workspaces/<uuid>`；选择项和普通设置使用 SharedPreferences。SAF URI 只交由文档提供者读写，不推测 Linux 路径。导入导出是有界复制，不隐式同步原目录。
+项目注册由 AtomicFile 保存，私有工作副本位于 `files/workspaces/<uuid>`；真实目录绑定另存版本化映射，不移动源码。统一目录解析供编辑器、文件工具与执行环境使用，绑定项目以显式 PRoot argv 挂载到 `/workspace/<uuid>`；解除绑定只移除登记和私有记录。外部目录不可访问时保留登记并报错，不回退到副本。选择项和普通设置使用 SharedPreferences。SAF URI 只交由文档提供者读写，不推测 Linux 路径。导入导出是有界复制，不隐式同步原目录。
 
 ProjectApkInstaller 在用户确认后于 IO 线程生成有界 APK 缓存副本，拒绝目录穿越和符号链接，通过 FileProvider 向系统安装器授予只读 URI 权限。提供者只暴露 `cache/apk-install/`；未知来源许可和最终安装由系统界面确认，不直接暴露项目目录或静默安装。
 

@@ -103,4 +103,53 @@ class AiModelsDeviceTest {
             main { models.cancelProbe() }
         }
     }
+    @Test(timeout = 100000) fun advancedConfigurationEncryptsHeadersAndRequiresExplicitCrossOriginReplacement() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val options = AiContextOptions(128000, false, 75, 8000)
+            val parameters = AiParameters(thinking = AiThinking.Enabled, reasoningEffort = AiReasoningEffort.High,
+                frequencyPenalty = 0.4, presencePenalty = -0.2, seed = 42)
+            val draft = draft(f).copy(parameters = parameters, context = options,
+                replacementHeaders = mapOf("X-Api-Key" to "HEADER_FIXTURE_PRIVATE"))
+            f.config.saveProfile(draft)
+            val loaded = AiConfigStore(context, f.token, f.alias)
+            assertEquals(options, loaded.load().context); assertEquals(parameters, loaded.load().parameters)
+            assertEquals(mapOf("X-Api-Key" to "HEADER_FIXTURE_PRIVATE"), loaded.load().requestHeaders)
+            assertEquals(listOf("X-Api-Key"), loaded.catalog().active!!.headerNames)
+            val serialized = File(context.filesDir, "${f.token}-profiles-v2.json").readText()
+            assertFalse(serialized.contains("HEADER_FIXTURE_PRIVATE"))
+            val retained = draft.copy(replacementHeaders = null)
+            f.config.saveProfile(retained); assertEquals("HEADER_FIXTURE_PRIVATE", f.config.load().requestHeaders["X-Api-Key"])
+            try {
+                f.config.resolve(retained.copy(endpoint = "https://other.invalid/v1", replacementKey = "")); fail("Headers must not cross origins implicitly")
+            } catch (_: AiOriginChanged) { }
+            val cleared = f.config.resolve(retained.copy(endpoint = "https://other.invalid/v1", replacementKey = "", replacementHeaders = emptyMap()))
+            assertTrue(cleared.requestHeaders.isEmpty())
+            f.enqueue("HEADER_FIXTURE_PRIVATE")
+            var log: AiRequestLog? = null
+            f.transport.request(f.config.load(), org.json.JSONArray().put(JSONObject().put("role", "user").put("content", "fixture")), org.json.JSONArray(), observe = { log = it }) { }
+            val recorded = f.server.takeRequest(2, TimeUnit.SECONDS)!!
+            assertEquals("HEADER_FIXTURE_PRIVATE", recorded.getHeader("X-Api-Key"))
+            val payload = JSONObject(recorded.body.readUtf8())
+            assertEquals("enabled", payload.getJSONObject("thinking").getString("type"))
+            assertEquals("high", payload.getString("reasoning_effort")); assertEquals(42, payload.getInt("seed"))
+            assertEquals(0.4, payload.getDouble("frequency_penalty"), 0.00001)
+            assertFalse(log.toString().contains("HEADER_FIXTURE_PRIVATE"))
+            f.server.enqueue(MockResponse().setBody("{\"data\":[{\"id\":\"fixture-code\"}]}"))
+            f.transport.models(f.config.load())
+            assertEquals("HEADER_FIXTURE_PRIVATE", f.server.takeRequest(2, TimeUnit.SECONDS)!!.getHeader("X-Api-Key"))
+        }
+    }
+    @Test(timeout = 45000) fun customHeadersAreNeverForwardedThroughRedirects() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            f.server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", f.server.url("/redirected")))
+            val config = f.config.load().copy(requestHeaders = mapOf("X-Api-Key" to "REDIRECT_FIXTURE_PRIVATE"))
+            try {
+                f.transport.request(config, org.json.JSONArray().put(JSONObject().put("role", "user").put("content", "fixture")), org.json.JSONArray()) { }
+                fail("A redirect must not receive credentials")
+            } catch (error: AiTransportException) { assertEquals(302, error.status) }
+            assertEquals(1, f.server.requestCount)
+            val request = f.server.takeRequest(2, TimeUnit.SECONDS)!!
+            assertEquals("/v1/chat/completions", request.path)
+        }
+    }
 }

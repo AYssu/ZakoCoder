@@ -49,9 +49,14 @@ data class AiRequestLog(
 }
 
 /** Redact the active credential even if echoed by a service or accidentally present in a prompt. */
-class AiLogRedactor(private val key: String) {
+class AiLogRedactor(key: String, additionalSecrets: Collection<String> = emptyList()) {
+    private val secrets = (additionalSecrets + key).filter(String::isNotEmpty).flatMap { secret ->
+        // Diagnostics include serialized JSON; header values may legally contain quotes/backslashes.
+        val escaped = secret.replace("\\", "\\\\").replace("\"", "\\\"")
+        listOf(secret, escaped, escaped.replace("/", "\\/"), escaped.replace("</", "<\\/"))
+    }.distinct().sortedByDescending(String::length)
     fun clean(value: String): String {
-        val withoutKey = if (key.isNotEmpty()) value.replace(key, "[REDACTED]") else value
+        val withoutKey = secrets.fold(value) { text, secret -> text.replace(secret, "[REDACTED]") }
         return withoutKey.replace(bearer, "$1[REDACTED]").replace(secretShape, "[REDACTED]")
     }
     override fun toString() = "AiLogRedactor(<redacted>)"
