@@ -14,6 +14,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class AiConversationDeviceTest {
+    @org.junit.Before fun foreground() = warmDeviceActivity()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private suspend fun await(condition: () -> Boolean) = withTimeout(25000) { while (!condition()) delay(40) }
@@ -64,6 +65,37 @@ class AiConversationDeviceTest {
                 assertEquals(freshId, restored.state.value.conversationId)
                 assertEquals(1, restored.state.value.conversations.size)
             }
+        }
+    }
+
+    @Test(timeout = 120000) fun forkPersistsTimingAndLeavesOriginalAndFilesUntouched() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("fork-fixture") }; ready(ai)
+            val source = File(f.root, "kept.txt").apply { writeText("current bytes") }
+            repeat(2) { index ->
+                f.enqueue("reply-$index")
+                main { ai.send("prompt-$index") }; await { !ai.state.value.active }
+                assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS))
+            }
+            val original = ai.state.value.conversationId
+            val timing = ai.state.value.turnTimings.first()
+            assertNotNull(timing.finished)
+            var branched = false
+            withContext(Dispatchers.Main) { branched = ai.forkConversation(original, 2) }
+            assertTrue(branched)
+            val fork = ai.state.value.conversationId
+            assertNotEquals(original, fork)
+            assertEquals(1, ai.state.value.turn)
+            assertTrue(ai.state.value.timeline.none { it.turn >= 2 })
+            assertEquals("current bytes", source.readText())
+            lateinit var reopened: AiController
+            main { reopened = controller(f); reopened.select("fork-fixture") }; ready(reopened)
+            assertEquals(fork, reopened.state.value.conversationId)
+            assertEquals(timing, reopened.state.value.turnTimings.single())
+            main { reopened.conversation(original) }; await { !reopened.state.value.permissionsLoading }
+            assertEquals(2, reopened.state.value.turn)
+            assertTrue(reopened.state.value.timeline.any { it.text == "prompt-1" })
         }
     }
 

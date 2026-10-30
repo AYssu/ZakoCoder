@@ -16,7 +16,9 @@ ZakoCoder 使用Sora原生编辑器，以Kotlin/Compose页面承载AndroidView�
 
 普通文件点击进入全屏编辑层，显示文件名、路径/未保存状态、行号、查找和保存；支持中文IME、选择复制、撤销/重做及区分大小写的字面量查找替换。
 
-基础TextMate词法着色覆盖Kotlin、Java、JavaScript/TypeScript、Python、Shell、JSON、C/C++。其他受支持UTF-8文件按纯文本打开。着色不是完整解析或语义诊断；没有LSP、跨文件语义补全或编辑器内联AI补全。主题和词法资源离线加载。
+基础TextMate词法着色覆盖 Kotlin、Java、JavaScript/TypeScript、Python、Shell、BAT/CMD、Markdown、HTML/CSS、YAML/TOML/XML、SQL、Go、Rust、Dockerfile、Makefile、JSON、C/C++ 与 Diff。识别常见扩展名、Shell 配置文件名和有界首行 shebang；Fish 采用基础 Shell 规则，Vue/Svelte 采用基础 HTML 规则，尚不含完整嵌入语言。其他受支持 UTF-8 文件按纯文本打开。着色不是完整解析或语义诊断；没有LSP、跨文件语义补全或编辑器内联AI补全。主题和词法资源离线加载。BAT、Shell 等脚本在编辑器中打开，不自动执行；Windows BAT 的运行仍需其对应执行环境。
+
+Markdown 文件在编辑器中提供“编辑 / 预览”切换，预览当前缓冲内容（包括未保存修改），不自动保存；返回编辑保留撤销与光标。原生渲染标题、列表、表格与代码块，不执行 HTML、不加载外部图片；外部链接点击后确认再交给浏览器。超过 64k 字符的预览有明确范围提示，可查看完整原文，原文件不截断。
 
 最多8个编辑缓冲区，可从项目文件页或编辑器加号打开，多文件切换并关闭当前页签。同名文件页签使用可区分路径；当前路径与未保存状态仍可核对。关闭脏页签或离开未保存文档需明确选择保存、继续编辑或放弃。
 

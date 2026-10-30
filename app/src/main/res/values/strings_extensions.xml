@@ -56,7 +56,6 @@
     <string name="mcp_save_disabled">保存后服务为停用状态；需要再次启用并确认。未保存的敏感输入仅保留在当前编辑页内存；保存后由本机安全存储保管。</string>
     <string name="mcp_invalid_fields">参数必须为字符串数组，环境变量与请求头必须为字符串对象。</string>
     <string name="mcp_save">保存配置</string>
-    <string name="mcp_import_hint">粘贴标准 mcpServers JSON。全部导入为停用状态，忽略 autoApprove；不会覆盖已有同名服务。配置可能含密钥，默认隐藏。</string>
     <string name="mcp_json">MCP JSON 配置</string>
     <string name="mcp_catalog_limited">工具目录超过显示或分页预算，只列出部分条目；未展示不代表不存在。</string>
 </resources>

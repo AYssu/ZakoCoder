@@ -58,14 +58,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         selectedBundles = selectedBundles.filter { id -> ToolBundles.catalog.any { it.id == id && ToolBundles.status(it, state.bundleTools) != BundleStatus.Ready } }
     }
     Column(Modifier.fillMaxSize()) {
-        PageHeading(stringResource(R.string.environment_title)) {
-            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            OutlinedIconButton(onClick = workbench::doctor, modifier = Modifier.size(48.dp), shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), enabled = !state.busy && !state.checkingTools && !state.checkingPlans) {
-                WorkbenchIcon(Glyph.Refresh, Modifier.size(17.dp), description = stringResource(R.string.check_tools))
-            }
-            }
-        }
+        PageHeading(stringResource(R.string.environment_title))
     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
         item { Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer,
             border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF1E3450) else androidx.compose.ui.graphics.Color(0xFFE3EAFB))) {

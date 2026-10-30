@@ -33,7 +33,7 @@ TextMate 传递依赖包括 Gson 2.13.1（Apache-2.0）、JCodings 1.0.63、Joni
 
 当前调试构建使用固定验证制品，正式发行前需自行编译替换。来源 https://github.com/AAswordman/OperitTerminalCore ，提交 `e4442bc6a047b6165bf59103721ad143149c620d`。固定 ARM64 PRoot、loader 及 SHA-256 见 [runtime/artifacts.json](runtime/artifacts.json)。构建脚本从该固定提交下载到忽略的 `runtime-artifacts/`，每次构建校验，不读取本地参考源码。
 
-来源仓库声明 LGPL-3.0；PRoot 上游为 GPL-2.0。该声明不能替代每个原生制品准确的对应源码、补丁、工具链与构建说明，当前尚未确认完整对应关系。因此仅用于本地调试验证：Release 任务直接阻止，CI 不上传 APK。正式发行必须固定并公开自编译输入和构建流程、履行实际组件许可证及对应源码义务，重跑真机验证；不能仅修改包名或改一个许可证标签即发行。来源许可证副本保留在 APK assets/licenses。
+来源仓库声明 LGPL-3.0；PRoot 上游为 GPL-2.0。该声明不能替代每个原生制品准确的对应源码、补丁、工具链与构建说明，当前尚未确认完整对应关系。当前仅用于调试验证：Release 任务直接阻止，常规 CI 不上传 APK；维护者可通过[手动打包工作流](docs/RELEASING.md#手动打包测试-apk)生成 Debug 测试 Artifact，不代表正式发行的来源材料与许可要求已经完成。正式发行必须固定并公开自编译输入和构建流程、履行实际组件许可证及对应源码义务，重跑真机验证；不能仅修改包名或改一个许可证标签即发行。来源许可证副本保留在 APK assets/licenses。
 
 ## Ubuntu 基础系统
 

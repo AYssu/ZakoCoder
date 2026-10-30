@@ -55,7 +55,12 @@ internal object AiMarkdownDocument {
 
 @OptIn(FlowPreview::class)
 @Composable
-internal fun AiMarkdown(text: String, onLink: (String) -> Unit) {
+internal fun AiMarkdown(
+    text: String,
+    projectId: String? = null,
+    onOpenProjectPath: ((String) -> Unit)? = null,
+    onLink: (String) -> Unit,
+) {
     var document by remember { mutableStateOf<Node?>(null) }
     var fullTextLength by rememberSaveable { mutableStateOf<Int?>(null) }
     val current by rememberUpdatedState(text)
@@ -72,7 +77,7 @@ internal fun AiMarkdown(text: String, onLink: (String) -> Unit) {
         }
         SelectionContainer {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                document?.let { root -> AiMarkdownDocument.children(root).forEach { MarkdownBlock(it, onLink, 0) } }
+                document?.let { root -> AiMarkdownDocument.children(root).forEach { MarkdownBlock(it, onLink, 0, projectId, onOpenProjectPath) } }
             }
         }
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
@@ -86,66 +91,88 @@ internal fun AiMarkdown(text: String, onLink: (String) -> Unit) {
 }
 
 @Composable
-private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int) {
+private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, projectId: String?, onOpenProjectPath: ((String) -> Unit)?) {
     if (depth > 16) return
     val children = AiMarkdownDocument.children(node)
     when (node) {
-        is Heading -> Text(inline(node, onLink), fontWeight = FontWeight.SemiBold,
+        is Heading -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
             fontSize = when (node.level) { 1 -> 21.sp; 2 -> 18.sp; else -> 15.sp }, lineHeight = 27.sp)
-        is org.commonmark.node.Paragraph -> Text(inline(node, onLink), fontSize = 13.sp, lineHeight = 22.sp)
+        is org.commonmark.node.Paragraph -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 13.sp, lineHeight = 22.sp)
         is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40))
         is IndentedCodeBlock -> CodeBlock(node.literal, "")
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
             Surface(Modifier.width(3.dp).heightIn(min = 30.dp), color = MaterialTheme.colorScheme.primary) { }
             Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                children.forEach { MarkdownBlock(it, onLink, depth + 1) }
+                children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
             }
         }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             children.forEachIndexed { index, item -> Row {
-                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.width(26.dp), fontSize = 13.sp)
+                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = 13.sp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1) }
+                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
                 }
             } }
         }
         is ThematicBreak -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        is TableBlock -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-            children.flatMap { AiMarkdownDocument.children(it) }.forEach { row -> Row {
-                AiMarkdownDocument.children(row).forEach { cell -> Surface(border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        is TableBlock -> Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            children.flatMap { AiMarkdownDocument.children(it) }.forEach { row -> Row(Modifier.height(IntrinsicSize.Min)) {
+                AiMarkdownDocument.children(row).forEach { cell -> Surface(modifier = Modifier.width(160.dp).fillMaxHeight(), border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                     color = if (cell is TableCell && cell.isHeader) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
-                    Text(inline(cell, onLink), Modifier.width(160.dp).padding(9.dp), fontSize = 12.sp, lineHeight = 19.sp,
+                    Text(inline(cell, onLink, projectId, onOpenProjectPath), Modifier.fillMaxWidth().padding(12.dp), fontSize = 12.sp, lineHeight = 19.sp,
                         fontWeight = if (cell is TableCell && cell.isHeader) FontWeight.SemiBold else null)
                 } }
             } }
         }
         is HtmlBlock -> Text(node.literal, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1) }
+        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
     }
 }
 
 @Composable
-private fun inline(node: Node, onLink: (String) -> Unit): AnnotatedString {
+private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onOpenProjectPath: ((String) -> Unit)?): AnnotatedString {
     val colors = MaterialTheme.colorScheme
     return buildAnnotatedString {
-        fun appendNode(current: Node, depth: Int) {
+        fun projectLink(label: String, relative: String) {
+            withLink(LinkAnnotation.Clickable("project:$relative",
+                TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
+                onOpenProjectPath?.invoke(relative)
+            }) { append(label) }
+        }
+        fun appendReferences(value: String, whole: Boolean = false) {
+            val resolved = if (whole && onOpenProjectPath != null) AiProjectPaths.resolve(value, projectId) else null
+            if (resolved != null) { projectLink(value, resolved); return }
+            val references = if (onOpenProjectPath != null) AiProjectPaths.references(value, projectId) else emptyList()
+            var offset = 0
+            references.forEach { reference ->
+                append(value.substring(offset, reference.start))
+                projectLink(value.substring(reference.start, reference.end), reference.relative)
+                offset = reference.end
+            }
+            append(value.substring(offset))
+        }
+        fun appendNode(current: Node, depth: Int, allowPaths: Boolean = true) {
             if (depth > 32) return
             when (current) {
-                is org.commonmark.node.Text -> append(current.literal)
-                is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceContainerHigh, color = colors.primary)) { append(current.literal) }
-                is SoftLineBreak -> append("\n")
+                is org.commonmark.node.Text -> if (allowPaths) appendReferences(current.literal) else append(current.literal)
+                is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceContainerHigh, color = colors.primary)) { if (allowPaths) appendReferences(current.literal, whole = true) else append(current.literal) }
+                is SoftLineBreak -> append(" ")
                 is HardLineBreak -> append("\n")
                 is HtmlInline -> append(current.literal)
-                is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) } }
-                is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) } }
+                is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, allowPaths) } }
+                is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, allowPaths) } }
                 is Link -> {
-                    if (AiMarkdownDocument.externalLink(current.destination)) withLink(LinkAnnotation.Clickable(current.destination,
-                        TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) { onLink(current.destination) }) {
-                        AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) }
-                    } else AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) }
+                    val relative = if (onOpenProjectPath != null) AiProjectPaths.resolve(current.destination, projectId) else null
+                    val target = if (AiMarkdownDocument.externalLink(current.destination)) current.destination else null
+                    if (relative != null || target != null) withLink(LinkAnnotation.Clickable(relative ?: target!!,
+                        TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
+                        if (relative != null) onOpenProjectPath?.invoke(relative) else onLink(target!!)
+                    }) {
+                        AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
+                    } else AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
                 }
-                is Image -> { append("["); AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) }; append("]") }
-                else -> AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1) }
+                is Image -> { append("["); AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, allowPaths) }; append("]") }
+                else -> AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, allowPaths) }
             }
         }
         AiMarkdownDocument.children(node).forEach { appendNode(it, 0) }

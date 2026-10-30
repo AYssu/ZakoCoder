@@ -182,8 +182,8 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
     }
     if (picker) {
         var query by remember { mutableStateOf("") }
-        AiFullScreen(stringResource(R.string.ai_models_picker), { picker = false; ai.models.cancelProbe() }) {
-        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        WorkbenchSheet(stringResource(R.string.ai_models_picker), { picker = false; ai.models.cancelProbe() }) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ModelField(query, { query = it }, R.string.ai_models_search)
             if (state.probe == AiProbe.Models) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.probeMessage.isNotEmpty()) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)

@@ -1,0 +1,50 @@
+{
+  "name": "go",
+  "scopeName": "source.zako.go",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block",
+      "begin": "/\\*",
+      "end": "\\*/"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "`",
+      "end": "`"
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\b(?:package|import|func|var|const|type|struct|interface|map|chan|if|else|for|range|switch|case|default|select|go|defer|return|break|continue|fallthrough|goto|true|false|nil)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<resources>
+    <string name="ai_skill_add_custom">新增自定义 Skill</string>
+    <string name="ai_skill_import_custom">导入 Skill 文件或 ZIP</string>
+    <string name="ai_skill_custom_name">名称</string>
+    <string name="ai_skill_custom_description">适用场景与说明</string>
+    <string name="ai_skill_custom_body">指令正文</string>
+    <string name="ai_skill_custom_document">SKILL.md 完整内容</string>
+    <string name="ai_skill_custom_hint">保存在当前项目 .zakocoder/skills/，保存后需手动勾选启用。支持 skill.md（不限大小写）或 ZIP；ZIP 中每个 Skill 文件夹须含 SKILL.md，可附带脚本、图片等资源，不会自动执行。</string>
+    <string name="ai_skill_custom_error">无法保存。请检查名称、说明和正文；完整内容最多 24,000 字符、64,000 字节，项目最多 32 个自定义 Skill。</string>
+    <string name="ai_skill_custom_read_error">无法读取：请选择 UTF-8 skill.md（最多 64,000 字节）或 ZIP（最多 5 MiB）。ZIP 最多 256 项、展开 16 MiB、单文件 2 MiB，须包含有效 Skill，且不能有链接或越界路径。若页面重建，请重新选择 ZIP。</string>
+    <string name="ai_skill_custom_need_project">选择项目后，可新增或导入自定义 Skill。</string>
+    <string name="ai_skill_custom_import_hint">保留原文件全部内容，须包含以 --- 分隔的 name 和 description 元数据及非空正文。</string>
+    <string name="ai_skill_custom_saved">已保存，请在列表中手动启用。</string>
+    <string name="ai_skill_custom_archive_hint">将导入各文件夹中的 SKILL.md 和配套文件。整批保存，不覆盖已有 Skill；不会执行脚本、展开内部压缩包或自动启用。仅支持 ZIP，不支持 RAR、7z。</string>
+    <string name="ai_skill_custom_archive_count">将导入 %1$d 个 Skill</string>
+</resources>

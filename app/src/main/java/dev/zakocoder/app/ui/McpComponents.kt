@@ -327,17 +327,22 @@ private fun McpImportDialog(controller: McpController, editable: Boolean, close:
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var source by remember { mutableStateOf("") }
+    var singleName by remember { mutableStateOf("") }
     var reveal by remember { mutableStateOf(false) }
     AiFullScreen(stringResource(R.string.mcp_import), close) {
         Column(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(stringResource(R.string.mcp_import_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.mcp_import_formats_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(singleName, { if (it.length <= 100) singleName = it },
+                    label = { Text(stringResource(R.string.mcp_import_single_name)) },
+                    supportingText = { Text(stringResource(R.string.mcp_import_single_name_hint)) },
+                    singleLine = true, enabled = editable && !state.busy, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(source, { if (it.length <= 524288) source = it }, label = { Text(stringResource(R.string.mcp_json)) }, minLines = 6, maxLines = 14, enabled = editable && !state.busy, visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
                 Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(reveal, { reveal = it }); Text(stringResource(R.string.mcp_reveal), style = MaterialTheme.typography.bodySmall) }
             }
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 McpFormError(state.error)
-                WorkbenchPrimaryButton(onClick = { scope.launch { controller.importJson(source).join(); if (controller.state.value.error.isEmpty()) close() } }, enabled = editable && !state.busy && !state.loading && source.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.mcp_import)) }
+                WorkbenchPrimaryButton(onClick = { scope.launch { controller.importJson(source, singleName).join(); if (controller.state.value.error.isEmpty()) close() } }, enabled = editable && !state.busy && !state.loading && source.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.mcp_import)) }
             }
         }
     }

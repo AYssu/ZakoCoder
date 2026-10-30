@@ -22,7 +22,7 @@ class EditorLanguages(private val context: Context) {
                 themes.loadTheme(IThemeSource.fromInputStream(it, "zako-$name.json", Charsets.UTF_8))
             }
         }
-        for (name in listOf("kotlin", "java", "javascript", "typescript", "python", "shell", "json", "c", "diff")) {
+        for (name in EditorLanguageResolver.bundled) {
             context.assets.open("editor/$name.tmLanguage.json").use {
                 GrammarRegistry.getInstance().loadGrammar(DefaultGrammarDefinition.withGrammarSource(
                     IGrammarSource.fromInputStream(it, "$name.tmLanguage.json", Charsets.UTF_8), name, "source.zako.$name"))
@@ -30,15 +30,5 @@ class EditorLanguages(private val context: Context) {
         }
         prepared = true
     }
-    fun language(path: String): String? = when (path.substringAfterLast('.', "").lowercase()) {
-        "kt", "kts" -> "kotlin"
-        "java" -> "java"
-        "js", "jsx", "mjs", "cjs" -> "javascript"
-        "ts", "tsx" -> "typescript"
-        "py", "pyw" -> "python"
-        "sh", "bash", "zsh" -> "shell"
-        "json", "jsonc" -> "json"
-        "c", "h", "cpp", "hpp", "cc", "cxx" -> "c"
-        else -> null
-    }
+    fun language(path: String, firstLine: String = ""): String? = EditorLanguageResolver.resolve(path, firstLine)
 }

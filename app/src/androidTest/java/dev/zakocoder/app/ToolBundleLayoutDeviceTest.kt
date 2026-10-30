@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** Isolated native component: 360dp / 1.3 font scale, both themes, no global display changes. */
 class ToolBundleLayoutDeviceTest {
+    @org.junit.Before fun foreground() = warmDeviceActivity()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private suspend fun await(label: String, predicate: () -> Boolean) {
@@ -52,6 +53,28 @@ class ToolBundleLayoutDeviceTest {
         while (!node.isClickable && !node.isSelected && node.parent != null) node = node.parent
         assertTrue("Clickable or selected control $label", node.isClickable || node.isSelected)
         return node
+    }
+    private fun visibleTextInRow(row: AccessibilityNodeInfo, label: String): AccessibilityNodeInfo? {
+        val owner = bounds(row)
+        fun walk(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+            // Compose may join merged text with commas rather than newlines. A non-clickable
+            // Surface can also expose its text separately from the row's description node.
+            val rectangle = bounds(node)
+            if (node.isVisibleToUser && !rectangle.isEmpty && owner.contains(rectangle) &&
+                node.text?.toString()?.contains(label) == true) return node
+            return (0 until node.childCount).firstNotNullOfOrNull { node.getChild(it)?.let(::walk) }
+        }
+        return instrumentation.uiAutomation.windows.mapNotNull { it.root }
+            .filter { it.packageName?.toString() == context.packageName }.firstNotNullOfOrNull(::walk)
+    }
+    private fun assertRecommendation(title: Int) {
+        val label = context.getString(R.string.bundle_details, context.getString(title))
+        val row = requireNotNull(find(label)) { "Missing tool row $label" }
+        // Bind to the owning row's bounds: a different tool's badge cannot satisfy this check.
+        val recommendation = requireNotNull(visibleTextInRow(row, context.getString(R.string.environment_bundle_recommended))) {
+            "Missing visible recommendation in $label (row text: ${row.text})"
+        }
+        assertTrue("Recommendation belongs to its visible tool row", bounds(row).contains(bounds(recommendation)))
     }
     private fun bounds(node: AccessibilityNodeInfo) = Rect().also(node::getBoundsInScreen)
     private suspend fun click(label: String) {
@@ -132,11 +155,22 @@ class ToolBundleLayoutDeviceTest {
                     await("header and filters") { find(context.getString(R.string.manage_tools)) != null && find(filters[2]) != null }
                     assertEquals("360dp fixture width", (360 * density).toDouble(), width.get().toDouble(), 1.0)
                     val heading = bounds(requireNotNull(find(context.getString(R.string.tool_bundles))))
+                    val refresh = bounds(control(context.getString(R.string.refresh)))
                     val manage = bounds(control(context.getString(R.string.manage_tools)))
+                    val headingLineHeight = WorkbenchTypography.titleSmall.lineHeight.value * 1.3f * density
+                    assertTrue("Title remains a single text line", heading.height() <= headingLineHeight + 2)
+                    assertFalse("Title and refresh do not overlap", Rect.intersects(heading, refresh))
                     assertFalse("Title and manage do not overlap", Rect.intersects(heading, manage))
-                    assertTrue("Title stays on header row", heading.centerY() in manage.top..manage.bottom)
-                    assertTrue("Manage touch height", manage.height() + 1 >= 48 * density)
-                    assertTrue("Manage touch width", manage.width() + 1 >= 48 * density)
+                    assertFalse("Refresh and manage do not overlap", Rect.intersects(refresh, manage))
+                    assertTrue("Title stays on refresh row", heading.centerY() in refresh.top..refresh.bottom)
+                    assertTrue("Title stays on manage row", heading.centerY() in manage.top..manage.bottom)
+                    assertTrue("Refresh and manage share header row", refresh.centerY() in manage.top..manage.bottom)
+                    listOf("Refresh" to refresh, "Manage" to manage).forEach { (label, rect) ->
+                        assertTrue("$label touch height", rect.height() + 1 >= 48 * density)
+                        assertTrue("$label touch width", rect.width() + 1 >= 48 * density)
+                    }
+                    assertRecommendation(R.string.bundle_zsh)
+                    assertRecommendation(R.string.bundle_git)
                     val tabBounds = filters.map { bounds(control(it)) }
                     tabBounds.forEach { rect ->
                         assertTrue("Filter row follows header", rect.top >= manage.bottom)

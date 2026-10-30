@@ -1,0 +1,41 @@
+{
+  "name": "html",
+  "scopeName": "source.zako.html",
+  "patterns": [
+    {
+      "name": "comment.block",
+      "begin": "<!--",
+      "end": "-->"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.control",
+      "match": "</?[A-Za-z][A-Za-z0-9:_-]*|/?>"
+    },
+    {
+      "name": "constant.character.escape",
+      "match": "&(?:#x[0-9a-fA-F]+|#[0-9]+|[A-Za-z]+);"
+    }
+  ]
+}

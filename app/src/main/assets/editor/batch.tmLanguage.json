@@ -1,0 +1,35 @@
+{
+  "name": "batch",
+  "scopeName": "source.zako.batch",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "(?i)^\\s*@?rem\\b.*$"
+    },
+    {
+      "name": "comment.line",
+      "match": "^\\s*::.*$"
+    },
+    {
+      "name": "constant.character.escape",
+      "match": "\\^."
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"|$"
+    },
+    {
+      "name": "constant.character.escape",
+      "match": "%[^%\\r\\n]+%|%[0-9*]|![^!\\r\\n]+!"
+    },
+    {
+      "name": "keyword.control",
+      "match": "(?i)\\b(?:echo|off|on|set|setlocal|endlocal|if|else|for|in|do|call|goto|exit|not|exist|defined|errorlevel|equ|neq|lss|leq|gtr|geq|pushd|popd|cd|chdir|start|pause|choice|shift)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?)\\b"
+    }
+  ]
+}

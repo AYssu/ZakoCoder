@@ -16,6 +16,7 @@ data class AiApproval(val title: String, val detail: String, val eventId: String
 data class AiChange(val path: String, val before: FileBaseline?, val after: FileBaseline)
 data class AiState(val projectId: String? = null, val checkpointId: String? = null, val references: List<AiReference> = emptyList(), val ruleSources: List<String> = emptyList(), val rulesLimited: Boolean = false, val restoring: Boolean = false, val workspaceRevision: Int = 0, val active: Boolean = false, val messages: List<String> = emptyList(),
     val conversationId: String = java.util.UUID.randomUUID().toString(), val turn: Int = 0,
+    val turnTimings: List<AiTurnTiming> = emptyList(),
     val contextSummary: String = "", val contextCompactions: Int = 0, val contextChars: Int = 0,
     val conversations: List<AiConversation> = emptyList(), val contextTurns: List<String> = emptyList(),
     val commandChanges: List<AiCommandChange> = emptyList(), val commandReviewLimited: Boolean = false,
@@ -147,6 +148,46 @@ class AiController(private val context: Context, root: (String) -> File, private
             catch (_: Exception) { if (sessionGeneration == generation && mutable.value.projectId == project) mutable.update { it.copy(permissionsLoading = false, historyError = true, error = context.getString(R.string.ai_history_load_error)) } }
         }
     }
+    /** Branch stored conversation context without changing files or deleting the original. */
+    suspend fun forkConversation(conversation: String, turn: Int): Boolean = scope.async {
+        performConversationFork(conversation, turn)
+    }.await()
+
+    private suspend fun performConversationFork(conversation: String, turn: Int): Boolean {
+        val current = mutable.value
+        val project = current.projectId ?: return false
+        if (current.active || current.restoring || current.permissionsLoading || current.permissionsSaving || current.historyError) return false
+        if (current.conversations.size >= 20) {
+            mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }; return false
+        }
+        retainDraftReferences()
+        val generation = ++sessionGeneration
+        mutable.update { it.copy(permissionsLoading = true) }
+        return try {
+            val loaded = historyMutex.withLock { withContext(Dispatchers.IO) {
+                history.save(project, current)
+                val source = if (conversation == current.conversationId) current else history.load(project, conversation).state
+                require(source?.conversationId == conversation)
+                val fork = source.forkBeforeTurn(turn)
+                AiHistoryStore.Loaded(fork, history.save(project, fork))
+            } }
+            if (sessionGeneration == generation && mutable.value.projectId == project) {
+                grants.clear(); toolGrants.clear(); decision = null
+                restore(loaded, current.policy)
+                true
+            } else false
+        } catch (cancelled: CancellationException) {
+            if (sessionGeneration == generation && mutable.value.projectId == project)
+                mutable.update { it.copy(permissionsLoading = false) }
+            throw cancelled
+        }
+        catch (_: Exception) {
+            if (sessionGeneration == generation && mutable.value.projectId == project) mutable.update {
+                it.copy(permissionsLoading = false, error = context.getString(R.string.ai_history_save_error))
+            }
+            false
+        }
+    }
     fun deleteConversation(id: String) {
         val current = mutable.value; val project = current.projectId ?: return
         if (current.active || current.restoring || current.permissionsLoading || current.permissionsSaving || current.historyError) return
@@ -225,6 +266,63 @@ class AiController(private val context: Context, root: (String) -> File, private
         retry.start()
         return retry
     }
+
+    /** SAF documents remain opaque URIs; bytes are bounded before any parsing or extraction. */
+    suspend fun readSkillPackage(uri: android.net.Uri): ByteArray = withContext(Dispatchers.IO) {
+        require(uri.scheme == "content")
+        val bytes = requireNotNull(context.contentResolver.openInputStream(uri)).use { stream ->
+            val result = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(4096)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = stream.read(buffer)
+                if (count < 0) break
+                require(result.size() + count <= AiSkillArchive.MAX_ZIP_BYTES)
+                result.write(buffer, 0, count)
+            }
+            result.toByteArray()
+        }
+        bytes
+    }
+    suspend fun readSkillDocument(uri: android.net.Uri): String = withContext(Dispatchers.IO) {
+        val bytes = readSkillPackage(uri)
+        require(bytes.size <= AiSkills.MAX_CUSTOM_BYTES)
+        AiSkillArchive.decode(bytes).removePrefix("\uFEFF").also {
+            require(it.length <= AiSkills.MAX_CUSTOM_CHARS && '\u0000' !in it)
+        }
+    }
+    suspend fun skillPackageDigest(bytes: ByteArray): String = withContext(Dispatchers.Default) {
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    }
+    suspend fun inspectSkillArchive(bytes: ByteArray): List<String> = withContext(Dispatchers.IO) {
+        AiSkillArchive.parse(bytes).map { skillStore.validateMarkdown(it.document).first }
+    }
+
+    /** A short project-file mutation uses the same exclusion gate as checkpoint file operations. */
+    suspend fun saveProjectSkill(project: String, conversation: String, name: String, description: String,
+        body: String, imported: Boolean, operationId: String = java.util.UUID.randomUUID().toString(), archive: ByteArray? = null): Boolean = scope.async {
+        val generation = sessionGeneration
+        historyMutex.withLock {
+            val current = mutable.value
+            if (current.projectId != project || current.conversationId != conversation || current.active || current.restoring ||
+                current.permissionsLoading || current.permissionsSaving || current.historyError || current.skillsLoading) return@withLock false
+            mutable.update { it.copy(restoring = true) }
+            try {
+                val skills = withContext(Dispatchers.IO) {
+                    currentCoroutineContext().ensureActive()
+                    if (archive != null) skillStore.importArchive(project, archive, operationId)
+                    else if (imported) skillStore.importMarkdown(project, body, operationId) else skillStore.create(project, name, description, body, operationId)
+                    skillStore.scan(project)
+                }
+                check(sessionGeneration == generation && mutable.value.projectId == project && mutable.value.conversationId == conversation)
+                mutable.update { it.copy(skills = skills, skillError = false, workspaceRevision = it.workspaceRevision + 1) }
+                filesChanged()
+                true
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { false }
+            finally { mutable.update { if (it.projectId == project && it.conversationId == conversation) it.copy(restoring = false) else it } }
+        }
+    }.await()
 
     fun refreshSkills() {
         val project = mutable.value.projectId ?: return
@@ -382,7 +480,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }; return false
         }
         sessionGeneration++
-        mutable.update { it.copy(active = true, interrupted = false, error = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User)
+        mutable.update { it.copy(active = true, interrupted = false, error = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User)
         val references = mutable.value.references.toList()
         mutable.update { it.copy(references = emptyList()) }
         grants.clear(); toolGrants.clear(); epoch++
@@ -426,7 +524,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                     }
                     mutable.update { snapshot ->
                         val reason = snapshot.failureKind ?: AiFailure.Internal
-                        snapshot.copy(approval = null, taskRecovery = "", taskPrompt = "", recoveryNotes = if (snapshot.phase == AiPhase.Completed) emptyList() else boundedRecovery(snapshot.recoveryNotes + recoveryNote(snapshot, reason)))
+                        snapshot.copy(turnTimings = snapshot.turnTimings.map { if (it.turn == snapshot.turn) it.copy(finished = System.currentTimeMillis()) else it }, approval = null, taskRecovery = "", taskPrompt = "", recoveryNotes = if (snapshot.phase == AiPhase.Completed) emptyList() else boundedRecovery(snapshot.recoveryNotes + recoveryNote(snapshot, reason)))
                     }
                     try { persist(final = true) }
                     catch (_: Exception) { /* persist exposes the owning session failure. */ }
@@ -514,8 +612,7 @@ class AiController(private val context: Context, root: (String) -> File, private
 
             discovered.received(ruleDelivery)
             mutable.update { it.copy(drafts = emptyList()) }
-            val assistant = JSONObject().put("role", "assistant").put("content", reply.text)
-            if (reply.calls.isNotEmpty()) assistant.put("tool_calls", JSONArray(reply.calls.map { call -> JSONObject().put("id", call.id).put("type", "function").put("function", JSONObject().put("name", call.name).put("arguments", call.arguments)) }))
+            val assistant = reply.asAssistantMessage()
             messages.put(assistant)
             if (reply.calls.isEmpty()) {
                 var completed = JSONArray()
@@ -524,7 +621,10 @@ class AiController(private val context: Context, root: (String) -> File, private
                     // Summarize complete evidence first; never persist detached calls/results.
                     compactContext(settings, messages, pinnedPrompt, null, messages.length())
                     completed = JSONArray().put(JSONObject().put("role", "user").put("content", pinnedPrompt))
-                        .put(JSONObject().put("role", "assistant").put("content", contextExcerpt(reply.text, 12000)))
+                        .put(JSONObject().put("role", "assistant").put("content", contextExcerpt(reply.text, 12000)).apply {
+                            // A synthetic summary is a new protocol message, never a truncated reasoning trace.
+                            if (reply.reasoningContent != null) put("reasoning_content", "")
+                        })
                 }
                 mutable.update { state ->
                     val turns = state.contextTurns + completed.toString()

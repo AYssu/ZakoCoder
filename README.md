@@ -1,101 +1,148 @@
-# ZakoCoder
+<p align="center">
+  <img src="docs/assets/brand-mark.svg" alt="ZakoCoder" width="80" height="80" />
+</p>
 
-Android 原生 AI 编码工作台。以项目为单位组织代码、终端、模型对话、文件变更和验证记录，在手机上完成编辑、运行与审阅。
+<h1 align="center">ZakoCoder</h1>
 
-使用 Kotlin、Jetpack Compose 和本地 Ubuntu 用户空间，当前版本为 `0.1.0-dev`。面向 ARM64 真机开发；x86_64 和模拟器尚未适配。
+<p align="center"><strong>把项目、编辑器、终端与 AI 助手，放进手机。</strong></p>
 
-## 功能
+<p align="center">Android 原生编码工作台 · 围绕真实项目完成编辑、运行、审阅与验证</p>
 
-| 模块 | 能力 |
+<p align="center">
+  <a href="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml"><img src="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/status-0.1.0--dev-2563EB" alt="开发预览版 0.1.0-dev" />
+  <img src="https://img.shields.io/badge/Android-8.0%2B%20%C2%B7%20ARM64-334155" alt="Android 8.0+ · ARM64" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-334155" alt="Apache-2.0" /></a>
+</p>
+
+<p align="center">
+  <a href="#开始使用">开始使用</a> ·
+  <a href="#功能概览">功能概览</a> ·
+  <a href="#支持范围">支持范围</a> ·
+  <a href="#技术架构">技术架构</a> ·
+  <a href="#开发与贡献">开发与贡献</a>
+</p>
+
+---
+
+ZakoCoder 是面向 Android 手机的独立开源编码工具。你可以导入自己的项目，使用原生编辑器修改代码，在 Ubuntu 用户空间运行开发工具，也可以让 AI 助手参与编码，并逐项查看授权、工具执行、文件变更和验证结果。
+
+项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前为开发预览版，面向 ARM64 真机；已验证设备为 Android 13，其他系统版本与工程兼容性仍在完善。
+
+## 功能概览
+
+| 工作场景 | 你可以做什么 |
 | --- | --- |
-| 项目库 | 创建项目（可选静态网页／Node.js／Python／C++／Go／Rust／Android Java/Kotlin/JNI 初始化模板，选“其他”时为空文件夹）、导入目录副本、克隆公开 HTTPS 仓库、搜索与切换项目 |
-| 代码编辑 | Sora 原生编辑器、语法着色、多文件页签、查找替换、显式保存与本地草稿 |
-| 开发环境 | Ubuntu 24.04、按需选择工具包、异步检测工具与项目根依赖清单 |
-| 终端 | 真实 PTY、最多四个会话、直接键盘输入、辅助键与浏览器预览入口 |
-| AI 编码 | Chat Completions 兼容接口、流式 Markdown、本地会话、项目规则、文件及报错引用、可选 Skill |
-| AI 扩展 | 独立管理会话 Skill 和 MCP 服务；支持 Ubuntu stdio、Streamable HTTP 与旧 SSE，工具调用沿用审批 |
-| 修改审阅 | 工具执行过程、权限审批、只读 Diff、任务检查点与冲突检查 |
-| 验证与诊断 | 项目构建/测试/运行命令、有界日志、退出状态、请求用量和上下文记录 |
-| Git | 状态、初始化、选择暂存和本地提交；不自动推送 |
+| **组织项目** | 创建带初始化模板的项目、导入目录副本、克隆公开 HTTPS 仓库，搜索与切换项目。 |
+| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览。 |
+| **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
+| **与 AI 协作** | 切换模型、流式阅读 Markdown 回复，引用文件、选中代码或构建日志；查看每轮 Token 用量、耗时与请求详情。 |
+| **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务。 |
+| **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
+| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；查看 Git 状态、选择暂存并创建本地提交。 |
 
-网页预览是可选工作流；脚本、库、命令行及其他项目使用各自的工具和验证命令。设置中可配置软件源、DNS、附加 PATH 与 HTTP／SOCKS5 代理（SOCKS5 可选用户名密码，凭据在本地加密保存且界面打码）；SOCKS5 覆盖应用自身下载与 AI 请求（由代理侧解析目标域名）及识别 `ALL_PROXY` 的终端工具（本应用只导出 `socks5://`，域名解析取决于具体工具；配置认证时该变量包含凭据、对 guest 进程可见），apt 等仅识别 HTTP 代理的工具不会走 SOCKS5。
+AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD、HTML/CSS、YAML、SQL、Go、Rust 等常见文件提供基础语法高亮，完整编辑范围见[编辑器说明](docs/EDITOR.md)。
 
 ## 开始使用
 
-1. 在项目库选择“添加项目”，导入已有源码、创建项目（可先选初始化模板，“其他”只建空文件夹）或克隆公开仓库。导入生成应用内工作副本，保留原目录。
-2. 在环境页显式安装 Ubuntu，按项目需要选择工具包。工具检测不会自动安装；项目依赖安装前需确认命令。
-3. 点击文件进入编辑器；在终端页新建项目会话，点击卡片进入终端。返回卡片列表会保留会话，关闭会话会结束其进程。
-4. 在设置的模型配置中填写自己的服务地址、模型与密钥，再显式测试连接。应用不附带模型账户、密钥或预置会话。
-5. 从助手页选择项目并发送任务。按权限策略审批文件和命令操作，在变更页及“更多 → 验收”核对实际结果。模型可从输入框下方切换或添加，盾牌进入项目工具权限。Skill 和 MCP 在“设置 → AI 扩展”管理，也可从输入框下方扩展入口进入。
+### 获取测试安装包
 
-项目规则和 Skill 是模型的任务参考，不会提升工具权限。模型说“完成”不等于构建或测试通过，以实际执行记录为准。
+测试 APK 由维护者通过 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动构建。成功运行的 **Artifacts** 中包含 ARM64 Debug APK、校验摘要和构建信息；产物保留 14 天。没有可用产物时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
-### 网页预览
+当前尚无正式 Release APK。PRoot 制品的自编译与完整来源材料仍需补齐，正式发布构建保持阻止；测试包入口与签名兼容性见[打包说明](docs/RELEASING.md#手动打包测试-apk)。
 
-在项目终端启动服务，再用终端的“预览网页”打开同一手机的浏览器。例如已有 Python 工具包时：
+### 完成第一个项目
+
+1. **添加项目**：在项目库创建项目、导入源码目录或克隆公开仓库。导入会建立应用内工作副本，后续修改不会自动同步原目录。
+2. **准备环境**：在环境页安装 Ubuntu，再按项目需要选择工具包。工具检测不会自动安装依赖。
+3. **开始编辑**：点击文件打开编辑器；Markdown 可切换预览，修改后显式保存。
+4. **配置助手**：在设置中填写模型服务地址、模型和密钥，手动测试连接；也可以先使用编辑器和终端。
+5. **运行并核对**：通过终端或项目命令构建、测试、启动服务；使用 AI 时，核对审批、变更和实际验证结果。
+
+**预览网页**：在项目终端启动开发服务，再通过终端的“预览网页”打开手机浏览器。已有 Python 工具包时，可以在项目目录运行：
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Vite 等工程需先安装项目依赖，再运行自身开发命令。使用实际输出的端口；地址识别不代表服务已经就绪。默认使用回环地址，不自动开放局域网。应用被系统结束后不保证服务继续运行。
+Vite 等工程使用自身的安装和启动命令。按实际输出选择端口；地址出现不代表服务已经就绪。
 
-## 从源码构建
+## 支持范围
 
-需要 JDK 17、Android SDK Platform 36、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3。Gradle Wrapper 固定为 8.13，库版本集中在 `gradle/libs.versions.toml`。
+| 项目 | 当前支持 |
+| --- | --- |
+| 设备 | Android 8.0+，ARM64 真机；当前设备验证覆盖 Android 13。x86_64 / 模拟器尚未适配。 |
+| 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
+| Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。已在手机上验证 ZakoCoder 自身的 Compose + JNI 构建，其他工程兼容性取决于依赖与工具链。 |
+| 模型服务 | Chat Completions 兼容接口与 SSE 工具调用；包含 DeepSeek 推理字段续接适配。具体模型和网关仍需实测，不含本地模型推理。 |
+| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，暂不提供 LSP 或跨文件语义补全。 |
+| Git | 公开 HTTPS 克隆、状态、暂存和本地提交；私有仓库认证、分支合并与冲突界面尚未提供。 |
 
-在 Android Studio 打开根目录，或配置 `ANDROID_HOME`。也可在不提交的 `local.properties` 中设置 `sdk.dir`。首次构建需要联网获取依赖及校验后的运行环境验证制品。
+完整限制与未完成项见[产品范围](docs/PRODUCT.md)、[运行环境](docs/RUNTIME.md)和[路线图](docs/ROADMAP.md)。
+
+### 数据与操作边界
+
+- 项目副本、草稿、会话和日志保存在应用私有存储。卸载或清除数据会删除它们；项目导出是源码副本，不是所有数据的完整备份。
+- AI 任务读取的项目内容会发送到你配置的模型服务。密钥在本机加密保存，项目规则、Skill 与 MCP 输出不会自动提升工具权限。
+- 文件恢复前会检查后续修改；检查点有范围和容量限制，不能回滚安装依赖、网络、数据库等外部副作用。
+- PRoot 用于兼容 Linux 工具，不构成独立安全隔离。系统结束应用后，不保证终端服务继续运行。
+
+## 技术架构
+
+应用采用 **Kotlin + Jetpack Compose** 原生方案。页面展示状态并派发操作，控制器处理任务与生命周期，文件、网络和进程操作由各自模块负责。
+
+| 层次 | 主要实现 |
+| --- | --- |
+| 原生交互 | Jetpack Compose、StateFlow、Sora 编辑器、原生终端视图。 |
+| 编码与协作 | 项目文件、编辑缓冲、Git、AI 会话、工具审批、Skill / MCP、检查点及验证记录。 |
+| 运行环境 | PRoot + Ubuntu、PTY 会话、开发工具包及项目命令管理。 |
+| 传输与存储 | OkHttp / SSE、CommonMark 文本解析、应用私有存储、Android Keystore 配置加密。 |
+
+模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
+
+## 开发与贡献
+
+欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。
+
+| 文档 | 内容 |
+| --- | --- |
+| [贡献指南](CONTRIBUTING.md) | 分支、Commit、PR、审查及合并流程。 |
+| [开发与测试](docs/DEVELOPMENT.md) | 工具链、源码构建、仓库检查与真机验证。 |
+| [界面规范](docs/DESIGN.md) | 原生页面结构、交互与移动布局约定。 |
+| [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
+| [发布流程](docs/RELEASING.md) | 测试包构建、签名和正式发行条件。 |
+| [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |
+
+<details>
+<summary><strong>开发者快速构建</strong></summary>
+
+准备 JDK 17、Android SDK Platform 36、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3，配置 `ANDROID_HOME` 或本地 `local.properties`，然后运行：
 
 ```sh
 python3 scripts/check_repository.py
 ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest
 ```
 
-调试 APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。最低 Android 版本为 8.0（API 26），当前真机覆盖为 Android 13 ARM64，最低版本尚未验收。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取依赖及校验后的运行验证制品；不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
 
-无需本地构建时，在 GitHub 的 **Actions → Build Debug APK → Run workflow** 手动打包，通常选择 `main`。成功后从运行摘要或 Artifacts 下载测试包压缩文件，内含 ARM64 Debug APK、SHA-256 与提交信息，保留 14 天。使用固定的 CI 测试签名；与本机签名不同的包无法直接覆盖安装。首次配置和限制见[手动测试包](docs/RELEASING.md#手动打包测试-apk)。
+</details>
 
-当前 **Release 构建被阻止**：PRoot 验证制品的可复现自编译与完整源码对应关系尚未完成。公开源码不代表已具备正式 APK 发行条件，准确来源、许可证和限制见 [第三方材料](THIRD_PARTY.md) 与 [发布流程](docs/RELEASING.md)。构建不需要本地参考工程、过程记录或设备数据。
+## 开源致谢
 
-## 数据与边界
+感谢以下项目及其贡献者为原生编辑、终端和开发环境提供基础能力。
 
-- 项目副本、草稿、会话与命令日志保存在应用私有目录。卸载或清除数据会删除它们；需要保留的源码应先导出。
-- 导出会跳过依赖缓存、生成目录、Git 元数据和符号链接，不是无损同步或完整备份。
-- 编辑器支持最多 1 MiB 的 UTF-8 文件、20,000 行及每行 20,000 字符，最多八个缓冲区；保存检查原始文件基线，不自动覆盖外部修改。暂不提供 LSP 或语义补全。
-- AI 任务会将允许读取的项目内容发送给用户配置的服务。密钥在本地加密保存；请求诊断、会话和日志仍需按项目敏感程度谨慎管理。
-- 检查点及日志有大小与保留数量限制；检查点不能回滚依赖安装、外部网络、数据库或项目外副作用，也不能消除并发进程的竞争。
-- PRoot 是运行 Linux 开发工具的兼容方案，不构成独立安全边界。命令执行前应核对项目、目录和权限。
-- Android Java/Kotlin 基础项目可选装 Android 工具包，在手机内构建 Debug APK 并从文件列表调起系统安装；需同意 SDK 许可和可访问 Google/Maven 的网络。可选 NDK 工具包支持 Kotlin + C++ JNI 模板（arm64-v8a、CMake）；已验证在手机 PRoot 内构建 ZakoCoder 自身（Compose + 终端 JNI），步骤见[运行环境](docs/RUNTIME.md#在手机上构建-zakocoder-自身)。任意导入工程的兼容性仍需适配；Flutter 工程仍需额外工具链。
-- Git 暂不提供私有仓库认证、分支合并、冲突界面或自动推送。更多未完成项见 [路线图](docs/ROADMAP.md)。
+| 项目 | 在 ZakoCoder 中的用途 |
+| --- | --- |
+| [Sora Editor](https://github.com/Rosemoe/sora-editor) | 原生代码编辑器与 TextMate 接入。 |
+| [Termux](https://github.com/termux/termux-app) | 终端模拟与视图基础库。 |
+| [PRoot](https://github.com/proot-me/PRoot) · [proot-distro](https://github.com/termux/proot-distro) · [Ubuntu](https://ubuntu.com/) | Linux 用户空间运行基础。 |
+| [OperitTerminalCore](https://github.com/AAswordman/OperitTerminalCore) | 当前调试版 PRoot 验证制品来源；完整材料与发行限制见第三方说明。 |
+| [android-arm-build-tools](https://github.com/Commit451/android-arm-build-tools) · [android-ndk-custom](https://github.com/HomuHomu833/android-ndk-custom) | 可选手机 Android / NDK 构建工具链。 |
+| [CommonMark Java](https://github.com/commonmark/commonmark-java) · [OkHttp](https://github.com/square/okhttp) | Markdown 解析和网络传输。 |
+| [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) | 随应用离线提供的等宽字体。 |
 
-## 工程结构
-
-```text
-app/src/main/java/dev/zakocoder/app/
-  ai/          模型传输、上下文、会话和工具审批
-  mcp/         MCP 配置、协议传输、发现与生命周期
-  editor/      编辑缓冲、文件基线、草稿与语言资源
-  git/         项目 Git 操作
-  projects/    项目注册、导入导出与清单识别
-  runtime/     下载校验、Ubuntu 与工具链
-  settings/    本地设置
-  terminal/    PTY 会话与运行服务
-  ui/          Compose 页面
-  workflow/    项目命令、日志和验证证据
-third_party/   终端基础库及上游声明
-runtime/       固定运行环境制品元数据
-scripts/       仓库与提交规范检查
-```
-
-## 开发文档
-
-- [贡献指南](CONTRIBUTING.md)：分支、commit、PR 与审查流程
-- [产品范围](docs/PRODUCT.md)、[架构](docs/ARCHITECTURE.md)、[运行环境](docs/RUNTIME.md)
-- [界面设计规范](docs/DESIGN.md)、[开发与测试](docs/DEVELOPMENT.md)
-- [AI 任务工作流](docs/AI_WORKFLOW.md)、[编辑器与文件安全](docs/EDITOR.md)
-- [路线图](docs/ROADMAP.md)、[发布流程](docs/RELEASING.md)
-- [安全报告](SECURITY.md)、[行为准则](CODE_OF_CONDUCT.md)、[第三方材料](THIRD_PARTY.md)
+各组件的准确版本、来源、许可证、修改与分发方式以[第三方材料](THIRD_PARTY.md)为准；上表不替代原始许可证声明。
 
 ## 许可证
 
-自有代码采用 [Apache License 2.0](LICENSE)。第三方组件保留各自版权、许可证和来源声明，不因本项目许可证而改变。
+ZakoCoder 自有代码使用 [Apache License 2.0](LICENSE)。第三方组件保留各自许可证与版权声明。

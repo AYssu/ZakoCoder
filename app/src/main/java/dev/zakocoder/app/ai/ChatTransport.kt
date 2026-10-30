@@ -19,7 +19,16 @@ import kotlin.coroutines.resumeWithException
 internal const val AI_RESPONSE_TEXT_LIMIT = 256000
 
 data class AiCall(val id: String, val name: String, val arguments: String)
-data class AiReply(val text: String, val calls: List<AiCall>)
+/** Provider reasoning is opaque protocol context, never an assistant's displayed answer. */
+data class AiReply(val text: String, val calls: List<AiCall>, val reasoningContent: String? = null) {
+    fun asAssistantMessage(): JSONObject = JSONObject().put("role", "assistant").put("content", text).apply {
+        reasoningContent?.let { put("reasoning_content", it) }
+        if (calls.isNotEmpty()) put("tool_calls", JSONArray(calls.map { call ->
+            JSONObject().put("id", call.id).put("type", "function")
+                .put("function", JSONObject().put("name", call.name).put("arguments", call.arguments))
+        }))
+    }
+}
 class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response") : IOException("AI request failed: ${kind.name}")
 class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
     .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()) {
@@ -88,7 +97,14 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             config.parameters.maxTokens?.let { put("max_tokens", it) }
             config.parameters.temperature?.let { put("temperature", it) }
             config.parameters.topP?.let { put("top_p", it) }
-            forceTool?.let { put("tool_choice", JSONObject().put("type", "function").put("function", JSONObject().put("name", it))) }
+            forceTool?.let {
+                put("tool_choice", JSONObject().put("type", "function").put("function", JSONObject().put("name", it)))
+                // DeepSeek thinking rejects forced tools; this applies only to the explicit probe.
+                // Exact official host detection cannot affect unrelated compatible providers.
+                if (java.net.URI(config.endpoint).host.equals("api.deepseek.com", ignoreCase = true)) {
+                    put("thinking", JSONObject().put("type", "disabled"))
+                }
+            }
         }.toString()
         update { it.copy(request = redactor.clean(payload).take(240000), requestBytes = payload.toByteArray().size, truncated = payload.length > 240000) }
         if (payload.length > 8 * 1024 * 1024) { update { it.copy(complete = true, failure = AiFailure.ContextLimit, diagnostic = "request_size_limit") }; throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "request_size_limit") }
@@ -118,7 +134,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             update { item -> item.copy(status = it.code) }
                             if (!it.isSuccessful) throw AiTransportException(it.code, AiFailure.Http, "http_status_${it.code}")
                             val source = it.body?.source() ?: throw AiTransportException(diagnostic = "missing_body")
-                            val text = StringBuilder(); val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
+                            val text = StringBuilder(); var reasoning: StringBuilder? = null; val calls = sortedMapOf<Int, Triple<StringBuilder, StringBuilder, StringBuilder>>()
                             var bytes = 0L; var finish = ""; var done = false
                             var events = 0; var lastPublished = -100L
                             var firstEvent: Long? = null; var firstText: Long? = null
@@ -173,10 +189,19 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                     fun number(name: String): Long? = usage?.takeUnless { u -> u.isNull(name) }?.optLong(name)?.takeIf { n -> n >= 0 }
                                     inputTokens = number("prompt_tokens") ?: inputTokens
                                     outputTokens = number("completion_tokens") ?: outputTokens
-                                    cachedTokens = usage?.optJSONObject("prompt_tokens_details")?.let { details -> if (details.isNull("cached_tokens")) null else details.optLong("cached_tokens").takeIf { n -> n >= 0 } } ?: cachedTokens
+                                    cachedTokens = usage?.optJSONObject("prompt_tokens_details")?.let { details -> if (details.isNull("cached_tokens")) null else details.optLong("cached_tokens").takeIf { n -> n >= 0 } } ?: number("prompt_cache_hit_tokens") ?: cachedTokens
                                     val choice = event.optJSONArray("choices")?.optJSONObject(0)
                                     if (choice != null && !choice.isNull("finish_reason")) finish = choice.optString("finish_reason")
                                     val part = choice?.optJSONObject("delta")
+                                    // Presence of the provider field is the capability signal, including gateways.
+                                    // Preserve every fragment verbatim for subsequent tools and user turns.
+                                    // Do not mix it into visible Markdown or synthesize it for other models.
+                                    if (part != null && !part.isNull("reasoning_content")) {
+                                        val fragment = part.getString("reasoning_content")
+                                        val target = reasoning ?: StringBuilder().also { reasoning = it }
+                                        if (fragment.length > AI_RESPONSE_TEXT_LIMIT - target.length) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_reasoning_limit")
+                                        target.append(fragment)
+                                    }
                                     val content = part?.optString("content", "")?.takeUnless { value -> value == "null" }.orEmpty()
                                     if (content.length > AI_RESPONSE_TEXT_LIMIT - text.length) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_text_limit")
                                     text.append(content)
@@ -202,7 +227,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             AiReply(text.toString(), calls.values.map { value ->
                                 if (value.first.isEmpty() || value.second.isEmpty()) throw AiTransportException(diagnostic = "incomplete_tool_identity")
                                 AiCall(value.first.toString(), value.second.toString(), value.third.toString())
-                            })
+                            }, reasoning?.toString())
                         }
                         update { if (it.complete) it else it.copy(complete = true) }
                         if (continuation.isActive) continuation.resume(reply)

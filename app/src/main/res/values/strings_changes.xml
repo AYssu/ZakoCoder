@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="ai_changes_title">文件变更</string>
-    <string name="ai_changes_persisted_help">按任务检查点审阅已记录的文件与目录变更；不代表验证通过，也不包含范围外的副作用。</string>
     <string name="ai_changes_no_task">当前会话尚无可审阅任务。</string>
     <string name="ai_changes_missing_checkpoint">此轮没有保留检查点，可能尚未建立或已被淘汰；不能据此判断没有修改。</string>
     <string name="ai_changes_read_failed">无法读取此轮变更，请重试；当前不能确认变更范围。</string>
@@ -9,8 +8,4 @@
     <string name="ai_changes_restoring">正在恢复工作区，完成后将重新加载变更。</string>
     <string name="ai_changes_snapshot_empty">此检查点记录范围内没有变更。</string>
     <string name="ai_changes_restored_history">此检查点已恢复；下面展示当时记录的历史变更，不代表当前磁盘内容。</string>
-    <string name="ai_changes_runtime_undo">本次运行保留的撤销记录</string>
-    <string name="ai_changes_runtime_undo_help">以下是当前会话本次运行保留的记录，不保证仅属于最新一轮；撤销仍需审批并检查磁盘冲突，重启后不保证保留。历史检查点请使用检查点恢复。</string>
-    <string name="ai_changes_runtime_commands">会话保留的命令变更片段</string>
-    <string name="ai_changes_runtime_commands_help">以下片段来自当前会话，不保证仅属于最新一轮，也不代表完整任务变更范围；按任务审阅请以上方检查点为准。</string>
 </resources>

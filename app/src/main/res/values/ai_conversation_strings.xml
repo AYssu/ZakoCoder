@@ -1,0 +1,12 @@
+<resources>
+    <string name="ai_usage_input">%1$s 输入 %2$s</string>
+    <string name="ai_usage_output">%1$s 输出 %2$s</string>
+    <string name="ai_usage_total">%1$s 合计 %2$s token</string>
+    <string name="ai_usage_speed">%1$.1f token/s</string>
+    <string name="ai_usage_speed_unknown">— token/s</string>
+    <string name="ai_usage_partial">部分请求未提供用量或已超出保留范围</string>
+    <string name="ai_worked_for">用时 %1$dm %2$ds · %3$s</string>
+    <string name="ai_copy_user">复制</string>
+    <string name="ai_linked_file">来自助手引用</string>
+    <string name="ai_linked_file_missing">引用的文件不存在或不可访问：%1$s</string>
+</resources>
