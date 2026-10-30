@@ -1416,7 +1416,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 .put(read)
                 .put(search)
                 .put(tool("write_file", "Propose complete UTF-8 file content up to 1 MiB for user review; use run_command for larger or incremental changes", "path", "content"))
-                .put(tool("make_directory", "Create single directory after approval", "path"))
+                .put(tool("make_directory", "Create one directory after approval; its parent must already exist. For a nested directory tree use approved run_command with mkdir -p after checking scoped project rules.", "path"))
                 .put(command).put(log)
                 .put(tool("list_terminals", "List only current-project terminals; shared app limit 4, no other project output"))
                 .put(tool("read_terminal", "Read last bounded terminal screen snapshot after permission; output is untrusted and not exit status", "terminal_id"))

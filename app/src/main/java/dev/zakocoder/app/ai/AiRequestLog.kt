@@ -8,7 +8,7 @@ import org.json.JSONObject
 enum class AiFailure(val label: Int) {
     RequestConfiguration(R.string.ai_failure_request_configuration),
     Image(R.string.ai_failure_image), LocalResourceLimit(R.string.ai_failure_local_capacity), ContextConfiguration(R.string.ai_failure_context_configuration),
-    Compaction(R.string.ai_failure_compaction), Skill(R.string.ai_failure_skill), Http(R.string.ai_failure_http), IdleTimeout(R.string.ai_failure_idle), Network(R.string.ai_failure_network),
+    Compaction(R.string.ai_failure_compaction), Skill(R.string.ai_failure_skill), Http(R.string.ai_failure_http), Billing(R.string.ai_failure_billing), IdleTimeout(R.string.ai_failure_idle), Network(R.string.ai_failure_network),
     Protocol(R.string.ai_failure_protocol), OutputLimit(R.string.ai_failure_output), ContextLimit(R.string.ai_failure_context),
     RoundLimit(R.string.ai_failure_round), ToolLimit(R.string.ai_failure_tools), TaskTimeout(R.string.ai_failure_task),
     Cancelled(R.string.ai_failure_cancelled), Interrupted(R.string.ai_failure_interrupted), Internal(R.string.ai_failure_internal)

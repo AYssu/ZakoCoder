@@ -36,24 +36,51 @@ class LiveAndroidGameAcceptanceTest {
         val workbench = applicationWorkbench()
         ready(workbench)
         check(!workbench.ai.state.value.active) { "An existing task is running; acceptance must not interrupt it" }
-        val before = workbench.state.value.projects.map { it.id }.toSet()
-        main { workbench.create("2048 Acceptance ${System.currentTimeMillis()}", ProjectTemplate.AndroidJava) }
-        await(120000) { !workbench.state.value.busy && workbench.state.value.projects.any { it.id !in before } }
-        val project = workbench.state.value.projects.single { it.id !in before }
+        val existingId = arguments.getString("acceptanceProjectId").orEmpty()
+        val encodedFeedback = arguments.getString("acceptanceFeedbackBase64").orEmpty()
+        require(existingId.isEmpty() == encodedFeedback.isEmpty()) { "Refinement requires an explicit project and feedback together" }
+        val project = if (existingId.isEmpty()) {
+            val before = workbench.state.value.projects.map { it.id }.toSet()
+            main { workbench.create("2048 Acceptance ${System.currentTimeMillis()}", ProjectTemplate.AndroidJava) }
+            await(120000) { !workbench.state.value.busy && workbench.state.value.projects.any { it.id !in before } }
+            workbench.state.value.projects.single { it.id !in before }
+        } else {
+            require(UUID.fromString(existingId).toString() == existingId)
+            workbench.state.value.projects.single { it.id == existingId }
+        }
+        val prompt = if (existingId.isEmpty()) BUILD_PROMPT else {
+            require(encodedFeedback.length <= 48000)
+            String(android.util.Base64.decode(encodedFeedback, android.util.Base64.DEFAULT), Charsets.UTF_8).also { require(it.isNotBlank() && it.length <= 16000) }
+        }
         main { workbench.ai.select(project.id) }
         aiReady(workbench, project.id)
         val root = withContext(Dispatchers.IO) { workbench.projects.directory(project.id) }
-        val recorder = Recorder("build", project.id)
+        val recorder = Recorder(if (existingId.isEmpty()) "build" else "refine", project.id)
         try {
-            runTask(workbench, project.id, BUILD_PROMPT, recorder)
+            runTask(workbench, project.id, prompt, recorder)
             withContext(Dispatchers.IO) {
                 val artifact = File(root, "app/build/outputs/apk/debug/app-debug.apk")
                 check(artifact.isFile && artifact.length() > 1024) { "No actual Debug APK was produced" }
                 ZipFile(artifact).use { zip ->
                     check(zip.getEntry("AndroidManifest.xml") != null && zip.getEntry("classes.dex") != null) { "Produced artifact is not an Android APK" }
                 }
-                check(workbench.ai.state.value.events.any { it.tool == AiTool.RunCommand && it.status == AiToolStatus.Succeeded && it.exitCode == 0 &&
-                    ("assembleDebug" in it.input || "assembleDebug" in it.output) }) { "No successful actual assembleDebug tool evidence" }
+                val finished = workbench.ai.state.value
+                check(finished.events.any { event ->
+                    if (event.turn != finished.turn || event.tool != AiTool.RunCommand || event.status != AiToolStatus.Succeeded || event.exitCode != 0) false
+                    else {
+                        // Require a direct build command in THIS turn, not an old event or text
+                        // mentioning assembleDebug in echoed output. The project is already cwd.
+                        val command = runCatching { JSONObject(event.input).getString("command").trim() }.getOrDefault("")
+                        val parts = command.split(Regex("\\s+"))
+                        parts.firstOrNull() in setOf("gradle", "./gradlew") &&
+                            parts.any { it in setOf(":app:assembleDebug", "app:assembleDebug", "assembleDebug") } &&
+                            parts.none { it in setOf("--dry-run", "-m", "--help", "-h", "--version", "-v", "-x", "--exclude-task") } &&
+                            command.none { it in ";&|`\n\r" } && !command.contains('$' + "(")
+                    }
+                }) { "No successful direct assembleDebug command in this turn" }
+                val sources = File(root, "app/src").walkTopDown().filter { it.isFile }.toList() +
+                    listOf("app/build.gradle.kts", "build.gradle.kts", "settings.gradle.kts", "gradle.properties").map { File(root, it) }.filter { it.isFile }
+                check(sources.all { it.lastModified() <= artifact.lastModified() + 2000 }) { "APK predates current project sources" }
                 recorder.write("artifact", JSONObject().put("path", "app/build/outputs/apk/debug/app-debug.apk")
                     .put("bytes", artifact.length()).put("sha256", digest(artifact)))
             }
@@ -171,7 +198,9 @@ class LiveAndroidGameAcceptanceTest {
                     withTimeoutOrNull(30000) { while (ai.state.value.active) delay(100) }
                 }
                 collector.cancelAndJoin(); snapshots.close()
-                withTimeoutOrNull(30000) { writer.join() }
+                // Finish the evidence archive before closing its stream. Silently timing out
+                // here could lose the final requests or race a still-running writer.
+                writer.join()
                 recorder.capture(ai.state.value)
             }
         }
@@ -193,6 +222,14 @@ class LiveAndroidGameAcceptanceTest {
         private val stream = file.outputStream().bufferedWriter()
         private val start = SystemClock.elapsedRealtime()
         private val seen = mutableMapOf<String, String>()
+        private val rawRequestBodies = mutableMapOf<String, String>()
+        // These records are immutable data classes, replaced with copy() on updates.
+        private val capturedRequests = mutableMapOf<String, AiRequestLog>()
+        private val capturedTools = mutableMapOf<String, AiToolEvent>()
+        private val capturedMessages = mutableMapOf<String, AiEntry>()
+        // Changes are immutable, appended records. Identity distinguishes repeated edits of the
+        // same path (even identical before/after values), and survives takeLast(32) index shifts.
+        private val capturedChanges = java.util.IdentityHashMap<AiChange, Int>()
         private val scrub = AiLogRedactor("")
         private var bytes = 0L
         init {
@@ -226,28 +263,40 @@ class LiveAndroidGameAcceptanceTest {
                     .put("text", if (appended) value.substring(previous!!.length) else value))
             }
             state.requests.forEach { request ->
+                if (capturedRequests.put(request.id, request) === request) return@forEach
                 val encoded = request.encode()
                 // Provider wire reasoning signatures/opaque state are not public audit content.
                 val body = encoded.optString("request")
                 encoded.remove("request"); encoded.remove("response")
                 changed("request:${request.id}", encoded)
-                if (body.isNotEmpty()) changed("request_body:${request.id}", JSONObject().put("id", request.id).put("body", sanitizeWire(body)))
+                if (body.isNotEmpty() && rawRequestBodies.put(request.id, body) != body) {
+                    changed("request_body:${request.id}", JSONObject().put("id", request.id).put("body", sanitizeWire(body)))
+                }
                 if (request.response.isNotEmpty()) textChanged("response:${request.id}", request.id, request.response)
             }
-            state.events.forEach { event -> changed("tool:${event.id}", JSONObject().put("id", event.id).put("callId", event.callId)
+            state.events.forEach { event ->
+                if (capturedTools.put(event.id, event) === event) return@forEach
+                changed("tool:${event.id}", JSONObject().put("id", event.id).put("callId", event.callId)
                 .put("tool", event.name).put("input", event.input).put("reason", event.reason).put("target", event.target)
+                .put("permission", event.permission.name).put("permissionSource", context.getString(event.permissionSource))
                 .put("status", event.status.name).put("exitCode", event.exitCode)
                 .put("started", event.started).put("finished", event.finished).put("truncated", event.truncated).put("turn", event.turn))
                 textChanged("tool_output:${event.id}", event.id, event.output)
             }
             state.timeline.forEach { entry ->
+                if (capturedMessages.put(entry.id, entry) === entry) return@forEach
                 changed("message:${entry.id}", JSONObject().put("id", entry.id).put("role", entry.role.name)
                     .put("turn", entry.turn).put("reasoningTruncated", entry.reasoningTruncated))
                 textChanged("message_text:${entry.id}", entry.id, entry.text)
                 textChanged("public_reasoning:${entry.id}", entry.id, entry.reasoning)
             }
-            state.changes.forEach { change -> changed("change:${change.path}", JSONObject().put("path", change.path)
-                .put("before", change.before?.toString()).put("after", change.after.toString())) }
+            state.changes.forEach { change ->
+                if (capturedChanges.containsKey(change)) return@forEach
+                val recordId = capturedChanges.size
+                capturedChanges[change] = recordId
+                changed("change:$recordId", JSONObject().put("id", recordId).put("path", change.path)
+                    .put("before", change.before?.toString()).put("after", change.after.toString()))
+            }
             state.commandChanges.forEach { change -> changed("command_change:${change.id}", change.encode()) }
             state.turnTimings.forEach { timing -> changed("timing:${timing.turn}", JSONObject().put("turn", timing.turn).put("started", timing.started).put("finished", timing.finished)) }
         }
@@ -275,13 +324,15 @@ class LiveAndroidGameAcceptanceTest {
             为手机触摸提供滑动与可访问的方向按钮；窄屏与深浅色文字均可读，不要求新引入大型框架。
             给核心合并算法编写真实可执行的确定性测试，实际运行并修复失败。
             然后真实构建 app/build/outputs/apk/debug/app-debug.apk，核对构建成功，不仅写代码或列操作说明。
+            构建证据必须包含当前轮直接执行的单条 gradle --no-daemon :app:assembleDebug 命令，不带dry-run、排除任务或仅打印命令。
             只操作此项目源码与构建产物；可使用既有 Gradle 缓存及 SDK。不要读取其他项目、密钥配置、个人目录或系统凭据，不申请root。
             此阶段不安装、不启动、不操作屏幕；完成后如实列出修改文件、执行命令、测试结果、APK位置、未验证项。
             如遇错误先定位修复继续执行，遇到无法解决的环境问题如实说明，不伪造完成。
         """.trimIndent()
         private val SCREEN_PROMPT = """
-            继续当前 2048 项目的验收。用户已经安装并明确授权当前项目APK作为屏幕测试目标。
-            请使用 android_test 工具启动、observe实际节点，操作方向按钮或滑动推进游戏，核对分数/棋盘变化，测试重新开始。
+            继续当前 2048 项目的验收。用户已明确授权当前项目APK作为屏幕测试目标。
+            先使用android_test的status核对安装及制品匹配；未安装或制品不匹配时用install请求系统安装，等待用户在系统界面确认，再用status核对。不操作安装器或更改系统权限。
+            安装确认后，请使用 android_test 工具启动、observe实际节点，操作方向按钮或滑动推进游戏，核对分数/棋盘变化，测试重新开始。
             每次关键操作后再次observe核对变化，至少用assert_text对实际节点中的分数或重新开始后的状态做一次通过断言。
             真实验证窄屏可用、按钮可点、数字清晰；可用时获取截图证据，未授予截图条件则明确未验证，不能停掉其他测试。依据实际节点决定动作，不猜node id。
             若发现应用缺陷，修复并重新构建，但不要越过系统安装确认，明确告知需要重新安装后再验。

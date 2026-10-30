@@ -35,7 +35,13 @@ data class AiReply(val text: String, val calls: List<AiCall>, val reasoningConte
         providerOutput?.let { put(PROVIDER_OUTPUT_KEY, JSONObject().put("protocol", requireNotNull(providerProtocol)).put("output", JSONArray(it))) }
     }
 }
-class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response", val retryAfterMillis: Long? = null) : IOException("AI request failed: ${kind.name}")
+class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response", val retryAfterMillis: Long? = null) : IOException("AI request failed: ${kind.name}") {
+    companion object {
+        /** Status-only classification: never retain or display an untrusted provider error body. */
+        internal fun http(status: Int, retryAfterMillis: Long? = null) = AiTransportException(
+            status, if (status == 402) AiFailure.Billing else AiFailure.Http, "http_status_$status", retryAfterMillis)
+    }
+}
 class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
     .retryOnConnectionFailure(false).connectTimeout(15, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build(),
     private val retryDelay: suspend (Long) -> Unit = { delay(it) }, private val maxAttempts: Int = AiRetryPolicy.MAX_ATTEMPTS) {
@@ -229,7 +235,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                     try {
                         val reply = response.use {
                             update { item -> item.copy(status = it.code) }
-                            if (!it.isSuccessful) throw AiTransportException(it.code, AiFailure.Http, "http_status_${it.code}", AiRetryPolicy.retryAfterMillis(it.header("Retry-After")))
+                            if (!it.isSuccessful) throw AiTransportException.http(it.code, AiRetryPolicy.retryAfterMillis(it.header("Retry-After")))
                             val source = it.body?.source() ?: throw AiTransportException(diagnostic = "missing_body")
                             if (config.protocol != AiApiProtocol.ChatCompletions) return@use readProvider(source, call, config, ::elapsed, ::clean, ::update,
                                 delta, reasoningDelta, toolDelta)
@@ -433,7 +439,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         val result = response.use {
-                            if (!it.isSuccessful) throw AiTransportException(it.code)
+                            if (!it.isSuccessful) throw AiTransportException.http(it.code)
                             val source = it.body?.source() ?: throw AiTransportException()
                             source.request(1024 * 1024 + 1L)
                             if (source.buffer.size > 1024 * 1024) throw AiTransportException()
