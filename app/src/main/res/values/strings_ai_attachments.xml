@@ -1,6 +1,5 @@
 <resources>
     <string name="ai_images_add">添加图片</string>
-    <string name="ai_images_help">每轮最多 4 张。图片会缩放后发送到当前模型服务，请确认所选模型支持图片理解。</string>
     <string name="ai_images_maximum">每轮最多添加 4 张图片，请先移除已有图片。</string>
     <string name="ai_images_loading">正在处理图片…</string>
     <string name="ai_images_remove">移除图片：%1$s</string>

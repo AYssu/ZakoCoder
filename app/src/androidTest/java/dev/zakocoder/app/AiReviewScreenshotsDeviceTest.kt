@@ -25,6 +25,7 @@ import dev.zakocoder.app.runtime.PrivateFiles
 import dev.zakocoder.app.ui.*
 import kotlinx.coroutines.*
 import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicReference
 class AiReviewScreenshotsDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
+    private var screenshotDark = false
     @Before fun foreground() {
         val component = android.content.ComponentName(context.packageName, MainActivity::class.java.name).flattenToString()
         // Both names are fixed Android package/class identifiers, never user or model text.
@@ -99,11 +101,19 @@ class AiReviewScreenshotsDeviceTest {
         val raw = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         val bars = requireNotNull(insets.get())
         val bitmap = Bitmap.createBitmap(raw, bars.left, bars.top, raw.width - bars.left - bars.right, raw.height - bars.top - bars.bottom)
-        try { withContext(Dispatchers.IO) {
+        val themedName = "${if (screenshotDark) "dark" else "light"}-$name"
+        try {
+            // Left edge above the cropped navigation inset belongs to the app/sheet surface,
+            // away from text, thumbnails, controls and the OS status/navigation bars.
+            val pixel = bitmap.getPixel(8.coerceAtMost(bitmap.width - 1), (bitmap.height - 16).coerceAtLeast(0))
+            val brightness = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3
+            assertTrue("Rendered theme for $themedName: brightness=$brightness",
+                if (screenshotDark) brightness < 100 else brightness > 80)
+            withContext(Dispatchers.IO) {
             File(context.cacheDir, "ui-review/pr23").mkdirs()
-            File(context.cacheDir, "ui-review/pr23/$name.insets.json").writeText(JSONObject().put("left", bars.left).put("top", bars.top)
-                .put("right", bars.right).put("bottom", bars.bottom).put("rawWidth", raw.width).put("rawHeight", raw.height).put("systemBarsCropped", true).toString())
-            File(context.cacheDir, "ui-review/pr23/$name.png").apply { parentFile!!.mkdirs() }.outputStream().use {
+            File(context.cacheDir, "ui-review/pr23/$themedName.insets.json").writeText(JSONObject().put("left", bars.left).put("top", bars.top)
+                .put("right", bars.right).put("bottom", bars.bottom).put("rawWidth", raw.width).put("rawHeight", raw.height).put("systemBarsCropped", true).put("darkMode", screenshotDark).toString())
+            File(context.cacheDir, "ui-review/pr23/$themedName.png").apply { parentFile!!.mkdirs() }.outputStream().use {
                 assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
             }
         } } finally { if (bitmap !== raw) bitmap.recycle(); raw.recycle() }
@@ -131,7 +141,9 @@ class AiReviewScreenshotsDeviceTest {
     private suspend fun reveal(label: String) {
         repeat(60) { attempt ->
             val settled = nodes { all ->
-                val height = context.resources.displayMetrics.heightPixels.toFloat()
+                val height = if (android.os.Build.VERSION.SDK_INT >= 30)
+                    context.getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.bounds.height().toFloat()
+                else android.content.res.Resources.getSystem().displayMetrics.heightPixels.toFloat()
                 val node = all.firstOrNull { matches(it, label) }
                 if (node != null) {
                     val y = node.layoutInfo.coordinates.localToWindow(Offset.Zero).y
@@ -164,6 +176,31 @@ class AiReviewScreenshotsDeviceTest {
         throw AssertionError("Could not scroll $label into screenshot viewport; see failure-semantics.txt")
     }
 
+    /** Every 1024-byte block contains a complete SSE event; comments pad only the wire chunks.
+     * MockWebServer sends the first block now and each later block after five seconds, so the
+     * screenshots must observe genuine transport callbacks rather than a fabricated active state.
+     */
+    private fun enqueuePaced(server: MockWebServer, groups: List<List<JSONObject>>) {
+        val body = buildString {
+            groups.forEachIndexed { index, events ->
+                val eventText = buildString {
+                    events.forEach { append("data: $it\n\n") }
+                    if (index == groups.lastIndex) append("data: [DONE]\n\n")
+                }
+                val remaining = 1024 - eventText.toByteArray(Charsets.UTF_8).size
+                require(remaining >= 3) { "Fixture SSE event must fit one wire block" }
+                append(eventText)
+                append(":").append(" ".repeat(remaining - 3)).append("\n\n")
+            }
+        }
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setBody(body).throttleBody(1024, 5, TimeUnit.SECONDS))
+    }
+
+    private fun delta(fields: JSONObject) = JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", fields)))
+    private fun finished(reason: String = "stop") = JSONObject().put("choices", JSONArray().put(
+        JSONObject().put("delta", JSONObject()).put("finish_reason", reason)))
+
     private fun generatedImage(root: File): AiImageAttachment {
         val bitmap = Bitmap.createBitmap(640, 360, Bitmap.Config.ARGB_8888)
         val bytes = try {
@@ -187,7 +224,55 @@ class AiReviewScreenshotsDeviceTest {
         return image
     }
 
-    @Test(timeout = 180000) fun completeAppConversationAttachmentsAndPermissionScreenshots() = runBlocking {
+    @Test(timeout = 240000) fun completeAppConversationAttachmentsAndPermissionScreenshotsLight() = runReview(false)
+
+    @Test(timeout = 240000) fun completeAppConversationAttachmentsAndPermissionScreenshotsDark() = runReview(true)
+
+    @Test(timeout = 90000) fun localDirectoryPermissionScreenshotLight() = permissionScreenshot(false)
+    @Test(timeout = 90000) fun localDirectoryPermissionScreenshotDark() = permissionScreenshot(true)
+
+    private fun permissionScreenshot(dark: Boolean) = runBlocking {
+        org.junit.Assume.assumeTrue("Permission-primer fixture requires file access to be disabled", android.os.Build.VERSION.SDK_INT >= 30 && !android.os.Environment.isExternalStorageManager())
+        screenshotDark = dark
+        val own = File(context.cacheDir, "permission-review-${UUID.randomUUID()}")
+        val base = context
+        val token = own.name
+        val preferences = mutableSetOf<String>()
+        val isolated = object : ContextWrapper(base) {
+            override fun getFilesDir() = File(own, "files").apply { mkdirs() }
+            override fun getCacheDir() = File(own, "cache").apply { mkdirs() }
+            override fun getNoBackupFilesDir() = File(own, "no-backup").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = base.getSharedPreferences("$token-$name".also { preferences += it }, mode)
+        }
+        val wb = withContext(Dispatchers.Main) { Workbench(isolated) }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity -> activity.setContent {
+                    val current = LocalConfiguration.current
+                    val themed = remember(current, dark) { Configuration(current).apply {
+                        uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                            if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+                    } }
+                    CompositionLocalProvider(LocalConfiguration provides themed, LocalWorkbenchDark provides dark) {
+                        ZakoCoderApp(wb)
+                        MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                            LocalProjectBindingSheet(true, {}, { error("Permission primer never binds a directory") })
+                        }
+                    }
+                } }
+                screenshot(scenario, "07b-local-directory-permission", context.getString(R.string.local_browser_grant))
+                assertTrue(has(context.getString(R.string.local_browser_permission_description)))
+            }
+        } finally {
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main) { wb.stopAll() }
+                withContext(Dispatchers.IO) { PrivateFiles.deleteTree(own); preferences.forEach { base.deleteSharedPreferences(it) } }
+            }
+        }
+    }
+
+    private fun runReview(dark: Boolean) = runBlocking {
+        screenshotDark = dark
         val token = "pr-review-${UUID.randomUUID()}"
         val own = File(context.cacheDir, token)
         val preferences = mutableSetOf<String>()
@@ -199,8 +284,21 @@ class AiReviewScreenshotsDeviceTest {
             override fun getSharedPreferences(name: String, mode: Int) = base.getSharedPreferences("$token-$name".also { preferences += it }, mode)
         }
         var workbench: Workbench? = null
+        var sharedFixture: File? = null
         try {
-            AiDeviceTest.Fixture(isolated).use { fixture ->
+            withContext(Dispatchers.IO) {
+                // Test-owned UUID leaf only. No existing storage directory is enumerated or removed.
+                val leaf = File(android.os.Environment.getExternalStorageDirectory(), "ZakoCoder-review-${UUID.randomUUID().toString().take(8)}")
+                check(leaf.mkdir()) { "Cannot create isolated shared-storage screenshot fixture; grant access only to the review package" }
+                sharedFixture = leaf
+                listOf("android-app", "scripts", "web-preview").forEach { child -> check(File(leaf, child).mkdir()) }
+                File(leaf, "README.md").writeText("# Local UI fixture\nGenerated solely for screenshots; not a user project.\n")
+            }
+            AiDeviceTest.Fixture(isolated, timeoutSeconds = 90).use { fixture ->
+                // Pace outbound screenshot events, never the much larger system/tool upload.
+                fixture.server.dispatcher = object : okhttp3.mockwebserver.QueueDispatcher() {
+                    override fun peek() = MockResponse()
+                }
                 withContext(Dispatchers.IO) {
                     val active = requireNotNull(fixture.config.catalog().active)
                     fixture.config.saveProfile(AiModelDraft(active.id, "界面验收（本地测试）", active.endpoint, "本地测试模型", null))
@@ -243,13 +341,17 @@ class AiReviewScreenshotsDeviceTest {
                 ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                     scenario.onActivity { activity -> activity.setContent {
                         val current = LocalConfiguration.current
-                        val light = remember(current) { Configuration(current).apply { uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO } }
-                        CompositionLocalProvider(LocalConfiguration provides light) {
-                            if (models) MaterialTheme(colorScheme = WorkbenchColors, typography = WorkbenchTypography) {
+                        val themed = remember(current, dark) { Configuration(current).apply {
+                            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                                if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+                        } }
+                        CompositionLocalProvider(LocalConfiguration provides themed, LocalWorkbenchDark provides dark) {
+                            if (models) MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                                 Surface(Modifier.fillMaxSize().safeDrawingPadding()) { AiModelsPage(wb.ai) { models = false } }
                             } else ZakoCoderApp(wb)
-                            MaterialTheme(colorScheme = WorkbenchColors, typography = WorkbenchTypography) {
-                                if (binding) LocalProjectBindingSheet(true, { binding = false }, { error("Screenshot must not bind a real directory") })
+                            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                                if (binding) LocalProjectBindingSheet(true, { binding = false }, { error("Screenshot must not bind a real directory") },
+                                    initialDirectory = requireNotNull(sharedFixture).path)
                             }
                         }
                     } }
@@ -258,8 +360,44 @@ class AiReviewScreenshotsDeviceTest {
                     click(context.getString(R.string.ai_reasoning_title))
                     screenshot(scenario, "02-assistant-reasoning-expanded", context.getString(R.string.ai_reasoning_provider_hint))
                     click(context.getString(R.string.ai_reasoning_title))
+
+                    val liveFirst = "本地测试流：先检查项目入口和移动端布局。"
+                    val liveNext = "继续接收：再核对文件操作与底部按钮的位置。"
+                    val liveAnswer = "本地测试流已完成。建议保留清晰的项目入口和底部操作区；未执行任何项目命令。"
+                    enqueuePaced(fixture.server, listOf(
+                        listOf(delta(JSONObject().put("reasoning_content", liveFirst))),
+                        listOf(delta(JSONObject().put("reasoning_content", liveNext))),
+                        listOf(delta(JSONObject().put("content", liveAnswer)), finished()),
+                    ))
+                    withContext(Dispatchers.Main) {
+                        assertTrue("Start a real local streamed AI turn", wb.ai.send("用本地测试流检查移动端布局，不执行命令。"))
+                    }
+                    await("First reasoning delta belongs to an active round") {
+                        val current = wb.ai.state.value
+                        current.active && current.reasoningEntryId != null &&
+                            current.timeline.any { it.id == current.reasoningEntryId && it.reasoning == liveFirst }
+                    }
+                    screenshot(scenario, "11-live-thinking-start", liveFirst)
+                    assertNotNull("First screenshot was taken during reasoning", wb.ai.state.value.reasoningEntryId)
+                    await("Later reasoning delta visibly appends before the answer") {
+                        val current = wb.ai.state.value
+                        current.active && current.reasoningEntryId != null &&
+                            current.timeline.any { it.id == current.reasoningEntryId && it.reasoning == liveFirst + liveNext }
+                    }
+                    screenshot(scenario, "12-live-thinking-growing", liveFirst + liveNext)
+                    assertNotNull("Second screenshot was taken during reasoning", wb.ai.state.value.reasoningEntryId)
+                    await("Answer completes and releases reasoning ownership") {
+                        val current = wb.ai.state.value
+                        !current.active && current.phase == AiPhase.Completed && current.reasoningEntryId == null &&
+                            current.timeline.lastOrNull { it.role == AiRole.Assistant }?.text == liveAnswer
+                    }
+                    await("Thinking auto-collapses when answer begins") { !has(liveFirst + liveNext) }
+                    screenshot(scenario, "13-answer-thinking-collapsed", liveAnswer)
+
                     click(context.getString(R.string.ai_context_attach))
                     screenshot(scenario, "03-attachments-sheet", context.getString(R.string.ai_images_add))
+                    click(context.getString(R.string.ai_attachment_build_log))
+                    screenshot(scenario, "03b-attachments-build-log", context.getString(R.string.ai_reference_error_log))
                     click(context.getString(R.string.close))
                     click(context.getString(R.string.ai_permissions))
                     screenshot(scenario, "04-permissions-normal", context.getString(R.string.ai_permission_preset_normal))
@@ -270,7 +408,10 @@ class AiReviewScreenshotsDeviceTest {
                     screenshot(scenario, "06-permissions-elevated", context.getString(R.string.ai_permission_preset_current, context.getString(R.string.ai_permission_preset_elevated)))
                     click(context.getString(R.string.close))
                     withContext(Dispatchers.Main) { binding = true }
-                    screenshot(scenario, "07-local-directory-binding", context.getString(R.string.local_project_direct_warning))
+                    await("Only generated browser fixture directories are displayed") {
+                        has("android-app") && has("web-preview") && has(requireNotNull(sharedFixture).path)
+                    }
+                    screenshot(scenario, "07-local-directory-binding", context.getString(R.string.local_browser_title))
                     click(context.getString(R.string.close))
                     withContext(Dispatchers.Main) { models = true }
                     click(context.getString(R.string.ai_models_edit_named, "界面验收（本地测试）"))
@@ -281,14 +422,43 @@ class AiReviewScreenshotsDeviceTest {
                     screenshot(scenario, "09-model-context-options", context.getString(R.string.ai_options_context))
                     reveal(context.getString(R.string.ai_options_headers))
                     screenshot(scenario, "10-model-request-headers", context.getString(R.string.ai_options_headers))
-                    assertEquals("Only the local TLS fixture was contacted", 1, fixture.server.requestCount)
+                    val probeText = "本地测试服务正在返回文本与 connection_probe 参数；不会执行项目命令。"
+                    val probeFirst = JSONObject().put("tool_calls", JSONArray().put(JSONObject().put("index", 0)
+                        .put("id", "review-probe").put("function", JSONObject().put("name", "connection_probe").put("arguments", "{\"ack\":"))))
+                    val probeLast = JSONObject().put("tool_calls", JSONArray().put(JSONObject().put("index", 0)
+                        .put("function", JSONObject().put("arguments", "\"ok\"}"))))
+                    enqueuePaced(fixture.server, listOf(
+                        listOf(delta(JSONObject().put("content", probeText))),
+                        listOf(delta(probeFirst)),
+                        listOf(delta(probeLast), finished("tool_calls")),
+                    ))
+                    click(context.getString(R.string.ai_models_test_button))
+                    await("Actual probe response text streams while test is active") {
+                        val current = wb.ai.models.state.value
+                        current.probe == AiProbe.Testing && (current.probeProgress?.textChars ?: 0) > 0
+                    }
+                    screenshot(scenario, "14-model-probe-live-text", context.getString(R.string.ai_probe_live_title))
+                    assertEquals("Text screenshot was captured before probe completion", AiProbe.Testing, wb.ai.models.state.value.probe)
+                    await("Actual probe tool arguments stream while test is active") {
+                        val current = wb.ai.models.state.value
+                        current.probe == AiProbe.Testing && (current.probeProgress?.argumentChars ?: 0) > 0
+                    }
+                    screenshot(scenario, "15-model-probe-live-tool", context.getString(R.string.ai_probe_live_title))
+                    assertEquals("Tool screenshot was captured before probe completion", AiProbe.Testing, wb.ai.models.state.value.probe)
+                    await("Local tool envelope and ack verified") { wb.ai.models.state.value.probe == AiProbe.Passed }
+                    screenshot(scenario, "16-model-probe-verified", context.getString(R.string.ai_probe_verified))
+                    assertEquals("History, live chat and probe contacted only the local TLS fixture", 3, fixture.server.requestCount)
                 }
             }
         } finally {
             withContext(NonCancellable) {
                 withContext(Dispatchers.Main) { workbench?.stopAll() }
                 delay(250)
-                withContext(Dispatchers.IO) { PrivateFiles.deleteTree(own); preferences.forEach { base.deleteSharedPreferences(it) } }
+                withContext(Dispatchers.IO) {
+                    PrivateFiles.deleteTree(own)
+                    sharedFixture?.let(PrivateFiles::deleteTree)
+                    preferences.forEach { base.deleteSharedPreferences(it) }
+                }
             }
         }
     }

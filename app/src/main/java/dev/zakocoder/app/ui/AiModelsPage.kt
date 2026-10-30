@@ -177,7 +177,8 @@ private fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> U
             ModelSection(stringResource(R.string.ai_models_test_title)) {
                 Text(stringResource(R.string.ai_models_test_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-                if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); TextButton(onClick = ai.models::cancelProbe) { Text(stringResource(R.string.cancel)) } }
+                if (!picker && state.probeProgress != null) AiModelProbeProgressContent(state)
+                if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); TextButton(onClick = ai.models::stopProbe) { Text(stringResource(R.string.cancel)) } }
                 else OutlinedButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && model.isNotBlank() && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
             }
             Spacer(Modifier.height(4.dp))

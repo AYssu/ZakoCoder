@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_probe_live_title">实时测试</string>
+    <string name="ai_probe_connecting">正在连接模型服务…</string>
+    <string name="ai_probe_waiting">已收到响应头，等待流式内容…</string>
+    <string name="ai_probe_receiving">正在接收文本和工具参数…</string>
+    <string name="ai_probe_verified">工具调用格式与参数已验证</string>
+    <string name="ai_probe_failed">测试失败，已收到的内容保留如下</string>
+    <string name="ai_probe_cancelled">测试已取消</string>
+    <string name="ai_probe_elapsed">耗时 %1$.1f s</string>
+    <string name="ai_probe_http">HTTP %1$d</string>
+    <string name="ai_probe_events">%1$d 个流事件</string>
+    <string name="ai_probe_first_event">首事件 %1$d ms</string>
+    <string name="ai_probe_response">服务返回内容</string>
+    <string name="ai_probe_truncated">仅显示前 4,000 字符</string>
+    <string name="ai_probe_no_execution">仅请求 connection_probe 回执；不会执行工具、读取项目或修改文件。</string>
+</resources>

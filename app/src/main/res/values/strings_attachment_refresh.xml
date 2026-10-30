@@ -1,0 +1,15 @@
+<resources>
+    <string name="ai_attachment_subtitle">选择图片、项目文件或构建日志，随消息发送给当前模型。</string>
+    <string name="ai_attachment_build_log">构建日志</string>
+    <string name="ai_attachment_log_hint">粘贴需要一起分析的输出或报错。</string>
+    <string name="ai_attachment_log_length">%1$d / 6000 字符</string>
+    <string name="ai_attachment_image_count">图片 %1$d / %2$d · 需使用支持图片的模型</string>
+    <string name="ai_attachment_reference_count">引用 %1$d / 4</string>
+    <string name="ai_attachment_loading_files">正在读取项目文件…</string>
+    <string name="ai_attachment_open_folder">打开文件夹</string>
+    <string name="ai_attachment_select_file">点击添加到本轮引用</string>
+    <string name="ai_attachment_file_hint">发送文件快照，每项最多 6000 字符；超长内容会截断。</string>
+    <string name="ai_attachment_reference_full">引用已满，请先在输入区移除不需要的内容。</string>
+    <string name="ai_attachment_wait">当前任务结束后可以添加内容。</string>
+    <string name="ai_attachment_rules">项目规则与读取权限</string>
+</resources>

@@ -608,7 +608,6 @@
     <string name="ai_context_status">上下文 %1$d 字符 · 已压缩 %2$d 次</string>
     <string name="ai_failure_compaction">上下文摘要不完整或不符合大小要求，任务已停止；原始进度保留，请检查后继续。</string>
     <string name="ai_context_attach">引用项目内容</string>
-    <string name="ai_context_attach_help">最多 4 项，每项最多 6000 字符。发送快照；未保存选区会明确标记，超长内容会截断。读取权限允许时，在任务开始及探索相关文件或目录后加载适用规则；规则不能覆盖你的要求或工具权限。</string>
     <string name="ai_context_add">添加引用</string>
     <string name="ai_reference_error">无法读取引用，请检查文件路径、编码和大小。</string>
     <string name="ai_reference_error_log">引用构建报错</string>

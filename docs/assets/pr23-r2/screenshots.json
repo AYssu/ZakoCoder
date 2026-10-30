@@ -1,0 +1,260 @@
+{
+  "device": "ARM64 Android 13",
+  "date": "2026-10-30",
+  "source": "AiReviewScreenshotsDeviceTest: isolated native app, generated project/image, local TLS SSE only",
+  "systemBarsCropped": true,
+  "screenshots": [
+    {
+      "file": "dark-01-assistant-reasoning-collapsed.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ac051a638cb90dbce421aef741d0f86dfc9fb09dc75bc70f24e643dc62007f34"
+    },
+    {
+      "file": "dark-02-assistant-reasoning-expanded.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "833adde9e1678a195877188cd1a77b4ef0662b2c7d5d65d086985c889e8a09c1"
+    },
+    {
+      "file": "dark-03-attachments-sheet.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7260c632370a787394a5736463e69dbcf337e48bdd3e971f68dc216f8d073665"
+    },
+    {
+      "file": "dark-03b-attachments-build-log.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "42096482cea72be752ad09bbbfb562ce4e6689b0bd6d9f93bf8026b343be2052"
+    },
+    {
+      "file": "dark-04-permissions-normal.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7e56ea38d78a83e528dbb3aad8566c063f9467c1fa489087195c4fcc8df930b6"
+    },
+    {
+      "file": "dark-05-permissions-elevated-confirmation.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "227008c534debb47888b4aab2162502febcbbfcbab6e026e621d9bedeb273a92"
+    },
+    {
+      "file": "dark-06-permissions-elevated.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7be500b79b95dda76bbcd87e1c0e81a2b7b5ea270b0884724d6cba484e04d83c"
+    },
+    {
+      "file": "dark-07-local-directory-binding.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "cc3c74c9ea4a61e863369eecd51c000d9a9461b3380a55436c16b12941e53082"
+    },
+    {
+      "file": "dark-07b-local-directory-permission.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "ae575f7d5fef4ced0d193513ffb369adca0c10342eb8f21260feea8b8de0fef9"
+    },
+    {
+      "file": "dark-08-model-thinking-options.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b0e9770b865decda41156d80829326149d5853629333142a95f4c0d0bfde05ed"
+    },
+    {
+      "file": "dark-09-model-context-options.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "acf0754f4300441181f742b545694a46fc6ccda3ac809ac8b53e05047bc3a304"
+    },
+    {
+      "file": "dark-10-model-request-headers.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "00e34eef505b879212951581b50b2e925f08ec65855f1e61b40a096a3c8ab5f8"
+    },
+    {
+      "file": "dark-11-live-thinking-start.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "13f270b49032ee6c92df26c1c915d3ef5bae1cd43b93de9efbc203f8a16552fe"
+    },
+    {
+      "file": "dark-12-live-thinking-growing.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "9a0b1080878e0706f9c71ca1b953af690c5b5dc5567d1850cb31b09322f7a6ed"
+    },
+    {
+      "file": "dark-13-answer-thinking-collapsed.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "14da7635acbb0b7f32f36a4b5ad9ed23624d61b3300b7ff7bda890e9de39bb93"
+    },
+    {
+      "file": "dark-14-model-probe-live-text.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "df5b1497470dcd60d423963a36850553271c7a3e2d7270408f16d10095e03095"
+    },
+    {
+      "file": "dark-15-model-probe-live-tool.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "579b986d9ff73095f619190d3340932301e1c304205ec015bf8d310e20a7e1d7"
+    },
+    {
+      "file": "dark-16-model-probe-verified.png",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "9c2c1559337a50b5c88520bc7f04c9c17d51c9e628b9514643fddd259925bf27"
+    },
+    {
+      "file": "light-01-assistant-reasoning-collapsed.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e39a4453175bb67ce4315eaeb578b86f8de013f732c5fb9f10d96c5f5dca6f85"
+    },
+    {
+      "file": "light-02-assistant-reasoning-expanded.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "697ba0b5ac5a7af71bcec26154a256005b3b8acbf98fd0e9f4fd3955955a561c"
+    },
+    {
+      "file": "light-03-attachments-sheet.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "31d6581138eb7a6fd1bafed39b81490abf83f8db18ef82fa1aefd93b464f0a13"
+    },
+    {
+      "file": "light-03b-attachments-build-log.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d49b58e67f89510164c20f1b10b169c5e4dd6dcd9654fa60ead11eee7a97b4f6"
+    },
+    {
+      "file": "light-04-permissions-normal.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5c578f060d43ed7f3326c433d3e6e8f540af8991dc438130c846489fa9ff4b47"
+    },
+    {
+      "file": "light-05-permissions-elevated-confirmation.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "918a5c5cd65e494e4a4da06cd08f1299d6801844ea3cb546eac2117dac9c7a6d"
+    },
+    {
+      "file": "light-06-permissions-elevated.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b0dc5ed9c84dafde02be7d10d42e62fc7beac87f662f542cf753d3839883adbd"
+    },
+    {
+      "file": "light-07-local-directory-binding.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e39afebb79674ab4fb93bafdf3c4a6135def1dbc76587fe03a93287e182a4187"
+    },
+    {
+      "file": "light-07b-local-directory-permission.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b4bbe1bd9a0e4e8c9a5b20b545f49399f12ec9a7d8cad40bfa1f77075ae65163"
+    },
+    {
+      "file": "light-08-model-thinking-options.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "df9da36026eedd7054fa39685f7206ceb234521eac02011ce0d850f4008940e7"
+    },
+    {
+      "file": "light-09-model-context-options.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "00ca7316cbc9fb6766a60ee6792a0021e195a5e0ae02958901e38cf389974c41"
+    },
+    {
+      "file": "light-10-model-request-headers.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "96d5647024e9d47307c953962fab99ec711e806caba86672dda9d5c7459a1ca6"
+    },
+    {
+      "file": "light-11-live-thinking-start.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7f4d8c27dc9925acd312df4ddcb55a632494120ac208a77d4c7f88d40fab2e97"
+    },
+    {
+      "file": "light-12-live-thinking-growing.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "193e539ba31833c2178527cfd85ecdcbd7b3f94a05d0de9d9b9140b430503270"
+    },
+    {
+      "file": "light-13-answer-thinking-collapsed.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4972ad42949ca359dfc6d9834cabaf2f9f4cea1a3b8895f86d279adffc65fd7c"
+    },
+    {
+      "file": "light-14-model-probe-live-text.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5d111fd471f5aadee86b02463daf9b712340262a8014e2bb5e6cff886b4d5f8e"
+    },
+    {
+      "file": "light-15-model-probe-live-tool.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "58ee2bc3236d389607026f836da89815c7b8b71ae521b3329a252ceb1d59a700"
+    },
+    {
+      "file": "light-16-model-probe-verified.png",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7570bd5c946d7ad18b97abc907457410c93c7185af6530307f39a3f18a9e1dca"
+    }
+  ]
+}

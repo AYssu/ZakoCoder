@@ -221,6 +221,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                     if (call.isCanceled()) throw AiTransportException(kind = AiFailure.Cancelled)
                                     if (content.isNotEmpty()) { firstText = firstText ?: now; delta(content) }
                                     val toolParts = part?.optJSONArray("tool_calls")
+                                    val firstTool = calls.isEmpty() && toolParts != null && toolParts.length() > 0
                                     if (toolParts != null) for (index in 0 until toolParts.length()) {
                                         val tool = toolParts.getJSONObject(index); val position = tool.getInt("index")
                                         if (position !in 0..7) throw AiTransportException(kind = AiFailure.ToolLimit)
@@ -230,7 +231,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                         if (target.first.length > 200 || target.second.length > 100) throw AiTransportException(diagnostic = "invalid_tool_identity")
                                         if (calls.values.sumOf { it.third.length } > 8 * 1024 * 1024) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "tool_arguments_limit")
                                     }
-                                    publish()
+                                    publish(force = firstTool)
                                 }
                             } finally { publish(force = true) }
                             if (finish == "length") throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "finish_length")

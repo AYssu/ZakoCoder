@@ -19,9 +19,14 @@ import dev.zakocoder.app.ai.AiEntry
 
 /** Only publicly returned provider reasoning, never inferred or reconstructed hidden thoughts. */
 @Composable
-internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier) {
+internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, streaming: Boolean = false) {
     if (entry.reasoning.isEmpty() && !entry.reasoningTruncated) return
-    var expanded by remember(entry.id) { mutableStateOf(false) }
+    var expanded by remember(entry.id) { mutableStateOf(streaming) }
+    LaunchedEffect(streaming) { expanded = streaming }
+    val scroll = rememberScrollState()
+    LaunchedEffect(streaming, expanded, entry.reasoning.length, scroll.maxValue) {
+        if (streaming && expanded) scroll.scrollTo(scroll.maxValue)
+    }
     val clipboard = LocalClipboardManager.current
     Surface(modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
@@ -33,10 +38,10 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier) {
             if (expanded) {
                 Text(stringResource(R.string.ai_reasoning_provider_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (entry.reasoning.isNotEmpty()) SelectionContainer {
-                    Text(entry.reasoning.take(12000), Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 12.dp),
+                    Text(if (streaming) entry.reasoning.takeLast(12000) else entry.reasoning.take(12000), Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (entry.reasoning.length > 12000) Text(stringResource(R.string.ai_reasoning_preview_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (entry.reasoning.length > 12000) Text(stringResource(if (streaming) R.string.ai_reasoning_live_preview_limited else R.string.ai_reasoning_preview_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (entry.reasoningTruncated) Text(stringResource(R.string.ai_reasoning_retention_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { clipboard.setText(AnnotatedString(entry.reasoning)) }, enabled = entry.reasoning.isNotEmpty()) {

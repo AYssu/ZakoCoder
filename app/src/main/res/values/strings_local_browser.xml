@@ -1,0 +1,18 @@
+<resources>
+    <string name="local_browser_title">选择项目文件夹</string>
+    <string name="local_browser_description">选择已有源码目录，编辑器、助手和终端直接使用这里的文件。</string>
+    <string name="local_browser_permission_title">允许浏览设备文件</string>
+    <string name="local_browser_permission_description">直接运行 Linux 开发工具需要文件路径。Android 要求开启“管理所有文件”；这不是只授权一个文件夹。绑定后，项目操作以所选目录为范围。</string>
+    <string name="local_browser_grant">前往授权</string>
+    <string name="local_browser_current">当前文件夹</string>
+    <string name="local_browser_up">上一级</string>
+    <string name="local_browser_empty">没有可浏览的子文件夹</string>
+    <string name="local_browser_unavailable">暂时无法读取这个文件夹，请检查文件访问授权后重试。</string>
+    <string name="local_browser_retry">重新读取</string>
+    <string name="local_browser_loading">正在读取文件夹…</string>
+    <string name="local_browser_use">使用此文件夹</string>
+    <string name="local_browser_choose_project">进入包含源码的项目文件夹后再确认。</string>
+    <string name="local_browser_original_notice">修改直接保存到原文件；解绑保留源码。</string>
+    <string name="local_browser_more">加载更多文件夹</string>
+    <string name="local_browser_storage">存储位置：%1$s</string>
+</resources>
