@@ -21,7 +21,19 @@ class ModelOptionsDraftTest {
         val draft = ModelOptionsDraft(null)
         draft.frequency = "NaN"; assertFalse(draft.valid())
         draft.frequency = ""; draft.seed = "1.5"; assertFalse(draft.valid())
-        draft.seed = ""; draft.contextChars = "100"; assertFalse(draft.valid())
-        draft.contextChars = "96000"; assertTrue(draft.valid())
+        draft.seed = ""; draft.windowTokens = "100"; assertFalse(draft.valid())
+        draft.windowTokens = "1000000"; assertTrue(draft.valid())
+    }
+    @Test fun customLegacyBudgetRemainsCleanUntilWindowChanges() {
+        val context = AiContextOptions(maxContextChars = 180000, compressionThresholdPercent = 80, contextWindowTokens = 60000)
+        val profile = AiProfile("legacy", "Legacy", "https://example.invalid", "custom", true, AiParameters(maxTokens = 2048), context = context)
+        val draft = ModelOptionsDraft(profile)
+        assertFalse(draft.dirty(profile))
+        assertEquals(context, draft.context())
+        draft.windowTokens = "1000000"
+        assertTrue(draft.dirty(profile))
+        assertEquals(1000000, draft.context().contextWindowTokens)
+        assertEquals(80, draft.context().compressionThresholdPercent)
+        assertEquals(profile.parameters, draft.parameters(profile.parameters))
     }
 }

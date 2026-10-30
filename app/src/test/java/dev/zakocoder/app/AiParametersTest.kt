@@ -26,9 +26,9 @@ class AiParametersTest {
         listOf(AiParameters(frequencyPenalty = Double.NaN), AiParameters(presencePenalty = 2.1)).forEach {
             assertThrows(IllegalArgumentException::class.java) { it.validate() }
         }
-        assertEquals(76800, AiContextOptions().compressionThresholdChars)
+        assertEquals(128000, AiContextOptions().contextWindowTokens)
         AiContextOptions(32000, false, 50, 2000).validate(); AiContextOptions(256000, true, 95, 12000).validate()
-        listOf(AiContextOptions(31999), AiContextOptions(compressionThresholdPercent = 96), AiContextOptions(summaryMaxChars = 12001)).forEach {
+        listOf(AiContextOptions(contextWindowTokens = 8191), AiContextOptions(compressionThresholdPercent = 96), AiContextOptions(summaryMaxChars = 12001)).forEach {
             assertThrows(IllegalArgumentException::class.java) { it.validate() }
         }
     }

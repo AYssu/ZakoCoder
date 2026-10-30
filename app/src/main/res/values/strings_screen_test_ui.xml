@@ -53,8 +53,8 @@
     <string name="screen_test_root_title">设备授权</string>
     <string name="screen_test_root_granted">已取得 root 授权</string>
     <string name="screen_test_root_request">申请 root 授权</string>
-    <string name="screen_test_root_explanation">仅点击此按钮后请求系统 root 管理器授权。测试仍限制在你选择的调试应用。</string>
-    <string name="screen_test_root_denied">未取得 root 授权。请在 root 管理器的「超级用户」列表允许本应用（%1$s），再返回点击「申请 root 授权」重新检查。APatch 未允许应用前可能不会弹出授权框。</string>
+    <string name="screen_test_root_explanation">点击后检查并申请 Root 权限。测试仍限制在你选择的调试应用。</string>
+    <string name="screen_test_root_denied">未取得 Root 权限。请检查设备的 Root 权限设置，允许本应用使用后再重试。</string>
     <string name="screen_test_share_title">截图与模型</string>
     <string name="screen_test_share_label">发送测试截图给模型</string>
     <string name="screen_test_share_hint">默认关闭。仅本次测试有效；需当前模型支持图片输入。</string>

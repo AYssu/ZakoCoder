@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-30",
+  "device": "Android 13 ARM64",
+  "source": "SmoothStreamingUiDeviceTest: real native Compose rendering of synthetic streamed Markdown; partial and completed states; no provider request or user conversation",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-complete.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0cc51b913c2db1bee6a539a7e3e153c2eece97af3d55b6ecb975da0ddfefe3e5",
+      "captureSha256": "09c4ade62ae1f72ea10a2de7eeea652bc0f12b7fbb0a18f677b540357aa8916d"
+    },
+    {
+      "file": "day-streaming.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "09288f81ce88da6f5b49436ba8e53e0bd736702ad08908bec6dbe74e0c65622c",
+      "captureSha256": "8a4254c676e76a89429ac3bd3634df0b9c48dd04a97843234986cfce4199be7f"
+    },
+    {
+      "file": "night-complete.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "776536ff88f5ae3294cddad3c0f75e3097921bef95c34c0590fdbe50b87a3043",
+      "captureSha256": "953997002542733b175eea6e318b88926fbbc5c7d109091d7acec108d08b07b8"
+    },
+    {
+      "file": "night-streaming.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "8bef0cfd068ccf46ea87f689585524d3b739b4c46be66b3202fcfd4148506362",
+      "captureSha256": "1ff4ad84ada2fe19e1e27d9aca0128c51f91291b654521c8b0cd6b12ca75982c"
+    }
+  ]
+}

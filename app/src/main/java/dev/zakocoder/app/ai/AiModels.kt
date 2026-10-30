@@ -15,12 +15,15 @@ data class AiParameters(val maxTokens: Int? = null, val temperature: Double? = n
         require(presencePenalty == null || (presencePenalty.isFinite() && presencePenalty in -2.0..2.0))
     }
 }
-/** Application character budgets, not provider token limits. */
+/** Explicit provider context window in tokens; local estimates are approximate, not billing usage.
+ * The first field remains source-compatible with older callers; it is never a runtime budget. */
 data class AiContextOptions(val maxContextChars: Int = 96000, val autoCompress: Boolean = true,
-    val compressionThresholdPercent: Int = 80, val summaryMaxChars: Int = 6000) {
+    val compressionThresholdPercent: Int = 90, val summaryMaxChars: Int = 6000,
+    val contextWindowTokens: Int = if (maxContextChars == 96000) 128000 else (maxContextChars / 3).coerceIn(8192, 2097152)) {
+    @Deprecated("Legacy character metadata only; use token budgets")
     val compressionThresholdChars get() = maxContextChars * compressionThresholdPercent / 100
     fun validate() {
-        require(maxContextChars in 32000..256000)
+        require(contextWindowTokens in 8192..2097152)
         require(compressionThresholdPercent in 50..95)
         require(summaryMaxChars in 2000..12000)
     }

@@ -67,7 +67,7 @@ internal fun ScreenTestSheet(controller: ScreenTestController, projectId: String
     var report by remember(projectId) { mutableStateOf<String?>(null) }
     val fallback = stringResource(R.string.screen_test_operation_failed)
     val unavailable = stringResource(R.string.screen_test_service_unavailable)
-    val rootDenied = stringResource(R.string.screen_test_root_denied, context.packageName)
+    val rootDenied = stringResource(R.string.screen_test_root_denied)
     val installSettingsUnavailable = stringResource(R.string.screen_test_install_settings_unavailable)
     val current = state.projectId == projectId && projectId != null
     DisposableEffect(controller, owner) {

@@ -85,7 +85,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
     var invalid by remember(model.configRevision) { mutableStateOf(false) }
     val dirty = host.trim() != model.host || port.toIntOrNull() != model.port || user.trim() != model.user ||
         workingDirectory.trim() != model.workingDirectory || auth != model.auth || secret.isNotEmpty() || passphrase.isNotEmpty() || tmux != model.tmuxEnabled
-    val secretLabel = stringResource(if (auth == SshAuthUi.Password) R.string.ssh_package_password else R.string.ssh_package_private_key)
+    val credentialLabel = stringResource(if (auth == SshAuthUi.Password) R.string.ssh_package_password else R.string.ssh_package_private_key)
     val revealLabel = stringResource(if (visible) R.string.ssh_package_hide_secret else R.string.ssh_package_show_secret)
     SshSection(stringResource(R.string.ssh_package_connection)) {
         OutlinedTextField(value = host, onValueChange = { host = it; invalid = false },
@@ -115,7 +115,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
                 }
             }
         }
-        OutlinedTextField(value = secret, onValueChange = { secret = it }, label = { Text(secretLabel) },
+        OutlinedTextField(value = secret, onValueChange = { secret = it }, label = { Text(credentialLabel) },
             enabled = !model.busy, singleLine = auth == SshAuthUi.Password,
             minLines = if (auth == SshAuthUi.PrivateKey) 3 else 1, maxLines = if (auth == SshAuthUi.PrivateKey) 5 else 1,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

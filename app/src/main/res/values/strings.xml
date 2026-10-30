@@ -539,7 +539,7 @@
     <string name="ai_request_body">请求正文（脱敏）</string>
     <string name="ai_response_body">响应摘要（不含内部思考）</string>
     <string name="ai_request_timeline">实时累计变化（秒 / 事件 / 正文与参数字符 / 数据字节）</string>
-    <string name="ai_log_limits">本地有界记录：最多 32 次请求与 768k 正文字符；过旧记录会裁剪。认证信息已脱敏，项目正文仍属于敏感数据。Token 以服务返回为准；未提供时不估造。上下文字符含消息 JSON，不含工具定义；模型窗口占用率未知。</string>
+    <string name="ai_log_limits">本地有界记录：最多 32 次请求与 768k 正文字符；过旧记录会裁剪。认证信息已脱敏，项目正文仍属于敏感数据。计费 Token 以服务返回为准，未提供时显示未知。上下文 Token 为含系统说明、历史和工具定义的本地估算，不等于实际计费用量；模型窗口与输出预留可在模型配置中调整。</string>
     <string name="ai_log_truncated">该记录正文已截断，统计计数仍保留。</string>
     <string name="ai_log_copy">复制脱敏详情</string>
     <string name="ai_recovery_available">下一次发送会带上中断进度与失败原因，不会自动重放操作。</string>
@@ -604,8 +604,7 @@
     <string name="ai_skills_project_hint">项目 .zakocoder/skills/ 下的 SKILL.md；与内置项合计最多 16 项 / 32k 字符，权限审批保持不变。</string>
     <string name="ai_phase_compacting">正在压缩上下文</string>
     <string name="ai_context_compacting">上下文较长，正在生成续接摘要；此请求计入模型用量。</string>
-    <string name="ai_context_compacted">上下文已压缩：%1$d → %2$d 字符。原始会话仍按本地保留规则保存。</string>
-    <string name="ai_context_status">上下文 %1$d 字符 · 已压缩 %2$d 次</string>
+    <string name="ai_context_status">上下文约 %1$s / %2$s Token · 已压缩 %3$d 次</string>
     <string name="ai_failure_compaction">上下文摘要不完整或不符合大小要求，任务已停止；原始进度保留，请检查后继续。</string>
     <string name="ai_context_attach">引用项目内容</string>
     <string name="ai_context_add">添加引用</string>

@@ -80,7 +80,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         if (json.has("presencePenalty")) json.getDouble("presencePenalty") else null,
         if (json.has("seed")) json.getInt("seed") else null).also { it.validate() }
     private fun contextOptions(json: JSONObject): AiContextOptions = json.optJSONObject("context")?.let {
-        AiContextOptions(it.getInt("maxContextChars"), it.getBoolean("autoCompress"), it.getInt("compressionThresholdPercent"), it.getInt("summaryMaxChars"))
+        decodeContextOptions(it)
     }?.also { it.validate() } ?: AiContextOptions()
     private fun headers(json: JSONObject): Map<String, String> {
         val encrypted = json.optJSONObject("requestHeaders") ?: return emptyMap()
@@ -170,7 +170,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         resolved.parameters.frequencyPenalty?.let { item.put("frequencyPenalty", it) }
         resolved.parameters.presencePenalty?.let { item.put("presencePenalty", it) }
         resolved.parameters.seed?.let { item.put("seed", it) }
-        item.put("context", JSONObject().put("maxContextChars", resolved.context.maxContextChars).put("autoCompress", resolved.context.autoCompress)
+        item.put("context", JSONObject().put("contextWindowTokens", resolved.context.contextWindowTokens).put("maxContextChars", resolved.context.maxContextChars).put("autoCompress", resolved.context.autoCompress)
             .put("compressionThresholdPercent", resolved.context.compressionThresholdPercent).put("summaryMaxChars", resolved.context.summaryMaxChars))
         item.put("headerNames", JSONArray(resolved.requestHeaders.keys.toList()))
         item.put("requestHeaders", encrypt(JSONObject(), JSONObject(resolved.requestHeaders).toString(), id + ":headers", headerPayload = true))

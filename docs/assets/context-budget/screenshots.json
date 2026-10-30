@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-30",
+  "device": "Android 13 ARM64",
+  "source": "ContextBudgetUiDeviceTest: real native Compose window/preset panels; synthetic configuration; 360dp viewport and 130% font scale; keyboard interaction not covered",
+  "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-model-presets.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5de1dd3ecc8c38a589c0f900b8bef21e4dfa5c6103c70aef4ed8b40799a2071e",
+      "captureSha256": "da696c6451919fb559b7d7710c13c084b0e5dd2b4b0e7851f3b3541f0860891c"
+    },
+    {
+      "file": "day-window-panel.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "3e8240349803b97f9eb9bdb9f3833a0545381adccdc1d4ddcdca04c83cec015b",
+      "captureSha256": "033e7489451513a0f4a15592792a8e3964ea9ff3b1042e8e3e22877cd50018b9"
+    },
+    {
+      "file": "night-model-presets.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "e1435873ee46b682870874cff016dc39944edd3a2a43a91d9d201c3fd84ba282",
+      "captureSha256": "13454f4a490f936e46c0d43985274839c896d67fa758083e9accda27cc1fa334"
+    },
+    {
+      "file": "night-window-panel.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "4474d08b4627dfbc1fb19de2de7206440e8915f5545d20262c1e704892e72726",
+      "captureSha256": "88ca2d178328be91025f1c2bb1eeb19dbf4adda31d1064efdef6860ae3e618c7"
+    }
+  ]
+}

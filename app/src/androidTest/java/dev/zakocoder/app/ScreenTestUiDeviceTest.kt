@@ -207,11 +207,11 @@ No test result was invented; this is UI-only fixture content."""
             click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
             capture(dark, "root-accessibility-entry")
 
-            val rootGuidance = context.getString(R.string.screen_test_root_denied, context.packageName)
+            val rootGuidance = context.getString(R.string.screen_test_root_denied)
             panel(selected.copy(access = ScreenTestAccess.Root, rootGranted = false), rootGuidance)
             await("Actionable root authorization guidance") { has(rootGuidance) }
-            assertTrue(rootGuidance.contains(context.packageName))
-            assertTrue(rootGuidance.contains("APatch"))
+            assertFalse(rootGuidance.contains(context.packageName))
+            assertTrue(rootGuidance.contains("重试"))
             assertFalse(has(context.getString(R.string.screen_test_root_granted)))
             reveal(rootGuidance)
             capture(dark, "root-permission-guidance")

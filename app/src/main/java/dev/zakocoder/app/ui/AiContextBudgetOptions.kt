@@ -1,0 +1,87 @@
+package dev.zakocoder.app.ui
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import dev.zakocoder.app.R
+import java.util.Locale
+
+internal data class ContextWindowPreset(val label: Int, val tokens: Int)
+
+/** Version-specific reference windows, checked against official API docs on 2026-10-30.
+ * Selecting a window never changes the selected model, endpoint or credentials. */
+internal val contextWindowPresets = listOf(
+    ContextWindowPreset(R.string.ai_context_preset_deepseek, 1_000_000),
+    ContextWindowPreset(R.string.ai_context_preset_gpt54, 1_050_000),
+    ContextWindowPreset(R.string.ai_context_preset_gpt41, 1_047_576),
+    ContextWindowPreset(R.string.ai_context_preset_gemini, 1_000_000),
+    ContextWindowPreset(R.string.ai_context_preset_grok, 500_000),
+)
+
+internal fun tokenWindowLabel(tokens: Long): String {
+    val divisor = when { tokens >= 1_000_000 -> 1_000_000.0; tokens >= 1_000 -> 1_000.0; else -> 1.0 }
+    val suffix = when { tokens >= 1_000_000 -> "M"; tokens >= 1_000 -> "K"; else -> "" }
+    return if (divisor == 1.0) tokens.toString() else
+        String.format(Locale.ROOT, "%.2f", tokens / divisor).trimEnd('0').trimEnd('.') + suffix
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, changed: () -> Unit) {
+    var presets by remember { mutableStateOf(false) }
+    Text(stringResource(R.string.ai_options_context), style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.ai_options_context_hint), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.ai_context_window_presets), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+        TextButton(onClick = { presets = true }, enabled = editable) { Text(stringResource(R.string.ai_context_choose_model_window)) }
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(32_000, 64_000, 128_000, 256_000, 500_000, 1_000_000, 2_000_000).forEach { tokens ->
+            FilterChip(selected = draft.windowTokens.toIntOrNull() == tokens, enabled = editable,
+                onClick = { draft.windowTokens = tokens.toString(); changed() }, label = { Text(tokenWindowLabel(tokens.toLong())) })
+        }
+    }
+    OutlinedTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth(),
+        enabled = editable, singleLine = true, label = { Text(stringResource(R.string.ai_options_context_tokens)) },
+        supportingText = { Text(stringResource(R.string.ai_context_window_range)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
+    Text(stringResource(R.string.ai_context_gateway_hint), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.ai_options_auto), Modifier.weight(1f))
+        Switch(draft.automatic, { draft.automatic = it; changed() }, enabled = editable)
+    }
+    ContextIntegerField(draft.threshold, { draft.threshold = it; changed() }, R.string.ai_options_threshold, editable)
+    ContextIntegerField(draft.summaryChars, { draft.summaryChars = it; changed() }, R.string.ai_options_summary_chars, editable)
+    Text(stringResource(R.string.ai_context_summary_hint), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (presets) WorkbenchSheet(stringResource(R.string.ai_context_choose_model_window), { presets = false },
+        subtitle = stringResource(R.string.ai_context_presets_checked)) {
+        Text(stringResource(R.string.ai_context_presets_scope), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        contextWindowPresets.forEach { preset ->
+            OutlinedButton(onClick = { draft.windowTokens = preset.tokens.toString(); changed(); presets = false }, enabled = editable,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), contentPadding = PaddingValues(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(stringResource(preset.label), style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.ai_context_preset_exact, java.text.NumberFormat.getIntegerInstance().format(preset.tokens)),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                WorkbenchIcon(Glyph.Next, Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContextIntegerField(value: String, update: (String) -> Unit, label: Int, editable: Boolean) {
+    OutlinedTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
+        label = { Text(stringResource(label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
+}

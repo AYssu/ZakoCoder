@@ -1,0 +1,17 @@
+<resources>
+    <string name="ai_context_window_presets">上下文容量</string>
+    <string name="ai_context_choose_model_window">按模型选择</string>
+    <string name="ai_context_window_range">支持 8,192～2,097,152 Token；K = 1,000，M = 1,000,000。</string>
+    <string name="ai_context_gateway_hint">窗口应与实际模型和网关限制一致。选择 1M 不会让不支持长上下文的服务获得该能力；这些设置只控制本地预算。</string>
+    <string name="ai_context_summary_hint">默认在可用输入预算的 90% 触发，并为输出预留空间。关闭后到达预算会停止并说明原因；总结长度仍以字符计，不是 Token。</string>
+    <string name="ai_context_presets_checked">按具体版本列出参考窗口 · 核对于 2026 年 10 月 30 日</string>
+    <string name="ai_context_presets_scope">仅填入上下文窗口，不更换当前模型或服务。不同版本和代理网关可能有更低限制，可返回手动调整。</string>
+    <string name="ai_context_preset_exact">%1$s Token</string>
+    <string name="ai_context_preset_deepseek">DeepSeek Flash / V4 Pro</string>
+    <string name="ai_context_preset_gpt54">GPT-5.4</string>
+    <string name="ai_context_preset_gpt41">GPT-4.1</string>
+    <string name="ai_context_preset_gemini">Gemini 4 Argon</string>
+    <string name="ai_context_preset_grok">Grok 4.7</string>
+    <string name="ai_context_reserve_status">输出预留 %1$s Token · 上下文为本地估算，计费用量见请求详情</string>
+    <string name="ai_context_estimated_request">本次输入估算 ≈ %1$s / %2$s Token · 输出预留 %3$s Token</string>
+</resources>

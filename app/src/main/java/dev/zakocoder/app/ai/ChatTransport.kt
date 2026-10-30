@@ -71,7 +71,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         val started = System.nanoTime()
         fun elapsed() = (System.nanoTime() - started) / 1000000
         var record = AiRequestLog(model = clean(config.model), origin = AiConfigStore.endpoint(config.endpoint).toHttpUrl().let { "${it.scheme}://${it.host}:${it.port}" },
-            contextChars = messages.toString().length)
+            contextChars = messages.toString().length, estimatedContextTokens = tokenBudget(config, messages, tools).inputTokens,
+            contextWindowTokens = config.context.contextWindowTokens, contextOutputReserveTokens = config.parameters.maxTokens ?: minOf(8192, config.context.contextWindowTokens / 4))
         val lock = Any()
         fun update(change: (AiRequestLog) -> AiRequestLog) = synchronized(lock) {
             record = change(record).copy(elapsed = elapsed()); observe(record)
@@ -119,7 +120,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         val diagnosticPayload = JSONObject(body.toString()).put("messages", imageMessages.diagnosticMessages).toString()
         update { it.copy(request = clean(diagnosticPayload).take(240000), requestBytes = payload.toByteArray().size,
             truncated = diagnosticPayload.length > 240000 || imageMessages.omitted > 0) }
-        if (payload.length > 8 * 1024 * 1024) { update { it.copy(complete = true, failure = AiFailure.ContextLimit, diagnostic = "request_size_limit") }; throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "request_size_limit") }
+        if (payload.toByteArray().size > AI_REQUEST_MAX_BYTES) { update { it.copy(complete = true, failure = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit") }; throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit") }
         // Resolve before enqueueing: transport errors are classified by the existing failure kinds.
         val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {
             update { it.copy(complete = true, failure = AiFailure.Network, diagnostic = "invalid_proxy") }

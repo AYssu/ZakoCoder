@@ -1,7 +1,7 @@
 {
   "date": "2026-10-30",
   "baseCommit": "56d86089be4eb58ab77fa3235e0c5024ce9e4b34",
-  "device": "Android 13 ARM64 MIUI",
+  "device": "Android 13 ARM64",
   "source": "CapabilityPackagesUiDeviceTest: native Compose render fixtures, 360dp viewport, 130% font; synthetic configuration; no user credentials",
   "systemBarsCropped": true,
   "cropPixels": {

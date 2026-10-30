@@ -40,6 +40,7 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
         turnTimings = turnTimings.filter { it.turn in 1 until turn },
         contextSummary = summary,
         contextChars = summary.length,
+        estimatedContextTokens = estimateAiTokens(summary), contextWindowTokens = contextWindowTokens, contextOutputReserveTokens = contextOutputReserveTokens,
         conversations = conversations,
         workspaceRevision = workspaceRevision,
         enabledSkills = enabledSkills,
