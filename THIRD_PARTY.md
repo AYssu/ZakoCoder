@@ -75,18 +75,22 @@ APK 的 `assets/licenses/` 保留 PRoot COPYING、GPL v3、talloc LGPL v3 和 sh
 - Kotlin、Coroutines、AndroidX、Compose：Apache-2.0 等各自上游声明，通过 Maven 仓库解析。
 - Apache Commons Compress（Apache-2.0）：XZ/TAR 安全解包；XZ for Java：上游公开领域声明及附属许可，保留依赖内声明。
 - JUnit 4（EPL-1.0）和 AndroidX Test：仅测试依赖，不作为用户项目预置数据。
-- Gradle Wrapper：标准启动脚本和 jar，原始版权声明保留，Gradle 8.13 分发配置 SHA-256。
+- Gradle Wrapper：标准启动脚本和 jar，原始版权声明保留；仓库构建固定 Gradle 9.8.2，官方分发 `https://services.gradle.org/distributions/gradle-9.8.2-bin.zip`，SHA-256 `21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607`。上文手机开发工具包的 Gradle 8.13 是独立安装版本，未随宿主构建升级。
 
 新增或更新第三方材料需记录组件、精确版本/提交、官方来源、许可、修改、摘要和分发方式；不得删除声明。对二进制对应源码不明确的组件，不能将“未提交 Git”当作无需许可审查的理由。
 
 ## AI 网络与测试
 
-HTTP/SSE 传输使用官方 Maven Central `com.squareup.okhttp3:okhttp:4.12.0`，来源 https://github.com/square/okhttp/tree/parent-4.12.0 ，Apache-2.0，未修改上游代码。传递依赖 `com.squareup.okio:okio-jvm:3.6.0`，来源 https://github.com/square/okio/tree/parent-3.6.0 ，Apache-2.0。APK 随附 `assets/licenses/OkHttp-Apache-2.0.txt`、`Okio-Apache-2.0.txt` 和上游 PublicSuffix NOTICE，JAR 内其他声明保留。测试专用 `mockwebserver:4.12.0`、`okhttp-tls:4.12.0` 仅进入 androidTest，不把测试 CA、服务或配置打入生产应用。
+HTTP/SSE 传输使用官方 Maven Central `com.squareup.okhttp3:okhttp:5.5.1`。Gradle 模块元数据在 Android 上选择 `com.squareup.okhttp3:okhttp-android:5.5.1`（AAR）；来源 https://github.com/square/okhttp/tree/parent-5.5.1 ，标签对应提交 `be5151ac3b63d3db405b9dbb62632c36cc6a657e`，Apache-2.0，未修改上游代码。传递依赖 `com.squareup.okio:okio-jvm:3.18.1`，来源 https://github.com/square/okio/tree/parent-3.18.1 ，Apache-2.0。APK 随附 `assets/licenses/OkHttp-Apache-2.0.txt`、`Okio-Apache-2.0.txt`，均与上述版本上游 `LICENSE.txt` 一致。测试专用 `com.squareup.okhttp3:mockwebserver:5.5.1`、`okhttp-tls:5.5.1` 仅进入 androidTest；保留上游仍发布的 `okhttp3.mockwebserver` 兼容 API，不把测试 CA、服务或配置打入生产应用。
 
-| Maven 制品 | SHA-256 |
+Android AAR 的 `assets/PublicSuffixDatabase.list` 为上游生成的 Public Suffix List 数据，适用 MPL-2.0，保持原样打包。其字节与固定标签的 [Android 数据文件](https://github.com/square/okhttp/blob/parent-5.5.1/okhttp/src/androidMain/assets/PublicSuffixDatabase.list) 完全一致；对应可修改列表及上游通知位于同标签的 [public_suffix_list.dat](https://github.com/square/okhttp/blob/parent-5.5.1/okhttp/src/jvmTest/resources/okhttp3/internal/publicsuffix/public_suffix_list.dat) 和 [NOTICE](https://github.com/square/okhttp/blob/parent-5.5.1/okhttp/src/jvmTest/resources/okhttp3/internal/publicsuffix/NOTICE)。APK 保留通知 `assets/licenses/OkHttp-PublicSuffix-NOTICE.txt`，并随附完整 `OkHttp-PublicSuffix-MPL-2.0.txt`（来源 https://www.mozilla.org/MPL/2.0/ ）。制品中的其他声明保留。
+
+| Maven 制品 / 上游数据 | SHA-256 |
 | --- | --- |
-| okhttp-4.12.0.jar | `b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0` |
-| okio-jvm-3.6.0.jar | `67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412` |
+| okhttp-android:5.5.1 的 okhttp.aar | `ce00fd7751cf7e4f28ba73a0287b3cc0c62b8b83f038e428592eeef189513ee1` |
+| okio-jvm-3.18.1.jar | `b97b640557a650d15411f2be29aef558c4e422a83653cb18ba494311dbed18be` |
+| AAR 内 assets/PublicSuffixDatabase.list | `c75ab827afd7ffff59a51b14729c25dbfc3b45237eb40ccf02bec7b7d44304a4` |
+| 固定标签中的 public_suffix_list.dat | `986879fc41f0a5cc65f5e7d88fa68f6f0d9c366bb620418b8b8045f61a134077` |
 
 Chat Completions 请求、SSE delta 和工具关联按公开协议独立实现，未复制 Operit 业务代码，未引入其 Agent、脚本引擎或插件模块。协议参考 OpenAI 官方 SDK schema： https://github.com/openai/openai-python/blob/main/src/openai/types/chat/chat_completion_chunk.py 。本项目没有嵌入该 SDK 源码或运行依赖。
 

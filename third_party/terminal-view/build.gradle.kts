@@ -1,7 +1,7 @@
 plugins { alias(libs.plugins.android.library) }
 android {
     namespace = "com.termux.view"
-    compileSdk = 36
+    compileSdk = 37
     buildToolsVersion = "36.0.0"
     defaultConfig {
         minSdk = 26

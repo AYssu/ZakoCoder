@@ -4,7 +4,6 @@ import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
 import kotlinx.coroutines.*
-import okhttp3.mockwebserver.QueueDispatcher
 import okhttp3.mockwebserver.MockResponse
 import org.json.JSONArray
 import org.json.JSONObject
@@ -55,12 +54,11 @@ class AiLiveReasoningDeviceTest {
         AiDeviceTest.Fixture(base, timeoutSeconds = 45).use { f ->
             // QueueDispatcher.peek normally applies the response throttle to incoming bodies too.
             // Only pace server events; the full system/tool request must upload immediately.
-            f.server.dispatcher = object : QueueDispatcher() {
-                override fun peek() = MockResponse()
-            }
+            val responses = ResponseOnlyDispatcher()
+            f.server.dispatcher = responses
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("live") }; ready(ai)
-            f.server.enqueue(response(reasoning("first "), reasoning("second"), content("answer"), reasoning(" late")))
+            responses.enqueue(response(reasoning("first "), reasoning("second"), content("answer"), reasoning(" late")))
             main { assertTrue(ai.send("fixture question")) }
             await(ai, "First reasoning fragment") { ai.state.value.reasoningEntryId != null }
             val entryId = ai.state.value.reasoningEntryId!!
@@ -87,15 +85,14 @@ class AiLiveReasoningDeviceTest {
         AiDeviceTest.Fixture(base, timeoutSeconds = 45).use { f ->
             // QueueDispatcher.peek normally applies the response throttle to incoming bodies too.
             // Only pace server events; the full system/tool request must upload immediately.
-            f.server.dispatcher = object : QueueDispatcher() {
-                override fun peek() = MockResponse()
-            }
+            val responses = ResponseOnlyDispatcher()
+            f.server.dispatcher = responses
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("tools") }; ready(ai)
             val tool = JSONObject().put("tool_calls", JSONArray().put(JSONObject().put("index", 0).put("id", "local-list")
                 .put("function", JSONObject().put("name", "list_files").put("arguments", "{\"path\":\"\"}"))))
-            f.server.enqueue(response(reasoning("round one"), tool, tools = true))
-            f.server.enqueue(response(reasoning("round two"), content("done")))
+            responses.enqueue(response(reasoning("round one"), tool, tools = true))
+            responses.enqueue(response(reasoning("round two"), content("done")))
             main { assertTrue(ai.send("inspect fixture directory")) }
             await(ai, "First tool-round reasoning") { ai.state.value.reasoningEntryId != null }
             val first = ai.state.value.reasoningEntryId!!
@@ -116,12 +113,11 @@ class AiLiveReasoningDeviceTest {
         AiDeviceTest.Fixture(base, timeoutSeconds = 45).use { f ->
             // QueueDispatcher.peek normally applies the response throttle to incoming bodies too.
             // Only pace server events; the full system/tool request must upload immediately.
-            f.server.dispatcher = object : QueueDispatcher() {
-                override fun peek() = MockResponse()
-            }
+            val responses = ResponseOnlyDispatcher()
+            f.server.dispatcher = responses
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("failure") }; ready(ai)
-            f.server.enqueue(response(reasoning("received before missing DONE"), done = false))
+            responses.enqueue(response(reasoning("received before missing DONE"), done = false))
             main { assertTrue(ai.send("incomplete stream")) }
             await(ai, "Reasoning before incomplete stream") { ai.state.value.reasoningEntryId != null }
             await(ai, "Incomplete stream finishes") { !ai.state.value.active }
@@ -129,7 +125,7 @@ class AiLiveReasoningDeviceTest {
             assertNull(ai.state.value.reasoningEntryId)
             assertEquals("received before missing DONE", ai.state.value.timeline.last { it.role == AiRole.Assistant }.reasoning)
             main { ai.select("cancel") }; ready(ai)
-            f.server.enqueue(response(reasoning("received before stop"), content("padding".repeat(500))))
+            responses.enqueue(response(reasoning("received before stop"), content("padding".repeat(500))))
             main { assertTrue(ai.send("cancel fixture")) }
             await(ai, "Reasoning before cancellation") { ai.state.value.reasoningEntryId != null }
             main { ai.stop() }

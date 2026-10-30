@@ -1,5 +1,5 @@
 [versions]
-agp = "8.13.2"
+agp = "9.5.0"
 kotlin = "2.2.21"
 compose-bom = "2026.02.01"
 activity = "1.10.1"
@@ -8,14 +8,14 @@ coroutines = "1.10.2"
 
 commons-compress = "1.27.1"
 xz = "1.12"
-lifecycle = "2.8.7"
+lifecycle = "2.10.0"
 junit = "4.13.2"
 annotation = "1.9.0"
 test-runner = "1.6.2"
 test-core = "1.6.1"
 
 sora = "0.23.6"
-okhttp = "4.12.0"
+okhttp = "5.5.1"
 
 [libraries]
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
@@ -44,7 +44,6 @@ test-core = { module = "androidx.test:core-ktx", version.ref = "test-core" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 android-library = { id = "com.android.library", version.ref = "agp" }

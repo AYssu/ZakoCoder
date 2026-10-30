@@ -96,10 +96,10 @@ class AiDiagnosticsDeviceTest {
 
     @Test(timeout = 120000) fun httpErrorsOutputLimitAndCancellationHaveDistinctDurableCauses() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
-            AiDeviceTest.Fixture(context).use { f ->
+            AiDeviceTest.Fixture(context, responseOnly = true).use { f ->
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("errors") }; ready(ai)
-                f.server.enqueue(MockResponse().setResponseCode(429).setBody("PRIVATE_ERROR_BODY test-only-placeholder"))
+                f.enqueueResponse(MockResponse().setResponseCode(429).setBody("PRIVATE_ERROR_BODY test-only-placeholder"))
                 main { ai.send("第一条") }; await { !ai.state.value.active }; request(f)
                 assertEquals(AiFailure.Http, ai.state.value.failureKind); assertTrue(ai.state.value.error.contains("429"))
                 assertFalse(ai.state.value.requests.single().encode().toString().contains("PRIVATE_ERROR_BODY"))

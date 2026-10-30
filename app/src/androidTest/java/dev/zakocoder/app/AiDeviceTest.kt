@@ -24,7 +24,7 @@ class AiDeviceTest {
     private val context = instrumentation.targetContext
     private suspend fun await(condition: () -> Boolean) = withTimeout(20000) { while (!condition()) delay(50) }
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
-    class Fixture(val context: android.content.Context, timeoutSeconds: Long = 15) : AutoCloseable {
+    class Fixture(val context: android.content.Context, timeoutSeconds: Long = 15, responseOnly: Boolean = false) : AutoCloseable {
         val token = "ai-test-${UUID.randomUUID()}"
         val root = File(context.cacheDir, token).apply { mkdirs() }
         val history = AiHistoryStore(File(root, "history"))
@@ -36,6 +36,7 @@ class AiDeviceTest {
             val certificate = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
             val serverCertificates = HandshakeCertificates.Builder().heldCertificate(certificate).build()
             val clientCertificates = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
+            if (responseOnly) server.dispatcher = ResponseOnlyDispatcher()
             server.useHttps(serverCertificates.sslSocketFactory(), false); server.start()
             transport = ChatTransport(OkHttpClient.Builder().sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager)
                 .followRedirects(false).followSslRedirects(false).callTimeout(timeoutSeconds, TimeUnit.SECONDS).build())
@@ -54,7 +55,11 @@ class AiDeviceTest {
                 append("data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", finish)))}\n\n")
                 if (done) append("data: [DONE]\n\n")
             }
-            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body).throttleBody(37, delayMillis, TimeUnit.MILLISECONDS))
+            enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body).throttleBody(37, delayMillis, TimeUnit.MILLISECONDS))
+        }
+        fun enqueueResponse(response: MockResponse) {
+            val dispatcher = server.dispatcher
+            if (dispatcher is ResponseOnlyDispatcher) dispatcher.enqueue(response) else server.enqueue(response)
         }
         override fun close() {
             server.shutdown(); root.deleteRecursively()
