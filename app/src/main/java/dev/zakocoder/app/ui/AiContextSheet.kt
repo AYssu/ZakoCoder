@@ -13,7 +13,7 @@ import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.*
 
 @Composable
-internal fun AiContextSheet(ai: AiController, state: AiState, close: () -> Unit) {
+internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> Unit)? = null, close: () -> Unit) {
     var directory by remember(state.projectId) { mutableStateOf("") }
     var directoryRetry by remember(state.projectId, directory) { mutableIntStateOf(0) }
     val listing = rememberDirectoryListing(state.projectId, directory, directoryRetry) { ai.referenceFiles(directory) }
@@ -23,6 +23,11 @@ internal fun AiContextSheet(ai: AiController, state: AiState, close: () -> Unit)
     var errorText by remember { mutableStateOf("") }
     var tab by remember { mutableIntStateOf(0) }
     WorkbenchSheet(stringResource(R.string.ai_context_attach), close) {
+        if (onImages != null) {
+            OutlinedButton(onClick = onImages, enabled = !state.active && !state.imagesLoading && state.pendingImages.size < AiImages.MAX_PER_TURN,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ai_images_add)) }
+            Text(stringResource(R.string.ai_images_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Text(stringResource(R.string.ai_context_attach_help), style = MaterialTheme.typography.bodySmall)
         Row { TextButton(onClick = { tab = 0 }) { Text(stringResource(R.string.browse_files)) }; TextButton(onClick = { tab = 1 }) { Text(stringResource(R.string.ai_reference_error_log)) } }
         if (tab == 1) {

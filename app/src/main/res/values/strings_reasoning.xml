@@ -1,0 +1,9 @@
+<resources>
+    <string name="ai_reasoning_title">思考内容</string>
+    <string name="ai_reasoning_expand">展开服务返回的思考内容</string>
+    <string name="ai_reasoning_collapse">收起思考内容</string>
+    <string name="ai_reasoning_provider_hint">模型服务公开返回的 reasoning_content 原文，与最终回答分开显示。</string>
+    <string name="ai_reasoning_copy">复制思考内容</string>
+    <string name="ai_reasoning_preview_limited">预览仅显示前 12000 字符，复制可获取本条已保留的全部内容。</string>
+    <string name="ai_reasoning_retention_limited">本条思考内容超过展示保留上限，后续部分未保留在对话界面中；复制同样只包含已保留部分。</string>
+</resources>

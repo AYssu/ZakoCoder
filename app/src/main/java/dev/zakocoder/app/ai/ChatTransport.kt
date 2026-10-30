@@ -64,7 +64,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     }
 
     suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null, proxy: String = "",
-        toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        imageData: (suspend (AiImageAttachment) -> String)? = null, toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
         AiRequestHeaders.validate(config.requestHeaders)
         val redactor = AiLogRedactor(config.key, config.requestHeaders.values)
         fun clean(value: String): String = redactor.clean(value)
@@ -94,7 +94,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             is IOException -> "network_io_failed"
             else -> "invalid_response_structure"
         }
-        val payload = JSONObject().put("model", config.model).put("messages", messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
+        val imageMessages = wireImageMessages(messages, imageData)
+        val body = JSONObject().put("model", config.model).put("messages", imageMessages.messages).put("stream", true).apply { if (tools.length() > 0) put("tools", tools) }
             .put("stream_options", JSONObject().put("include_usage", true)).apply {
             config.parameters.validate()
             config.parameters.maxTokens?.let { put("max_tokens", it) }
@@ -113,8 +114,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                     put("thinking", JSONObject().put("type", "disabled"))
                 }
             }
-        }.toString()
-        update { it.copy(request = clean(payload).take(240000), requestBytes = payload.toByteArray().size, truncated = payload.length > 240000) }
+        }
+        val payload = body.toString()
+        val diagnosticPayload = JSONObject(body.toString()).put("messages", imageMessages.diagnosticMessages).toString()
+        update { it.copy(request = clean(diagnosticPayload).take(240000), requestBytes = payload.toByteArray().size,
+            truncated = diagnosticPayload.length > 240000 || imageMessages.omitted > 0) }
         if (payload.length > 8 * 1024 * 1024) { update { it.copy(complete = true, failure = AiFailure.ContextLimit, diagnostic = "request_size_limit") }; throw AiTransportException(kind = AiFailure.ContextLimit, diagnostic = "request_size_limit") }
         // Resolve before enqueueing: transport errors are classified by the existing failure kinds.
         val http = try { clientFor(proxy) } catch (_: IllegalArgumentException) {

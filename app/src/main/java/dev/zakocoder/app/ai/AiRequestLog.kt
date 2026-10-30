@@ -6,6 +6,7 @@ import org.json.JSONObject
 
 /** Only stable, allow-listed diagnostics enter history. Never retain Throwable, headers or provider error bodies. */
 enum class AiFailure(val label: Int) {
+    Image(R.string.ai_failure_image),
     Compaction(R.string.ai_failure_compaction), Skill(R.string.ai_failure_skill), Http(R.string.ai_failure_http), IdleTimeout(R.string.ai_failure_idle), Network(R.string.ai_failure_network),
     Protocol(R.string.ai_failure_protocol), OutputLimit(R.string.ai_failure_output), ContextLimit(R.string.ai_failure_context),
     RoundLimit(R.string.ai_failure_round), ToolLimit(R.string.ai_failure_tools), TaskTimeout(R.string.ai_failure_task),

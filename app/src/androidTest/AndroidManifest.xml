@@ -2,6 +2,6 @@
     <application>
         <!-- Test APK only: serves fixed test bytes, never application files. Removed with the test APK. -->
         <provider android:name="dev.zakocoder.app.ImportFixtureProvider"
-            android:authorities="dev.zakocoder.app.test.import-fixture" android:exported="true" />
+            android:authorities="${applicationId}.import-fixture" android:exported="true" />
     </application>
 </manifest>
