@@ -1,12 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "dev.zakocoder.app"
-    compileSdk = 36
+    compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
@@ -20,7 +19,7 @@ android {
     }
     ndkVersion = "28.2.13676358"
     defaultConfig { ndk { abiFilters += "arm64-v8a" } }
-    sourceSets.getByName("main").jniLibs.srcDir(rootProject.file("runtime-artifacts/jniLibs"))
+    sourceSets.getByName("main").jniLibs.directories.add(rootProject.file("runtime-artifacts/jniLibs").absolutePath)
     packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libzakocoder_*.so" } }
     buildFeatures { compose = true }
     testOptions { unitTests.isReturnDefaultValues = true }
@@ -28,7 +27,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -38,9 +36,9 @@ android {
     lint { warningsAsErrors = true }
 }
 
-val prepareRuntime by tasks.registering(Exec::class) {
+val prepareRuntime = tasks.register<Exec>("prepareRuntime") {
     workingDir(rootProject.projectDir)
-    commandLine("python3", "scripts/prepare_runtime.py", "--ndk", android.ndkDirectory.absolutePath)
+    commandLine("python3", "scripts/prepare_runtime.py", "--ndk", androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath)
     inputs.file(rootProject.file("runtime/artifacts.json"))
     inputs.file(rootProject.file("scripts/prepare_runtime.py"))
     // Always verify, including files already present. No unverified local override.

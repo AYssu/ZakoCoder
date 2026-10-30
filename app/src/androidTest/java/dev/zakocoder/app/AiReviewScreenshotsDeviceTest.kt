@@ -296,9 +296,8 @@ class AiReviewScreenshotsDeviceTest {
             }
             AiDeviceTest.Fixture(isolated, timeoutSeconds = 90).use { fixture ->
                 // Pace outbound screenshot events, never the much larger system/tool upload.
-                fixture.server.dispatcher = object : okhttp3.mockwebserver.QueueDispatcher() {
-                    override fun peek() = MockResponse()
-                }
+                val responses = ResponseOnlyDispatcher()
+                fixture.server.dispatcher = responses
                 withContext(Dispatchers.IO) {
                     val active = requireNotNull(fixture.config.catalog().active)
                     fixture.config.saveProfile(AiModelDraft(active.id, "界面验收（本地测试）", active.endpoint, "本地测试模型", null))
@@ -309,7 +308,7 @@ class AiReviewScreenshotsDeviceTest {
                 val answer = "建议：顶部放项目身份，中间保留内容，底部提供模型与权限入口。\n\n本地测试服务回复；未修改文件或执行构建。"
                 val event = JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject().put("reasoning_content", reasoning).put("content", answer))))
                 val finish = JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", "stop")))
-                fixture.server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+                responses.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
                     .setBody("data: $event\n\ndata: $finish\n\ndata: [DONE]\n\n"))
                 var record: AiRequestLog? = null
                 val started = System.currentTimeMillis()

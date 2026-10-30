@@ -7,6 +7,9 @@
     <issue id="GradleDependency" severity="informational" />
     <issue id="NewerVersionAvailable" severity="informational" />
     <issue id="OldTargetApi" severity="informational" />
+    <!-- Release resource shrinking stays unchanged and release remains blocked pending review.
+         This optimization recommendation is not a correctness or security exception. -->
+    <issue id="NotShrinkingResources" severity="informational" />
     <!-- This validation milestone explicitly targets ARM64 phones only. -->
     <issue id="ChromeOsAbiSupport" severity="ignore" />
 </lint>
