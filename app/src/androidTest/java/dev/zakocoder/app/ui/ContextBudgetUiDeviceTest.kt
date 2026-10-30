@@ -23,6 +23,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.AiParameters
+import dev.zakocoder.app.ai.AiRequestLog
+import dev.zakocoder.app.ai.AiState
 import dev.zakocoder.app.warmDeviceActivity
 import org.junit.Assert.*
 import org.junit.Before
@@ -79,6 +81,14 @@ class ContextBudgetUiDeviceTest {
         val title = context.getString(R.string.ai_options_context)
         val draft = ModelOptionsDraft(null).apply { seed = "42"; frequency = "0.25" }
         val before = draft.parameters(AiParameters())
+        val diagnostics = mutableStateOf(false)
+        val request = AiRequestLog(id = "budget-review", turn = 1, round = 1,
+            model = "review-model", origin = "https://example.invalid", elapsed = 1250,
+            status = 200, complete = true, finish = "stop", contextChars = 18600,
+            requestBytes = 20800, events = 48, textChars = 1900, bytes = 2400,
+            inputTokens = 6240, outputTokens = 488, cachedTokens = 2048,
+            estimatedContextTokens = 6400, contextWindowTokens = 1000000, contextOutputReserveTokens = 8192)
+        val diagnosticsCommitted = AtomicBoolean()
         val changed = AtomicInteger()
         val committed = AtomicBoolean()
         val renderedTokens = AtomicReference("")
@@ -95,7 +105,8 @@ class ContextBudgetUiDeviceTest {
                     LocalDensity provides Density(widthPx.coerceAtLeast(1) / 360f, 1.3f)) {
                     MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                         Surface(Modifier.fillMaxSize()) {
-                            WorkbenchSheet(title, {}) {
+                            if (diagnostics.value) AiRequestsPanel(AiState(conversationId = "budget-review", requests = listOf(request)), Modifier.fillMaxSize())
+                            else WorkbenchSheet(title, {}) {
                                 ContextBudgetOptions(draft, true) { changed.incrementAndGet() }
                             }
                         }
@@ -103,7 +114,8 @@ class ContextBudgetUiDeviceTest {
                 }
                 val tokens = draft.windowTokens
                 val automatic = draft.automatic
-                SideEffect { renderedTokens.set(tokens); renderedAutomatic.set(automatic); committed.set(true) }
+                val showingDiagnostics = diagnostics.value
+                SideEffect { renderedTokens.set(tokens); renderedAutomatic.set(automatic); committed.set(true); diagnosticsCommitted.set(showingDiagnostics) }
             } }
             await("initial composition committed") { committed.get() && renderedTokens.get() == "128000" }
             assertEquals(128000, draft.context().contextWindowTokens)
@@ -135,6 +147,32 @@ class ContextBudgetUiDeviceTest {
             assertTrue(draft.context().autoCompress)
             assertEquals(beforeToggle + 2, changed.get())
             assertEquals(before, draft.parameters(AiParameters()))
+            instrumentation.runOnMainSync { diagnostics.value = true }
+            val requestRow = context.getString(R.string.ai_request_row, 1, 1)
+            await("diagnostics composition committed") { diagnosticsCommitted.get() && has(requestRow) }
+            click(requestRow)
+            val budget = context.getString(R.string.ai_context_estimated_request, tokenWindowLabel(6400), tokenWindowLabel(1000000), tokenWindowLabel(8192))
+            val usage = context.getString(R.string.ai_request_tokens, "6240", "488", "2048")
+            await("request budget and actual usage composed") { has(budget) && has(usage) }
+            // Scroll the real details container so the budget and provider usage share a frame.
+            nodes { all ->
+                var node = all.last { text(it) == usage } as SemanticsNode?
+                while (node != null && node.config.getOrNull(SemanticsActions.ScrollBy) == null) node = node.parent
+                assertTrue(requireNotNull(node).config[SemanticsActions.ScrollBy].action?.invoke(0f, 140f) == true)
+            }
+            instrumentation.waitForIdleSync()
+            Thread.sleep(250)
+            nodes { all ->
+                for (label in listOf(budget, usage)) {
+                    val node = all.last { text(it) == label }
+                    var root = node
+                    while (root.parent != null) root = requireNotNull(root.parent)
+                    val y = node.layoutInfo.coordinates.localToWindow(Offset.Zero).y
+                    val rootY = root.layoutInfo.coordinates.localToWindow(Offset.Zero).y
+                    assertTrue("budget/usage visible in screenshot", y >= rootY && y + node.layoutInfo.coordinates.size.height <= rootY + root.layoutInfo.coordinates.size.height)
+                }
+            }
+            capture(dark, "request-budget")
         }
     }
 
