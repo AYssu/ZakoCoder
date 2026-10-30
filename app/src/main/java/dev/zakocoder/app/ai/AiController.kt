@@ -59,7 +59,9 @@ class AiController(private val context: Context, root: (String) -> File, private
     /** User confirmation in the test panel, never inferred from the model name or tool arguments. */
     private val shareScreenTestImages: (String) -> Boolean = { false },
     /** Current settings proxy; read at request time so edits apply without recreating the controller. */
-    private val proxy: () -> String = { "" }) {
+    private val proxy: () -> String = { "" },
+    /** Shared project operations keep ownership between individual process executions. */
+    private val canStartTask: () -> Boolean = { true }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(AiState())
     val state = mutable.asStateFlow()
@@ -581,6 +583,10 @@ class AiController(private val context: Context, root: (String) -> File, private
     fun send(text: String): Boolean {
         val id = mutable.value.projectId ?: return false
         if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
+        if (!canStartTask()) {
+            mutable.update { it.copy(error = context.getString(R.string.project_other_busy)) }
+            return false
+        }
         if (mutable.value.conversations.size >= 20 && mutable.value.conversations.none { it.id == mutable.value.conversationId }) {
             mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }; return false
         }

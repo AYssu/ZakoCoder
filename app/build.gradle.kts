@@ -58,6 +58,8 @@ dependencies {
     androidTestImplementation(libs.okhttp.tls)
     implementation(libs.sora.editor)
     implementation(libs.sora.textmate)
+    implementation(libs.sora.lsp)
+    implementation(libs.lsp4j)
     implementation(libs.commons.compress)
     implementation(libs.xz)
     implementation(libs.lifecycle.compose)

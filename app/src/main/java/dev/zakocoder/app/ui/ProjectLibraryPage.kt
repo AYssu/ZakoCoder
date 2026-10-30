@@ -42,7 +42,6 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::import) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::export) }
     var cloning by remember { mutableStateOf(false) }
-    var cloneUrl by remember { mutableStateOf("") }
     var adding by rememberSaveable { mutableStateOf(false) }
     var binding by rememberSaveable { mutableStateOf(false) }
     var creating by rememberSaveable { mutableStateOf(false) }
@@ -178,11 +177,11 @@ PageHeading(stringResource(R.string.projects_title)) {
             modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
         TextButton(onClick = { creating = false }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
     }
-    if (cloning) WorkbenchSheet(stringResource(R.string.git_clone), { cloning = false }, stringResource(R.string.git_clone_help)) {
-        OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.project_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(cloneUrl, { cloneUrl = it }, label = { Text(stringResource(R.string.git_url)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { workbench.cloneProject(name, cloneUrl); cloning = false; name = ""; cloneUrl = "" }, enabled = !state.busy && state.installed && name.isNotBlank() && runCatching { dev.zakocoder.app.git.publicCloneUrl(cloneUrl) }.isSuccess, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.git_clone)) }
-    }
+    if (cloning) GitCloneSheet(enabled = !state.busy && state.installed,
+        close = { cloning = false }, onClone = { projectName, url, username, token ->
+            workbench.cloneProject(projectName, url, username, token)
+            cloning = false
+        })
     actions?.let { project -> WorkbenchSheet(project.name, { actions = null }) {
         WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; workbench.select(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.use_project)) }
         OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; workbench.select(project.id); onOpened(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
@@ -260,10 +259,12 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     }
     BackHandler { if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack() }
     if (tasks) { ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }; return }
-    if (git) { ProjectGitPage(workbench, project.id) { git = false }; return }
+    if (git) { ProjectGitPage(workbench, project.id, close = { git = false }); return }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
     if (editor.projectId == project.id && !showReferencedDirectory) {
-        CodeEditorPage(workbench.editor) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
+        CodeEditorPage(workbench.editor, onInstallLsp = { server ->
+            workbench.installToolBundles(setOf(if (server == dev.zakocoder.app.editor.lsp.LspServer.Python) "lsp-python" else "lsp-typescript"))
+        }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
         return
     }
     Column(Modifier.fillMaxSize()) {

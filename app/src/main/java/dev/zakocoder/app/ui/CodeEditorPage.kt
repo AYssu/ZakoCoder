@@ -40,7 +40,7 @@ import io.github.rosemoe.sora.widget.EditorSearcher
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 
 @Composable
-internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
+internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.zakocoder.app.editor.lsp.LspServer) -> Unit)? = null, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
     val state by controller.state.collectAsStateWithLifecycle()
     val document = state.document
     val language = document?.let { controller.languages.language(state.path, it.content.getLineString(0)) }
@@ -198,13 +198,25 @@ internal fun CodeEditorPage(controller: EditorController, onReference: ((dev.zak
                     }
                     // TextMate attachEditor reloads its theme; apply search colors after attachment.
                     colorScheme.setColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND, if (dark) 0xFF344B68.toInt() else 0xFFDCE9FF.toInt())
+                    controller.lsp?.attach(this, requireNotNull(state.projectId), state.path) {
+                        if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false)
+                    }
                     editor = this
                 }
             }, modifier = Modifier.fillMaxWidth().weight(1f).background(if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface).padding(8.dp), onRelease = {
+                controller.lsp?.detach(it, restoreSyntax = false)
                 if (editor === it) editor = null
                 it.release()
             })
         } else Spacer(Modifier.weight(1f))
+        if (document != null && !showingPreview) controller.lsp?.let { lsp ->
+            EditorLspStatus(lsp, requireNotNull(state.projectId), state.path,
+                onInstall = { server -> onInstallLsp?.invoke(server) }, onRetry = {
+                    editor?.let { view -> lsp.attach(view, requireNotNull(state.projectId), state.path) {
+                        if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false)
+                    } }
+                })
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Surface(color = PanelBackground) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {

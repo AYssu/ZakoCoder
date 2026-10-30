@@ -8,7 +8,7 @@
 MainActivity / Compose
   ZakoApplication → Workbench
     projects/  项目注册、SAF 导入导出、私有工作副本与清单检测
-    editor/    编辑缓冲、文件基线、原子保存、草稿与语法资源
+    editor/    编辑缓冲、文件基线、原子保存、草稿、语法资源及本机语言服务
     runtime/   下载校验、解包、工具探针、安装计划与 guest 命令
     terminal/  PTY、输入输出、会话归属与前台服务
     ai/        模型配置、SSE、会话、上下文、权限、工具及检查点
@@ -17,7 +17,7 @@ MainActivity / Compose
     screentest/    项目 APK 目标、屏幕节点／截图、受限交互与审计
     ssh/       原生 SSH／SFTP、主机指纹、加密认证与自有 tmux 任务
     workflow/  项目命令配置、执行记录、日志与源码证据
-    git/       Ubuntu Git 克隆、状态、暂存与本地提交
+    git/       Ubuntu Git 克隆、认证、同步、分支、冲突及暂存提交
     settings/  运行与显示配置
 ```
 
@@ -30,6 +30,10 @@ UI 展示生命周期感知状态并派发事件，不直接执行网络、安�
 ProjectApkInstaller 在用户确认后于 IO 线程生成有界 APK 缓存副本，拒绝目录穿越和符号链接，通过 FileProvider 向系统安装器授予只读 URI 权限。提供者只暴露 `cache/apk-install/`；未知来源许可和最终安装由系统界面确认，不直接暴露项目目录或静默安装。
 
 EditorController 持有最多 8 个 Content 缓冲；EditorFileStore 限量读取 UTF-8，保存前检查原始字节摘要，写同目录临时文件、同步并保留权限后原子替换。草稿独立保存文本、基线及光标，只有显式保存修改源码。磁盘变化采样绑定文档与代际，不重设保存基线；外部进程不受应用锁约束，最终检查与替换间仍可能竞争。
+
+EditorLspController 为可见文档持有一个本机语言服务会话，使用 Sora LSP 接入固定的 Ubuntu Python／TypeScript 服务。LspProcess 使用独立二进制 stdio 与所属 PID；帧适配器校正文档 URI 和语言标识，并按通知替换诊断。连接、重试及释放绑定视图和代际，失败恢复基础语法；未保存缓冲不会自动写入项目文件，详见[语言服务](LSP.md)。
+
+ProjectGit 在整个同步或合并期间保持独立忙状态和前台服务；普通构建任务与 AI 任务在入口检查该状态。取消后重新读取磁盘状态，读取失败或输出截断时禁止使用旧状态变更仓库。网络操作采用明确远端、固定传输策略和 URL 重写预检；HTTPS 凭据按项目及来源路径加密保存，经临时 FIFO 送给 ASKPASS，结束清理，启动先清旧遗留。PRoot 仍与终端共享 UID，不能视为凭据沙箱，详见 [Git 工作流](GIT.md)。
 
 AI 会话位于 `noBackupFilesDir/ai-history-v1`，检查点与恢复进度独立持久化；项目命令配置、记录与日志位于 `project-tasks-v1`，草稿位于 `editor-drafts`。这些内容不属于项目导出。数据有保留上限，详见[产品边界](PRODUCT.md)；存储格式变动必须兼容读取或明确迁移，不能静默清空数据。
 

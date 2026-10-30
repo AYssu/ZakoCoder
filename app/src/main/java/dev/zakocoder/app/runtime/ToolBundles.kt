@@ -13,6 +13,8 @@ object ToolBundles {
         ToolBundle("git", R.string.bundle_git, R.string.bundle_git_description, setOf("git")),
         ToolBundle("node", R.string.bundle_node, R.string.bundle_node_description, setOf("node", "npm")),
         ToolBundle("python", R.string.bundle_python, R.string.bundle_python_description, setOf("python", "pip", "venv")),
+        ToolBundle("lsp-python", R.string.bundle_lsp_python, R.string.bundle_lsp_python_description, setOf("python", "venv", "lsp-python")),
+        ToolBundle("lsp-typescript", R.string.bundle_lsp_typescript, R.string.bundle_lsp_typescript_description, setOf("node", "npm", "lsp-typescript")),
         ToolBundle("go", R.string.bundle_go, R.string.bundle_go_description, setOf("go")),
         ToolBundle("rust", R.string.bundle_rust, R.string.bundle_rust_description, setOf("rustc", "cargo")),
         ToolBundle("jdk", R.string.bundle_jdk, R.string.bundle_jdk_description, setOf("java", "javac")),

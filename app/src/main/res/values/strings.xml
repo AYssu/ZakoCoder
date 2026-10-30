@@ -648,7 +648,7 @@
     <string name="project_validation_changes">已记录的修改文件</string>
     <string name="git_title">Git</string>
     <string name="git_clone">克隆仓库</string>
-    <string name="git_url">公开 HTTPS 仓库地址</string>
+    <string name="git_url">HTTPS 仓库地址</string>
     <string name="git_clone_help">克隆到新的项目目录。当前支持无凭据的公开 HTTPS 仓库，需 Ubuntu 和 Git。下载会访问外部网络。</string>
     <string name="git_operation_error">Git 操作失败，请检查环境和仓库状态。</string>
     <string name="git_not_repository">当前目录不是 Git 仓库，或 Git 尚未安装。</string>

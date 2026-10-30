@@ -16,18 +16,23 @@ SIL Open Font License 1.1；原始版权与完整许可证保存在 APK 的 `ass
 
 ## Sora 原生代码编辑器
 
-官方来源 https://github.com/Rosemoe/sora-editor ，使用 Maven Central 的 `io.github.Rosemoe.sora-editor:editor:0.23.6` 和 `language-textmate:0.23.6`，源码标签 `0.23.6` 对应提交 `b1777d0d465b42515739ffe529b4ec1634ac2175`。不修改上游库，不引用 example。App 通过 AndroidView 适配，词法规则及主题为本项目自写。
+官方来源 https://github.com/Rosemoe/sora-editor ，使用 Maven Central 的 `io.github.Rosemoe.sora-editor:editor:0.23.6` 、`language-textmate:0.23.6` 和 `editor-lsp:0.23.6`，源码标签 `0.23.6` 对应提交 `b1777d0d465b42515739ffe529b4ec1634ac2175`。不修改上游库，不引用 example。App 通过 AndroidView 适配，词法规则及主题为本项目自写。
 
 | 制品 | SHA-256 |
 | --- | --- |
 | editor-0.23.6.aar | `d6d87ac499b64d4f1e89e41f355d343dc44674f38e37181f4bd58a5cb71a5360` |
 | editor-0.23.6-sources.jar | `b3573309e8e3e4d1006c6a0da7aa94fa0712e87d1d256650a5e39349850c78ce` |
+| editor-lsp-0.23.6.aar | `1476ed87220d03827ac056380e41548c6e66b88b0e26fb80f7eafbceebede3cc` |
 | language-textmate-0.23.6.aar | `909576591348f999b318ef601568a208550ee1c0cae375d70626f70f2b7c63ba` |
 | language-textmate-0.23.6-sources.jar | `ca06b725576c3de059d0625d7971803c08046cd4907b3235d88b82baa2d4311b` |
 
 Sora 声明 LGPL-2.1（源码头允许后续版本），原始许可证保存在 APK `assets/licenses/SoraEditor-LGPL-2.1.txt`。language-textmate 内含 TM4E，源文件保留 EPL-2.0 头，完整 EPL 保存在 `assets/licenses/TM4E-EPL-2.0.txt`。对应源码可从以上固定提交及 Maven 同版本 `-sources.jar` 获取，原版权头未改变。公开发行需随本项目构建输入提供依赖对应源码和可重新构建/链接的方法，不将本项目 Apache-2.0 当作第三方代码许可；当前 Release 仍等待自编译运行时分发材料与设备覆盖的维护者审查。
 
-TextMate 传递依赖包括 Gson 2.13.1（Apache-2.0）、JCodings 1.0.63、Joni 2.2.6（MIT）、SnakeYAML Engine 2.9（Apache-2.0）、JDT annotations 2.3.100（EPL-2.0）。来源及许可随 Maven POM/JAR 保留；不接入语言服务器或远端补全。新引入的 AndroidX/Kotlin 依赖继续遵循各自声明。
+TextMate 传递依赖包括 Gson 2.13.1（Apache-2.0）、JCodings 1.0.63、Joni 2.2.6（MIT）、SnakeYAML Engine 2.9（Apache-2.0）、JDT annotations 2.3.100（EPL-2.0）。来源及许可随 Maven POM/JAR 保留；LSP 模块用于连接用户在本机 Ubuntu 按需安装的语言服务器，不使用云端补全。新引入的 AndroidX/Kotlin 依赖继续遵循各自声明。
+
+LSP 新增传递依赖 Eclipse LSP4J 0.24.0（`org.eclipse.lsp4j` 与 `org.eclipse.lsp4j.jsonrpc`），来源 https://github.com/eclipse-lsp4j/lsp4j ，许可证 EPL-2.0，正文随 APK 中现有 `assets/licenses/TM4E-EPL-2.0.txt` 提供。对应 Maven 同版本源码包可获取源码；未修改上游制品。两个 JAR 的 SHA-256 分别为 `2caea31ffa2abd13c6f5d13489be071ad08f108eae83a34473ac72d96cf72922` 和 `7721572e849d4f359b46ede55d5604b982ff498d0d92ebc70e18029f59823c08`。
+
+按需下载的语言服务器不打包进 APK：Python LSP Server 1.13.1（MIT，https://github.com/python-lsp/python-lsp-server ）及 Pyflakes 3.4.0（MIT，https://github.com/PyCQA/pyflakes ）；TypeScript Language Server 4.4.0（MIT，https://github.com/typescript-language-server/typescript-language-server ）与 TypeScript 5.9.3（Apache-2.0，https://github.com/microsoft/TypeScript ）。安装保留 pip/npm 分发包的许可证及依赖元数据，工具目录独立于用户工程；间接依赖由包管理器解析，不宣称完整锁定依赖树。
 
 ## PRoot 与 loader：仓库内源码自行编译
 
