@@ -15,7 +15,7 @@ test-runner = "1.6.2"
 test-core = "1.6.1"
 
 sora = "0.23.6"
-okhttp = "4.12.0"
+okhttp = "5.5.1"
 
 [libraries]
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
