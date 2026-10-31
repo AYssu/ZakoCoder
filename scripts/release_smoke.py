@@ -104,6 +104,18 @@ class Device:
         self.launch()
 
 
+
+def failure_status(error):
+    # Bounded command status only: do not serialize argv/stdout/stderr, which can
+    # contain input text or credentials in future smoke scenarios.
+    status = {'type': type(error).__name__}
+    if isinstance(error, subprocess.CalledProcessError):
+        status['returnCode'] = error.returncode
+    if isinstance(error, subprocess.TimeoutExpired):
+        status['timeoutSeconds'] = error.timeout
+    return status
+
+
 def run(args):
     args.output.mkdir(parents=True, exist_ok=True)
     if (args.output / 'report.json').exists():
@@ -137,10 +149,14 @@ def run(args):
             raise ValueError('Beta gate currently requires API 35')
         if ('package:' + PACKAGE) in device.shell('pm', 'list', 'packages', PACKAGE).splitlines():
             raise ValueError('Dedicated emulator must not already contain the production package')
+        report['stage'] = 'read-original-night-mode'
         old_night = device.shell('cmd', 'uimode', 'night').strip()
         old_ime = device.shell('settings', 'get', 'secure', 'show_ime_with_hard_keyboard').strip()
+        report['stage'] = 'configure-keyboard'
         device.shell('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', 1)
+        report['stage'] = 'configure-day-mode'
         device.shell('cmd', 'uimode', 'night', 'no')
+        report['stage'] = 'install-release-apk'
         result = device.adb('install', '--no-incremental', str(args.apk))
         if 'Success' not in result:
             raise ValueError('APK installation did not report success')
@@ -208,6 +224,7 @@ def run(args):
         report['status'] = 'passed'
     except Exception as error:
         report['error'] = str(error)
+        report['errorStatus'] = failure_status(error)
         if installed:
             try:
                 device.shot('failure')
@@ -215,21 +232,24 @@ def run(args):
                 pass
         raise
     finally:
-        if installed:
+        def cleanup(stage, operation):
             try:
-                device.adb('uninstall', PACKAGE)
+                operation()
             except Exception as error:
                 report['status'] = 'failed'
-                report['cleanupError'] = str(error)
+                report.setdefault('cleanupErrors', []).append({'stage': stage, 'error': str(error),
+                                                              **failure_status(error)})
+        if installed:
+            cleanup('uninstall-smoke-package', lambda: device.adb('uninstall', PACKAGE))
         if old_night:
             old_mode = old_night.rsplit(' ', 1)[-1]
             if old_mode in ('yes', 'no', 'auto'):
-                device.shell('cmd', 'uimode', 'night', old_mode)
+                cleanup('restore-night-mode', lambda: device.shell('cmd', 'uimode', 'night', old_mode))
         if old_ime is not None:
             if old_ime == 'null':
-                device.shell('settings', 'delete', 'secure', 'show_ime_with_hard_keyboard')
+                cleanup('restore-keyboard', lambda: device.shell('settings', 'delete', 'secure', 'show_ime_with_hard_keyboard'))
             else:
-                device.shell('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', old_ime)
+                cleanup('restore-keyboard', lambda: device.shell('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', old_ime))
         (args.output / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
     if report['status'] != 'passed':
         raise RuntimeError('Smoke cleanup failed')
