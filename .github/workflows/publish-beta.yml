@@ -217,24 +217,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" --name "beta-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out
       - name: Start dedicated official API 35 emulator
+        timeout-minutes: 10
         run: |
           set -euo pipefail
+          mkdir -p out/device-validation
+          trap 'result=$?; if [[ "$result" != 0 ]]; then tail -n 120 out/device-validation/emulator.log 2>/dev/null || true; timeout -k 3 15 adb devices -l || true; fi' EXIT
           sdkmanager 'emulator' 'build-tools;36.0.0' 'system-images;android-35;google_apis;x86_64'
           printf 'no\n' | avdmanager create avd --force --name beta-release --package 'system-images;android-35;google_apis;x86_64'
           sudo chmod a+rw /dev/kvm
-          mkdir -p out/device-validation
+          "$ANDROID_HOME/emulator/emulator" -version > out/device-validation/emulator-version.txt 2>&1
+          "$ANDROID_HOME/emulator/emulator" -accel-check > out/device-validation/acceleration.txt 2>&1
+          timeout -k 5 30 adb start-server
           "$ANDROID_HOME/emulator/emulator" -avd beta-release -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -memory 2048 > out/device-validation/emulator.log 2>&1 &
-          timeout 180 adb -s emulator-5554 wait-for-device
+          emulator_pid=$!
+          printf '%s\n' "$emulator_pid" > out/device-validation/emulator.pid
+          timeout -k 5 180 adb -s emulator-5554 wait-for-device
           booted=false
-          for attempt in $(seq 1 120); do
-            if [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+          boot_deadline=$((SECONDS + 240))
+          while (( SECONDS < boot_deadline )); do
+            kill -0 "$emulator_pid"
+            boot_state=$(timeout -k 2 8 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') || boot_state=''
+            if [[ "$boot_state" == 1 ]]; then
               booted=true
               break
             fi
             sleep 2
           done
           [[ "$booted" == true ]]
-          adb -s emulator-5554 shell input keyevent 82
+          timeout -k 3 15 adb -s emulator-5554 shell input keyevent 82
       - name: Verify signed minified Release in real UI and compare with ARM64 public APK
         run: |
           python3 scripts/release_smoke.py --serial emulator-5554 \
@@ -242,10 +252,15 @@ jobs:
             --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --output out/device-validation
       - name: Collect diagnostics and stop dedicated emulator
         if: always()
+        timeout-minutes: 2
         run: |
           mkdir -p out/device-validation
-          adb -s emulator-5554 logcat -d > out/device-validation/logcat.txt 2>&1 || true
-          adb -s emulator-5554 emu kill || true
+          timeout -k 5 20 adb -s emulator-5554 logcat -d > out/device-validation/logcat.txt 2>&1 || true
+          timeout -k 3 15 adb -s emulator-5554 emu kill || true
+          if [[ -f out/device-validation/emulator.pid ]]; then
+            emulator_pid=$(cat out/device-validation/emulator.pid)
+            if [[ "$emulator_pid" =~ ^[1-9][0-9]*$ ]]; then kill "$emulator_pid" 2>/dev/null || true; fi
+          fi
       - name: Preserve actual smoke evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
