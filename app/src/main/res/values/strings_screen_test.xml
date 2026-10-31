@@ -20,7 +20,6 @@
     <string name="screen_test_assert_failed">断言失败：当前可见界面未找到预期文本</string>
     <string name="screen_test_screenshot_unsupported">Android 11 以下仅支持界面节点观察，无法获取屏幕截图</string>
     <string name="screen_test_report_unavailable">测试证据保存失败，未将本次操作记为通过</string>
-    <string name="screen_test_timeout">屏幕测试操作超时；请观察当前界面后重试</string>
     <string name="screen_test_root_screenshot_accessibility">Root 模式截图也需由用户开启项目屏幕测试无障碍服务；不会通过 Root 截取整个屏幕。未开启时仍可使用 Root 节点观察和操作。</string>
     <string name="screen_test_secure_screenshot">系统禁止截取此安全窗口，未保存截图；请使用节点观察</string>
     <string name="screen_test_screenshot_failed">系统未能获取目标窗口截图，未保存截图；请重新观察后重试</string>

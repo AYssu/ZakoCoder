@@ -245,13 +245,15 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             while (!running.waitFor(50, TimeUnit.MILLISECONDS)) {
                 currentCoroutineContext().ensureActive()
                 currentCheck(operationGeneration)
-                if (deadlineExceeded(started, System.nanoTime(), timeoutSeconds)) fail(R.string.screen_test_root_timeout)
+                if (deadlineExceeded(started, System.nanoTime(), timeoutSeconds)) throw ScreenTestException(context.getString(R.string.screen_test_root_stage_timeout,
+                    screenTestStageLabel(context, stage), timeoutSeconds), ScreenTestTimeoutDiagnostic(stage))
                 if (log.length() > 2_097_152) diagnostic("${stage}_output_limit")
             }
             currentCoroutineContext().ensureActive()
             currentCheck(operationGeneration)
             val exit = running.exitValue()
-            if (isTimeoutExit(exit)) fail(R.string.screen_test_root_timeout)
+            if (isTimeoutExit(exit)) throw ScreenTestException(context.getString(R.string.screen_test_root_stage_timeout,
+                    screenTestStageLabel(context, stage), timeoutSeconds), ScreenTestTimeoutDiagnostic(stage))
             if (exit != 0) throw ScreenTestException(context.getString(R.string.screen_test_root_command_exit, stage, exit))
             if (log.length() > 2_097_152) diagnostic("${stage}_output_limit")
             log.readText()

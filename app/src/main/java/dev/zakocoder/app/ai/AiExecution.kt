@@ -45,7 +45,11 @@ enum class AiRole { User, Assistant, Notice }
 internal const val AI_REASONING_DISPLAY_LIMIT = 64000
 
 data class AiEntry(val id: String, val text: String = "", val toolId: String? = null, val role: AiRole = AiRole.Notice, val turn: Int = 0,
-    val reasoning: String = "", val reasoningTruncated: Boolean = false, val images: List<AiImageAttachment> = emptyList())
+    val reasoning: String = "", val reasoningTruncated: Boolean = false, val images: List<AiImageAttachment> = emptyList(),
+    val inputLength: Int? = null, val inputReferences: List<AiReference> = emptyList()) {
+    /** New records keep the typed input boundary separately from their displayed references. */
+    val originalInput: String get() = inputLength?.let { text.take(it) } ?: text
+}
 data class AiConversation(val id: String, val title: String, val updated: Long, val turns: Int)
 data class AiPlanStep(val title: String, val status: String)
 data class AiCallDraft(val index: Int, val name: String, val arguments: String)

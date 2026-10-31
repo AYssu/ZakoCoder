@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_permissions_title">权限管理</string>
+    <string name="app_permissions_hint">查看系统权限、后台运行与工具审批</string>
+    <string name="app_permissions_intro">集中查看并按需开启，不必全部授权。系统操作仍需你确认，返回后自动刷新；AI 工具审批独立管理。</string>
+    <string name="app_permissions_system">系统权限</string>
+    <string name="app_permissions_special">特殊访问</string>
+    <string name="app_permissions_background">后台运行</string>
+    <string name="app_permissions_tools">AI 工具权限</string>
+    <string name="app_permissions_tools_hint">按项目管理读取、修改、命令和外部工具审批；系统授权不会自动允许工具执行。</string>
+    <string name="app_permissions_notifications">运行通知</string>
+    <string name="app_permissions_notifications_hint">显示终端、构建与 AI 任务的运行状态和停止入口。</string>
+    <string name="app_permissions_files">本地文件访问</string>
+    <string name="app_permissions_files_hint">绑定真实本地目录时使用。导入项目副本无需开启所有文件访问。</string>
+    <string name="app_permissions_files_legacy">共享存储读写</string>
+    <string name="app_permissions_files_legacy_hint">在此 Android 版本中，绑定共享存储目录需要读写权限。</string>
+    <string name="app_permissions_install">安装应用</string>
+    <string name="app_permissions_install_hint">允许提交项目 APK 给系统安装器；每次安装仍由系统确认。</string>
+    <string name="app_permissions_overlay">悬浮窗</string>
+    <string name="app_permissions_overlay_hint">用于屏幕测试时的返回与停止入口；授权后仍需在屏幕能力包中启用。</string>
+    <string name="app_permissions_accessibility">屏幕操作服务</string>
+    <string name="app_permissions_accessibility_hint">用于读取项目测试应用的节点并操作界面。仍需选择测试目标并通过工具审批。</string>
+    <string name="app_permissions_battery">电池优化</string>
+    <string name="app_permissions_battery_hint">前往系统列表调整本应用的电池优化策略。</string>
+    <string name="app_permissions_background_hint">前台任务通过运行通知保持可见。系统仍可能限制后台或结束进程，电池设置不能保证永久运行。</string>
+    <string name="app_permissions_root">Root 访问</string>
+    <string name="app_permissions_root_hint">可选的屏幕测试方式，仅在你主动请求后检查。不会代替目标选择和工具审批。</string>
+    <string name="app_permissions_root_request">请求授权</string>
+    <string name="app_permissions_root_confirm">切换屏幕测试为 Root 方式并请求授权？正在进行的屏幕操作会结束。此操作不会授予 AI 工具执行权限。</string>
+    <string name="app_permissions_root_busy">正在请求</string>
+    <string name="app_permissions_granted">已开启</string>
+    <string name="app_permissions_disabled">未开启</string>
+    <string name="app_permissions_unknown">暂无法读取</string>
+    <string name="app_permissions_loading">正在读取权限状态</string>
+    <string name="app_permissions_manage">管理</string>
+    <string name="app_permissions_settings_unavailable">无法打开系统设置，请在系统的应用设置中管理此项。</string>
+    <string name="app_permissions_battery_exempt">不受电池优化</string>
+    <string name="app_permissions_battery_optimized">使用系统优化</string>
+    <string name="app_permissions_tools_unavailable">先选择项目，再管理该项目的 AI 工具权限。</string>
+    <string name="app_permissions_service">任务保活</string>
+    <string name="app_permissions_service_running">服务运行中</string>
+    <string name="app_permissions_service_idle">当前无活动服务</string>
+    <string name="app_permissions_service_limited">服务启动受限</string>
+    <string name="app_permissions_service_hint">有运行任务时显示前台通知；页面关闭或系统限制不代表任务已完成。</string>
+    <string name="app_permissions_service_error_hint">系统未能启动前台服务，请检查通知和后台限制；运行中的任务仍需核对实际状态。</string>
+</resources>

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.update
     val projects: List<Project> = emptyList(), val selectedId: String? = null,
     val installed: Boolean = false, val usedBytes: Long? = null, val downloadCacheBytes: Long? = null, val fileRevision: Int = 0,
     val busy: Boolean = false, val showProgress: Boolean = true, val operation: String = "", val log: String = "", val message: String = "", val messageIsError: Boolean = false,
+    val backgroundServiceRunning: Boolean = false, val backgroundServiceError: Boolean = false,
     val checkingTools: Boolean = false, val toolCheckError: String = "", val toolCheckRevision: Int = 0,
     val tools: List<ToolCheck> = emptyList(), val bundleTools: List<ToolCheck> = emptyList(), val plans: List<DependencyPlan> = emptyList(),
     val plansProjectId: String? = null, val checkingPlans: Boolean = false, val plansError: Boolean = false,
@@ -150,6 +151,16 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             check(mutable.value.projects.any { it.id == id })
             screenTests.execute(id, args, expectedSession = lease)
         }, screenTestLease = screenTests::taskLease,
+        screenTestPreview = { id, path ->
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
+            screenTests.previewApk(id, path)
+        }, screenTestSelect = { id, path, digest ->
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
+            screenTests.selectApk(id, path, digest)
+            Unit
+        },
         screenTestDescription = { id ->
             val current = screenTests.state.value
             val project = mutable.value.projects.singleOrNull { it.id == id }
@@ -256,7 +267,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         })
         scope.launch {
             screenTests.state.collect {
-                if (!screenOverlayActive()) releaseService()
+                if (!screenTestActive()) releaseService()
                 else try { service() }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: SecurityException) { screenTests.reportOverlayServiceFailure() }
@@ -266,6 +277,16 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     screenTests.reportOverlayServiceFailure()
                 }
             }
+        }
+        scope.launch {
+            kotlinx.coroutines.flow.combine(ai.state, screenTests.state) { _, screen ->
+                val project = screen.projectId
+                val lease = project?.let(screenTests::taskLease)
+                if (project == null || lease == null) null else Triple(project, lease, ai.screenOverlayTranscript(project, lease).orEmpty())
+            }.collect { update -> update?.let { (project, lease, text) -> screenTests.updateOverlayConversation(project, lease, text) } }
+        }
+        scope.launch {
+            ai.state.collect { foregroundService?.setTaskActive(taskNeedsCpu()) }
         }
         scope.launch { ssh.load() }
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
@@ -306,28 +327,40 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private var foregroundService: DevelopmentService? = null
     private var serviceRequested = false
     private fun service() {
-        if (foregroundService != null || serviceRequested) return
+        foregroundService?.let { it.setTaskActive(taskNeedsCpu()); return }
+        if (serviceRequested) return
         serviceRequested = true
         try { ContextCompat.startForegroundService(context, Intent(context, DevelopmentService::class.java)) }
-        catch (error: Exception) { serviceRequested = false; throw error }
+        catch (error: Exception) {
+            serviceRequested = false
+            mutable.update { it.copy(backgroundServiceError = true) }
+            throw error
+        }
     }
     fun serviceReady(service: DevelopmentService) {
         serviceRequested = false
         foregroundService = service
+        mutable.update { it.copy(backgroundServiceRunning = true, backgroundServiceError = false) }
+        service.setTaskActive(taskNeedsCpu())
         releaseService()
     }
     fun serviceDestroyed(service: DevelopmentService) {
         if (foregroundService === service) {
             foregroundService = null
-            if (screenOverlayActive() || mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
+            mutable.update { it.copy(backgroundServiceRunning = false) }
+            if (screenTestActive() || mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
         }
     }
-    private fun screenOverlayActive() = screenTests.state.value.let { it.active && it.overlayEnabled && it.overlayGranted }
+    private fun screenTestActive() = screenTests.state.value.let { it.active || it.busy }
+    private fun taskNeedsCpu() = mutable.value.busy || git.state.value.busy || projectTasksActive() || ai.state.value.let { it.active && it.approval == null } || screenTests.state.value.busy
     private fun releaseService() {
-        if (!screenOverlayActive() && !mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
+        foregroundService?.setTaskActive(taskNeedsCpu())
+        if (!screenTestActive() && !mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null
+            mutable.update { it.copy(backgroundServiceRunning = false) }
+            ready.setTaskActive(false)
             ready.stopSelf()
         }
     }

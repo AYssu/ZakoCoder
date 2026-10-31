@@ -1,0 +1,16 @@
+<resources>
+    <string name="ai_usage_cache">缓存 %1$s（%2$s）</string>
+    <string name="ai_usage_cache_unknown">缓存 —</string>
+    <string name="ai_message_edit">编辑并重新生成</string>
+    <string name="ai_message_retry">重新生成</string>
+    <string name="ai_message_requests">查看会话请求</string>
+    <string name="ai_message_actions">消息操作</string>
+    <string name="ai_message_retry_title">从这轮重新生成？</string>
+    <string name="ai_message_retry_notice">将保留原会话，在新会话分支中重新发送本轮输入。文件、终端和外部操作不会回滚，模型可能再次执行操作；请核对后再确认。</string>
+    <string name="ai_message_edit_label">本轮输入</string>
+    <string name="ai_message_retry_unavailable">暂时无法重新生成，请确认当前会话、模型和输入长度后重试。</string>
+    <string name="ai_message_edit_limit">最多 16000 个字符；可先精简输入。</string>
+    <string name="ai_screen_prepare_warning">选择本轮调试目标：%1$s\n项目 APK：%2$s\nSHA-256：%3$s\n确认后仅选择此制品；安装、系统权限和截图分享仍需单独决定。</string>
+    <string name="screen_overlay_user">你</string>
+    <string name="screen_overlay_assistant">助手</string>
+</resources>

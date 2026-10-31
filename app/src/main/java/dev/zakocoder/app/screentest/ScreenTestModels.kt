@@ -10,6 +10,8 @@ data class ScreenTestApk(
     val debuggable: Boolean,
 )
 
+data class ScreenTestApkProposal(val apk: ScreenTestApk, val sha256: String)
+
 enum class ScreenTestAccess { Normal, Accessibility, Root }
 
 data class ScreenTestState(
@@ -30,6 +32,7 @@ data class ScreenTestState(
     val overlayGranted: Boolean = false,
     val overlayVisible: Boolean = false,
     val overlayFailure: String = "",
+    val overlayConversation: String = "",
 )
 
 data class ScreenTestResult(val output: String, val imageUri: Uri? = null)
@@ -62,4 +65,17 @@ internal fun boundedScreenObservation(
     }
     payload.put("truncated", truncated || count < nodes.size)
     return ScreenTestObservationOutput(payload.toString(), count)
+}
+
+/** Includes artifact hashing and multiple bounded root commands; never retries input or installation. */
+internal fun screenActionTimeoutMillis(action: String): Long = when (action) {
+    "install", "launch" -> 60_000L
+    "observe", "assert_text", "click", "long_click", "input_text", "swipe", "back", "screenshot" -> 60_000L
+    else -> 20_000L
+}
+
+internal fun boundedOverlayText(text: String): String {
+    val end = text.length.coerceAtMost(1200)
+    val safeEnd = if (end > 0 && end < text.length && Character.isHighSurrogate(text[end - 1])) end - 1 else end
+    return text.take(safeEnd)
 }
