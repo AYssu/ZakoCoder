@@ -216,6 +216,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" --name "beta-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out
+      - name: Install emulator host runtime dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpulse0
       - name: Start dedicated official API 35 emulator
         timeout-minutes: 10
         run: |
@@ -225,6 +229,8 @@ jobs:
           sdkmanager 'emulator' 'build-tools;36.0.0' 'system-images;android-35;google_apis;x86_64'
           printf 'no\n' | avdmanager create avd --force --name beta-release --package 'system-images;android-35;google_apis;x86_64'
           sudo chmod a+rw /dev/kvm
+          ldd "$ANDROID_HOME/emulator/qemu/linux-x86_64/qemu-system-x86_64" > out/device-validation/emulator-libraries.txt
+          if rg -n 'not found' out/device-validation/emulator-libraries.txt; then exit 1; fi
           "$ANDROID_HOME/emulator/emulator" -version > out/device-validation/emulator-version.txt 2>&1
           "$ANDROID_HOME/emulator/emulator" -accel-check > out/device-validation/acceleration.txt 2>&1
           timeout -k 5 30 adb start-server
