@@ -67,6 +67,8 @@ python3 native-runtime/checks/device.py --serial DEVICE_SERIAL \
 
 这些证据不包含最终公开 ARM64 Release 包的真机安装、同签名升级或 Ubuntu／终端／HTTP 冒烟。R8 mapping 单独作为诊断 Artifact 提供，不附到 Release；公开仓库的 Actions Artifact 仍可能被有读取权限的登录用户下载，不是密钥或用户数据存储位置。
 
+Beta 用户附件仅保留 APK 与 `SHA256SUMS.txt`。构建详情放发布正文，完整运行时源码通过该页指向的不可变提交／标签 GitHub Source code 归档取得；固定 `sources/`、补丁、工具链与许可必须完整保留。内部独立源码包、构建和测试材料留在 Actions 校验，不以限期 Artifact 代替对应源码提供。
+
 ## 适用范围
 
 没有对每个 PRoot 系统调用、所有内核、最低 Android 8、其他厂商、16 KiB 页设备或各 ABI 的所有行为作完整保证。16 KiB ELF 对齐通过不等于 16 KiB 真机已验证。构建配方当前固定 Linux x86_64 宿主，手机内社区 ARM64 NDK 构建尚未适配；不延续旧预编译路径的手机自构建已通过声明。稳定版门禁保留。Beta 预发布通道须经维护者确认，并按[发布流程](../docs/RELEASING.md)核对对应源码、许可证、最终签名及 R8 QA 证据并明确真机限制；不允许仅设置 Beta 参数跳过材料与验证。首批 Beta 使用不可调试的 Release + R8 构建，默认复用仓库 CI Debug 证书（可选自有签名），并非正式长期签名；自动检查使用 API 35 x86_64 同签名 R8 QA 包，校验其与公开 ARM64 包的 DEX／资源／assets 一致；最终 ARM64 Release 的真机安装、同签名升级与终端／HTTP 冒烟仍未完成，须列入预发布限制，不引用 QA 或 Debug 矩阵冒充完成。稳定版需补齐相关实际证据。

@@ -237,6 +237,62 @@ class BetaReleaseTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 beta.finalize(directory, root / "qa.apk", root / "report.json")
 
+    def test_published_metadata_reads_hidden_body_and_legacy_build_asset(self):
+        record = {"schemaVersion": 1, "package": beta.PACKAGE, "version": "0.1.0-beta.1",
+                  "versionCode": 1001, "commit": "a" * 40, "apkSha256": "b" * 64}
+        body = "<!-- zakocoder-build\n" + json.dumps(record) + "\n-->"
+        releases = [[{"draft": False, "body": body, "assets": []},
+                     {"draft": False, "assets": [{"name": "BUILD.json", "id": 42}]}]]
+        legacy = record | {"versionCode": 1002}
+        with patch.object(beta, "gh_json", return_value=releases), patch.object(beta, "gh", return_value=json.dumps(legacy).encode()):
+            builds = beta.published_builds("AYssu/ZakoCoder")
+            self.assertEqual([1001, 1002], [item["versionCode"] for item in builds])
+            beta.require_increasing_code(1003, builds)
+            with self.assertRaises(ValueError):
+                beta.require_increasing_code(1002, builds)
+        for invalid in ("<!-- zakocoder-build\n{}\n-->", body + body, "<!-- zakocoder-build invalid -->"):
+            with patch.object(beta, "gh_json", return_value=[[{"body": invalid, "assets": []}]]), self.assertRaises(ValueError):
+                beta.published_builds("AYssu/ZakoCoder")
+
+    def test_successful_publish_uploads_only_apk_and_apk_only_checksums(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory, metadata = self.assets(root)
+            qa = root / "qa.apk"
+            qa.write_bytes(b"qa")
+            evidence = root / "evidence"
+            evidence.mkdir()
+            report = evidence / "report.json"
+            report.write_text(json.dumps(self.smoke_report(qa, directory / metadata["apk"], metadata)))
+            beta.finalize(directory, qa, report)
+            uploads, payloads = {}, []
+            tag = "v0.1.0-beta.1"
+            def request_json(*args, **kwargs):
+                if "POST" in args:
+                    payloads.append(beta.read_json(args[-1]))
+                    return {"id": 7, "draft": True, "tag_name": tag}
+                if "PATCH" in args:
+                    return {"draft": False, "prerelease": True, "target_commitish": metadata["commit"], "html_url": "https://github.com/release"}
+                return {"draft": True, "tag_name": tag, "assets": [
+                    {"name": name, "id": index, "size": len(data)} for index, (name, data) in enumerate(sorted(uploads.items()), 1)]}
+            def request(*args, **kwargs):
+                if "POST" in args:
+                    path = Path(args[-1])
+                    uploads[path.name] = path.read_bytes()
+                    return b"{}"
+                asset_id = int(args[1].rsplit("/", 1)[1])
+                return sorted(uploads.items())[asset_id - 1][1]
+            with patch.object(beta, "preflight"), patch.object(beta, "published_builds", return_value=[]), \
+                    patch.object(beta, "gh_json", side_effect=request_json), patch.object(beta, "gh", side_effect=request):
+                beta.publish("AYssu/ZakoCoder", directory, qa, report)
+            self.assertEqual({metadata["apk"], "SHA256SUMS.txt"}, set(uploads))
+            self.assertEqual(f"{metadata['apkSha256']}  {metadata['apk']}\n".encode(), uploads["SHA256SUMS.txt"])
+            body = payloads[0]["body"]
+            self.assertIn("<!-- zakocoder-build\n", body)
+            self.assertIn(f"/archive/{metadata['commit']}.tar.gz", body)
+            self.assertEqual(beta.read_json(directory / "BUILD.json"), json.loads(body.split("<!-- zakocoder-build\n")[1].split("\n-->")[0]))
+            beta.verify_assets(directory)
+
     def test_formal_signing_kind_is_recorded_without_debug_claims(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -49,7 +49,7 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 获取安装包
 
-Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 及校验摘要；以实际存在的发布为准。首次版本计划为 `0.1.0-beta.1`，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次 Beta 为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
+Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；构建详情和本次固定提交的完整源码入口在发布页，以实际存在的发布为准。首次版本计划为 `0.1.0-beta.1`，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次 Beta 为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
 开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 提供 ARM64 Debug APK、自编译运行时、对应源码、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 

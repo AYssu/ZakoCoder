@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tempfile
 import tarfile
@@ -88,6 +89,20 @@ def published_builds(repo):
     builds = []
     for release in (item for page in pages for item in page):
         if release.get("draft"):
+            continue
+        body = release.get("body") or ""
+        markers = re.findall(r"<!-- zakocoder-build\n(.*?)\n-->", body, re.DOTALL)
+        if "<!-- zakocoder-build" in body:
+            if len(markers) != 1 or len(markers[0]) > 1_000_000:
+                raise ValueError("Release needs exactly one valid embedded build record")
+            build = json.loads(markers[0])
+            if not isinstance(build, dict) or build.get("schemaVersion") != 1 or build.get("package") != PACKAGE:
+                raise ValueError("Unsupported embedded build metadata")
+            validate_inputs(build.get("version"), build.get("versionCode"))
+            validate_commit(build.get("commit", ""))
+            if not isinstance(build.get("apkSha256"), str) or not DIGEST.fullmatch(build["apkSha256"]):
+                raise ValueError("Embedded build metadata needs its APK digest")
+            builds.append(build)
             continue
         assets = [item for item in release.get("assets", []) if item.get("name") == "BUILD.json"]
         if len(assets) != 1 or type(assets[0].get("id")) is not int:
@@ -276,16 +291,26 @@ def publish(repo, directory, qa_apk, report_file):
         raise ValueError("BUILD must identify its actual signing key kind")
     signing_note = ("Signed with the existing CI Debug key for Beta only; this is not the long-term production signing key. "
                     if key_kind == "debug-reused-for-beta" else "Signed with the configured release key. ")
-    notes = (f"ZakoCoder {version} — ARM64 Beta\n\n"
-             "Minified, non-debuggable Release build. " + signing_note + "Verify SHA256SUMS.txt before installation. "
-             "Use the same signing certificate for upgrades; do not uninstall to bypass a signature mismatch.\n\n"
-             "Includes corresponding native-runtime source, licenses and validation evidence. "
-             "Release emulator smoke covers shared code/resources; ARM64 hardware and vendor-specific behavior remain limited.\n\n"
-             f"Commit: {commit}\nWorkflow: {metadata['workflowRun']}\n")
+    notes = (f"ZakoCoder {version} · ARM64 测试版\n\n"
+             "下载 APK 安装；SHA256SUMS.txt 可用于校验文件。测试版请先备份重要项目。\n\n"
+             "<details>\n<summary>构建与兼容信息</summary>\n\n"
+             "Release 构建，已启用 R8，非 debuggable。" + signing_note +
+             "升级需要相同签名；如提示签名不一致，请勿直接卸载以免丢失数据。\n\n"
+             "已验证 Release 模拟器上的共用代码与资源；ARM64 真机和厂商系统覆盖仍有限。\n\n"
+             f"提交：`{commit}` · [构建与验证记录]({metadata['workflowRun']})\n\n"
+             f"[本版本完整源码](https://github.com/{repo}/archive/{commit}.tar.gz) · "
+             f"[许可证](https://github.com/{repo}/blob/{commit}/LICENSE) · "
+             f"[第三方声明](https://github.com/{repo}/blob/{commit}/THIRD_PARTY.md) · "
+             f"[原生运行时源码](https://github.com/{repo}/tree/{commit}/native-runtime)\n\n"
+             "</details>\n\n<!-- zakocoder-build\n" + json.dumps(metadata, ensure_ascii=False) + "\n-->\n")
     payload = {"tag_name": tag, "target_commitish": commit, "name": tag, "body": notes,
                "draft": True, "prerelease": True, "make_latest": "false"}
     created = None
+    downloads = tempfile.TemporaryDirectory(prefix="zako-beta-downloads-")
     try:
+        download_directory = Path(downloads.name)
+        shutil.copyfile(apk, download_directory / apk.name)
+        checksums(download_directory)
         with tempfile.TemporaryDirectory(prefix="zako-beta-") as temporary:
             body = Path(temporary) / "release.json"
             body.write_text(json.dumps(payload))
@@ -293,7 +318,7 @@ def publish(repo, directory, qa_apk, report_file):
         release_id = created["id"]
         if type(release_id) is not int or not created.get("draft") or created.get("tag_name") != tag:
             raise ValueError("GitHub did not return the expected new draft")
-        files = sorted(directory.iterdir())
+        files = sorted(download_directory.iterdir())
         for path in files:
             # Address only this newly created draft ID. The uploads API rejects duplicate
             # asset names; there is no overwrite or tag-based race with another release.
@@ -327,7 +352,8 @@ def publish(repo, directory, qa_apk, report_file):
             if current and current.get("draft") and current.get("tag_name") == tag:
                 gh("api", "--method", "DELETE", f"repos/{repo}/releases/{created['id']}")
         raise
-
+    finally:
+        downloads.cleanup()
 
 
 def require_publishable_target(commit, latest_main):

@@ -31,13 +31,18 @@ CI 签名材料只在 Secrets 和临时 runner 中使用，不写入聊天、Iss
 
 ### 发布附件与诊断材料
 
-每个 Beta 的同一发布位置应提供：
+每个 Beta 仅上传两个自定义 Release 附件：
 
-- `ZakoCoder-<version>-arm64.apk`、`SHA256SUMS.txt`、`BUILD.json`、`BUILD.txt`，包含提交、版本、versionCode、构建范围和公开签名证书摘要。
-- 与二进制对应的 `native-runtime-sources.tar.gz` 及摘要，包含原始源码、补丁、构建配方和许可。
-- `LICENSE.txt`、`THIRD_PARTY.md`、`licenses.tar.gz`、`runtime-validation.tar.gz`、`release-validation.tar.gz`，提供许可证及实际构建／验证记录。不能只链接到可变上游分支代替对应源码。
+- `ZakoCoder-<version>-arm64.apk`：用户安装包。
+- `SHA256SUMS.txt`：该 APK 的 SHA-256 校验摘要。
 
-R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，用于还原堆栈，不作为 Release 附件。**公开仓库的 Actions Artifact 不是私密存储：任何有仓库读取权限且登录的用户都可能下载。**该制品不得包含密钥、凭据或用户数据。候选包 Artifact `beta-candidate-<runid>-<attempt>` 保留 7 天，其中 `public/` 为待发布材料，`qa/ZakoCoder-release-qa-multiabi.apk` 为 ARM64 + x86_64 测试包；QA APK不上传 Release，独立验收证据保留 14 天。维护者应在过期前另行安全保管 mapping。APK 与公开附件均不得含签名材料、用户配置、测试凭据或生成的会话数据。PRoot／loader 分发义务以[第三方材料](../THIRD_PARTY.md)和[独立运行时](../native-runtime/README.md)为准。
+发布正文面向用户说明安装、升级及已知限制；提交、versionCode、证书和构建验证信息放在可折叠的构建详情中。自动版本检查使用隐藏的元数据注释，不额外上传 `BUILD.txt`／`BUILD.json`。
+
+发布页须清楚指出本次不可变提交与版本标签，并链接其 GitHub **Source code (zip / tar.gz)** 完整归档。归档中的 `native-runtime/` 已包含固定原始 `sources/`、`patches/`、构建脚本、工具链／产物锁、交叉编译输入及 `licenses/`，用于取得与 APK 对应的完整运行时源码和重建材料。发布前核对归档确实包含这些内容；不能用可变上游分支或限期 Actions Artifact 代替长期可得的对应源码。许可证与版权声明保留在 APK 和源码中，详见[第三方材料](../THIRD_PARTY.md)。
+
+内部候选仍生成完整源码包、许可证、构建记录和验证材料，用于分发前校验；它们与 QA APK 留在 Actions，不作为用户 Release 附件。候选 Artifact `beta-candidate-<runid>-<attempt>` 保留 7 天，解压目录为 `candidate/` 和 `qa/`，后者包含 `ZakoCoder-release-qa-multiabi.apk`。发布前另存 `beta-release-records-<runid>-<attempt>` 14 天，包含 BUILD 记录、独立源码包、运行时／Release 验证及许可归档；独立冒烟证据同样保留 14 天。内部完整摘要清单不作为用户版 `SHA256SUMS.txt` 上传。
+
+R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，不作为 Release 附件。**公开仓库的 Actions Artifact 不是私密存储：有仓库读取权限且登录的用户仍可能下载。**所有制品均不得含密钥、凭据或用户数据，维护者应在过期前另行保管诊断材料。
 
 ## Beta 发布检查
 
@@ -47,12 +52,12 @@ R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，用�
 - [x] 最终 API 35 真实 R8 QA 完成项目创建、编辑保存、重启及配置持久化，4 张日夜截图通过。
 - [x] 干净 checkout 的仓库检查、58 项脚本测试及 Release 构建通过；无 `example/` 或本地资料依赖。
 - [ ] GitHub Actions 首次端到端运行通过（PR 合并后手动触发）。
-- [x] 固定运行时源码、补丁、工具链和 ELF／摘要检查及 14 项原生回归通过，对应源码包和许可证已完整收集。
+- [x] 固定运行时源码、补丁、工具链和 ELF／摘要检查及 14 项原生回归通过，内部对应源码包和许可证已完整收集；发布仍须核对不可变源码归档可取得。
 - [x] 最终本地候选签名 APK 的 applicationId、版本、versionCode、ABI、证书和 SHA-256 已核验；调试开关、测试 CA、测试 Provider 不进入发布包。CI 会重新构建并使用其实际密钥重复验收。
 - [x] API 35 x86_64 设备安装**与公开包采用同一证书签名的 R8 QA 包**并通过本地界面冒烟；QA 与公开 ARM64 APK 的全部 DEX、resources.arsc、res 与 assets 字节一致，共有原生制品、版本身份与签名证书一致；架构差异单独记录。
 - [x] 首个 Beta 没有可比旧 Beta，本次覆盖升级明确记录为未验证；未引用不同签名的 Debug 升级替代。
 - [x] 报告清楚区分已有 Debug Ubuntu／PTY／HTTP 基线与本次 Release QA，未运行的链路不标记通过。
-- [ ] 公开附件、单独的 R8 诊断 Artifact、安装说明、已知限制和数据边界已由维护者确认；诊断 Artifact 不作为秘密存储。
+- [ ] 两个用户附件、不可变源码归档入口、单独的 R8 诊断 Artifact、安装说明及已知限制已由维护者确认；诊断 Artifact 不作为秘密存储。
 
 已完成的 Debug 系统基线见[兼容性结果](ANDROID_COMPATIBILITY_RESULTS.md)：Android 11–17 AOSP x86_64，含 Android 12L；不代表最终 Release APK、所有 ARM64 厂商设备或真实 16 KiB 页设备均通过。Android 8 的完整开发环境与模型网络尚未通过验收，不列入首批 Beta 验收范围。
 

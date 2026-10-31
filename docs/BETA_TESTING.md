@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-1. 打开 [ZakoCoder Releases](https://github.com/AYssu/ZakoCoder/releases)，选择 Beta 预发布，下载 ARM64 APK、`SHA256SUMS.txt` 和 `BUILD.txt`。
+1. 打开 [ZakoCoder Releases](https://github.com/AYssu/ZakoCoder/releases)，选择 Beta 预发布，下载 ARM64 APK 和 `SHA256SUMS.txt`。构建信息在发布正文的折叠详情中；完整源码使用该页指向本次固定提交／标签的 **Source code** 归档。
 2. 按摘要核对下载文件。系统提示时，仅为你使用的浏览器或文件管理器开启安装未知应用权限。
 3. 打开 APK 安装。首次进入先创建或导入一个可用于测试的项目，再按需要安装 Ubuntu 和开发工具；模型服务由你配置。
 

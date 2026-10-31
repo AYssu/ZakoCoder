@@ -50,7 +50,9 @@ PRoot 保留上游 seccomp、fake root、link2symlink、kill-on-exit 等实现�
 
 PRoot 的 GPL-2.0-or-later 源码允许选择后续版本；本目录把静态链接 LGPL-3.0-or-later talloc 的 PRoot 组合制品按 **GPL-3.0-or-later** 分发，loader 源码保留 GPL-2.0-or-later。`licenses/` 保留 PRoot COPYING、GPL v3、talloc LGPL v3、shmem BSD 与参考构建脚本声明；APK 同样包含实际运行组件的许可。应用自有 Kotlin/Compose 代码继续使用 Apache-2.0。
 
-公开提供二进制时，应在同一分发位置提供 `bundle_sources.py` 生成的完整对应源码包及摘要（包含原始源码、补丁、配方、交叉编译答案和许可），保留实际采用的工具链版本与设备验证记录；不能只指向可变的上游分支。talloc 静态链接的重新构建输入在源码包中，不要求使用者依赖某个远端预编译文件。
+公开提供二进制时，发布页必须清楚指向本次不可变提交／标签对应的 GitHub **Source code** 完整归档。本目录已经保留原始 `sources/`、`patches/`、构建配方、工具链／产物锁、交叉编译答案及 `licenses/`；归档需完整包含这些重建输入，不能只链接可变上游分支。发布附件可仅保留 APK 和摘要，许可证与版权仍保留在 APK 和源码中。
+
+`bundle_sources.py` 仍生成独立的完整对应源码包供内部候选校验和独立重建，构建与设备证据留在 Actions；限期 Artifact 不能替代发布页长期可取得的对应源码。talloc 静态链接的重建输入包含在固定源码归档内，不要求使用者依赖某个远端预编译文件。
 
 ## 接入应用和设备验证
 
@@ -58,7 +60,7 @@ PRoot 的 GPL-2.0-or-later 源码允许选择后续版本；本目录把静态�
 
 设备检查使用应用现有 Android instrumentation，并增加 `NativeRuntimeArtifactDeviceTest` 检查安装后的实际摘要、持久硬链接、符号链接、tar、SQLite、Python 子进程/线程/套接字、Node 和离线 npm 缓存操作。现有测试覆盖启动矩阵、退出码、工作目录、PTY、Activity 重建、取消子进程和 MCP stdio。安装器测试在独立私有子树覆盖损坏镜像、取消、重试安装及新环境执行；不得清除用户环境来测试。
 
-设备检查固定使用独立包名 `dev.zakocoder.app.runtimecheck`，通过 `-PruntimeVerification=true` 构建；测试 Provider authority 同样独立。runner 的 `--provision` 会在独立包安装 Ubuntu、Python 和 Node，`--install` 会先核对包名与原生文件摘要，不覆盖原包。也可用 `--apk-root` 指向临时源码副本的构建输出，避免与其他开发会话共享构建目录。运行命令和实际结果见 [VALIDATION.md](VALIDATION.md)。仅安装/测试本地 Debug 包，不构成正式发行授权。Release 仍等待维护者对分发材料和设备覆盖的审查。
+设备检查固定使用独立包名 `dev.zakocoder.app.runtimecheck`，通过 `-PruntimeVerification=true` 构建；测试 Provider authority 同样独立。runner 的 `--provision` 会在独立包安装 Ubuntu、Python 和 Node，`--install` 会先核对包名与原生文件摘要，不覆盖原包。也可用 `--apk-root` 指向临时源码副本的构建输出，避免与其他开发会话共享构建目录。运行命令和实际结果见 [VALIDATION.md](VALIDATION.md)。该原生 runner 仅安装／测试本地 Debug 包，不构成发行授权。Beta 另按发布流程完成 Release QA 并公开限制，稳定版仍需维护者审查最终真机与升级证据。
 
 当前构建配方仅验收 Linux x86_64 宿主；手机内部的社区 ARM64 NDK 不是这套固定工具链，不能直接据旧文档宣称可在手机内构建当前应用。最低 Android 版本、其他内核、16 KiB 页设备及各 ABI 的运行行为需要独立验证；不能把静态 16 KiB 对齐检查当成该页大小设备运行验收。
 

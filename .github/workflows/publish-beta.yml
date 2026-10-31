@@ -95,7 +95,7 @@ jobs:
           ./gradlew :app:assembleRelease :app:lintRelease :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest \
             -PbetaRelease=true -PbetaVersion="$BETA_VERSION" -PbetaVersionCode="$BETA_VERSION_CODE" \
             -PcompatibilityAbis=arm64-v8a,x86_64 --stacktrace
-          mkdir -p out/public out/qa out/r8-symbols/multiabi out/runtime-evidence
+          mkdir -p out/candidate out/qa out/r8-symbols/multiabi out/runtime-evidence
           cp app/build/outputs/apk/release/app-release-unsigned.apk out/qa-unsigned.apk
           cp -R app/build/outputs/mapping/release/. out/r8-symbols/multiabi/
       - name: Verify corresponding native sources, artifacts and runtime evidence
@@ -103,14 +103,14 @@ jobs:
           set -euo pipefail
           python3 native-runtime/checks/verify.py > out/runtime-evidence/static-verification.txt
           python3 -m unittest discover -s native-runtime/checks -p 'test_*.py' -v > out/runtime-evidence/regression-tests.txt 2>&1
-          python3 native-runtime/bundle_sources.py --output out/public/native-runtime-sources.tar.gz
-          rm out/public/native-runtime-sources.tar.gz.sha256
+          python3 native-runtime/bundle_sources.py --output out/candidate/native-runtime-sources.tar.gz
+          rm out/candidate/native-runtime-sources.tar.gz.sha256
           cp native-runtime/build/build-record.json native-runtime/artifacts.lock.json native-runtime/toolchain.lock.json native-runtime/VALIDATION.md out/runtime-evidence/
           cp docs/ANDROID_COMPATIBILITY.md out/runtime-evidence/
-          tar -czf out/public/runtime-validation.tar.gz -C out/runtime-evidence .
-          cp LICENSE out/public/LICENSE.txt
-          cp THIRD_PARTY.md out/public/THIRD_PARTY.md
-          tar -czf out/public/licenses.tar.gz app/src/main/assets/licenses native-runtime/licenses LICENSE THIRD_PARTY.md
+          tar -czf out/candidate/runtime-validation.tar.gz -C out/runtime-evidence .
+          cp LICENSE out/candidate/LICENSE.txt
+          cp THIRD_PARTY.md out/candidate/THIRD_PARTY.md
+          tar -czf out/candidate/licenses.tar.gz app/src/main/assets/licenses native-runtime/licenses LICENSE THIRD_PARTY.md
       - name: Build public ARM64 Release from the same source and version
         run: |
           set -euo pipefail
@@ -154,7 +154,7 @@ jobs:
           umask 077
           printf '%s' "$key_base64" | base64 --decode > "$key_dir/release.keystore"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          public_apk="out/public/ZakoCoder-$BETA_VERSION-arm64.apk"
+          public_apk="out/candidate/ZakoCoder-$BETA_VERSION-arm64.apk"
           qa_apk=out/qa/ZakoCoder-release-qa-multiabi.apk
           zipalign="$ANDROID_HOME/build-tools/36.0.0/zipalign"
           "$zipalign" -f -P 16 4 out/arm64-unsigned.apk "$key_dir/arm64-aligned.apk"
@@ -173,7 +173,7 @@ jobs:
           qa_certificate=$("$signer" verify --print-certs "$qa_apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
           [[ -n "$certificate" && "$certificate" == "$qa_certificate" ]]
           rm -f "$public_apk.idsig" "$qa_apk.idsig"
-          python3 scripts/beta_release.py metadata --directory out/public --version "$BETA_VERSION" \
+          python3 scripts/beta_release.py metadata --directory out/candidate --version "$BETA_VERSION" \
             --version-code "$BETA_VERSION_CODE" --commit "$SOURCE_COMMIT" --certificate "$certificate" --signing-key-kind "$signing_kind" \
             --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Preserve minifier mapping separately (not a Release asset)
@@ -188,7 +188,7 @@ jobs:
         with:
           name: beta-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            out/public/
+            out/candidate/
             out/qa/
           if-no-files-found: error
           compression-level: 0
@@ -238,7 +238,7 @@ jobs:
       - name: Verify signed minified Release in real UI and compare with ARM64 public APK
         run: |
           python3 scripts/release_smoke.py --serial emulator-5554 \
-            --apk out/qa/ZakoCoder-release-qa-multiabi.apk --comparison-apk "out/public/ZakoCoder-$BETA_VERSION-arm64.apk" \
+            --apk out/qa/ZakoCoder-release-qa-multiabi.apk --comparison-apk "out/candidate/ZakoCoder-$BETA_VERSION-arm64.apk" \
             --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --output out/device-validation
       - name: Collect diagnostics and stop dedicated emulator
         if: always()
@@ -270,15 +270,32 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
-      - name: Verify evidence, create a new draft, verify uploaded hashes and publish as pre-release
+      - name: Restore candidates and finalize internal validation records
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh run download "$GITHUB_RUN_ID" --name "beta-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out
           gh run download "$GITHUB_RUN_ID" --name "beta-validation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out/device-validation
-          python3 scripts/beta_release.py finalize --directory out/public \
+          python3 scripts/beta_release.py finalize --directory out/candidate \
             --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk --report out/device-validation/report.json
+      - name: Preserve source and validation records in Actions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: beta-release-records-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/candidate/BUILD.json
+            out/candidate/BUILD.txt
+            out/candidate/native-runtime-sources.tar.gz
+            out/candidate/runtime-validation.tar.gz
+            out/candidate/release-validation.tar.gz
+            out/candidate/licenses.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish only the APK and its checksum as pre-release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           python3 scripts/beta_release.py publish --repository "$GITHUB_REPOSITORY" \
-            --directory out/public --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk \
+            --directory out/candidate --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk \
             --report out/device-validation/report.json
