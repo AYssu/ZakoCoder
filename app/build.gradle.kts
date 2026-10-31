@@ -3,6 +3,28 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val compatibilityAbis = providers.gradleProperty("compatibilityAbis").orElse("arm64-v8a").get()
+    .split(",").map(String::trim).distinct().also { abis ->
+        require(abis.isNotEmpty() && abis.all { it in setOf("arm64-v8a", "x86_64") }) { "Unsupported compatibility ABI" }
+    }
+val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCode").orNull?.let {
+    it.toInt().also { code -> require(code > 0) }
+} ?: 1
+
+// Stable distribution remains gated; Beta must opt in with an explicit immutable version.
+val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
+val betaVersion = providers.gradleProperty("betaVersion").orNull
+val betaVersionCode = providers.gradleProperty("betaVersionCode").orNull?.toIntOrNull()
+if (betaRelease) {
+    require(betaVersion?.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[1-9][0-9]*")) == true) {
+        "Beta requires -PbetaVersion=<major>.<minor>.<patch>-beta.<positive number>"
+    }
+    require(betaVersionCode != null && betaVersionCode > 0) { "Beta requires a positive -PbetaVersionCode" }
+    require(!providers.gradleProperty("compatibilityVersionCode").isPresent) {
+        "Use betaVersionCode alone for Beta builds"
+    }
+}
+
 android {
     namespace = "dev.zakocoder.app"
     compileSdk = 37
@@ -13,12 +35,12 @@ android {
             "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = if (betaRelease) requireNotNull(betaVersionCode) else compatibilityVersionCode
+        versionName = if (betaRelease) requireNotNull(betaVersion) else "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     ndkVersion = "28.2.13676358"
-    defaultConfig { ndk { abiFilters += "arm64-v8a" } }
+    defaultConfig { ndk { abiFilters += compatibilityAbis } }
     sourceSets.getByName("main").jniLibs.directories.add(rootProject.file("runtime-artifacts/jniLibs").absolutePath)
     packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libzakocoder_*.so" } }
     buildFeatures { compose = true }
@@ -30,22 +52,30 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
     lint { warningsAsErrors = true }
 }
 
-val prepareRuntime = tasks.register<Exec>("prepareRuntime") {
-    workingDir(rootProject.projectDir)
-    commandLine("python3", "scripts/prepare_runtime.py", "--ndk", androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath)
-    inputs.file(rootProject.file("runtime/artifacts.json"))
-    inputs.file(rootProject.file("scripts/prepare_runtime.py"))
-    // Always verify, including files already present. No unverified local override.
+val prepareRuntime = tasks.register("prepareRuntime")
+compatibilityAbis.forEach { abi ->
+    val prepareAbi = tasks.register<Exec>("prepareRuntime" + abi.replace("-", "_").replaceFirstChar { it.uppercase() }) {
+        workingDir(rootProject.projectDir)
+        commandLine("python3", "scripts/prepare_runtime.py", "--ndk", androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath, "--abi", abi)
+        inputs.file(rootProject.file("runtime/artifacts.json"))
+        inputs.file(rootProject.file("scripts/prepare_runtime.py"))
+        // Verify cached artifacts on every invocation.
+    }
+    prepareRuntime.configure { dependsOn(prepareAbi) }
 }
 tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
 tasks.matching { it.name.contains("Release") }.configureEach {
-    doFirst { error("Release requires maintainer review of self-built runtime evidence and distribution materials; see docs/RELEASING.md") }
+    doFirst {
+        check(betaRelease) {
+            "Stable Release remains gated; Beta requires explicit version properties and the distribution checks in docs/RELEASING.md"
+        }
+    }
 }
 
 dependencies {

@@ -1,6 +1,6 @@
 # 运行环境与终端
 
-当前仅构建 ARM64 调试版，x86_64 模拟器未适配。运行环境采用 Ubuntu 用户空间与 PRoot，不需要 QuickJS；它是开发工具兼容层，不是安全沙箱。
+默认构建 ARM64 调试版；可显式启用实验性 x86_64 原生库、Ubuntu 和基础终端，用于 Android 模拟器系统兼容性验证。x86_64 不包含托管 Android SDK／NDK 工具包，测试范围和执行记录见[兼容性说明](ANDROID_COMPATIBILITY.md)。运行环境采用 Ubuntu 用户空间与 PRoot，不需要 QuickJS；它是开发工具兼容层，不是安全沙箱。
 
 ## 安装与发行限制
 
@@ -8,7 +8,7 @@
 
 PRoot／loader 已使用固定 NDK 自编译，完整输入与测试见[独立子项目](../native-runtime/README.md)。Release 打包仍等待维护者审查分发材料和设备覆盖；准确来源和许可见[第三方说明](../THIRD_PARTY.md)。
 
-应用显式下载固定 Ubuntu noble ARM64 基础系统，或通过 SAF 导入摘要相同的离线包，不接受任意 rootfs。安装依次完成下载／校验、暂存解包、guest Bash 自检及就绪标记；失败或取消清理暂存，不能显示已安装。进程中断后下次安装清理遗留暂存，不自动续执行安装。至少需要 600 MiB 可用空间；基础镜像约 60 MiB 下载、280 MiB 解包，额外工具另占空间。
+应用按实际安装的原生库 ABI 显式下载固定 Ubuntu noble ARM64 或 x86_64 基础系统，或通过 SAF 导入该架构摘要相同的离线包，不接受任意 rootfs。ARM64 的既有清单、根目录及安装标记保持不变；不能将已有 ARM64 根目录直接切换为 x86_64，错误架构离线包不能通过校验。安装依次完成下载／校验、暂存解包、guest Bash 自检及就绪标记；失败或取消清理暂存，不能显示已安装。进程中断后下次安装清理遗留暂存，不自动续执行安装。至少需要 600 MiB 可用空间；基础镜像约 60 MiB 下载、280 MiB 解包，额外工具另占空间。
 
 解包限制路径、条目数和大小，拒绝越界链接与异常条目；合法 guest 绝对链接转换为内部相对链接。设备节点不从归档恢复，运行时显式绑定。PRoot 从 APK 提取的 nativeLibraryDir 执行，不直接执行可写目录内下载的宿主二进制。
 
@@ -42,6 +42,8 @@ PRoot／loader 已使用固定 NDK 自编译，完整输入与测试见[独立�
 PRoot 硬链接模拟使用持久 `rootfs/.zakocoder-links`，统一将规范化路径传入 `PROOT_L2S_DIR`；新 PTY 和命令共用准备逻辑。该目录不随下载缓存清理，不自动修复历史断链，也不提供额外隔离。
 
 ## Android Debug 构建
+
+以下托管 Android SDK／NDK 工具包仅支持 ARM64。x86_64 会在执行安装和 APT 变更前明确拒绝这些包，已有 ARM64 标记也不会向 x86_64 进程注入对应 PATH／JAVA_HOME；基础 Ubuntu、Shell 和通用 APT 工具不受此限制。
 
 环境工具包中的 Android 需要先装 Ubuntu、至少 3 GiB 可用空间，并显式同意 Android SDK 许可。APT 安装 JDK 17、curl、CA、unzip 及运行库；之后在 guest 安装 SDK Command-line Tools 19.0、Platform 36、Build Tools 36.0.0 与 Gradle 8.13。四项需要执行的原生构建工具使用固定摘要的 Linux ARM64 制品。Google SDK 包由 sdkmanager 校验其发布元数据；CLI、Gradle、ARM64 制品另核对固定 SHA-256。版本、来源和许可见[第三方说明](../THIRD_PARTY.md)。
 
@@ -94,7 +96,7 @@ AI 可按项目权限列出、读取、新建、输入、中断及关闭终端�
 
 ## 设置、恢复与兼容
 
-未配置用户默认使用清华 Ubuntu 软件源与 `223.5.5.5,119.29.29.29` DNS；已有保存选项保持不变。软件源、IPv4 DNS 写入 guest 配置；附加 PATH 及 HTTP／SOCKS5 代理用于新进程。代理接受 `http://host:port` 与 `socks5://[user:password@]host:port`（HTTP 不支持凭据，SOCKS5 凭据可省略），作用于环境镜像下载与 AI 请求。SOCKS5 凭据通过 Android Keystore 加密保存在本机、界面以打码形式显示、不写入日志；应用请求（HttpURLConnection／OkHttp 经 `java.net.Proxy.Type.SOCKS`）经 JDK SOCKS 认证层使用该凭据，并实测把目标域名发送给代理（SOCKS5 ATYP=3）、由代理侧解析；guest 进程在 HTTP 下导出 `http_proxy`／`https_proxy` 等变量，SOCKS5 下只导出 `socks5://` 形式的 `ALL_PROXY`（**配置认证时该变量包含凭据，对 guest 进程可见**），guest 工具是否在本机解析域名取决于工具（curl／git 对 `socks5://` 本机解析，仅 `socks5h://` 才由代理解析，本项目不导出 socks5h）；apt 等只识别 HTTP 代理的工具不会走 SOCKS5。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
+未配置用户默认使用清华 Ubuntu 软件源（ARM64 使用 `ubuntu-ports`，x86_64 使用 `ubuntu` archive）与 `223.5.5.5,119.29.29.29` DNS；已有保存选项保持不变。软件源、IPv4 DNS 写入 guest 配置；附加 PATH 及 HTTP／SOCKS5 代理用于新进程。代理接受 `http://host:port` 与 `socks5://[user:password@]host:port`（HTTP 不支持凭据，SOCKS5 凭据可省略），作用于环境镜像下载与 AI 请求。SOCKS5 凭据通过 Android Keystore 加密保存在本机、界面以打码形式显示、不写入日志；应用请求（HttpURLConnection／OkHttp 经 `java.net.Proxy.Type.SOCKS`）经 JDK SOCKS 认证层使用该凭据，并实测把目标域名发送给代理（SOCKS5 ATYP=3）、由代理侧解析；guest 进程在 HTTP 下导出 `http_proxy`／`https_proxy` 等变量，SOCKS5 下只导出 `socks5://` 形式的 `ALL_PROXY`（**配置认证时该变量包含凭据，对 guest 进程可见**），guest 工具是否在本机解析域名取决于工具（curl／git 对 `socks5://` 本机解析，仅 `socks5h://` 才由代理解析，本项目不导出 socks5h）；apt 等只识别 HTTP 代理的工具不会走 SOCKS5。缓存清理仅删除环境下载缓存，不删除项目、已装工具或持久硬链接目录。
 
 取消 APT 可能留下 dpkg 未配置状态，需确认后执行 `dpkg --configure -a` 并重检；取消不等于回滚已安装包。暂不提供自动环境升级、重装迁移或任意 rootfs 管理。
 

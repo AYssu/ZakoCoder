@@ -28,5 +28,29 @@
     "bytes": 64133552,
     "prefix": "ubuntu-noble-aarch64/",
     "unpackedBytes": 292934755
+  },
+  "architectures": {
+    "x86_64": {
+      "nativeArtifacts": [
+        {
+          "name": "libzakocoder_proot.so",
+          "path": "native-runtime/build/x86_64/jniLibs/x86_64/libzakocoder_proot.so",
+          "sha256": "5e0b2b085965661adbc0f701005ca7d63fdcf9dcb79e603bc7fe84c82354d63a"
+        },
+        {
+          "name": "libzakocoder_loader.so",
+          "path": "native-runtime/build/x86_64/jniLibs/x86_64/libzakocoder_loader.so",
+          "sha256": "feab2863c28683ffa4e028976b8417d8dbb3c1e3d631c862f4097efdafcb5537"
+        }
+      ],
+      "rootfs": {
+        "version": "ubuntu-noble-x86_64-pd-v4.18.0",
+        "url": "https://github.com/termux/proot-distro/releases/download/v4.18.0/ubuntu-noble-x86_64-pd-v4.18.0.tar.xz",
+        "sha256": "3a769bce23985effb504140d43b6ddd73dac9e261d1932894afa31de81e45414",
+        "bytes": 67761056,
+        "prefix": "ubuntu-noble-x86_64/",
+        "unpackedBytes": 262217053
+      }
+    }
   }
 }

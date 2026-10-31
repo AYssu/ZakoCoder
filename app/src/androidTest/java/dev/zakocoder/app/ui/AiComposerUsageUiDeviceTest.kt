@@ -26,7 +26,9 @@ import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /** Full production AiPage; isolated history/configuration and local TLS SSE, never a paid API. */
@@ -96,7 +98,7 @@ class AiComposerUsageUiDeviceTest {
                     delay(700)
                     assertTrue(has(context.getString(R.string.ai_usage_output, "↓", "12.35K")))
                     assertTrue(has(context.getString(R.string.ai_usage_total, "Σ", "1.25M")))
-                    assertFalse(has(context.getString(R.string.ai_usage_partial)))
+                    assertFalse(has("部分请求未提供用量或已超出保留范围"))
                     assertModelRow(model)
                     capture(dark, "completed-large-usage")
 
@@ -104,26 +106,67 @@ class AiComposerUsageUiDeviceTest {
                     withContext(Dispatchers.Main) { wb.ai.conversation() }
                     await("Empty isolated conversation") { wb.ai.state.value.timeline.isEmpty() && !wb.ai.state.value.permissionsLoading }
                     val liveText = "本地流式响应。"
-                    val firstEvent = event(JSONObject().put("content", liveText))
-                    // Deliver one complete event now; hold completion in the next wire block.
-                    val firstBlock = firstEvent + ": " + " ".repeat(180 - firstEvent.toByteArray(Charsets.UTF_8).size - 4) + "\n\n"
-                    fixture.enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream")
-                        .setBody(firstBlock + finish())
-                        .throttleBody(180, 20, TimeUnit.SECONDS))
-                    withContext(Dispatchers.Main) { assertTrue(wb.ai.send("开始本地流式界面测试。")) }
-                    await("Actual local streaming request active") { wb.ai.state.value.active && wb.ai.state.value.requests.any { !it.complete } && wb.ai.state.value.timeline.any { it.role == AiRole.Assistant && liveText in it.text } }
-                    await("Live stop action") { nodes { all -> all.any { context.getString(R.string.ai_stop) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() } } }
-                    assertModelRow(model)
-                    nodes { all ->
-                        assertFalse("Live turn must not add token statistics above the composer", all.any { node ->
-                            text(node).let { it.startsWith("↑") || it.startsWith("↓") || it.startsWith("Σ") }
+                    val releaseStream = CountDownLatch(1)
+                    val writerFinished = CountDownLatch(1)
+                    val writerStarted = AtomicBoolean()
+                    val served = AtomicBoolean()
+                    // A real response body stays open until the test releases it. Heartbeats keep
+                    // the transport read deadline alive and detect cancellation without a sleeping
+                    // throttle worker. Screenshot duration cannot complete this response.
+                    val liveResponse = mockwebserver3.MockResponse.Builder()
+                        .setHeader("Content-Type", "text/event-stream")
+                        .body(object : mockwebserver3.MockResponseBody {
+                            override val contentLength = -1L
+                            override fun writeTo(sink: okio.BufferedSink) {
+                                writerStarted.set(true)
+                                try {
+                                    sink.writeUtf8(event(JSONObject().put("content", liveText)))
+                                    sink.flush()
+                                    while (!releaseStream.await(250, TimeUnit.MILLISECONDS)) {
+                                        sink.writeUtf8(": fixture heartbeat\n\n")
+                                        sink.flush()
+                                    }
+                                } finally {
+                                    writerFinished.countDown()
+                                }
+                            }
                         })
+                        // This open-ended response is consumed through cancellation, not a fake
+                        // advertised length or a timer-driven finish event.
+                        .removeHeader("Content-Length")
+                        .build()
+                    fixture.server.delegate.dispatcher = object : mockwebserver3.Dispatcher() {
+                        override fun peek() = mockwebserver3.MockResponse()
+                        override fun dispatch(request: mockwebserver3.RecordedRequest) =
+                            if (served.compareAndSet(false, true)) liveResponse else mockwebserver3.MockResponse(code = 503)
+                        override fun close() { releaseStream.countDown() }
                     }
-                    assertFalse(has(context.getString(R.string.ai_usage_partial)))
-                    capture(dark, "active-streaming")
-                    assertTrue("Streaming evidence must be captured before completion", wb.ai.state.value.active)
-                    withContext(Dispatchers.Main) { wb.ai.stop() }
-                    await("Fixture task cancelled") { !wb.ai.state.value.active }
+                    try {
+                        withContext(Dispatchers.Main) { assertTrue(wb.ai.send("开始本地流式界面测试。")) }
+                        await("Actual local streaming request active") { wb.ai.state.value.active && wb.ai.state.value.requests.any { !it.complete } && wb.ai.state.value.timeline.any { it.role == AiRole.Assistant && liveText in it.text } }
+                        await("Live stop action") { nodes { all -> all.any { context.getString(R.string.ai_stop) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() } } }
+                        assertModelRow(model)
+                        nodes { all ->
+                            assertFalse("Live turn must not add token statistics above the composer", all.any { node ->
+                                text(node).let { it.startsWith("↑") || it.startsWith("↓") || it.startsWith("Σ") }
+                            })
+                        }
+                        assertFalse(has("部分请求未提供用量或已超出保留范围"))
+                        capture(dark, "active-streaming")
+                        assertTrue("Streaming evidence must be captured before completion", wb.ai.state.value.active)
+                        assertEquals("Wire completion remains gated during capture", 1L, writerFinished.count)
+                        withContext(Dispatchers.Main) { wb.ai.stop() }
+                        await("Fixture task cancelled") { !wb.ai.state.value.active }
+                    } finally {
+                        withContext(NonCancellable) {
+                            // Always cancel before releasing the body, including assertion failures.
+                            withContext(Dispatchers.Main) { wb.ai.stop() }
+                            releaseStream.countDown()
+                            if (writerStarted.get()) withContext(Dispatchers.IO) {
+                                assertTrue("Live response writer must exit before server shutdown", writerFinished.await(5, TimeUnit.SECONDS))
+                            }
+                        }
+                    }
                 }
             }
         } finally {

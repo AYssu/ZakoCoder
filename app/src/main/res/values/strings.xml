@@ -41,9 +41,10 @@
     <string name="environment_title">开发环境</string>
     <string name="runtime_ready">Ubuntu 运行环境已就绪</string>
     <string name="runtime_missing">运行环境尚未安装</string>
-    <string name="runtime_description">Ubuntu 24.04 ARM64 基础系统，下载约 64 MB，基础系统解包约 300 MB。语言工具链按项目需要安装，不预装示例项目。</string>
+    <string name="runtime_description">Ubuntu 24.04 基础系统，按设备架构选择 ARM64 或 x86_64；下载约 64–68 MB，解包约 300 MB。语言工具链按项目需要安装，不预装示例项目。</string>
     <string name="install_runtime">安装运行环境</string>
-    <string name="arm64_required">当前验证版仅支持 ARM64 真机。</string>
+    <string name="runtime_abi_unsupported">当前应用进程架构不受支持；Linux 环境需要 ARM64 或 x86_64 原生运行库。</string>
+    <string name="android_toolchain_abi_unsupported">当前 Android SDK / NDK 工具包仅提供 ARM64 可执行文件，尚不支持此设备架构；基础 Ubuntu 和通用开发工具仍可使用。</string>
     <string name="runtime_already_present">环境目录已存在；请先检查现有安装，不能直接覆盖。</string>
     <string name="storage_insufficient">至少需要 600 MiB 可用空间，请清理存储后重试。</string>
     <string name="checksum_failed">资源大小或 SHA-256 校验失败，请重试。</string>
@@ -336,7 +337,6 @@
     <string name="ai_key_replace">替换密钥（已配置，留空保留）</string>
     <string name="ai_key">API Key（可选）</string>
     <string name="ai_clear_key">清除已保存密钥</string>
-    <string name="ai_undo_file">撤销：%1$s</string>
     <string name="ai_disclosure">发送会将需求及工具读取的项目文本传给所配置服务。请勿输入秘密信息。会话正文和工具结果保存在本机，供查看及续聊；新会话不带旧上下文，卸载应用会删除记录。</string>
     <string name="ai_prompt">描述当前项目的任务</string>
     <string name="ai_stop">停止任务</string>
@@ -402,7 +402,6 @@
     <string name="ai_plan_active">进行中</string>
     <string name="ai_plan_completed">模型标记完成</string>
     <string name="ai_plan_progress">%1$d / %2$d 步</string>
-    <string name="ai_process">执行过程</string>
     <string name="ai_tool_parameters">调用参数</string>
     <string name="ai_tool_output">工具结果</string>
     <string name="ai_reason_missing">模型未提供操作说明</string>
@@ -650,7 +649,6 @@
     <string name="git_title">Git</string>
     <string name="git_clone">克隆仓库</string>
     <string name="git_url">HTTPS 仓库地址</string>
-    <string name="git_clone_help">克隆到新的项目目录。当前支持无凭据的公开 HTTPS 仓库，需 Ubuntu 和 Git。下载会访问外部网络。</string>
     <string name="git_operation_error">Git 操作失败，请检查环境和仓库状态。</string>
     <string name="git_not_repository">当前目录不是 Git 仓库，或 Git 尚未安装。</string>
     <string name="git_initialize">初始化仓库</string>

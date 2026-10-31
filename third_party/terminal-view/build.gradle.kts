@@ -5,7 +5,7 @@ android {
     buildToolsVersion = "36.0.0"
     defaultConfig {
         minSdk = 26
-        ndk { abiFilters += "arm64-v8a" }
+        ndk { abiFilters += providers.gradleProperty("compatibilityAbis").orElse("arm64-v8a").get().split(",").map(String::trim) }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

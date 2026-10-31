@@ -4,7 +4,6 @@
     <string name="ai_usage_total">%1$s 合计 %2$s token</string>
     <string name="ai_usage_speed">%1$.1f token/s</string>
     <string name="ai_usage_speed_unknown">— token/s</string>
-    <string name="ai_usage_partial">部分请求未提供用量或已超出保留范围</string>
     <string name="ai_composer_thinking_default">默认</string>
     <string name="ai_composer_thinking_enabled">开启</string>
     <string name="ai_composer_thinking_disabled">关闭</string>

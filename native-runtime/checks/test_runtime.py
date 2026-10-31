@@ -97,5 +97,26 @@ class ArtifactContractTest(unittest.TestCase):
             inspect_elf(self.proot(), loader=True)
 
 
+@unittest.skipUnless((ROOT / "build/x86_64/jniLibs/x86_64/libzakocoder_proot.so").exists(),
+                     "build x86_64 native runtime first for ELF tests")
+class X86ArtifactContractTest(unittest.TestCase):
+    directory = ROOT / "build/x86_64/jniLibs/x86_64"
+
+    def test_x86_artifacts_match_independent_pins(self):
+        lock = json.loads((ROOT / "artifacts.lock.json").read_text())
+        expected = lock["architectures"]["x86_64"]["artifacts"]
+        self.assertEqual(set(builder.NAMES), set(verify(self.directory, expected, "x86_64")))
+
+    def test_arm64_cannot_satisfy_x86_contract(self):
+        data = bytearray((self.directory / builder.NAMES[0]).read_bytes())
+        struct.pack_into("<H", data, 18, 183)
+        with self.assertRaisesRegex(ValueError, "x86_64"):
+            inspect_elf(data, abi="x86_64")
+
+    def test_digest_is_verified_before_elf(self):
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            verify(self.directory, {name: "0" * 64 for name in builder.NAMES}, "x86_64")
+
+
 if __name__ == "__main__":
     unittest.main()

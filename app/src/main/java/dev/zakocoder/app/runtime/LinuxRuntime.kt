@@ -2,7 +2,7 @@ package dev.zakocoder.app.runtime
 
 import android.content.Context
 import android.net.Uri
-import android.os.Build
+import android.os.Process
 import android.os.StatFs
 import android.system.Os
 import dev.zakocoder.app.R
@@ -37,7 +37,18 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
     val workspaces = File(context.filesDir, "workspaces")
     private val temporary = File(home, "tmp")
     private val manifest by lazy { JSONObject(context.assets.open("runtime-artifacts.json").bufferedReader().use { it.readText() }) }
-    private val image get() = manifest.getJSONObject("rootfs")
+    private val architecture get() = RuntimeArchitecture.forNativeLibraryDirectory(nativeDirectory, Process.is64Bit())
+    private fun selectedArtifacts(): JSONObject = when (architecture) {
+        RuntimeArchitecture.Arm64 -> manifest
+        RuntimeArchitecture.X86_64 -> manifest.getJSONObject("architectures").getJSONObject("x86_64")
+        null -> error(context.getString(R.string.runtime_abi_unsupported))
+    }
+    private val image get() = selectedArtifacts().getJSONObject("rootfs")
+
+    /** Managed Android SDK/NDK archives currently contain ARM64 executables only. */
+    fun requireAndroidToolchainSupport() {
+        require(architecture == RuntimeArchitecture.Arm64) { context.getString(R.string.android_toolchain_abi_unsupported) }
+    }
     private val nativeDirectory get() = context.applicationInfo.nativeLibraryDir
     val imageVersion: String get() = image.getString("version")
 
@@ -72,10 +83,10 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
     }
 
     suspend fun install(settings: AppSettings, offline: Uri? = null, status: (String) -> Unit) = withContext(Dispatchers.IO) {
-        require(Build.SUPPORTED_ABIS.contains("arm64-v8a")) { context.getString(R.string.arm64_required) }
+        require(architecture != null) { context.getString(R.string.runtime_abi_unsupported) }
         check(!root.exists()) { context.getString(R.string.runtime_already_present) }
         require(freeBytes() > 600L * 1024 * 1024) { context.getString(R.string.storage_insufficient) }
-        val nativeArtifacts = manifest.getJSONArray("nativeArtifacts")
+        val nativeArtifacts = selectedArtifacts().getJSONArray("nativeArtifacts")
         for (index in 0 until nativeArtifacts.length()) {
             val artifact = nativeArtifacts.getJSONObject(index)
             check(checksum(File(nativeDirectory, artifact.getString("name"))) == artifact.getString("sha256")) {
@@ -170,7 +181,7 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         })
         PrivateFiles.writeConfined(target, "etc/apt/sources.list.d/ubuntu.sources", """
             Types: deb
-            URIs: ${settings.aptSource.baseUrl}
+            URIs: ${architecture?.aptBaseUrl(settings.aptSource) ?: error(context.getString(R.string.runtime_abi_unsupported))}
             Suites: noble noble-updates noble-security
             Components: main universe restricted multiverse
             Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
@@ -251,7 +262,7 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             "/workspace/$projectId"
         }
         val androidMarker = File(target, AndroidToolchain.MARKER.removePrefix("/"))
-        val androidReady = androidMarker.isFile && androidMarker.length() == AndroidToolchain.VERSION.length + 1L &&
+        val androidReady = architecture == RuntimeArchitecture.Arm64 && androidMarker.isFile && androidMarker.length() == AndroidToolchain.VERSION.length + 1L &&
             androidMarker.readText().trim() == AndroidToolchain.VERSION
         val ndkMarker = File(target, AndroidNdkToolchain.MARKER.removePrefix("/"))
         val ndkReady = androidReady && ndkMarker.isFile && ndkMarker.length() == AndroidNdkToolchain.VERSION.length + 1L &&

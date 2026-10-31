@@ -1,0 +1,144 @@
+name: Android compatibility (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      api:
+        description: Android API to verify (30=Android 11, 37=Android 17)
+        type: choice
+        default: all
+        options: [all, '30', '31', '33', '34', '35', '36', '37']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: android-compatibility-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      matrix: ${{ steps.matrix.outputs.value }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - id: matrix
+        env:
+          SELECTED_API: ${{ inputs.api }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          apis = [30, 31, 33, 34, 35, 36, 37]
+          selected = os.environ['SELECTED_API']
+          if selected != 'all':
+              assert int(selected) in apis
+              apis = [int(selected)]
+          matrix = {'include': [{'api': api, 'image': '37.0' if api == 37 else str(api)} for api in apis]}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('value=' + json.dumps(matrix) + '\n')
+          PY
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - name: Build isolated base, instrumentation and upgrade APKs once
+        run: |
+          set -euo pipefail
+          mkdir -p build/compatibility-apks
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PruntimeVerification=true -PcompatibilityAbis=x86_64 -PcompatibilityVersionCode=1 --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk build/compatibility-apks/base.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk build/compatibility-apks/test.apk
+          ./gradlew :app:assembleDebug -PruntimeVerification=true -PcompatibilityAbis=x86_64 -PcompatibilityVersionCode=2 --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk build/compatibility-apks/upgrade.apk
+          cd build/compatibility-apks
+          sha256sum base.apk test.apk upgrade.apk > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: compatibility-apks
+          path: build/compatibility-apks/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  compatibility:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Download the exact APKs built in this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name compatibility-apks --dir build/compatibility-apks
+          cd build/compatibility-apks
+          sha256sum --check SHA256SUMS
+      - name: Install official emulator and image
+        env:
+          IMAGE_VERSION: ${{ matrix.image }}
+        run: |
+          set -euo pipefail
+          sdkmanager 'emulator' 'build-tools;36.0.0' "system-images;android-$IMAGE_VERSION;google_apis;x86_64"
+          printf 'no\n' | avdmanager create avd --force --name compatibility --package "system-images;android-$IMAGE_VERSION;google_apis;x86_64"
+          sudo chmod a+rw /dev/kvm
+      - name: Boot dedicated emulator and run compatibility checks
+        run: |
+          set -euo pipefail
+          mkdir -p build/android-compatibility
+          "$ANDROID_HOME/emulator/emulator" -avd compatibility -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader > build/android-compatibility/emulator.log 2>&1 &
+          timeout 120 adb -s emulator-5554 wait-for-device
+          booted=false
+          for attempt in $(seq 1 180); do
+            if [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$booted" != true ]]; then
+            echo 'Emulator did not finish booting.' >&2
+            exit 1
+          fi
+          adb -s emulator-5554 shell input keyevent 82
+          adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 1
+          python3 scripts/android_compatibility.py --serial emulator-5554 \
+            --apk build/compatibility-apks/base.apk --test-apk build/compatibility-apks/test.apk \
+            --upgrade-apk build/compatibility-apks/upgrade.apk \
+            --output build/android-compatibility/results --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt2"
+      - name: Collect diagnostics and stop dedicated emulator
+        if: always()
+        run: |
+          mkdir -p build/android-compatibility
+          adb -s emulator-5554 logcat -d > build/android-compatibility/logcat.txt 2>&1 || true
+          adb -s emulator-5554 emu kill || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: android-api-${{ matrix.api }}-compatibility
+          path: build/android-compatibility/
+          if-no-files-found: warn
+          retention-days: 14

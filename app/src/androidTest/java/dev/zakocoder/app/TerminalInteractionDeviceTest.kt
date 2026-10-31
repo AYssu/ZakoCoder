@@ -635,7 +635,7 @@ class TerminalInteractionDeviceTest {
                 click("项目库")
                 click("添加项目")
                 click("克隆仓库")
-                await("existing clone form") { find(base.getString(R.string.git_clone_help)) != null }
+                await("existing clone form") { find(base.getString(R.string.git_clone_credentials_help)) != null }
                 assertTrue(isolated.state.value.projects.isEmpty())
                 click(base.getString(R.string.close))
                 await("clone cancellation returns to library") { find("还没有项目") != null }
