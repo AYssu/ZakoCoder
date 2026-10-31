@@ -81,9 +81,12 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
                     label = { Text(if (effort == null) stringResource(R.string.ai_options_provider_default) else effort.wire) })
             }
         }
-        OptionField(draft.frequency, { draft.frequency = it; changed() }, R.string.ai_options_frequency, editable)
-        OptionField(draft.presence, { draft.presence = it; changed() }, R.string.ai_options_presence, editable)
-        OptionField(draft.seed, { draft.seed = it; changed() }, R.string.ai_options_seed, editable)
+        OptionField(draft.frequency, { draft.frequency = it; changed() }, R.string.ai_options_frequency, editable,
+            !ModelInputValidation.penalty(draft.frequency), R.string.ai_reading_number_penalty)
+        OptionField(draft.presence, { draft.presence = it; changed() }, R.string.ai_options_presence, editable,
+            !ModelInputValidation.penalty(draft.presence), R.string.ai_reading_number_penalty)
+        OptionField(draft.seed, { draft.seed = it; changed() }, R.string.ai_options_seed, editable,
+            !ModelInputValidation.seed(draft.seed), R.string.ai_reading_number_seed, KeyboardType.Number)
         HorizontalDivider()
         ContextBudgetOptions(draft, editable, changed)
         HorizontalDivider()
@@ -93,16 +96,21 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_options_headers_replace), Modifier.weight(1f)); Switch(draft.replaceHeaders, { draft.replaceHeaders = it; changed() }, enabled = editable)
         }
+        val headersInvalid = draft.replaceHeaders && runCatching { draft.headers() }.isFailure
         if (draft.replaceHeaders) OutlinedTextField(draft.headersText, { draft.headersText = it.take(26000); changed() }, Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.ai_options_headers_lines)) }, minLines = 3, maxLines = 7, enabled = editable,
+            isError = headersInvalid,
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
-            supportingText = { Text(stringResource(R.string.ai_options_headers_empty)) })
+            supportingText = { Text(stringResource(if (headersInvalid) R.string.ai_reading_headers_invalid else R.string.ai_options_headers_empty)) })
         if (!draft.valid()) Text(stringResource(R.string.ai_options_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 }
 
 @Composable
-private fun OptionField(value: String, update: (String) -> Unit, label: Int, editable: Boolean) {
+private fun OptionField(value: String, update: (String) -> Unit, label: Int, editable: Boolean,
+    invalid: Boolean, hint: Int, keyboard: KeyboardType = KeyboardType.Decimal) {
     OutlinedTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
-        label = { Text(stringResource(label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, autoCorrectEnabled = false))
+        label = { Text(stringResource(label)) }, isError = invalid,
+        supportingText = if (invalid) { { Text(stringResource(hint)) } } else null,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrectEnabled = false))
 }

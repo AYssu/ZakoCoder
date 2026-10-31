@@ -60,6 +60,8 @@ internal fun AiMarkdown(
     text: String,
     projectId: String? = null,
     onOpenProjectPath: ((String) -> Unit)? = null,
+    streaming: Boolean = false,
+    onReadingInteraction: () -> Unit = {},
     onLink: (String) -> Unit,
 ) {
     var document by remember { mutableStateOf<Node?>(null) }
@@ -75,15 +77,15 @@ internal fun AiMarkdown(
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
             Text(stringResource(R.string.ai_markdown_partial, AiTextPages.MARKDOWN_LIMIT, text.length),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
+            OutlinedButton(onClick = { onReadingInteraction(); fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
         }
         SelectionContainer {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                document?.let { root -> AiMarkdownDocument.children(root).forEach { MarkdownBlock(it, onLink, 0, projectId, onOpenProjectPath) } }
+                document?.let { root -> AiMarkdownDocument.children(root).forEach { MarkdownBlock(it, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction) } }
             }
         }
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
-            TextButton(onClick = { fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
+            TextButton(onClick = { onReadingInteraction(); fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
         }
     }
     fullTextLength?.let { length ->
@@ -93,26 +95,27 @@ internal fun AiMarkdown(
 }
 
 @Composable
-private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, projectId: String?, onOpenProjectPath: ((String) -> Unit)?) {
+private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, projectId: String?, onOpenProjectPath: ((String) -> Unit)?, streaming: Boolean,
+    sourceLimited: Boolean, onReadingInteraction: () -> Unit) {
     if (depth > 16) return
     val children = AiMarkdownDocument.children(node)
     when (node) {
         is Heading -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
             fontSize = when (node.level) { 1 -> 21.sp; 2 -> 18.sp; else -> 15.sp }, lineHeight = 27.sp)
         is org.commonmark.node.Paragraph -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 13.sp, lineHeight = 22.sp)
-        is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40))
-        is IndentedCodeBlock -> CodeBlock(node.literal, "")
+        is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40), streaming, sourceLimited, onReadingInteraction)
+        is IndentedCodeBlock -> CodeBlock(node.literal, "", streaming, sourceLimited, onReadingInteraction)
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
             Surface(Modifier.width(3.dp).heightIn(min = 30.dp), color = MaterialTheme.colorScheme.primary) { }
             Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
+                children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
             }
         }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             children.forEachIndexed { index, item -> Row {
                 Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = 13.sp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
+                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
                 }
             } }
         }
@@ -127,7 +130,7 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
             } }
         }
         is HtmlBlock -> Text(node.literal, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath) }
+        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
     }
 }
 
@@ -182,17 +185,46 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
 }
 
 @Suppress("DEPRECATION")
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CodeBlock(code: String, language: String) {
+private fun CodeBlock(code: String, language: String, streaming: Boolean, sourceLimited: Boolean, onReadingInteraction: () -> Unit) {
     val clipboard = LocalClipboardManager.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var fullText by remember { mutableStateOf<String?>(null) }
+    val preview = remember(code, expanded) { AiCodePreview.of(code, expanded) }
+    val collapsed = remember(code) { AiCodePreview.of(code, false) }
     Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(language.ifBlank { stringResource(R.string.ai_code) }, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { clipboard.setText(AnnotatedString(code)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text(stringResource(R.string.ai_copy_code), fontSize = 11.sp) }
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(language.ifBlank { stringResource(R.string.ai_code) }, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (collapsed.limited) Text(stringResource(R.string.ai_reading_code_lines, preview.totalLines),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { clipboard.setText(AnnotatedString(code)) }, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 10.dp)) { Text(stringResource(if (sourceLimited) R.string.ai_reading_code_copy_preview else R.string.ai_copy_code), fontSize = 11.sp) }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text(code.trimEnd('\n'), Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 20.sp, softWrap = false)
+            Text(preview.text, Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 20.sp, softWrap = false)
+            if (sourceLimited) Text(stringResource(R.string.ai_reading_code_source_limited, stringResource(R.string.ai_full_text_open)), Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (collapsed.limited) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    if (preview.limited) Text(stringResource(if (sourceLimited) R.string.ai_reading_code_partial_lines else R.string.ai_reading_code_preview, preview.lines, preview.totalLines),
+                        Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onReadingInteraction(); expanded = !expanded }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(if (expanded) R.string.ai_reading_code_collapse else R.string.ai_reading_code_expand))
+                        }
+                        if (expanded && preview.limited) TextButton(onClick = { onReadingInteraction(); fullText = code }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(if (sourceLimited) R.string.ai_reading_code_open_preview else R.string.ai_reading_code_full))
+                        }
+                    }
+                    if (streaming) Text(stringResource(R.string.ai_reading_code_receiving), Modifier.padding(horizontal = 4.dp),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
+    fullText?.let { snapshot -> AiFullText(snapshot) { fullText = null } }
 }

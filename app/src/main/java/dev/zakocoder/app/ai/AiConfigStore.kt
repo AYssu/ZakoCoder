@@ -5,6 +5,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import android.util.Base64
+import dev.zakocoder.app.mcp.McpCleartextHosts
 import java.io.File
 import java.net.URI
 import java.security.KeyStore
@@ -30,11 +31,17 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         fun endpoint(value: String): String {
             val base = value.trim().trimEnd('/').removeSuffix("/chat/completions").removeSuffix("/responses").removeSuffix("/messages").removeSuffix("/models")
             val uri = URI(base)
-            require(uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && (uri.port == -1 || uri.port in 1..65535))
+            require(uri.scheme in setOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && (uri.port == -1 || uri.port in 1..65535))
+            // Use the same literal-host policy as MCP; do not resolve arbitrary DNS into trust.
+            require(uri.scheme != "http" || McpCleartextHosts.allowed(uri.host))
             require(base.length <= 2048)
             return base
         }
-        private fun origin(value: String): String { val uri = URI(endpoint(value)); return "${uri.host.lowercase()}:${if (uri.port == -1) 443 else uri.port}" }
+        internal fun origin(value: String): String {
+            val uri = URI(endpoint(value))
+            val port = if (uri.port != -1) uri.port else if (uri.scheme == "https") 443 else 80
+            return "${uri.scheme}://${uri.host.lowercase(java.util.Locale.ROOT)}:$port"
+        }
     }
     private fun exists(file: AtomicFile) = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
     private fun read(file: AtomicFile): JSONObject {

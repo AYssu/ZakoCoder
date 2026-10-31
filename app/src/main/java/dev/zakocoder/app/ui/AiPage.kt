@@ -167,7 +167,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             itemsIndexed(state.timeline, key = { _, entry -> entry.id }) { index, entry ->
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
                 if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
-                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id)
+                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id)
                 }
                 else state.events.find { it.id == entry.toolId }?.let { event ->
                     val terminalId = if (event.tool in setOf(dev.zakocoder.app.ai.AiTool.StartTerminal, dev.zakocoder.app.ai.AiTool.ReadTerminal, dev.zakocoder.app.ai.AiTool.SendTerminalInput) && event.status == dev.zakocoder.app.ai.AiToolStatus.Succeeded)
@@ -348,7 +348,7 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 
 @Suppress("DEPRECATION")
 @Composable
-internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false) {
+internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val visibleResponse = if (entry.role == AiRole.Assistant) smoothStreamingText(entry.id, entry.text, responseStreaming, animateOnMount) else entry.text
     val visibleReasoning = if (entry.role == AiRole.Assistant) smoothStreamingText("${entry.id}:reasoning", entry.reasoning, reasoningStreaming, animateOnMount) else entry.reasoning
@@ -371,8 +371,8 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
             }
         }
         AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning)
-            if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, onLink = onLink)
+            AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction)
+            if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink)
             if (entry.text.isNotEmpty()) IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }, modifier = Modifier.size(36.dp)) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         AiRole.Notice -> Text(entry.text, Modifier.padding(vertical = 4.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

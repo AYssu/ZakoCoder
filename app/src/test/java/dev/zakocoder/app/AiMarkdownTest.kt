@@ -32,4 +32,22 @@ class AiMarkdownTest {
         assertEquals(source, (parsed.firstChild.firstChild as Text).literal)
     }
     @Test(expected = IllegalArgumentException::class) fun rejectsUnboundedInput() { AiMarkdownDocument.parse("a".repeat(64001)) }
+
+    @Test fun streamingFencesKeepReceivedLiteralAndClosingOnlyChangesStructure() {
+        val parts = listOf("```kotlin\nval emoji = \"😀\"", "```kotlin\nval emoji = \"😀\"\nval x = 2\n", "```kotlin\nval emoji = \"😀\"\nval x = 2\n```\n\n完成")
+        parts.forEachIndexed { index, source ->
+            val first = AiMarkdownDocument.parse(source).firstChild as FencedCodeBlock
+            assertEquals("kotlin", first.info)
+            assertTrue(first.literal.startsWith("val emoji = \"😀\""))
+            assertFalse(first.literal.contains("```"))
+            if (index > 0) assertTrue(first.literal.contains("val x = 2"))
+        }
+    }
+
+    @Test fun incompleteInlineLinkIsPlainReceivedTextUntilUrlIsComplete() {
+        val source = "查看 [接口说明](https://example.org/api"
+        val pending = AiMarkdownDocument.parse(source).firstChild
+        assertFalse(AiMarkdownDocument.children(pending).any { it is Link })
+        assertTrue(AiMarkdownDocument.children(AiMarkdownDocument.parse("$source)").firstChild).any { it is Link })
+    }
 }
