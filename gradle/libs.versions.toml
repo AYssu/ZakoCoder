@@ -19,6 +19,7 @@ okhttp = "5.5.1"
 jsch = "2.28.8"
 
 [libraries]
+lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "0.24.0" }
 jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
 commonmark = { module = "org.commonmark:commonmark", version = "0.31.0" }
@@ -27,6 +28,7 @@ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-mock = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
 okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
 sora-editor = { module = "io.github.Rosemoe.sora-editor:editor", version.ref = "sora" }
+sora-lsp = { module = "io.github.Rosemoe.sora-editor:editor-lsp", version.ref = "sora" }
 sora-textmate = { module = "io.github.Rosemoe.sora-editor:language-textmate", version.ref = "sora" }
 androidx-core = { module = "androidx.core:core-ktx", version.ref = "core" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }

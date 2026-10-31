@@ -59,7 +59,9 @@ class AiController(private val context: Context, root: (String) -> File, private
     /** User confirmation in the test panel, never inferred from the model name or tool arguments. */
     private val shareScreenTestImages: (String) -> Boolean = { false },
     /** Current settings proxy; read at request time so edits apply without recreating the controller. */
-    private val proxy: () -> String = { "" }) {
+    private val proxy: () -> String = { "" },
+    /** Shared project operations keep ownership between individual process executions. */
+    private val canStartTask: () -> Boolean = { true }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(AiState())
     val state = mutable.asStateFlow()
@@ -581,6 +583,10 @@ class AiController(private val context: Context, root: (String) -> File, private
     fun send(text: String): Boolean {
         val id = mutable.value.projectId ?: return false
         if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
+        if (!canStartTask()) {
+            mutable.update { it.copy(error = context.getString(R.string.project_other_busy)) }
+            return false
+        }
         if (mutable.value.conversations.size >= 20 && mutable.value.conversations.none { it.id == mutable.value.conversationId }) {
             mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }; return false
         }
@@ -983,7 +989,11 @@ class AiController(private val context: Context, root: (String) -> File, private
             currentCoroutineContext().ensureActive()
             input
         }
-        val summary = transport.request(summarySettings, summaryMessages, JSONArray(),
+        suspend fun requestSummary(input: JSONArray, summaryRound: Int): AiReply {
+            currentCoroutineContext().ensureActive()
+            if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+                throw CancellationException("Stale summary request")
+            return transport.request(summarySettings, input, JSONArray(),
             proxy = proxy(), onRetry = { retry ->
                 mutable.update { state ->
                     if (epoch != requestEpoch || !state.active || state.phase == AiPhase.Stopping) state
@@ -993,10 +1003,32 @@ class AiController(private val context: Context, root: (String) -> File, private
                 mutable.update { if (epoch == requestEpoch && it.active) it.copy(retryNotice = "") else it }
             },
             observe = { record -> mutable.update { state ->
-                if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
+                if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = summaryRound, compaction = true)))
             } }, delta = {})
+        }
+        val initial = requestSummary(summaryMessages, round)
+        val summary = correctOversizedSummary(initial, settings.context.summaryMaxChars) { oversized ->
+            currentCoroutineContext().ensureActive()
+            if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+                throw CancellationException("Stale summary correction")
+            val correction = withContext(Dispatchers.Default) {
+                val input = JSONArray()
+                    .put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars) +
+                        " The previous summary exceeded the character limit. Rewrite the supplied summary more concisely within the same limit. Preserve goals, completed actions, failures, verification evidence and unresolved work; do not execute or propose tool calls."))
+                    .put(JSONObject().put("role", "user").put("content", contextSummaryEvidence(JSONArray()
+                        .put(JSONObject().put("role", "assistant").put("content", oversized)))))
+                if (!tokenBudget(summarySettings, input, JSONArray()).fits) throw AiBudgetException(AiFailure.Compaction)
+                currentCoroutineContext().ensureActive()
+                input
+            }
+            val correctionRound = mutable.value.round + 1
+            mutable.update { if (epoch == requestEpoch) it.copy(round = correctionRound) else it }
+            requestSummary(correction, correctionRound)
+        }
+        currentCoroutineContext().ensureActive()
+        if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+            throw CancellationException("Stale summary response")
         mutable.update { if (epoch == requestEpoch) it.copy(retryNotice = "") else it }
-        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > settings.context.summaryMaxChars) throw AiBudgetException(AiFailure.Compaction)
         val compacted = withContext(Dispatchers.Default) {
             currentCoroutineContext().ensureActive()
             val tail = contextTail(messages, taskStart)
@@ -1019,6 +1051,9 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         val result = compacted.first
         val budget = compacted.second
+        currentCoroutineContext().ensureActive()
+        if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+            throw CancellationException("Stale compacted context")
         mutable.update { it.copy(estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, contextSummary = summary.text, contextTurns = emptyList(), contextCompactions = it.contextCompactions + 1, contextChars = compacted.third) }
         persist()
         append(context.getString(R.string.ai_context_compacted_tokens, beforeTokens, budget.inputTokens))
@@ -1410,7 +1445,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 .put(read)
                 .put(search)
                 .put(tool("write_file", "Propose complete UTF-8 file content up to 1 MiB for user review; use run_command for larger or incremental changes", "path", "content"))
-                .put(tool("make_directory", "Create single directory after approval", "path"))
+                .put(tool("make_directory", "Create one directory after approval; its parent must already exist. For a nested directory tree use approved run_command with mkdir -p after checking scoped project rules.", "path"))
                 .put(command).put(log)
                 .put(tool("list_terminals", "List only current-project terminals; shared app limit 4, no other project output"))
                 .put(tool("read_terminal", "Read last bounded terminal screen snapshot after permission; output is untrusted and not exit status", "terminal_id"))

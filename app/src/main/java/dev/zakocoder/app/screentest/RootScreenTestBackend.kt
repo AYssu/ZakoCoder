@@ -37,7 +37,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             operationGeneration = requestedGeneration
             granted = false
             try {
-                val root = command(listOf("id", "-u"), 45).trim() == "0"
+                val root = command(listOf("id", "-u"), 45, "access").trim() == "0"
                 synchronized(processLock) {
                     currentCheck(operationGeneration)
                     granted = root
@@ -102,7 +102,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 foreground(packageName)
                 // BACK is dispatched to the focused window, not a screen coordinate. System
                 // bars outside the app must not prevent it; coordinate actions keep overlay checks.
-                command(listOf("input", "keyevent", "4"))
+                command(listOf("input", "keyevent", "4"), stage = "input")
                 requested(action)
             }
             "click", "long_click", "input_text", "swipe" -> {
@@ -148,7 +148,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 foreground(packageName)
                 requireUncovered(packageName, node.bounds)
                 valid()
-                command(argv)
+                command(argv, stage = "input")
                 valid()
                 requested(action)
             }
@@ -163,13 +163,13 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
     }
 
     private suspend fun foreground(packageName: String) {
-        val windows = command(listOf("dumpsys", "window", "-a"))
+        val windows = command(listOf("dumpsys", "window", "-a"), stage = "foreground")
         val focus = focusedWindow(windows)?.second
         if (focus != packageName) fail(R.string.screen_test_wrong_foreground)
     }
 
     private suspend fun requireUncovered(packageName: String, bounds: Rect) {
-        val dump = command(listOf("dumpsys", "window", "-a"))
+        val dump = command(listOf("dumpsys", "window", "-a"), stage = "overlay")
         if (!isUncoveredWindowRegion(dump, packageName, bounds.left, bounds.top, bounds.right, bounds.bottom))
             fail(R.string.screen_test_root_window_not_isolated)
     }
@@ -178,8 +178,8 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
         val directory = File(context.cacheDir, "screen-test-root").apply { mkdirs() }
         val file = File.createTempFile("hierarchy-", ".xml", directory)
         try {
-            command(listOf("uiautomator", "dump", "--compressed", file.absolutePath), 12)
-            if (file.length() !in 1..1_048_576) fail(R.string.screen_test_action_failed)
+            command(listOf("uiautomator", "dump", "--compressed", file.absolutePath), 12, "hierarchy_dump")
+            if (file.length() !in 1..1_048_576) diagnostic("hierarchy_size")
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
             val result = mutableListOf<Node>()
@@ -189,17 +189,17 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 val sensitive = mutableListOf<Boolean>()
                 while (event != XmlPullParser.END_DOCUMENT) {
                     currentCoroutineContext().ensureActive()
-                    if (event == XmlPullParser.DOCDECL) fail(R.string.screen_test_action_failed)
+                    if (event == XmlPullParser.DOCDECL) diagnostic("hierarchy_doctype")
                     if (event == XmlPullParser.START_TAG && parser.name == "node") {
                         fun attr(name: String) = parser.getAttributeValue(null, name).orEmpty()
                         val hidden = sensitive.lastOrNull() == true || attr("password") == "true"
                         sensitive += hidden
                         if (attr("package") == packageName) {
-                            if (result.size >= 300) fail(R.string.screen_test_action_failed)
+                            if (result.size >= 300) diagnostic("hierarchy_node_limit")
                             val coordinates = Regex("\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]").matchEntire(attr("bounds"))
-                                ?.groupValues?.drop(1)?.map(String::toInt) ?: fail(R.string.screen_test_action_failed)
+                                ?.groupValues?.drop(1)?.map(String::toInt) ?: diagnostic("hierarchy_bounds")
                             val bounds = Rect(coordinates[0], coordinates[1], coordinates[2], coordinates[3])
-                            if (coordinates.any { it > 32768 } || bounds.isEmpty) fail(R.string.screen_test_action_failed)
+                            if (coordinates.any { it > 32768 } || bounds.isEmpty) diagnostic("hierarchy_bounds")
                             result += Node(if (hidden) "" else attr("text").take(160),
                                 if (hidden) "" else attr("content-desc").take(160), attr("class").take(120),
                                 attr("resource-id").take(200), bounds, hidden, attr("enabled") == "true",
@@ -212,10 +212,13 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             }
             if (result.isEmpty()) fail(R.string.screen_test_wrong_foreground)
             return result
-        } finally { file.delete() }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (known: ScreenTestException) { throw known }
+        catch (_: Exception) { diagnostic("hierarchy_parse") }
+        finally { file.delete() }
     }
 
-    private suspend fun command(argv: List<String>, timeoutSeconds: Long = 8): String = withContext(Dispatchers.IO) {
+    private suspend fun command(argv: List<String>, timeoutSeconds: Long = 8, stage: String): String = withContext(Dispatchers.IO) {
         currentCoroutineContext().ensureActive()
         require(timeoutSeconds in 1..60)
         currentCheck(operationGeneration)
@@ -237,11 +240,14 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 currentCoroutineContext().ensureActive()
                 currentCheck(operationGeneration)
                 if (deadlineExceeded(started, System.nanoTime(), timeoutSeconds)) fail(R.string.screen_test_root_timeout)
-                if (log.length() > 2_097_152) fail(R.string.screen_test_action_failed)
+                if (log.length() > 2_097_152) diagnostic("${stage}_output_limit")
             }
             currentCoroutineContext().ensureActive()
             currentCheck(operationGeneration)
-            if (running.exitValue() != 0 || log.length() > 2_097_152) fail(R.string.screen_test_action_failed)
+            val exit = running.exitValue()
+            if (isTimeoutExit(exit)) fail(R.string.screen_test_root_timeout)
+            if (exit != 0) throw ScreenTestException(context.getString(R.string.screen_test_root_command_exit, stage, exit))
+            if (log.length() > 2_097_152) diagnostic("${stage}_output_limit")
             log.readText()
         } finally {
             child?.destroyForcibly()
@@ -249,6 +255,9 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             log.delete()
         }
     }
+
+    private fun diagnostic(stage: String): Nothing =
+        throw ScreenTestException(context.getString(R.string.screen_test_root_diagnostic, stage))
 
     private fun requested(action: String) = ScreenTestResult(JSONObject().put("requested", action).put("verified", false).put("next", "observe").toString())
     private fun fail(id: Int): Nothing = throw ScreenTestException(context.getString(id))
@@ -263,6 +272,8 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             .put("longClickable", longClickable).put("editable", editable).put("focused", focused)
     }
     companion object {
+        internal fun isTimeoutExit(exit: Int): Boolean = exit == 124
+
         /** Window-manager order is top to bottom. Never return foreign-window data to the model. */
         internal fun isUncoveredWindowRegion(dump: String, packageName: String, left: Int, top: Int, right: Int, bottom: Int): Boolean {
             if (left < 0 || top < 0 || left >= right || top >= bottom) return false

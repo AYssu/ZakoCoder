@@ -35,27 +35,52 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val editor = dev.zakocoder.app.editor.EditorController(context, projects, savedFile = {
         mutable.update { it.copy(fileRevision = it.fileRevision + 1) }
         refreshDependencies()
-    })
+    }, lsp = dev.zakocoder.app.editor.lsp.EditorLspController(context, runtime,
+        { mutable.value.settings }, { mutable.value.installed && !mutable.value.busy }))
     private val settingsRepository = SettingsRepository(context)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
+    internal val gitCredentials = dev.zakocoder.app.git.GitCredentialStore(context)
+    private val gitCredentialAccess = dev.zakocoder.app.git.GitCredentialAccess(gitCredentials, runtime.root)
     val git: dev.zakocoder.app.git.ProjectGit = dev.zakocoder.app.git.ProjectGit(context,
-        { id, script -> executeProjectCommand(id, script, 120000, {}) }, { !mutable.value.busy && !aiActive() && !aiRestoring() })
-    fun cloneProject(name: String, url: String) = run(R.string.git_clone, foreground = true) {
+        { id, script -> executeProjectCommand(id, script, 120000, {}) },
+        { !mutable.value.busy && !aiActive() && !aiRestoring() && !projectTasksActive() },
+        networkExecute = { id, script, remote ->
+            gitCredentialAccess.execute(id, script, remote) { projectId, guarded, redact ->
+                var log = ""
+                executeProjectCommand(projectId, guarded, 30 * 60 * 1000L) { chunk ->
+                    log = (log + redact(chunk)).takeLast(24000)
+                    git.reportOutput(log)
+                }
+            }
+        })
+    fun cloneProject(name: String, url: String, username: String = "", token: String = "") = run(R.string.git_clone, foreground = true) {
         val remote = dev.zakocoder.app.git.publicCloneUrl(url)
         check(mutable.value.installed)
         val project = withContext(Dispatchers.IO) { projects.create(name) }
         var registered = false
         try {
-            val script = dev.zakocoder.app.git.GIT_PREFIX + " clone -- " + dev.zakocoder.app.workflow.shellArgument(remote) + " ."
-            val result = runtime.execute(script, project.id, mutable.value.settings, timeoutMillis = 30 * 60 * 1000L, output = ::append)
+            try { dev.zakocoder.app.git.ensureGitNetworkPolicy { probe -> runtime.execute(probe, project.id, mutable.value.settings) } }
+            catch (_: dev.zakocoder.app.git.GitUrlRewriteDetected) { error(context.getString(R.string.git_workflow_error_url_rewrite)) }
+            catch (_: dev.zakocoder.app.git.GitNetworkPolicyUnavailable) { error(context.getString(R.string.git_workflow_error_network_policy)) }
+            if (username.isNotEmpty() || token.isNotEmpty()) withContext(Dispatchers.IO) {
+                gitCredentials.save(project.id, remote, username, token)
+            }
+            val script = dev.zakocoder.app.git.gitNetworkPrefix(remote) + " clone --progress -- " + dev.zakocoder.app.workflow.shellArgument(remote) + " ."
+            val result = gitCredentialAccess.execute(project.id, script, remote) { id, guarded, redact ->
+                runtime.execute(guarded, id, mutable.value.settings, timeoutMillis = 30 * 60 * 1000L,
+                    output = { append(redact(it)) })
+            }
             check(result.exitCode == 0) { context.getString(R.string.git_operation_error) + "\n" + dev.zakocoder.app.ai.AiLogRedactor("").clean(result.output).takeLast(3000) }
             val kinds = withContext(Dispatchers.IO) { ProjectDetector.detect(projects.directory(project.id)) }
             withContext(NonCancellable) { persist(mutable.value.projects + project.copy(kinds = kinds), project.id); registered = true }
-        } finally { if (!registered) withContext(NonCancellable + Dispatchers.IO) { PrivateFiles.deleteTree(projects.directory(project.id)) } }
+        } finally { if (!registered) withContext(NonCancellable + Dispatchers.IO) {
+            try { gitCredentials.remove(project.id, remote) }
+            finally { PrivateFiles.deleteTree(projects.directory(project.id)) }
+        } }
     }
     val projectTasks: dev.zakocoder.app.workflow.ProjectTasks = dev.zakocoder.app.workflow.ProjectTasks(context, projects::directory, ::executeProjectCommand,
-        { !mutable.value.busy && !aiActive() && !aiRestoring() }, { if (projectTasksActive()) service() else releaseService() })
+        { !mutable.value.busy && !git.state.value.busy && !aiActive() && !aiRestoring() }, { if (projectTasksActive()) service() else releaseService() })
     private fun projectTasksActive() = projectTasks.state.value.busy
     private suspend fun executeProjectCommand(id: String, script: String, timeout: Long, output: (String) -> Unit): CommandResult {
         check(!mutable.value.busy && mutable.value.installed)
@@ -128,7 +153,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 }))
         },
         finishScreenTestTask = { id, lease -> screenTests.finishTask(id, lease) }, stopScreenTest = { screenTests.stop() },
-        shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() })
+        shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() },
+        canStartTask = { !mutable.value.busy && !git.state.value.busy && !projectTasksActive() })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -203,9 +229,15 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     init {
         scope.launch { ssh.load() }
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
+        // A Git operation spans several commands and credential cleanup. Keep ownership
+        // and the foreground service through the gaps between individual guest processes.
+        scope.launch { git.state.collect { if (it.busy) service() else releaseService() } }
         scope.launch {
             try {
-                val data = withContext(Dispatchers.IO) { runtime.workspaces.mkdirs(); terminal.prepareTypeface()
+                val data = withContext(Dispatchers.IO) {
+                    // Migrate old authentication leases before the first guest process can run.
+                    if (runtime.isInstalled()) dev.zakocoder.app.git.GitCredentialAccess.prepareRuntime(runtime.root)
+                    runtime.workspaces.mkdirs(); terminal.prepareTypeface()
                     WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay()) }
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
                 mutable.update { it.copy(loading = false, projects = data.projects, settings = data.settings,
@@ -247,11 +279,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     fun serviceDestroyed(service: DevelopmentService) {
         if (foregroundService === service) {
             foregroundService = null
-            if (mutable.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
+            if (mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
         }
     }
     private fun releaseService() {
-        if (!mutable.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
+        if (!mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null
@@ -361,6 +393,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         withContext(Dispatchers.IO) { projectTasks.deleteProject(id) }
         if (ai.state.value.projectId == id) ai.select(null)
         if (!bound) persist(remaining, remaining.firstOrNull()?.id)
+        withContext(NonCancellable + Dispatchers.IO) { gitCredentials.removeProject(id) }
     }
     fun redetect() = run(R.string.detect_project, recheckTools = true) {
         val project = mutable.value.project ?: return@run
@@ -458,6 +491,13 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             val result = runtime.execute(DevelopmentTools.installScript(packages), null, mutable.value.settings, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+        }
+        for ((bundle, server) in listOf("lsp-python" to dev.zakocoder.app.editor.lsp.LspServer.Python,
+            "lsp-typescript" to dev.zakocoder.app.editor.lsp.LspServer.TypeScript)) {
+            if (bundle in ids) {
+                val result = runtime.execute(server.installScript, null, mutable.value.settings, output = ::append)
+                check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+            }
         }
         if ("android" in ids) {
             val script = withContext(Dispatchers.IO) { context.assets.open("android-build/install.sh").bufferedReader().use { it.readText() } }

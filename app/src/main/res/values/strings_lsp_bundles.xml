@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bundle_lsp_python">Python 语言服务</string>
+    <string name="bundle_lsp_python_description">安装独立的 Python LSP 环境，为编辑器提供诊断及补全，需要联网下载依赖。</string>
+    <string name="bundle_lsp_typescript">JavaScript / TypeScript 语言服务</string>
+    <string name="bundle_lsp_typescript_description">安装独立的 TypeScript LSP 工具，为 JS / TS 文件提供诊断及补全，需要 Node.js 和联网下载依赖。</string>
+</resources>

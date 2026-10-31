@@ -33,13 +33,13 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 
 | 工作场景 | 你可以做什么 |
 | --- | --- |
-| **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录或克隆公开 HTTPS 仓库；搜索与切换项目。 |
-| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览。 |
+| **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
+| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS 可选本机语言服务。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情。 |
 | **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
 | **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
-| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；选择项目 Debug APK，通过系统安装及受限屏幕测试验证界面；查看 Git 状态、选择暂存并创建本地提交。 |
+| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；选择项目 Debug APK，通过系统安装及受限屏幕测试验证界面；查看 Git 状态、获取／拉取／推送、管理分支与冲突，选择暂存并创建提交。 |
 
 图片从附件入口添加，可单独发送或配合文字描述，需使用支持图片输入的模型服务；真实服务的视觉理解效果仍待验证。服务公开返回的思考内容在当前轮实时展开，开始正式回答或工具调用后自动收起；历史可展开和复制；不会推测或补造模型内部思考。工具权限提供普通、高权限和高级逐工具规则：高权限需确认，保留禁止项，MCP、Android 屏幕操作与 SSH 仍询问，不获得 Android root。
 
@@ -55,7 +55,7 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 完成第一个项目
 
-1. **添加项目**：创建项目、导入副本、绑定本地目录或克隆公开仓库。导入副本与原目录独立；绑定本地目录直接修改原文件。
+1. **添加项目**：创建项目、导入副本、绑定本地目录或克隆 HTTPS 仓库。私有仓库需填写具有对应权限的用户名和访问令牌。导入副本与原目录独立；绑定本地目录直接修改原文件。
 2. **准备环境**：在环境页安装 Ubuntu，再按项目需要选择工具包。工具检测不会自动安装依赖。
 3. **开始编辑**：点击文件打开编辑器；Markdown 可切换预览，修改后显式保存。
 4. **配置助手**：在设置中填写模型地址、模型和密钥，手动测试连接；高级设置可调整生成参数、思考模式、上下文和压缩策略、请求头；服务是否支持这些参数需实际测试。也可以独立使用编辑器和终端。
@@ -77,8 +77,12 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
 | 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
-| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，暂不提供 LSP 或跨文件语义补全。 |
-| Git | 公开 HTTPS 克隆、状态、暂存和本地提交；私有仓库认证、分支合并与冲突界面尚未提供。 |
+| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，可选实验性 Python／JS／TS LSP 补全与诊断。暂不提供 Java／Kotlin 语言服务或完整重构。 |
+| Git | 公开／私有 HTTPS 克隆、按仓库保存令牌、状态、暂存、提交、获取／快进拉取／推送、分支管理及冲突编辑入口；不提供强推、rebase 或 Git SSH 密钥管理。 |
+
+Git 与语言服务均使用同一项目及手机上的 Ubuntu 环境。Git 拉取默认仅快进，分叉需明确合并；冲突处理后保存并标记解决，再提交。领先／落后数量来自最近获取的记录。已有 `ssh://` 远端使用终端配置的身份与严格主机校验，不提供密钥管理界面，详见 [Git 工作流](docs/GIT.md)。
+
+语言服务需按需联网安装，仅为当前可见文件建立连接。Python 与 JavaScript／TypeScript 提供实验性补全和诊断，不能代替项目构建，也不代表其他语言已具备语义支持；依赖解析和设备适用性见[语言服务说明](docs/LSP.md)。
 
 「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包，按项目启用且默认关闭。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；普通、无障碍和 Root 方式的权限分别授权，截图分享默认关闭，目标仍限用户选择的项目调试 APK。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
 
@@ -126,6 +130,7 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 | [开发与测试](docs/DEVELOPMENT.md) | 工具链、源码构建、仓库检查与真机验证。 |
 | [界面规范](docs/DESIGN.md) | 原生页面结构、交互与移动布局约定。 |
 | [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
+| [Git 工作流](docs/GIT.md) · [语言服务](docs/LSP.md) | 仓库同步、认证、冲突处理及可选本机补全与诊断。 |
 | [发布流程](docs/RELEASING.md) | 测试包构建、签名和正式发行条件。 |
 | [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |
 
@@ -149,7 +154,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需�
 
 | 项目 | 在 ZakoCoder 中的用途 |
 | --- | --- |
-| [Sora Editor](https://github.com/Rosemoe/sora-editor) | 原生代码编辑器与 TextMate 接入。 |
+| [Sora Editor](https://github.com/Rosemoe/sora-editor) | 原生代码编辑器、TextMate 与实验性 LSP 接入。 |
 | [Termux](https://github.com/termux/termux-app) | 终端模拟与视图基础库。 |
 | [PRoot](https://github.com/proot-me/PRoot) · [proot-distro](https://github.com/termux/proot-distro) · [Ubuntu](https://ubuntu.com/) | Linux 用户空间运行基础。 |
 | [termux/proot](https://github.com/termux/proot) · [talloc](https://talloc.samba.org/) · [libandroid-shmem](https://github.com/termux/libandroid-shmem) | 仓库内保留源码，自行编译 PRoot 与 loader；见 [独立子项目](native-runtime/README.md)。 |

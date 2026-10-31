@@ -18,6 +18,8 @@ object DevelopmentTools {
         DevelopmentTool("python", "python3 --version", listOf("python3")),
         DevelopmentTool("pip", "python3 -m pip --version", listOf("python3-pip")),
         DevelopmentTool("venv", "python3 -c 'import venv, ensurepip; print(\"venv / ensurepip\")'", listOf("python3-venv")),
+        DevelopmentTool("lsp-python", "/opt/zakocoder/lsp/python/bin/pylsp --version", listOf("python3", "python3-venv")),
+        DevelopmentTool("lsp-typescript", "/opt/zakocoder/lsp/typescript/node_modules/.bin/typescript-language-server --version", listOf("nodejs", "npm", "curl", "ca-certificates")),
         DevelopmentTool("go", "go version", listOf("golang-go")),
         DevelopmentTool("rustc", "rustc --version", listOf("rustc")),
         DevelopmentTool("cargo", "cargo --version", listOf("cargo")),
@@ -35,7 +37,7 @@ object DevelopmentTools {
         return catalog.filter { it.id in ids }
     }
     fun doctorScript(tools: List<DevelopmentTool>): String = tools.joinToString("\n") { tool ->
-        val executable = when (tool.id) { "python", "pip", "venv" -> "python3"; "android-sdk" -> "sdkmanager"; "android-ndk" -> "${AndroidNdkToolchain.PATH}/clang"; else -> tool.id }
+        val executable = when (tool.id) { "python", "pip", "venv" -> "python3"; "lsp-python" -> "/opt/zakocoder/lsp/python/bin/pylsp"; "lsp-typescript" -> "/opt/zakocoder/lsp/typescript/node_modules/.bin/typescript-language-server"; "android-sdk" -> "sdkmanager"; "android-ndk" -> "${AndroidNdkToolchain.PATH}/clang"; else -> tool.id }
         """
             if ! command -v $executable >/dev/null 2>&1; then
               printf 'ZAKO_TOOL\t${tool.id}\tMissing\t-\n'

@@ -28,7 +28,8 @@ data class EditorState(
 
 /** Application-owned buffer; Activity recreation releases the View, preserving Content/undo/cursor. */
 class EditorController(private val context: Context, private val projects: ProjectRepository, private val savedFile: () -> Unit,
-    private val inspectDisk: suspend (FileBaseline) -> FileBaseline = { EditorFileStore(projects::directory).open(it.projectId, it.path) }) {
+    private val inspectDisk: suspend (FileBaseline) -> FileBaseline = { EditorFileStore(projects::directory).open(it.projectId, it.path) },
+    val lsp: dev.zakocoder.app.editor.lsp.EditorLspController? = null) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val files = EditorFileStore(projects::directory)
     val languages = EditorLanguages(context)
@@ -144,6 +145,7 @@ class EditorController(private val context: Context, private val projects: Proje
                 doc.baseline = baseline
                 savedFile()
                 mutable.update { it.copy(saving = false, dirty = doc.content.toString() != text, error = "", conflict = false, saved = true, diskState = null, diskChecking = false, diskVersion = null) }
+                lsp?.save(doc.baseline.projectId, doc.baseline.path)
                 checkDisk()
                 mutable.update { it.copy(tabs = tabs()) }; queueDrafts(immediate = true)
                 if (closeAfter && !mutable.value.dirty) close(keepEditorOpen)
