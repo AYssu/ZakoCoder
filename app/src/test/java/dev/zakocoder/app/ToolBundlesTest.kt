@@ -28,8 +28,8 @@ class ToolBundlesTest {
         assertEquals(BundleStatus.Unknown, ToolBundles.status(node, emptyList()))
         assertEquals(BundleStatus.Broken, ToolBundles.status(node, partial.map { it.copy(status = ToolStatus.Broken) }))
     }
-    @Test fun manualBundlesAndUntrustedIdsCannotProduceCommands() {
-        assertThrows(IllegalArgumentException::class.java) { ToolBundles.packages(setOf("flutter"), emptyList()) }
+    @Test fun flutterUsesOnlyFixedApprovedPackagesAndUntrustedIdsCannotProduceCommands() {
+        assertEquals(FlutterToolchain.packages.sorted(), ToolBundles.packages(setOf("flutter"), emptyList()))
         assertThrows(NoSuchElementException::class.java) { ToolBundles.packages(setOf("node; touch /tmp/injected"), emptyList()) }
     }
 }

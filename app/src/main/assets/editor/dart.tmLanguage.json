@@ -1,0 +1,128 @@
+{
+  "name": "dart",
+  "scopeName": "source.zako.dart",
+  "patterns": [
+    {
+      "name": "comment.line",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [
+        {
+          "include": "#blockComment"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "r'''",
+      "end": "'''"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'''",
+      "end": "'''",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        },
+        {
+          "name": "variable.other",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "r\"\"\"",
+      "end": "\"\"\""
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        },
+        {
+          "name": "variable.other",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "r'",
+      "end": "'"
+    },
+    {
+      "name": "string.quoted",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        },
+        {
+          "name": "variable.other",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted",
+      "begin": "r\"",
+      "end": "\""
+    },
+    {
+      "name": "string.quoted",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape",
+          "match": "\\\\."
+        },
+        {
+          "name": "variable.other",
+          "match": "\\$[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    {
+      "name": "keyword.control",
+      "match": "\\b(?:abstract|as|assert|async|await|base|break|case|catch|class|const|continue|covariant|default|deferred|do|dynamic|else|enum|export|extends|extension|external|factory|final|finally|for|get|hide|if|implements|import|in|interface|is|late|library|mixin|new|of|on|operator|part|required|rethrow|return|sealed|set|show|static|super|switch|sync|this|throw|try|type|typedef|var|void|when|while|with|yield)\\b"
+    },
+    {
+      "name": "constant.language",
+      "match": "\\b(?:true|false|null)\\b"
+    },
+    {
+      "name": "constant.numeric",
+      "match": "\\b(?:0[xX][0-9a-fA-F]+|[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\\b"
+    },
+    {
+      "name": "storage.type",
+      "match": "\\b(?:bool|double|int|num|String|Object|Never|List|Map|Set|Future|Stream)\\b"
+    }
+  ],
+  "repository": {
+    "blockComment": {
+      "name": "comment.block",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [
+        {
+          "include": "#blockComment"
+        }
+      ]
+    }
+  }
+}

@@ -34,7 +34,7 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 | 工作场景 | 你可以做什么 |
 | --- | --- |
 | **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
-| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS 可选本机语言服务。 |
+| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS 可选本机语言服务，Dart 提供基础词法着色。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情。 |
 | **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
@@ -63,6 +63,8 @@ Beta 的 Release 构建、签名、源码与许可证分发要求见[发布流�
 4. **配置助手**：在设置中填写模型地址、模型和密钥，手动测试连接；高级设置可调整生成参数、思考模式、上下文和压缩策略、请求头；服务是否支持这些参数需实际测试。也可以独立使用编辑器和终端。
 5. **运行并核对**：通过终端或项目命令构建、测试、启动服务；使用 AI 时，核对审批、变更和实际验证结果。
 
+Flutter 项目从环境页安装可选工具包，在项目终端初始化平台并运行；Android APK 还需安装 Android 与 NDK 工具包并确认 SDK 许可，步骤与边界见 [Flutter 开发](docs/FLUTTER.md)。
+
 **预览网页**：在项目终端启动开发服务，再通过终端的“预览网页”打开手机浏览器。已有 Python 工具包时，可以在项目目录运行：
 
 ```sh
@@ -76,8 +78,9 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | 项目 | 当前支持 |
 | --- | --- |
 | 设备 | Beta 面向 ARM64、Android 11–17；已有 AOSP x86_64 系统基线和 Android 13 ARM64 真机记录，不保证全部厂商设备。最低 SDK 仍为 Android 8.0，但完整开发环境未验收；实验 x86_64 仅用于基础兼容性验证，不含 Android SDK／NDK 工具包。见[实际结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)。 |
-| 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
+| 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android、Flutter 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
+| Flutter 工程 | 可选固定 Flutter 3.47.9／Dart 3.13.7 工具包、Dart 模板与基础着色；ARM64 Ubuntu 中的依赖、分析、Widget 测试及 Web 构建已有真机记录，Android APK 与完整应用流程的验收状态见 [Flutter 开发](docs/FLUTTER.md)。 |
 | 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
 | 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，可选实验性 Python／JS／TS LSP 补全与诊断。暂不提供 Java／Kotlin 语言服务或完整重构。 |
 | Git | 公开／私有 HTTPS 克隆、按仓库保存令牌、状态、暂存、提交、获取／快进拉取／推送、分支管理及冲突编辑入口；不提供强推、rebase 或 Git SSH 密钥管理。 |
@@ -133,6 +136,7 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 | [Android 兼容性](docs/ANDROID_COMPATIBILITY.md) | 系统版本矩阵、隔离测试包、进程恢复、覆盖升级及手动 CI。 |
 | [界面规范](docs/DESIGN.md) | 原生页面结构、交互与移动布局约定。 |
 | [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
+| [Flutter 开发](docs/FLUTTER.md) | 安装固定 SDK、创建 Dart 项目、分析测试、Web 预览及 Android APK。 |
 | [Git 工作流](docs/GIT.md) · [语言服务](docs/LSP.md) | 仓库同步、认证、冲突处理及可选本机补全与诊断。 |
 | [发布流程](docs/RELEASING.md) · [更新记录](CHANGELOG.md) | Debug／Beta 打包、发布签名与分发条件。 |
 | [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |

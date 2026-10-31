@@ -16,7 +16,9 @@ ZakoCoder 使用Sora原生编辑器，以Kotlin/Compose页面承载AndroidView�
 
 普通文件点击进入全屏编辑层，显示文件名、路径/未保存状态、行号、查找和保存；支持中文IME、选择复制、撤销/重做及区分大小写的字面量查找替换。
 
-基础TextMate词法着色覆盖 Kotlin、Java、JavaScript/TypeScript、Python、Shell、BAT/CMD、Markdown、HTML/CSS、YAML/TOML/XML、SQL、Go、Rust、Dockerfile、Makefile、JSON、C/C++ 与 Diff。识别常见扩展名、Shell 配置文件名和有界首行 shebang；Fish 采用基础 Shell 规则，Vue/Svelte 采用基础 HTML 规则，尚不含完整嵌入语言。其他受支持 UTF-8 文件按纯文本打开。词法着色本身不是完整解析或语义诊断；Python／JavaScript／TypeScript 安装对应工具后可使用下述实验性 LSP，暂不提供编辑器内联 AI 补全。主题和词法资源离线加载。BAT、Shell 等脚本在编辑器中打开，不自动执行；Windows BAT 的运行仍需其对应执行环境。
+基础TextMate词法着色覆盖 Kotlin、Dart、Java、JavaScript/TypeScript、Python、Shell、BAT/CMD、Markdown、HTML/CSS、YAML/TOML/XML、SQL、Go、Rust、Dockerfile、Makefile、JSON、C/C++ 与 Diff。识别常见扩展名、Shell 配置文件名和有界首行 shebang；Fish 采用基础 Shell 规则，Vue/Svelte 采用基础 HTML 规则，尚不含完整嵌入语言。其他受支持 UTF-8 文件按纯文本打开。词法着色本身不是完整解析或语义诊断；Python／JavaScript／TypeScript 安装对应工具后可使用下述实验性 LSP，暂不提供编辑器内联 AI 补全。主题和词法资源离线加载。BAT、Shell 等脚本在编辑器中打开，不自动执行；Windows BAT 的运行仍需其对应执行环境。
+
+Dart 文件使用本项目自有的基础词法规则，覆盖注释、字符串、关键字和数值；不包含 Dart Analysis Server、Flutter Widget 补全或重构。Flutter 的语义检查与测试通过项目终端执行，见 [Flutter 开发](FLUTTER.md)。
 
 Markdown 文件在编辑器中提供“编辑 / 预览”切换，预览当前缓冲内容（包括未保存修改），不自动保存；返回编辑保留撤销与光标。原生渲染标题、列表、表格与代码块，不执行 HTML、不加载外部图片；外部链接点击后确认再交给浏览器。超过 64k 字符的预览有明确范围提示，可查看完整原文，原文件不截断。
 
@@ -30,7 +32,7 @@ Markdown 文件在编辑器中提供“编辑 / 预览”切换，预览当前�
 
 当前可见文件持有语言服务连接，初始缓冲区和后续未保存修改均可参与分析；服务不会替用户保存源码。切换文件、项目或离开编辑器会释放连接，重新进入需再次连接。Python 的独立 venv 不自动继承项目 venv 内的全部包；JS／TS 解析也取决于项目依赖和服务能力，大工程索引可能较慢。
 
-当前范围不含 Kotlin、Java、C++ 语言服务，不提供完整跨文件重命名、符号搜索和导航界面。其他文件继续使用基础编辑与着色；具体安装、进程边界和适用性见[语言服务说明](LSP.md)。
+当前范围不含 Dart、Kotlin、Java、C++ 语言服务，不提供完整跨文件重命名、符号搜索和导航界面。其他文件继续使用基础编辑与着色；具体安装、进程边界和适用性见[语言服务说明](LSP.md)。
 
 ## 文件范围与字节保留
 

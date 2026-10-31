@@ -30,7 +30,7 @@ object DevelopmentTools {
         DevelopmentTool("cmake", "cmake --version", listOf("cmake", "pkg-config")),
         DevelopmentTool("android-sdk", AndroidToolchain.PROBE, AndroidToolchain.packages),
         DevelopmentTool("android-ndk", AndroidNdkToolchain.PROBE, AndroidNdkToolchain.packages),
-        DevelopmentTool("flutter", "flutter --version", emptyList()),
+        DevelopmentTool("flutter", FlutterToolchain.PROBE, FlutterToolchain.packages),
     )
     fun required(kinds: Set<ProjectKind>): List<DevelopmentTool> {
         val ids = setOf("bash", "git") + kinds.flatMap { it.tools }
@@ -73,6 +73,11 @@ object DevelopmentTools {
         else if (File(root, "pyproject.toml").isFile || File(root, "setup.py").isFile) add(DependencyPlan("python3 -m venv .venv && .venv/bin/python -m pip install -e .", "."))
         if (File(root, "go.mod").isFile) add(DependencyPlan("go mod download", "."))
         if (File(root, "Cargo.toml").isFile) add(DependencyPlan("cargo fetch", "."))
+        val pubspec = File(root, "pubspec.yaml")
+        if (pubspec.isFile && pubspec.length() < 262144 && !java.nio.file.Files.isSymbolicLink(pubspec.toPath()) &&
+            Regex("(?m)^\\s*flutter\\s*:").containsMatchIn(pubspec.readText())) {
+            add(DependencyPlan("flutter pub get", "."))
+        }
         if (File(root, "gradlew").isFile) add(DependencyPlan("sh ./gradlew dependencies --console=plain", "."))
     }
 }

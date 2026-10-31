@@ -32,4 +32,16 @@ class ProjectDetectorTest {
         assertTrue("nodejs" in DevelopmentTools.packages(result))
         assertThrows(IllegalArgumentException::class.java) { DevelopmentTools.installScript(listOf("curl; rm -rf /")) }
     }
+
+    @Test fun flutterDependenciesRequireTheRootFlutterManifest() {
+        val root = Files.createTempDirectory("zako-flutter-deps").toFile()
+        try {
+            File(root, "pubspec.yaml").writeText("name: app\ndependencies:\n  flutter:\n    sdk: flutter\n")
+            assertEquals(listOf("flutter pub get"), DevelopmentTools.dependencies(root).map { it.command })
+            File(root, "nested").mkdir()
+            File(root, "nested/pubspec.yaml").writeText(File(root, "pubspec.yaml").readText())
+            File(root, "pubspec.yaml").writeText("name: dart_only\n")
+            assertTrue(DevelopmentTools.dependencies(root).isEmpty())
+        } finally { root.deleteRecursively() }
+    }
 }

@@ -9,6 +9,7 @@ enum class ProjectTemplate(@param:StringRes val label: Int, @param:StringRes val
     Web(R.string.template_web, R.string.template_web_description),
     Node(R.string.template_node, R.string.template_node_description),
     Python(R.string.template_python, R.string.template_python_description),
+    Flutter(R.string.template_flutter, R.string.template_flutter_description),
     AndroidJava(R.string.template_android_java, R.string.template_android_java_description),
     AndroidKotlin(R.string.template_android_kotlin, R.string.template_android_kotlin_description),
     AndroidNative(R.string.template_android_native, R.string.template_android_native_description),
@@ -55,6 +56,7 @@ object ProjectTemplates {
         val identifier = identifier(projectName)
         val generated = when (template) {
             ProjectTemplate.Other -> emptyMap()
+            ProjectTemplate.Flutter -> FlutterProjectTemplates.files(projectName)
             ProjectTemplate.AndroidJava -> AndroidProjectTemplates.files(projectName, kotlin = false)
             ProjectTemplate.AndroidKotlin -> AndroidProjectTemplates.files(projectName, kotlin = true)
             ProjectTemplate.AndroidNative -> AndroidProjectTemplates.files(projectName, kotlin = true, native = true)

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="template_flutter">Flutter</string>
+    <string name="template_flutter_description">Dart 应用：Android APK 与 Web 预览</string>
+</resources>
