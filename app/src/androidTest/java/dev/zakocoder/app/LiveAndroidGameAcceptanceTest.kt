@@ -30,6 +30,34 @@ class LiveAndroidGameAcceptanceTest {
     private val arguments get() = InstrumentationRegistry.getArguments()
     private val context get() = instrumentation.targetContext
 
+    @Test(timeout = 8 * 60 * 1000L)
+    fun paidModelReadOnlyCacheObservation() = runBlocking {
+        optIn("cache")
+        val projectId = arguments.getString("acceptanceProjectId").orEmpty()
+        require(UUID.fromString(projectId).toString() == projectId)
+        val workbench = applicationWorkbench()
+        ready(workbench)
+        check(workbench.state.value.projects.any { it.id == projectId })
+        check(!workbench.ai.state.value.active)
+        main { workbench.ai.select(projectId) }
+        aiReady(workbench, projectId)
+        val recorder = Recorder("cache", projectId)
+        try {
+            withTimeout(7 * 60 * 1000L) {
+                runTask(workbench, projectId,
+                    "只做只读核对，不修改文件、不运行命令、不调用屏幕工具、不重建或安装。请依次分四轮读取以下文件，每轮只调用一次 read_file，看到结果后再读下一个：settings.gradle.kts、build.gradle.kts、app/build.gradle.kts、app/src/main/AndroidManifest.xml。最后简短列出应用包名、SDK和构建插件；不要重复之前验收。", recorder,
+                    maxRequests = 8, readOnly = true)
+            }
+            val finished = workbench.ai.state.value
+            val reads = finished.events.filter { it.turn == finished.turn && it.tool == AiTool.ReadFile }
+            check(reads.size == 4 && reads.all { it.status == AiToolStatus.Succeeded })
+            check(reads.map { JSONObject(it.input).getString("path") } == listOf(
+                "settings.gradle.kts", "build.gradle.kts", "app/build.gradle.kts", "app/src/main/AndroidManifest.xml"))
+            check(finished.requests.count { it.turn == finished.turn } in 5..8)
+            recorder.write("stage_result", JSONObject().put("passed", true).put("scope", "Read-only real provider cache observations; cache hits are not guaranteed"))
+        } finally { recorder.close() }
+    }
+
     @Test(timeout = 65 * 60 * 1000L)
     fun paidModelDevelopsAndBuildsAndroid2048() = runBlocking {
         optIn("build")
@@ -160,7 +188,8 @@ class LiveAndroidGameAcceptanceTest {
         await(120000) { workbench.ai.state.value.let { it.projectId == id && it.configured && !it.permissionsLoading && !it.skillsLoading && !it.restoring } && !workbench.ai.models.state.value.loading }
         check(!workbench.ai.state.value.historyError)
     }
-    private suspend fun runTask(workbench: Workbench, projectId: String, prompt: String, recorder: Recorder) = coroutineScope {
+    private suspend fun runTask(workbench: Workbench, projectId: String, prompt: String, recorder: Recorder,
+        maxRequests: Int = Int.MAX_VALUE, readOnly: Boolean = false) = coroutineScope {
         val ai = workbench.ai
         val snapshots = Channel<AiState>(Channel.UNLIMITED)
         // Enqueue snapshots without IO so history's bounded 32-request window is not the archive.
@@ -169,11 +198,20 @@ class LiveAndroidGameAcceptanceTest {
         var ownedTask = false
         try {
             main { check(ai.send(prompt)); ownedTask = true }
+            if (readOnly) main {
+                check(!ai.stopForScreenLease(projectId, "unowned-screen-lease")) {
+                    "An unrelated screen entry must not stop this AI task"
+                }
+            }
             val approved = mutableSetOf<String>()
             withTimeout(60 * 60 * 1000L) {
                 while (true) {
                     val state = ai.state.value
                     check(state.projectId == projectId) { "Project changed during acceptance" }
+                    check(state.requests.count { it.turn == state.turn } <= maxRequests) { "Acceptance request budget reached" }
+                    if (readOnly) check(state.events.none { it.turn == state.turn && it.tool !in setOf(AiTool.ReadFile, AiTool.ListFiles, AiTool.SearchFiles, AiTool.UpdatePlan) }) {
+                        "Read-only observation attempted an unrelated tool"
+                    }
                     state.approval?.let { approval ->
                         val event = state.events.singleOrNull { it.id == approval.eventId }
                         if (event != null && approved.add(event.id)) {

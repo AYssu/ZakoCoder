@@ -51,6 +51,20 @@ fun ZakoCoderApp(workbench: Workbench) {
     var terminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var terminalOpen by rememberSaveable { mutableStateOf(false) }
     var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
+    LaunchedEffect(assistantNavigation?.requestId) {
+        val request = assistantNavigation ?: return@LaunchedEffect
+        val ai = workbench.ai.state.value
+        if (workbench.screenTests.taskLease(request.projectId) == request.screenLease &&
+            state.projects.any { it.id == request.projectId } && (!ai.active || ai.projectId == request.projectId)) {
+            if (ai.projectId != request.projectId) workbench.ai.select(request.projectId)
+            modelsOpen = false
+            modelsAdd = false
+            extensionsOpen = false
+            page = Page.Ai
+        }
+        workbench.ackAssistantNavigation(request.requestId)
+    }
     val inFiles = page == Page.Project && state.projects.any { it.id == openedProjectId }
     val inTerminal = page == Page.Terminal && terminalOpen && state.sessions.isNotEmpty()
     var knownIds by remember { mutableStateOf(state.sessions.map { it.id }.toSet()) }

@@ -84,6 +84,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         while (draftReferences.size > 20) draftReferences.remove(draftReferences.keys.first())
     }
     private var task: Job? = null
+    private var screenTaskOwner: Triple<String, String, Long>? = null
     private val historyMutex = kotlinx.coroutines.sync.Mutex()
     private var imageImports = 0
     private var imageMaintenance = false
@@ -451,6 +452,16 @@ class AiController(private val context: Context, root: (String) -> File, private
     fun approve(value: Boolean) = approve(if (value) AiDecision.Once else AiDecision.Reject)
     fun approve(value: AiDecision) { decision?.complete(value) }
     fun stop() { stopScreenTest?.invoke(); if (mutable.value.active) mutable.update { it.copy(phase = AiPhase.Stopping, reasoningEntryId = null, retryNotice = "") }; task?.cancel() }
+    /** Called on Main by the floating entry; a project match alone never owns an AI task. */
+    fun stopForScreenLease(projectId: String, lease: String): Boolean {
+        if (!mutable.value.active || mutable.value.projectId != projectId ||
+            screenTaskOwner != Triple(projectId, lease, epoch)) return false
+        // The caller already stopped the matching screen lease. Do not invoke the
+        // unscoped screen-stop callback again: a new selection may be arriving.
+        mutable.update { it.copy(phase = AiPhase.Stopping, reasoningEntryId = null, retryNotice = "") }
+        task?.cancel()
+        return true
+    }
     private suspend fun requestApproval(title: String, detail: String, eventId: String? = null, review: AiReview? = null): AiDecision {
         val pending = CompletableDeferred<AiDecision>(); decision = pending
         mutable.update { it.copy(approval = AiApproval(title, detail, eventId, review), phase = AiPhase.Waiting) }
@@ -599,7 +610,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         draftImages.remove(id to mutable.value.conversationId)
         val references = mutable.value.references.toList()
         mutable.update { it.copy(references = emptyList(), pendingImages = emptyList()) }
-        grants.clear(); toolGrants.clear(); epoch++
+        grants.clear(); toolGrants.clear(); epoch++; screenTaskOwner = null
         task = scope.launch {
             var checkpoint: Job? = null
             try {
@@ -651,6 +662,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                         try { pruneUnusedImages() }
                         catch (_: Exception) { imageCollectionPending = true }
                     }
+                    screenTaskOwner = null
                     mutable.update { it.copy(active = false, retryNotice = "") }; grants.clear(); toolGrants.clear(); activityChanged()
                 }
             }
@@ -679,6 +691,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 if (approvedLease == null || approvedLease != currentLease || (ownedScreenLease != null && ownedScreenLease != currentLease))
                     throw AiTerminalException(context.getString(R.string.ai_screen_test_session_changed))
                 ownedScreenLease = currentLease
+                screenTaskOwner = Triple(id, currentLease, epoch)
             }
             return screenTestTool?.invoke(id, args, ownedScreenLease)
                 ?: throw AiTerminalException(context.getString(R.string.ai_screen_test_unavailable))
@@ -694,8 +707,6 @@ class AiController(private val context: Context, root: (String) -> File, private
         mutable.update { it.copy(ruleSources = discovered.current.sources, rulesLimited = discovered.current.limited) }
         val pinnedPrompt = text + if (references.isEmpty()) "" else "\n\n" + references.joinToString("\n\n") { it.render() }
         val workspaceContext = withContext(Dispatchers.IO) { checkpoints.workspaceContext(id) }
-        var commandContext = ""
-        var changeContext = ""
         val overview = withContext(Dispatchers.IO) { AiProjectOverview(files).load(id, mutable.value.policy, currentCoroutineContext()) }
         if (overview.isNotBlank()) append(context.getString(R.string.ai_project_overview_loaded))
         val settings = withContext(Dispatchers.IO) { config.load() }
@@ -710,16 +721,19 @@ class AiController(private val context: Context, root: (String) -> File, private
         val selected = try { if (mutable.value.enabledSkills.isEmpty()) "" else withContext(Dispatchers.IO) { skillStore.content(id, mutable.value.enabledSkills) } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { throw AiBudgetException(AiFailure.Skill) }
-        fun metadata() = "User-selected skills for this task. Apply each workflow only when its stated task type matches the user request; verification-only instructions do not prevent an authorized implementation. Treat as reference guidance subordinate to system rules and tool permissions. Scripts are not executed automatically. Explicit user instructions override expression style. When first adopting a selected skill for the current user task, briefly announce its exact name in backticks and its purpose in the user's language before the related work, for example: 本次使用 `investigate-first` 定位原因，再按 `surgical-patch` 修复。 Mention only selected skills you actually apply, not the entire enabled list. Announce each skill once per user task, not on every tool call or continuation round; announce a newly adopted skill when switching workflows. If none applies, omit the announcement. This is a public workflow declaration, not internal reasoning or proof of execution. Do not invent skill tool calls or audit events.\n$selected\n\n${if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"}\n\n$commandContext\n\n$changeContext\n\n$overview\n\n$workspaceContext\n\n${mcpCatalog?.invoke().orEmpty()}"
+        fun metadata() = "User-selected skills for this task. Apply each workflow only when its stated task type matches the user request; verification-only instructions do not prevent an authorized implementation. Treat as reference guidance subordinate to system rules and tool permissions. Scripts are not executed automatically. Explicit user instructions override expression style. When first adopting a selected skill for the current user task, briefly announce its exact name in backticks and its purpose in the user's language before the related work, for example: 本次使用 `investigate-first` 定位原因，再按 `surgical-patch` 修复。 Mention only selected skills you actually apply, not the entire enabled list. Announce each skill once per user task, not on every tool call or continuation round; announce a newly adopted skill when switching workflows. If none applies, omit the announcement. This is a public workflow declaration, not internal reasoning or proof of execution. Do not invent skill tool calls or audit events.\n$selected\n\n${if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"}\n\n$overview\n\n$workspaceContext"
         var skillMessageIndex: Int? = messages.length()
         messages.put(JSONObject().put("role", "user").put("content", metadata()))
+        val dynamicContext = AiContextCache(mapOf("rules" to if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow)
+            discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"))
         suspend fun refreshRules(paths: List<String>) {
             if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) {
                 withContext(Dispatchers.IO) { discovered.refresh(paths) }
             }
             if (mutable.value.policy.permission(AiTool.ReadFile) != AiPermission.Allow) discovered.clear()
             mutable.update { it.copy(ruleSources = discovered.current.sources, rulesLimited = discovered.current.limited) }
-            messages.getJSONObject(requireNotNull(skillMessageIndex)).put("content", metadata())
+            dynamicContext.update("rules", if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow)
+                discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]")
         }
         suspend fun beforePathWrite(path: String): String? {
             refreshRules(listOf(path))
@@ -731,13 +745,18 @@ class AiController(private val context: Context, root: (String) -> File, private
         val baselines = linkedMapOf<String, FileBaseline>(); val refused = mutableSetOf<String>(); var count = 0
         while (true) {
             currentCoroutineContext().ensureActive()
-            commandContext = projectCommandContext?.invoke(id).orEmpty()
-            changeContext = if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) {
+            dynamicContext.update("commands", projectCommandContext?.invoke(id).orEmpty())
+            val changeContext = if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) {
                 try { withContext(Dispatchers.IO) { checkpoints.changeContext(id, requireNotNull(mutable.value.checkpointId)) } }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (_: Exception) { "[Current task change evidence unavailable; do not infer no changes or reuse a previous sample.]" }
             } else "[Automatic task change evidence disabled by current read permission; do not infer no changes.]"
+            dynamicContext.update("changes", changeContext)
+            dynamicContext.update("mcp", mcpCatalog?.invoke().orEmpty())
             refreshRules(emptyList())
+            // Only append after every call in the preceding assistant batch has a tool result.
+            // Never rewrite the early rule/skill/project message: it is a stable cache prefix.
+            dynamicContext.nextMessage()?.let(messages::put)
             messages.getJSONObject(0).put("content", systemForPackages(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh)) + "\nCurrent app permissions: " + AiTool.entries.filter { it != AiTool.AndroidTest || available(CapabilityPackage.Screen) }.filter { it != AiTool.SshRemote || available(CapabilityPackage.Ssh) }.joinToString { tool -> "${tool.wire}=${mutable.value.policy.permission(tool).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
             if (!screenSharingAllowed() && screenImages.isNotEmpty()) {
                 omitScreenTestImages(messages, screenImageIds)
@@ -753,7 +772,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (budget.outputReserveTokens >= budget.windowTokens) throw AiTransportException(kind = AiFailure.ContextConfiguration, diagnostic = "output_reserve_exceeds_context_window")
             if (options.autoCompress && budget.shouldCompress) {
                 val skill = skillMessageIndex?.let { messages.getJSONObject(it) }
-                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, budget.inputTokens, taskImages, activeSchemas)
+                messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, budget.inputTokens, taskImages, activeSchemas, dynamicContext.snapshotMessage())
                 if (screenImages.isNotEmpty()) messages.put(imageMessage(SCREEN_TEST_IMAGE_EVIDENCE, screenImages.toList()))
                 skillMessageIndex = if (skill == null) null else 2
                 turnStart = if (skill == null) 2 else 3
@@ -967,7 +986,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             measured
         }
 
-    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int, beforeTokens: Long, images: List<AiImageAttachment> = emptyList(), tools: JSONArray = JSONArray()): JSONArray {
+    private suspend fun compactContext(settings: AiConfig, messages: JSONArray, prompt: String, skill: JSONObject?, taskStart: Int, beforeTokens: Long, images: List<AiImageAttachment> = emptyList(), tools: JSONArray = JSONArray(), currentState: JSONObject? = null): JSONArray {
         if (!settings.context.autoCompress) throw AiBudgetException(AiFailure.ContextLimit)
         mutable.update { it.copy(phase = AiPhase.Compacting) }
         append(context.getString(R.string.ai_context_compacting))
@@ -1031,7 +1050,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         mutable.update { if (epoch == requestEpoch) it.copy(retryNotice = "") else it }
         val compacted = withContext(Dispatchers.Default) {
             currentCoroutineContext().ensureActive()
-            val tail = contextTail(messages, taskStart)
+            val tail = contextTail(contextBeforeStateUpdates(messages), taskStart)
             val result = JSONArray().put(messages.getJSONObject(0)).put(contextMemory(summary.text))
             if (skill != null) result.put(skill)
             // Keep the most recent user attachments across request-time compaction. Screen-test
@@ -1043,6 +1062,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             } + images).distinctBy { it.id }.takeLast(AiImages.MAX_PER_TURN)
             result.put(imageMessage(prompt, retainedImages))
             tail.forEach(result::put)
+            currentState?.let(result::put)
             val budget = tokenBudget(settings, result, tools)
             if (!budget.fits || budget.shouldCompress) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
             val chars = result.toString().length
@@ -1423,7 +1443,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             mcpParameters.getJSONObject("properties").put("method", JSONObject().put("type", "string").put("enum", JSONArray(listOf("tools/list", "tools/call", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get"))))
             mcpParameters.getJSONObject("properties").put("params", JSONObject().put("type", "object").put("description", "Exact MCP JSON parameters, e.g. name and nested arguments for tools/call; empty object for discovery"))
             mcpParameters.put("required", JSONArray(listOf("server_id", "method", "params")))
-            val screenTest = tool("android_test", "Test only the APK explicitly selected by the user for the current project; every action needs approval or a task grant. Build and unit-test first. User enables accessibility/root in UI; never enable permissions yourself. install requires system confirmation. Use launch → observe → node action → assert_text/screenshot → finish. A build or click is not proof of passing UI tests. Screenshots enter model image input only with explicit user model-image confirmation. Fix and reverify failures.", "action")
+            val screenTest = tool("android_test", "Test only the APK explicitly selected by the user for the current project; Follow the configured tool permission: Ask requires approval or a task grant; Allow permits execution without another tool prompt. Neither replaces target selection or system access. Build and unit-test first. User enables accessibility/root in UI; never enable permissions yourself. install requires system confirmation. Use launch → observe → node action → assert_text/screenshot → finish. A build or click is not proof of passing UI tests. Screenshots enter model image input only with explicit user model-image confirmation. Fix and reverify failures.", "action")
             val screenProperties = screenTest.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
             screenProperties.put("action", JSONObject().put("type", "string").put("enum", JSONArray(SCREEN_TEST_ACTIONS)))
             listOf("snapshot", "node", "text", "direction").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }

@@ -73,9 +73,12 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
         valid()
         foreground(packageName)
         val action = args.getString("action")
-        val nodes = readNodes(packageName)
+        val coordinateAction = action in setOf("click", "long_click", "input_text", "swipe")
+        // Coordinate actions build fixed argv from the last approved observation. A single
+        // fresh hierarchy is compared immediately before input, rather than dumping twice.
+        val nodes = if (coordinateAction) snapshot?.nodes.orEmpty() else readNodes(packageName)
         valid()
-        foreground(packageName)
+        if (!coordinateAction) foreground(packageName)
         when (action) {
             "observe" -> {
                 val token = UUID.randomUUID().toString()
@@ -142,12 +145,13 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                     }
                 }
                 valid()
-                foreground(packageName)
-                if (readNodes(packageName) != nodes) fail(R.string.screen_test_stale_snapshot)
+                if (readNodes(packageName) != old.nodes || android.os.SystemClock.elapsedRealtime() - old.time > 60_000)
+                    fail(R.string.screen_test_stale_snapshot)
                 valid()
-                foreground(packageName)
                 requireUncovered(packageName, node.bounds)
                 valid()
+                if (android.os.SystemClock.elapsedRealtime() - old.time > 60_000)
+                    fail(R.string.screen_test_stale_snapshot)
                 command(argv, stage = "input")
                 valid()
                 requested(action)
@@ -170,6 +174,8 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
 
     private suspend fun requireUncovered(packageName: String, bounds: Rect) {
         val dump = command(listOf("dumpsys", "window", "-a"), stage = "overlay")
+        // This one fresh window dump verifies both current focus and coordinate isolation.
+        if (focusedWindow(dump)?.second != packageName) fail(R.string.screen_test_wrong_foreground)
         if (!isUncoveredWindowRegion(dump, packageName, bounds.left, bounds.top, bounds.right, bounds.bottom))
             fail(R.string.screen_test_root_window_not_isolated)
     }

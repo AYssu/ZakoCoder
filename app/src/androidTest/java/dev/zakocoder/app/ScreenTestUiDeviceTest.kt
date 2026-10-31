@@ -113,6 +113,8 @@ class ScreenTestUiDeviceTest {
         val stopped = AtomicBoolean()
         val openedReport = AtomicBoolean()
         val shared = AtomicBoolean()
+        val overlaySettings = AtomicBoolean()
+        val overlayEnabled = AtomicReference<Boolean>()
         val root = AtomicBoolean()
         val access = AtomicReference<ScreenTestAccess>()
         val fixtureReport = """# Android screen test
@@ -143,7 +145,8 @@ No test result was invented; this is UI-only fixture content."""
                 show { WorkbenchSheet(context.getString(R.string.screen_test_title), {}) {
                     ScreenTestPanel(model, error = failure, onChoose = { choose.set(true) }, onEnable = { enable.set(true) },
                         onStop = { stopped.set(true) }, onReport = { openedReport.set(true) }, onAccess = { access.set(it) },
-                        onRoot = { root.set(true) }, onShare = { shared.set(it) }, onInstallPermission = { installPermission.set(true) })
+                        onRoot = { root.set(true) }, onShare = { shared.set(it) }, onInstallPermission = { installPermission.set(true) },
+                        onOverlayEnabled = { overlayEnabled.set(it) }, onOverlaySettings = { overlaySettings.set(true) })
                 } }
             }
             panel(ScreenTestUiModel())
@@ -194,7 +197,7 @@ No test result was invented; this is UI-only fixture content."""
             click(context.getString(R.string.screen_test_root_request)); assertTrue(root.get())
             await("Root granted") { has(context.getString(R.string.screen_test_root_granted)) }
             nodes { all ->
-                val switch = all.last { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                val switch = all.single { context.getString(R.string.screen_test_share_label) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
                 assertTrue(switch.config[SemanticsActions.OnClick].action?.invoke() == true)
             }
             assertTrue(shared.get())
@@ -215,6 +218,54 @@ No test result was invented; this is UI-only fixture content."""
             assertFalse(has(context.getString(R.string.screen_test_root_granted)))
             reveal(rootGuidance)
             capture(dark, "root-permission-guidance")
+
+            // Render-only overlay states never request a real system permission or create a window.
+            panel(selected.copy(overlayEnabled = true, overlayGranted = false))
+            reveal(context.getString(R.string.screen_overlay_open_settings))
+            nodes { all ->
+                val control = all.single { context.getString(R.string.screen_overlay_switch) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                assertNotNull(control.config.getOrNull(SemanticsProperties.Disabled))
+                assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
+            }
+            capture(dark, "overlay-permission-needed")
+            click(context.getString(R.string.screen_overlay_open_settings)); assertTrue(overlaySettings.get())
+            assertNull(overlayEnabled.get())
+
+            panel(selected.copy(overlayGranted = true))
+            reveal(context.getString(R.string.screen_overlay_off))
+            nodes { all ->
+                val control = all.single { context.getString(R.string.screen_overlay_switch) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
+                assertTrue(control.config[SemanticsActions.OnClick].action?.invoke() == true)
+            }
+            assertEquals(true, overlayEnabled.get())
+            capture(dark, "overlay-authorized-off")
+
+            panel(selected.copy(overlayGranted = true, overlayEnabled = true, overlayVisible = true))
+            reveal(context.getString(R.string.screen_overlay_visible)); capture(dark, "overlay-visible-status")
+            panel(selected.copy(active = false, overlayGranted = true, overlayEnabled = true))
+            reveal(context.getString(R.string.screen_overlay_waiting_target)); capture(dark, "overlay-waiting-target")
+
+            listOf(
+                "window_permission" to R.string.screen_overlay_failure_permission,
+                "foreground_service" to R.string.screen_overlay_failure_background,
+                "window_token" to R.string.screen_overlay_failure_window,
+            ).forEach { (code, message) ->
+                panel(selected.copy(overlayGranted = code != "window_permission", overlayFailure = code))
+                reveal(context.getString(message))
+                assertFalse(has(code))
+                assertFalse(has(context.getString(R.string.screen_overlay_off)))
+                reveal(context.getString(R.string.screen_overlay_failure_fallback))
+                capture(dark, "overlay-failure-$code")
+                if (code != "window_permission") {
+                    overlayEnabled.set(null)
+                    reveal(context.getString(R.string.screen_overlay_retry))
+                    click(context.getString(R.string.screen_overlay_retry)); assertEquals(true, overlayEnabled.get())
+                } else {
+                    reveal(context.getString(R.string.screen_overlay_open_settings))
+                    click(context.getString(R.string.screen_overlay_open_settings))
+                }
+            }
 
             val consent = AtomicBoolean()
             val dismissed = AtomicBoolean()

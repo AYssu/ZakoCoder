@@ -67,12 +67,12 @@ class AiScreenTestDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun allowPolicyStillAsksAndProjectCannotSwitchDuringScreenAction() = runBlocking {
+    @Test(timeout = 120000) fun explicitAskPolicyPreservesApprovalAndProjectSwitchProtection() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
             val owners = mutableListOf<String>(); val finished = mutableListOf<String>()
             lateinit var ai: AiController
             main { ai = controller(f, { id, _ -> owners += id; ScreenTestResult("verified status") }, { finished += it }); ai.select("screen-a") }; ready(ai)
-            main { ai.setPolicy(AiPolicy(AiPermission.Allow, emptyMap())) }; await { !ai.state.value.permissionsSaving }
+            main { ai.setPolicy(AiPolicy(AiPermission.Allow, mapOf(AiTool.AndroidTest to AiPermission.Ask))) }; await { !ai.state.value.permissionsSaving }
             f.enqueue(calls = listOf(call("status"))); f.enqueue("Done")
             main { assertTrue(ai.send("Inspect test status")) }; await { ai.state.value.approval != null }
             assertTrue(owners.isEmpty())
@@ -80,6 +80,67 @@ class AiScreenTestDeviceTest {
             main { ai.approve(AiDecision.Once) }; await { !ai.state.value.active }
             assertEquals(listOf("screen-a"), owners); assertTrue("Status alone must not own or revoke a selected test session", finished.isEmpty())
             assertEquals(AiToolStatus.Succeeded, ai.state.value.events.single().status)
+        }
+    }
+
+    @Test(timeout = 120000) fun explicitScreenAllowExecutesWithoutApprovalAndMatchingLeaseStopsOnlyItsTask() = runBlocking {
+        AiDeviceTest.Fixture(base).use { f ->
+            val entered = CompletableDeferred<Unit>()
+            var executions = 0
+            var cancelled = false
+            var unscopedStops = 0
+            lateinit var ai: AiController
+            main {
+                ai = controller(f, { _, _ ->
+                    executions++
+                    entered.complete(Unit)
+                    try { awaitCancellation() } finally { cancelled = true }
+                }, stop = { unscopedStops++ }, lease = { "owned-screen-lease" })
+                ai.select("screen-explicit-allow")
+            }; ready(ai)
+            main { ai.setPolicy(AiPolicy(overrides = mapOf(AiTool.AndroidTest to AiPermission.Allow))) }
+            await { !ai.state.value.permissionsSaving }
+            unscopedStops = 0
+            f.enqueue(calls = listOf(call("observe")))
+            main { assertTrue(ai.send("Observe the selected app")) }
+            withTimeout(45000) { entered.await() }
+            assertEquals(1, executions)
+            assertNull("Explicit Allow must not create an approval", ai.state.value.approval)
+            assertEquals(AiPermission.Allow, ai.state.value.events.single().permission)
+            main {
+                assertFalse(ai.stopForScreenLease("other-project", "owned-screen-lease"))
+                assertFalse(ai.stopForScreenLease("screen-explicit-allow", "stale-screen-lease"))
+            }
+            assertTrue(ai.state.value.active)
+            assertFalse(cancelled)
+            main { assertTrue(ai.stopForScreenLease("screen-explicit-allow", "owned-screen-lease")) }
+            await { !ai.state.value.active }
+            assertTrue(cancelled)
+            assertEquals(0, unscopedStops)
+            assertEquals(AiToolStatus.Cancelled, ai.state.value.events.single().status)
+            assertEquals(AiToolStatus.Cancelled, f.history.load("screen-explicit-allow").state!!.events.single().status)
+            main { assertFalse(ai.stopForScreenLease("screen-explicit-allow", "owned-screen-lease")) }
+        }
+    }
+
+    @Test(timeout = 120000) fun explicitAllowCannotExecuteWithoutUserSelectedScreenLease() = runBlocking {
+        AiDeviceTest.Fixture(base).use { f ->
+            var executed = 0
+            lateinit var ai: AiController
+            main {
+                ai = controller(f, { _, _ -> executed++; ScreenTestResult("unexpected") }, lease = { null })
+                ai.select("screen-no-selection")
+            }; ready(ai)
+            main { ai.setPolicy(AiPolicy(overrides = mapOf(AiTool.AndroidTest to AiPermission.Allow))) }
+            await { !ai.state.value.permissionsSaving }
+            f.enqueue(calls = listOf(call("observe"))); f.enqueue("No selected screen target was controlled")
+            main { assertTrue(ai.send("Observe app")) }
+            await { !ai.state.value.active }
+            assertEquals(0, executed)
+            assertNull(ai.state.value.approval)
+            val event = ai.state.value.events.single()
+            assertEquals(AiToolStatus.Failed, event.status)
+            assertTrue(event.output.contains(base.getString(R.string.ai_screen_test_unavailable)))
         }
     }
 

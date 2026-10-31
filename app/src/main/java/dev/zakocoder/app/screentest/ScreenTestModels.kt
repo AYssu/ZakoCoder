@@ -26,6 +26,10 @@ data class ScreenTestState(
     val busy: Boolean = false,
     val summary: String = "",
     val reportPath: String? = null,
+    val overlayEnabled: Boolean = false,
+    val overlayGranted: Boolean = false,
+    val overlayVisible: Boolean = false,
+    val overlayFailure: String = "",
 )
 
 data class ScreenTestResult(val output: String, val imageUri: Uri? = null)

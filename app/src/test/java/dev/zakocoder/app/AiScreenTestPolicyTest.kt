@@ -5,11 +5,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AiScreenTestPolicyTest {
-    @Test fun screenControlRequiresApprovalEvenWithPreviouslyUnrestrictedPolicy() {
-        listOf(AiPolicy(), AiPolicy(AiPermission.Allow, emptyMap()),
-            AiPolicy(overrides = mapOf(AiTool.AndroidTest to AiPermission.Allow))).forEach {
-            assertEquals(AiPermission.Ask, it.permission(AiTool.AndroidTest))
-            assertEquals(AiPermission.Ask, it.permission(AiTool.SshRemote))
+    @Test fun ordinaryAndElevatedDefaultsStillAskForScreenAndSsh() {
+        listOf(AiPolicy(), AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Elevated)).forEach { policy ->
+            listOf(AiTool.AndroidTest, AiTool.SshRemote).forEach { tool ->
+                assertEquals(AiPermission.Ask, policy.permission(tool))
+            }
+        }
+    }
+    @Test fun explicitAdvancedAllowIsHonoredForScreenAndSsh() {
+        listOf(AiTool.AndroidTest, AiTool.SshRemote).forEach { tool ->
+            AiPermission.entries.forEach { default ->
+                val policy = AiPolicy(default, mapOf(tool to AiPermission.Allow))
+                assertEquals(AiPermission.Allow, policy.permission(tool))
+                assertEquals(R.string.ai_permission_tool_rule, policy.source(tool))
+            }
+            assertEquals(AiPermission.Allow, AiPolicy(AiPermission.Allow, emptyMap()).permission(tool))
+        }
+    }
+    @Test fun explicitDenyWinsOverAllowDefaultAndPresetsPreserveIt() {
+        listOf(AiTool.AndroidTest, AiTool.SshRemote).forEach { tool ->
+            val denied = AiPolicy(AiPermission.Allow, mapOf(tool to AiPermission.Deny))
+            assertEquals(AiPermission.Deny, denied.permission(tool))
+            AiPermissionPreset.entries.forEach { preset ->
+                assertEquals(AiPermission.Deny, AiPermissionPresets.apply(denied, preset).permission(tool))
+            }
         }
     }
     @Test fun elevatedPresetNeverConvertsScreenDenialToApprovalOrPermission() {

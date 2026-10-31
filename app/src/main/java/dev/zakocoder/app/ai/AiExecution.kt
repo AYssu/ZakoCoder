@@ -24,10 +24,9 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
 }
 enum class AiPermission(val label: Int) { Allow(R.string.ai_permission_allow), Ask(R.string.ai_permission_ask), Deny(R.string.ai_permission_deny) }
 data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }) {
-    fun permission(tool: AiTool): AiPermission {
-        val configured = overrides[tool] ?: default
-        return if ((tool == AiTool.AndroidTest || tool == AiTool.SshRemote) && configured == AiPermission.Allow) AiPermission.Ask else configured
-    }
+    // Explicit advanced rules are authoritative here. Capability, target lease and system
+    // authorization remain independent checks at execution; presets still default to Ask.
+    fun permission(tool: AiTool): AiPermission = overrides[tool] ?: default
     fun source(tool: AiTool) = if (tool in overrides) R.string.ai_permission_tool_rule else R.string.ai_permission_default_rule
 }
 enum class AiToolStatus(val label: Int) {

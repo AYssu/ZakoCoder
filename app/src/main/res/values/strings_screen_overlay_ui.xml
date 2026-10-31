@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_overlay_title">屏幕测试悬浮入口</string>
+    <string name="screen_overlay_switch">显示悬浮入口</string>
+    <string name="screen_overlay_description">默认关闭。测试期间显示状态，并提供返回助手、停止测试入口；不保证后台持续运行。此开关不代替目标应用授权、Root 或无障碍授权，也不改变 AI 工具审批规则。</string>
+    <string name="screen_overlay_permission_needed">尚未获得悬浮权限。请先前往系统授权，返回后再手动开启；拒绝授权仍可在助手内操作。</string>
+    <string name="screen_overlay_open_settings">前往系统授权</string>
+    <string name="screen_overlay_off">已授权，悬浮入口已关闭。</string>
+    <string name="screen_overlay_visible">悬浮入口已显示。读屏或触控动作期间会临时隐藏，避免遮挡测试。</string>
+    <string name="screen_overlay_waiting_target">已开启；选择并授权测试目标后才会显示。</string>
+    <string name="screen_overlay_temporarily_hidden">已开启；当前暂未显示。测试动作期间会隐藏，结束后按当前授权恢复。</string>
+    <string name="screen_overlay_settings_unavailable">无法打开系统悬浮权限页面，请在系统应用设置中检查；仍可在助手内操作。</string>
+    <string name="screen_overlay_failure_permission">系统未允许显示悬浮入口，或悬浮权限已被撤销。请检查系统授权后重试。</string>
+    <string name="screen_overlay_failure_background">系统未允许启动测试的后台运行服务，悬浮入口已关闭。请在助手保持前台时重试。</string>
+    <string name="screen_overlay_failure_window">悬浮入口无法显示，已停止显示。可重新开启；若仍失败，请在助手内继续操作。</string>
+    <string name="screen_overlay_failure_fallback">悬浮入口失败不代表测试通过或任务已停止。请返回助手查看任务状态，也可在本页停止屏幕测试。</string>
+    <string name="screen_overlay_retry">重试显示悬浮入口</string>
+</resources>

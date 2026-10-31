@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_overlay_handle">测试</string>
+    <string name="screen_overlay_expand">展开或收起屏幕测试操作，可拖动</string>
+    <string name="screen_overlay_return">返回助手</string>
+    <string name="screen_overlay_stop">停止任务</string>
+    <string name="screen_overlay_collapse">收起屏幕测试操作，可拖动</string>
+    <string name="screen_overlay_frame_timeout">悬浮窗隐藏后未及时完成画面同步；本次未执行屏幕操作，请重试。</string>
+    <string name="screen_overlay_remove_failed">悬浮窗未能安全隐藏，本次未执行屏幕操作。请关闭悬浮权限后重试。</string>
+</resources>

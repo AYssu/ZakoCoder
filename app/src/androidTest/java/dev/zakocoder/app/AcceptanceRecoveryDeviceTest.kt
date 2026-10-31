@@ -16,6 +16,36 @@ import java.util.UUID
 
 /** Read-only, explicitly selected acceptance history; never loads provider configuration. */
 class AcceptanceRecoveryDeviceTest {
+    @Test fun completedPaidCacheTurnRetainsAppendedEvidenceAcrossStoreReopen() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val arguments = InstrumentationRegistry.getArguments()
+        assumeTrue("Existing cache acceptance evidence is opt-in", arguments.getString("verifyCacheRecovery") == "true")
+        val context = instrumentation.targetContext
+        check(context.packageName == "dev.zakocoder.app")
+        val projectId = arguments.getString("acceptanceProjectId").orEmpty()
+        val conversationId = arguments.getString("acceptanceConversationId").orEmpty()
+        require(UUID.fromString(projectId).toString() == projectId)
+        require(UUID.fromString(conversationId).toString() == conversationId)
+        withContext(Dispatchers.IO) {
+            val state = requireNotNull(AiHistoryStore(context).load(projectId, conversationId).state)
+            assertEquals(conversationId, state.conversationId)
+            assertEquals(AiPhase.Completed, state.phase)
+            assertFalse(state.active)
+            assertTrue(state.contextCompactions > 0)
+            assertTrue(state.contextSummary.isNotBlank())
+            val reads = state.events.filter { it.turn == state.turn && it.tool == AiTool.ReadFile }
+            assertEquals(4, reads.size)
+            assertTrue(reads.all { it.status == AiToolStatus.Succeeded })
+            assertEquals(listOf("settings.gradle.kts", "build.gradle.kts", "app/build.gradle.kts", "app/src/main/AndroidManifest.xml"),
+                reads.map { JSONObject(it.input).getString("path") })
+            assertTrue(state.contextTurns.any { it.contains(dev.zakocoder.app.ai.AI_CONTEXT_UPDATE) })
+            val reopened = requireNotNull(AiHistoryStore(context).load(projectId, conversationId).state)
+            assertEquals(state.contextTurns, reopened.contextTurns)
+            assertEquals(state.contextSummary, reopened.contextSummary)
+            assertEquals(state.requests.map { it.id }, reopened.requests.map { it.id })
+        }
+    }
+
     @Test fun failedPaidBuildRetainsSummaryToolsAndFailureAcrossStoreReopen() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val arguments = InstrumentationRegistry.getArguments()
