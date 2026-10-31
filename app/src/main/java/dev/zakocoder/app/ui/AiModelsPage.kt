@@ -138,7 +138,8 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
-    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol)
+    fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
+    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt)
     fun leave() { if (state.saving) return; if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
@@ -174,11 +175,16 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                 if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(clearKey, { clearKey = it; key = ""; changed() }, enabled = editable); Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp) }
             }
             ModelSection(stringResource(R.string.ai_models_model_section)) {
-                ModelField(model, { model = it; changed() }, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
+                ModelField(model, ::selectModel, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_models_manual_hint), Modifier.weight(1f), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = { picker = true; ai.models.discover(draft()) }, enabled = editable && normalized != null && parametersValid) { WorkbenchIcon(Glyph.Refresh, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_models_fetch)) }
                 }
+                // The value stays visible while the numeric controls remain in advanced options.
+                AiModelContextSummary(model, options.windowTokens)
+            }
+            ModelSection(stringResource(R.string.ai_provider_prompt_title)) {
+                AiProviderPromptField(options.systemPrompt, { options.systemPrompt = it; changed() }, editable)
             }
             ModelSection(stringResource(R.string.ai_models_parameters)) {
                 Text(stringResource(R.string.ai_models_parameters_hint), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -208,7 +214,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.available.filter { it.contains(query, ignoreCase = true) }, key = { it }) { id ->
                     val description = stringResource(R.string.ai_models_choose_named, id)
-                    Row(Modifier.fillMaxWidth().semantics { contentDescription = description }.clickable { model = id; changed(); picker = false }.heightIn(min = 48.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().semantics { contentDescription = description }.clickable { selectModel(id); picker = false }.heightIn(min = 48.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(id, Modifier.weight(1f), fontSize = 13.sp, fontFamily = FontFamily.Monospace)
                         if (id == model) WorkbenchIcon(Glyph.Check, tint = MaterialTheme.colorScheme.primary)
                     }
