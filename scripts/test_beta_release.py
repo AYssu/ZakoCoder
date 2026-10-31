@@ -288,6 +288,11 @@ class BetaReleaseTest(unittest.TestCase):
             self.assertEqual({metadata["apk"], "SHA256SUMS.txt"}, set(uploads))
             self.assertEqual(f"{metadata['apkSha256']}  {metadata['apk']}\n".encode(), uploads["SHA256SUMS.txt"])
             body = payloads[0]["body"]
+            self.assertIn("### 主要功能", body)
+            self.assertIn("### 安装与开始", body)
+            self.assertIn("### 测试范围与已知限制", body)
+            self.assertIn("https://github.com/AYssu/ZakoCoder/issues/new/choose", body)
+            self.assertIn(f"/blob/{metadata['commit']}/SECURITY.md", body)
             self.assertIn("<!-- zakocoder-build\n", body)
             self.assertIn(f"/archive/{metadata['commit']}.tar.gz", body)
             self.assertEqual(beta.read_json(directory / "BUILD.json"), json.loads(body.split("<!-- zakocoder-build\n")[1].split("\n-->")[0]))
