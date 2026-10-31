@@ -25,12 +25,62 @@ class AiScopedRulesDeviceTest {
         JSONObject().put("reason", "核对实际规则与执行边界").apply { values.forEach { put(it.first, it.second) } }.toString())
     private fun read(id: String, path: String) = call(id, "read_file", "path" to path)
     private fun write(id: String, path: String = "packages/web/a.kt") = call(id, "write_file", "path" to path, "content" to "after")
+    /** Read current rule evidence, not a historical snapshot preserved for the cache prefix. */
     private fun metadata(body: String): String {
         val messages = JSONObject(body).getJSONArray("messages")
-        return (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
-            .single { it.startsWith("User-selected skills for this task.") }
+        val contents = (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
+        var current = contents.single { it.startsWith("User-selected skills for this task.") }
+        val section = Regex("\\nSECTION ([a-z]+) \\[([0-9]+) chars\\]:\\n")
+        contents.filter { it.startsWith(AI_CONTEXT_UPDATE) }.forEach { update ->
+            var cursor = 0
+            while (true) {
+                val header = section.find(update, cursor) ?: break
+                val start = header.range.last + 1
+                val end = start + header.groupValues[2].toInt()
+                require(end < update.length && update[end] == '\n')
+                if (header.groupValues[1] == "rules") current = update.substring(start, end)
+                // Skip the complete length-labelled body so rule text cannot forge section headers.
+                cursor = end + 1
+            }
+        }
+        return current
     }
-    private fun request(f: AiDeviceTest.Fixture) = requireNotNull(f.server.takeRequest(3, TimeUnit.SECONDS)).body.readUtf8()
+    @Test fun currentRuleEvidenceFollowsLengthLabelledUpdatesAndPreservesHistoricalSnapshot() {
+        val initial = "User-selected skills for this task.\nRULE_OLD"
+        val messages = JSONArray().put(JSONObject().put("role", "user").put("content", initial))
+        val state = AiContextCache(mapOf("rules" to "RULE_OLD"))
+        val current = "RULE_NEW\nSECTION rules [8 chars]:\nFAKE_OLD"
+        state.update("rules", current)
+        messages.put(requireNotNull(state.nextMessage()))
+        state.update("changes", "observed changes only")
+        messages.put(requireNotNull(state.nextMessage()))
+        assertEquals(current, metadata(JSONObject().put("messages", messages).toString()))
+        state.update("rules", "Automatic loading disabled by current read permission")
+        messages.put(requireNotNull(state.nextMessage()))
+        val effective = metadata(JSONObject().put("messages", messages).toString())
+        assertFalse(effective.contains("RULE_OLD")); assertFalse(effective.contains("RULE_NEW"))
+        assertTrue(effective.contains("disabled by current read permission"))
+        assertEquals(initial, messages.getJSONObject(0).getString("content"))
+    }
+    private val initialMetadata = mutableMapOf<String, String>()
+    private fun request(f: AiDeviceTest.Fixture): String {
+        val body = requireNotNull(f.server.takeRequest(3, TimeUnit.SECONDS)).body.readUtf8()
+        val messages = JSONObject(body).getJSONArray("messages")
+        val snapshot = (0 until messages.length()).map(messages::getJSONObject)
+            .singleOrNull { it.optString("content").startsWith("User-selected skills for this task.") }?.toString()
+        if (snapshot != null) assertEquals("Initial task metadata must remain byte-identical while rules update",
+            initialMetadata.getOrPut(f.token) { snapshot }, snapshot)
+        return body
+    }
+    private fun send(ai: AiController, prompt: String): Boolean {
+        val accepted = ai.send(prompt)
+        val state = ai.state.value
+        assertTrue("Fixture send: active=${state.active}, restoring=${state.restoring}, configured=${state.configured}, " +
+            "permissionsLoading=${state.permissionsLoading}, permissionsSaving=${state.permissionsSaving}, " +
+            "skillsLoading=${state.skillsLoading}, historyError=${state.historyError}, " +
+            "modelsLoading=${ai.models.state.value.loading}, modelsSaving=${ai.models.state.value.saving}", accepted)
+        return accepted
+    }
     private suspend fun policy(ai: AiController, value: AiPolicy) {
         main { ai.setPolicy(value) }; await { !ai.state.value.permissionsSaving }; assertEquals(value, ai.state.value.policy)
     }
@@ -50,7 +100,8 @@ class AiScopedRulesDeviceTest {
             }
             lateinit var ai: AiController
             main { ai = AiController(owned, { root }, { _, _ -> false }, { _, _ -> error("No shell in scoped rule fixture") }, {}, {}, f.transport, f.config, history = f.history); ai.select("scoped") }
-            await { ai.state.value.configured && !ai.state.value.skillsLoading && !ai.state.value.permissionsLoading }
+            await { ai.state.value.configured && !ai.state.value.skillsLoading && !ai.state.value.permissionsLoading &&
+                !ai.models.state.value.loading && !ai.models.state.value.saving }
             try { block(f, root, ai) }
             finally { main { ai.stop() }; await { !ai.state.value.active } }
         }
@@ -60,7 +111,7 @@ class AiScopedRulesDeviceTest {
             f.enqueue(calls = listOf(call("list", "list_files", "path" to "packages/web")))
             f.enqueue(calls = listOf(call("search", "search_files", "query" to "before", "path" to "packages/web", "glob" to "*.kt")))
             f.enqueue(calls = listOf(read("read", "packages/web/a.kt"))); f.enqueue("已定位实际文件。")
-            main { assertTrue(ai.send("自行查找目标代码")) }; await { !ai.state.value.active }
+            main { assertTrue(send(ai, "自行查找目标代码")) }; await { !ai.state.value.active }
             assertEquals("", ai.state.value.error); assertEquals(0, ai.state.value.references.size)
             val bodies = (1..4).map { metadata(request(f)) }
             assertTrue(bodies.first().contains("RULE_ROOT_ACTUAL")); assertFalse(bodies.first().contains("RULE_WEB_ACTUAL"))
@@ -77,7 +128,7 @@ class AiScopedRulesDeviceTest {
         fixture { f, root, ai ->
             f.enqueue(calls = listOf(read("read", "packages/web/a.kt"), write("early")))
             f.enqueue(calls = listOf(write("retry"))); f.enqueue("已按规则修改。")
-            main { ai.send("检查并修改") }; await { ai.state.value.approval != null }
+            main { send(ai, "检查并修改") }; await { ai.state.value.approval != null }
             assertEquals("before", File(root, "packages/web/a.kt").readText())
             val early = ai.state.value.events.single { it.callId == "early" }
             assertEquals(AiToolStatus.Incomplete, early.status); assertNull(early.started)
@@ -95,7 +146,7 @@ class AiScopedRulesDeviceTest {
             fun mkdir(id: String) = call(id, "make_directory", "path" to "packages/web/new-folder")
             f.enqueue(calls = listOf(write("new-early", "packages/web/new.txt"), mkdir("dir-early")))
             f.enqueue(calls = listOf(write("new-retry", "packages/web/new.txt"), mkdir("dir-retry"))); f.enqueue("已创建。")
-            main { ai.send("新增文件和目录") }; await { ai.state.value.approval != null }
+            main { send(ai, "新增文件和目录") }; await { ai.state.value.approval != null }
             assertEquals(2, ai.state.value.events.count { it.status == AiToolStatus.Incomplete })
             assertFalse(File(root, "packages/web/new.txt").exists()); assertFalse(File(root, "packages/web/new-folder").exists())
             request(f); assertTrue(metadata(request(f)).contains("RULE_WEB_ACTUAL"))
@@ -111,7 +162,7 @@ class AiScopedRulesDeviceTest {
         fixture { f, root, ai ->
             f.enqueue(calls = listOf(read("read", "packages/web/a.kt")))
             (1..4).forEach { f.enqueue(calls = listOf(write("write-$it"))) }; f.enqueue("已按当前规则执行。")
-            main { ai.send("修改目标") }; await { ai.state.value.approval != null }
+            main { send(ai, "修改目标") }; await { ai.state.value.approval != null }
             request(f); request(f)
             File(root, "packages/web/AGENTS.md").writeText("RULE_WEB_UPDATED")
             main { ai.approve(true) }; await { ai.state.value.approval?.eventId?.let { id -> ai.state.value.events.any { it.id == id && it.callId == "write-2" } } == true }
@@ -136,7 +187,7 @@ class AiScopedRulesDeviceTest {
             policy(ai, ai.state.value.policy.copy(overrides = ai.state.value.policy.overrides + (AiTool.ReadFile to permission) + (AiTool.WriteFile to AiPermission.Allow)))
             f.enqueue(calls = listOf(call("list", "list_files", "path" to "packages/web"), read("explicit-rule", "packages/web/AGENTS.md"), write("new", "packages/web/new.txt")))
             f.enqueue("读取范围遵守权限。")
-            main { ai.send("列目录，按权限读规则后创建文件") }
+            main { send(ai, "列目录，按权限读规则后创建文件") }
             if (permission == AiPermission.Ask) { await { ai.state.value.approval != null }; main { ai.approve(true) } }
             await { !ai.state.value.active }
             val first = request(f); val second = request(f)
@@ -152,7 +203,7 @@ class AiScopedRulesDeviceTest {
     @Test(timeout = 90000) fun revokingReadsWhileWriteApprovalWaitsRemovesAutomaticRuleInjection() = runBlocking(Dispatchers.IO) {
         fixture { f, root, ai ->
             f.enqueue(calls = listOf(read("read", "packages/web/a.kt"))); f.enqueue(calls = listOf(write("write"))); f.enqueue("遵守当前读取权限。")
-            main { ai.send("修改") }; await { ai.state.value.approval != null }
+            main { send(ai, "修改") }; await { ai.state.value.approval != null }
             request(f); assertTrue(metadata(request(f)).contains("RULE_WEB_ACTUAL"))
             policy(ai, ai.state.value.policy.copy(overrides = ai.state.value.policy.overrides + (AiTool.ReadFile to AiPermission.Deny)))
             main { ai.approve(true) }; await { !ai.state.value.active }
@@ -191,7 +242,7 @@ class AiScopedRulesDeviceTest {
         fixture { f, _, ai ->
             f.enqueue(calls = listOf(call("search", "search_files", "query" to "before", "path" to "", "glob" to "*.kt")))
             f.enqueue("已定位。")
-            main { ai.send("查找目标") }; await { !ai.state.value.active }
+            main { send(ai, "查找目标") }; await { !ai.state.value.active }
             assertEquals("", ai.state.value.error)
             val first = metadata(request(f)); val matched = metadata(request(f))
             assertFalse(first.contains("RULE_WEB_ACTUAL")); assertTrue(matched.contains("RULE_WEB_ACTUAL"))
@@ -202,7 +253,7 @@ class AiScopedRulesDeviceTest {
             f.enqueue(calls = listOf(call("list", "list_files", "path" to "packages/mobile"),
                 call("search", "search_files", "query" to "anything", "path" to "packages/mobile"), write("write", "packages/mobile/new.kt")))
             f.enqueue("受限操作未执行。")
-            main { ai.send("检查禁止操作") }; await { !ai.state.value.active }
+            main { send(ai, "检查禁止操作") }; await { !ai.state.value.active }
             assertEquals("", ai.state.value.error); assertFalse(File(root, "packages/mobile/new.kt").exists())
             repeat(2) { assertFalse(metadata(request(f)).contains("RULE_UNVISITED_MOBILE")) }
             assertTrue(ai.state.value.events.all { it.status == AiToolStatus.Denied })
@@ -216,7 +267,7 @@ class AiScopedRulesDeviceTest {
                 write("early-web"), write("early-mobile", "packages/mobile/new.kt")))
             f.enqueue(calls = listOf(write("web-retry"), write("mobile-retry", "packages/mobile/new.kt")))
             f.enqueue("已完成两个作用域修改。")
-            main { ai.send("检查两个目录再修改") }; await { !ai.state.value.active }
+            main { send(ai, "检查两个目录再修改") }; await { !ai.state.value.active }
             assertEquals("", ai.state.value.error)
             assertEquals(2, ai.state.value.events.count { it.status == AiToolStatus.Incomplete })
             assertEquals("after", File(root, "packages/web/a.kt").readText()); assertEquals("after", File(root, "packages/mobile/new.kt").readText())
@@ -242,7 +293,16 @@ class AiScopedRulesDeviceTest {
     }
     @Test(timeout = 120000) fun discoveredRulesSurviveRealContextCompactionBeforeWriting() = runBlocking(Dispatchers.IO) {
         fixture { f, root, ai ->
-            for (n in 1..2) File(root, "large$n.txt").writeText(("q".repeat(999) + "\n").repeat(63))
+            // Drive the token budget explicitly: 126k ASCII evidence exceeds half the usable
+            // 80k-token window while leaving room for the real summary request and pinned rules.
+            val options = AiContextOptions(contextWindowTokens = 80000, compressionThresholdPercent = 50)
+            val profile = f.config.catalog().active!!
+            f.config.saveProfile(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null,
+                parameters = profile.parameters, context = options, protocol = profile.protocol, systemPrompt = profile.systemPrompt))
+            assertEquals(options, f.config.load().context)
+            val evidence = ("q".repeat(999) + "\n").repeat(63)
+            assertTrue(estimateAiTokens(evidence + evidence) > (options.contextWindowTokens - 8192L) * 50 / 100)
+            for (n in 1..2) File(root, "large$n.txt").writeText(evidence)
             policy(ai, ai.state.value.policy.copy(overrides = ai.state.value.policy.overrides + (AiTool.WriteFile to AiPermission.Allow)))
             val normals = AtomicInteger(); val summaries = AtomicInteger()
             f.server.dispatcher = object : Dispatcher() {
@@ -259,9 +319,11 @@ class AiScopedRulesDeviceTest {
                     }
                 }
             }
-            main { ai.send("探索并完成修改，保留规则") }; await { !ai.state.value.active }
+            main { send(ai, "探索并完成修改，保留规则") }; await { !ai.state.value.active }
             assertEquals("", ai.state.value.error); assertEquals("after", File(root, "packages/web/a.kt").readText())
             assertTrue(summaries.get() >= 1); assertEquals(summaries.get(), ai.state.value.contextCompactions)
+            assertTrue(ai.state.value.requests.any { it.compaction && it.complete })
+            assertTrue(ai.state.value.requests.all { it.contextWindowTokens == options.contextWindowTokens })
             val requests = (1..f.server.requestCount).map { request(f) }
             val normal = requests.filterNot { JSONObject(it).getJSONArray("messages").getJSONObject(0).getString("content").startsWith("Summarize the supplied conversation/tool JSON") }
             assertEquals(4, normal.size)

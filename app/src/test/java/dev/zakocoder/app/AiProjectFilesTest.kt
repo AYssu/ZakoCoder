@@ -70,7 +70,7 @@ class AiProjectFilesTest {
         val diff = fileDiff("a\nb\nc\nd", "a\nB\nC\nd")
         assertEquals("@@ -1,4 +1,4 @@\n a\n-b\n-c\n+B\n+C\n d\n", diff)
     }
-    @Test fun endpointRequiresHttpsAndRejectsCredentialAndQueryUrls() {
+    @Test fun endpointRequiresHttpsForPublicServicesAndRejectsCredentialAndQueryUrls() {
         assertEquals("https://example.org/v1", AiConfigStore.endpoint(" https://example.org/v1/chat/completions/ "))
         listOf("http://example.org", "https://key@example.org", "https://example.org?k=x", "https://example.org#key", "https:///v1").forEach { denied { AiConfigStore.endpoint(it) } }
     }

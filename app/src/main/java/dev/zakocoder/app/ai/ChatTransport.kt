@@ -273,17 +273,12 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                 }
                             }
                             try {
-                                while (!source.exhausted()) {
-                                    val line = try { source.readUtf8LineStrict(8L * 1024 * 1024) }
-                                    catch (error: java.io.EOFException) {
-                                        if (source.buffer.size > 8L * 1024 * 1024) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_event_limit")
-                                        throw error
-                                    }
+                                val frames = AiSseReader(source) { if (call.isCanceled()) throw AiTransportException(kind = AiFailure.Cancelled, diagnostic = "cancelled") }
+                                while (true) {
+                                    val data = frames.next() ?: break
                                     // Decoded SSE data bytes; excludes comments/framing and compressed transport overhead.
-                                    if (!line.startsWith("data:")) continue
-                                    val data = line.removePrefix("data:").trim()
                                     bytes += data.toByteArray().size
-                                    if (data == "[DONE]") { done = true; break }
+                                    if (data.trim() == "[DONE]") { done = true; break }
                                     if (data.isEmpty()) continue
                                     val event = JSONObject(data)
                                     if (event.has("error")) throw AiTransportException(diagnostic = "provider_error_event")
@@ -291,10 +286,10 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                     val now = elapsed()
                                     firstEvent = firstEvent ?: now
                                     val usage = event.optJSONObject("usage")
-                                    fun number(name: String): Long? = usage?.takeUnless { u -> u.isNull(name) }?.optLong(name)?.takeIf { n -> n >= 0 }
+                                    fun number(name: String): Long? = usage?.let { AiStreamUsage.count(it, name) }
                                     inputTokens = number("prompt_tokens") ?: inputTokens
                                     outputTokens = number("completion_tokens") ?: outputTokens
-                                    cachedTokens = usage?.optJSONObject("prompt_tokens_details")?.let { details -> if (details.isNull("cached_tokens")) null else details.optLong("cached_tokens").takeIf { n -> n >= 0 } } ?: number("prompt_cache_hit_tokens") ?: cachedTokens
+                                    cachedTokens = usage?.optJSONObject("prompt_tokens_details")?.let { details -> AiStreamUsage.count(details, "cached_tokens") } ?: number("prompt_cache_hit_tokens") ?: cachedTokens
                                     val choice = event.optJSONArray("choices")?.optJSONObject(0)
                                     if (choice != null && !choice.isNull("finish_reason")) finish = choice.optString("finish_reason")
                                     val part = choice?.optJSONObject("delta")
@@ -381,10 +376,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                     points = points)
             }
         }
-        val pending = StringBuilder(); var pendingBytes = 0
-        fun dispatch() {
-            if (pending.isEmpty()) return
-            val data = pending.toString(); pending.setLength(0); pendingBytes = 0
+        fun dispatch(data: String) {
             bytes += data.toByteArray().size
             if (data == "[DONE]") {
                 if (!stream.done) throw AiTransportException(diagnostic = "missing_done")
@@ -397,23 +389,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             publish(force = !hadDrafts && drafts.isNotEmpty())
         }
         try {
-            while (!stream.done && !source.exhausted()) {
-                val line = try { source.readUtf8LineStrict(8L * 1024 * 1024) }
-                catch (error: java.io.EOFException) {
-                    if (source.buffer.size > 8L * 1024 * 1024)
-                        throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_event_limit")
-                    throw error
-                }
-                if (line.isEmpty()) { dispatch(); continue }
-                if (!line.startsWith("data:")) continue
-                val data = line.removePrefix("data:").removePrefix(" ")
-                pendingBytes += data.toByteArray().size + 1
-                if (pendingBytes > 8 * 1024 * 1024)
-                    throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_event_limit")
-                if (pending.isNotEmpty()) pending.append('\n')
-                pending.append(data)
+            val frames = AiSseReader(source) { if (call.isCanceled()) throw AiTransportException(kind = AiFailure.Cancelled, diagnostic = "cancelled") }
+            while (!stream.done) {
+                val data = frames.next() ?: break
+                if (data.isNotEmpty()) dispatch(data)
             }
-            if (!stream.done) dispatch()
             return stream.reply()
         } finally { publish(force = true) }
     }

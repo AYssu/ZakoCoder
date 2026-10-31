@@ -233,12 +233,8 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
         confirmButton = { TextButton(onClick = { key = ""; close() }) { Text(stringResource(R.string.ai_models_discard)) } }, dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.ai_models_keep_editing)) } })
 }
 
-private fun sameModelOrigin(first: String, second: String): Boolean {
-    fun origin(value: String): Pair<String, Int> = URI(AiConfigStore.endpoint(value)).let {
-        it.host.lowercase(java.util.Locale.ROOT) to if (it.port == -1) 443 else it.port
-    }
-    return origin(first) == origin(second)
-}
+private fun sameModelOrigin(first: String, second: String): Boolean =
+    AiConfigStore.origin(first) == AiConfigStore.origin(second)
 
 @Composable
 private fun ModelSection(title: String, content: @Composable ColumnScope.() -> Unit) {

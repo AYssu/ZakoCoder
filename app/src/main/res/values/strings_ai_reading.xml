@@ -1,0 +1,20 @@
+<resources>
+    <string name="ai_reading_code_lines">%1$d 行</string>
+    <string name="ai_reading_code_preview">已显示前 %1$d 行，共 %2$d 行；复制保留完整代码。</string>
+    <string name="ai_reading_code_expand">展开代码</string>
+    <string name="ai_reading_code_collapse">收起代码</string>
+    <string name="ai_reading_code_full">查看完整代码</string>
+    <string name="ai_reading_code_copy_preview">复制预览</string>
+    <string name="ai_reading_code_open_preview">查看代码预览</string>
+    <string name="ai_reading_code_source_limited">此消息超出预览范围，代码可能不完整。复制仅包含预览，请从消息的“%1$s”核对。</string>
+    <string name="ai_reading_code_partial_lines">已显示前 %1$d 行，代码预览共 %2$d 行。</string>
+    <string name="ai_reading_code_receiving">回复仍在接收，预览不会自动展开。</string>
+    <string name="ai_reading_reasoning_latest">回到最新思考</string>
+    <string name="ai_reading_reasoning_paused_preview">已保留当前思考片段，后续内容继续接收；回到最新后显示最近 12,000 字符。</string>
+    <string name="ai_reading_number_penalty">请输入 −2 到 2 的数字，留空使用服务默认值。</string>
+    <string name="ai_reading_number_seed">请输入 −2147483648 到 2147483647 的整数，或留空。</string>
+    <string name="ai_reading_number_window">请输入 8192 到 2097152 的整数 Token 容量。</string>
+    <string name="ai_reading_number_threshold">请输入 50 到 95 的整数百分比。</string>
+    <string name="ai_reading_number_summary">请输入 2000 到 12000 的整数字符数。</string>
+    <string name="ai_reading_headers_invalid">请求头格式无效：每行使用“名称: 值”，名称不可重复，也不可覆盖认证或协议保留头。</string>
+</resources>

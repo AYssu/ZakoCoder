@@ -145,7 +145,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         val previous = threads.remove(id)
         while (threads.size > 8) threads.remove(threads.keys.first())
         mutable.update { AiState(projectId = id, endpoint = it.endpoint, model = it.model, hasKey = it.hasKey,
-            configured = it.configured, configurationRevision = it.configurationRevision, interrupted = it.interrupted, permissionsLoading = id != null) }
+            configured = it.configured, configurationRevision = it.configurationRevision, interrupted = it.interrupted,
+            contextWindowTokens = it.contextWindowTokens, contextOutputReserveTokens = it.contextOutputReserveTokens, permissionsLoading = id != null) }
         permissionLoad?.cancel()
         if (id != null) permissionLoad = scope.launch {
             try {
@@ -172,6 +173,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         } else if (current.conversationId == restored.conversationId) current.references else savedReferences
         mutable.value = restored.copy(projectId = current.projectId, references = references, pendingImages = images, policy = policy,
             endpoint = current.endpoint, model = current.model, hasKey = current.hasKey, configured = current.configured,
+            // Model capacity is live configuration, not the last request budget saved in history.
+            contextWindowTokens = current.contextWindowTokens, contextOutputReserveTokens = current.contextOutputReserveTokens,
             configurationRevision = current.configurationRevision, conversations = loaded.conversations,
             changes = cached?.takeIf { it.conversationId == restored.conversationId }?.changes.orEmpty())
         refreshSkills()
@@ -273,7 +276,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         if (mutable.value.projectId == id) {
             permissionLoad?.cancel()
             mutable.update { AiState(endpoint = it.endpoint, model = it.model, hasKey = it.hasKey,
-                configured = it.configured, configurationRevision = it.configurationRevision) }
+                configured = it.configured, configurationRevision = it.configurationRevision,
+                contextWindowTokens = it.contextWindowTokens, contextOutputReserveTokens = it.contextOutputReserveTokens) }
         }
         collectUnusedImages()
     }

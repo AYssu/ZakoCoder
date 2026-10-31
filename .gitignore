@@ -1,6 +1,13 @@
 # Local references: never commit or publish
 /example/
 /参考源码/
+# Local research and comparison notes
+/docs/research/
+/docs/references/
+/docs/local-research/
+/docs/*_STUDY.md
+/docs/*_RESEARCH.md
+/docs/*_REFERENCE*.md
 # Android and IDE
 .gradle/
 **/build/

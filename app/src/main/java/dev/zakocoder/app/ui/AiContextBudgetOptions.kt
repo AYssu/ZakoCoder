@@ -62,7 +62,8 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
     val windowDescription = stringResource(R.string.ai_options_context_tokens)
     OutlinedTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth().semantics { contentDescription = windowDescription },
         enabled = editable, singleLine = true, label = { Text(stringResource(R.string.ai_options_context_tokens)) },
-        supportingText = { Text(stringResource(R.string.ai_context_window_range)) },
+        isError = !ModelInputValidation.window(draft.windowTokens),
+        supportingText = { Text(stringResource(if (ModelInputValidation.window(draft.windowTokens)) R.string.ai_context_window_range else R.string.ai_reading_number_window)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
     Text(stringResource(R.string.ai_context_gateway_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -70,8 +71,10 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         Text(stringResource(R.string.ai_options_auto), Modifier.weight(1f))
         Switch(draft.automatic, { draft.automatic = it; changed() }, enabled = editable)
     }
-    ContextIntegerField(draft.threshold, { draft.threshold = it; changed() }, R.string.ai_options_threshold, editable)
-    ContextIntegerField(draft.summaryChars, { draft.summaryChars = it; changed() }, R.string.ai_options_summary_chars, editable)
+    ContextIntegerField(draft.threshold, { draft.threshold = it; changed() }, R.string.ai_options_threshold, editable,
+        !ModelInputValidation.threshold(draft.threshold), R.string.ai_reading_number_threshold)
+    ContextIntegerField(draft.summaryChars, { draft.summaryChars = it; changed() }, R.string.ai_options_summary_chars, editable,
+        !ModelInputValidation.summary(draft.summaryChars), R.string.ai_reading_number_summary)
     Text(stringResource(R.string.ai_context_summary_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (presets) WorkbenchSheet(stringResource(R.string.ai_context_choose_model_window), { presets = false },
@@ -113,7 +116,8 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
 }
 
 @Composable
-private fun ContextIntegerField(value: String, update: (String) -> Unit, label: Int, editable: Boolean) {
+private fun ContextIntegerField(value: String, update: (String) -> Unit, label: Int, editable: Boolean, invalid: Boolean, hint: Int) {
     OutlinedTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
-        label = { Text(stringResource(label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
+        label = { Text(stringResource(label)) }, isError = invalid, supportingText = { Text(stringResource(hint)) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
 }

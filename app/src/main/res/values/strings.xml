@@ -321,7 +321,7 @@
     <string name="nav_ai">助手</string>
     <string name="ai_project_busy">AI 正在操作此项目，请先停止任务</string>
     <string name="ai_interrupted">上次 AI 任务意外中断，请检查项目文件；不会自动重放。</string>
-    <string name="ai_config_error">配置未保存：请检查 HTTPS 地址、模型名称。更换服务地址时需重新输入或清除密钥。</string>
+    <string name="ai_config_error">配置未保存：请检查服务地址、模型名称。支持 HTTPS，以及 localhost、回环地址和 10 / 172.16–31 / 192.168 网段 IP 的 HTTP；更换服务源需重新输入或清除密钥。</string>
     <string name="ai_finished">模型已结束。是否通过验证，请查看实际命令退出码；未运行测试不代表测试通过。</string>
     <string name="ai_stopped">任务已停止，已批准的文件修改仍保留。</string>
     <string name="ai_file_written">已写入 %1$s</string>
@@ -331,7 +331,7 @@
     <string name="ai_tool_error">工具失败：路径不允许、未先读取、文件发生变化、编辑器已打开此文件或环境不可用。</string>
     <string name="ai_undo">确认撤销文件修改</string>
     <string name="ai_settings">模型配置</string>
-    <string name="ai_endpoint">HTTPS 服务地址</string>
+    <string name="ai_endpoint">服务地址（HTTPS / 本地 HTTP）</string>
     <string name="ai_model">模型标识</string>
     <string name="ai_key_replace">替换密钥（已配置，留空保留）</string>
     <string name="ai_key">API Key（可选）</string>
@@ -475,7 +475,7 @@
     <string name="ai_models_request_rejected">服务不接受此请求（400/422）。请检查模型是否支持流式工具调用，或关闭不兼容的生成参数。</string>
     <string name="ai_models_network_error">未收到完整的兼容响应。请检查网络、证书、服务地址及流式工具调用支持。</string>
     <string name="ai_models_service_error">服务暂时无法完成请求，请稍后重试。</string>
-    <string name="ai_models_invalid">请检查配置名称、HTTPS 地址、模型标识和参数范围。</string>
+    <string name="ai_models_invalid">请检查配置名称、服务地址、模型标识和参数范围。HTTP 仅支持 localhost、127.0.0.1、[::1] 及 10 / 172.16–31 / 192.168 网段 IP；其他地址使用 HTTPS。</string>
     <string name="ai_models_save_error">配置操作未完成，原配置仍保留。请检查应用存储后重试。</string>
     <string name="ai_data_details">数据发送说明</string>
     <string name="ai_ready_title">从当前项目开始编码</string>
