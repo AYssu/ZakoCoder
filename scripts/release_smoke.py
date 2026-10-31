@@ -49,12 +49,13 @@ class Device:
         self.last_xml = self.shell('cat', '/sdcard/zako-beta-smoke.xml')
         return ET.fromstring(self.last_xml)
 
-    def find(self, label, *, click=False, scroll=False, timeout=45):
+    def find(self, label, *, click=False, scroll=False, timeout=45, description_only=False):
         until = time.monotonic() + timeout
         while time.monotonic() < until:
             tree = self.dump()
             matches = [n for n in tree.iter('node') if
-                       label in (n.get('text'), n.get('content-desc')) and n.get('enabled') == 'true']
+                       label in ((n.get('content-desc'),) if description_only else (n.get('text'), n.get('content-desc')))
+                       and n.get('enabled') == 'true']
             for node in matches:
                 rect = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
                 if len(rect) != 4 or rect[2] <= rect[0] or rect[3] <= rect[1]:
@@ -68,6 +69,12 @@ class Device:
                 self.shell('input', 'swipe', width//2, int(height*.74), width//2, int(height*.35), 250)
             time.sleep(.3)
         raise RuntimeError(f'Expected visible UI label: {label}')
+
+    def saved_model_card(self, profile):
+        # Only the saved catalog renders this action; the editor's same-name
+        # EditText is not acknowledgement that asynchronous persistence completed.
+        description = self.labels['ai_models_edit_named'].replace('%1$s', profile)
+        return self.find(description, description_only=True)
 
     def click(self, resource, **kwargs):
         return self.find(self.labels.get(resource, resource), click=True, **kwargs)
@@ -174,11 +181,16 @@ def run(args):
         device.text('ai_endpoint', 'https://example.invalid/v1', scroll=True)
         device.text('ai_model', 'beta-smoke', scroll=True)
         device.click('editor_save')
-        device.find(profile)
+        report['stage'] = 'waiting-for-model-catalog-save-acknowledgement'
+        device.saved_model_card(profile)
+        report['stage'] = 'model-saved-card-visible-before-restart'
+        device.shot('models-saved-before-restart')
         device.restart()
+        report['stage'] = 'model-restart-completed'
         device.click('nav_settings')
         device.click('ai_settings', scroll=True)
-        device.find(profile)
+        device.saved_model_card(profile)
+        report['stage'] = 'model-saved-card-visible-after-restart'
         report['checks'].append('model-configuration-retained-after-real-force-stop')
         device.shot('models-night')
         device.shell('cmd', 'uimode', 'night', 'no')

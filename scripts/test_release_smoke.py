@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 import release_smoke
@@ -42,6 +43,30 @@ class SmokeSafetyTest(unittest.TestCase):
                 release_smoke.run(self.args)
             device.return_value.adb.assert_not_called()
             device.return_value.shot.assert_not_called()
+
+    def test_saved_model_ack_ignores_editor_text_and_waits_for_catalog_action(self):
+        profile = 'beta-config-regression'
+        device = release_smoke.Device('emulator-5554', self.root)
+        description = device.labels['ai_models_edit_named'].replace('%1$s', profile)
+        editor = ET.Element('hierarchy')
+        ET.SubElement(editor, 'node', {'text': profile, 'class': 'android.widget.EditText',
+                                     'enabled': 'true', 'bounds': '[0,0][200,60]'})
+        # Even an ordinary text label matching the action description must not
+        # replace the catalog action's actual accessibility description.
+        ET.SubElement(editor, 'node', {'text': description, 'enabled': 'true', 'bounds': '[0,60][200,120]'})
+        catalog = ET.Element('hierarchy')
+        action = ET.SubElement(catalog, 'node', {'content-desc': description, 'clickable': 'true',
+                                               'enabled': 'true', 'bounds': '[0,0][200,60]'})
+        with patch.object(device, 'dump', side_effect=[editor, catalog]) as dump, \
+             patch.object(release_smoke.time, 'sleep') as pause:
+            self.assertIs(action, device.saved_model_card(profile))
+            self.assertEqual(2, dump.call_count)
+            pause.assert_called_once()
+        with patch.object(device, 'dump', return_value=editor), \
+             patch.object(release_smoke.time, 'monotonic', side_effect=[0, 0, 46]), \
+             patch.object(release_smoke.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'Expected visible UI label'):
+                device.saved_model_card(profile)
 
     def test_manifest_mismatch_prevents_any_device_access(self):
         self.args.comparison_apk = self.apk
