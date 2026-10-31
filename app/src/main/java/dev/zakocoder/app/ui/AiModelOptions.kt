@@ -15,6 +15,8 @@ import dev.zakocoder.app.ai.*
 
 /** Memory-only drafts. In particular replacement headers must never use rememberSaveable. */
 internal class ModelOptionsDraft(profile: AiProfile?) {
+    var systemPrompt by mutableStateOf(profile?.systemPrompt.orEmpty())
+    private var selectedModel = profile?.model.orEmpty().trim().lowercase(java.util.Locale.ROOT)
     var thinking by mutableStateOf(profile?.parameters?.thinking ?: AiThinking.Default)
     var effort by mutableStateOf(profile?.parameters?.reasoningEffort)
     var frequency by mutableStateOf(profile?.parameters?.frequencyPenalty?.toString().orEmpty())
@@ -27,6 +29,13 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
     var summaryChars by mutableStateOf((profile?.context?.summaryMaxChars ?: 6000).toString())
     var replaceHeaders by mutableStateOf(false)
     var headersText by mutableStateOf("")
+    /** Editing/choosing another model resets only its window; reopening the same model preserves overrides. */
+    fun modelChanged(model: String) {
+        val normalized = model.trim().lowercase(java.util.Locale.ROOT)
+        if (normalized == selectedModel) return
+        selectedModel = normalized
+        windowTokens = AiModelContextWindows.defaultTokens(model).toString()
+    }
     fun parameters(base: AiParameters) = base.copy(thinking = thinking, reasoningEffort = effort,
         frequencyPenalty = frequency.takeIf(String::isNotBlank)?.toDouble(), presencePenalty = presence.takeIf(String::isNotBlank)?.toDouble(), seed = seed.takeIf(String::isNotBlank)?.toInt())
     fun context() = AiContextOptions(legacyContextChars, automatic, threshold.toInt(), summaryChars.toInt(), windowTokens.toInt()).also { it.validate() }
@@ -38,10 +47,11 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
         require(pairs.map { it.first.lowercase(java.util.Locale.ROOT) }.distinct().size == pairs.size)
         pairs.toMap().also(AiRequestHeaders::validate)
     }
-    fun valid() = runCatching { parameters(AiParameters()).validate(); context(); headers() }.isSuccess
+    fun valid() = runCatching { parameters(AiParameters()).validate(); context(); headers(); AiSystemPrompt.normalize(systemPrompt) }.isSuccess
     fun dirty(profile: AiProfile?) = runCatching {
         parameters(AiParameters()) != (profile?.parameters ?: AiParameters()).copy(maxTokens = null, temperature = null, topP = null) ||
-            context() != (profile?.context ?: AiContextOptions()) || replaceHeaders
+            context() != (profile?.context ?: AiContextOptions()) || replaceHeaders ||
+            AiSystemPrompt.normalize(systemPrompt) != AiSystemPrompt.normalize(profile?.systemPrompt.orEmpty())
     }.getOrDefault(true)
 }
 

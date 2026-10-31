@@ -1,0 +1,14 @@
+<resources>
+    <string name="ai_provider_prompt_title">系统提示词</string>
+    <string name="ai_provider_prompt_field">自定义指令（选填）</string>
+    <string name="ai_provider_prompt_hint">为当前服务商配置补充语言、代码风格或工作习惯。留空使用默认编码规则；工具权限和审批仍按应用设置执行。</string>
+    <string name="ai_provider_prompt_privacy">随对话发送给当前服务，请求详情中可查看。请勿填写密钥或密码。</string>
+    <string name="ai_provider_prompt_count">%1$d / %2$d 字符</string>
+    <string name="ai_provider_prompt_too_long">提示词超过字符上限，请缩短后保存。</string>
+    <string name="ai_provider_context_label">上下文窗口</string>
+    <string name="ai_provider_context_invalid">待设置</string>
+    <string name="ai_provider_context_select">选择模型后自动匹配参考容量，可在高级选项中调整。</string>
+    <string name="ai_provider_context_recommended">已匹配当前模型的参考容量，可在高级选项中调整。服务商实际限制可能不同。</string>
+    <string name="ai_provider_context_custom">使用已保存或手动设置的容量。更换模型时会重新匹配参考值，可在高级选项中调整。</string>
+    <string name="ai_provider_context_unknown">暂无该型号的参考容量，新选模型默认 128K。请按服务商限制在高级选项中调整。</string>
+</resources>

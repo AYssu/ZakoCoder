@@ -30,6 +30,12 @@ Responses 使用 `store: false` 和完整本机历史，不依赖 `previous_resp
 - Anthropic 默认输出预算为 8192 Token；显式启用手动思考时预算为 `min(4096, max_tokens - 1)`，且至少 1024。此模式不与 temperature、top_p 或强制工具并用；探测在启用思考时使用自动工具选择，仍检查实际返回的探针调用。温度上限 1，不接受 seed 或两种 penalty；关闭思考不能同时指定 effort。支持的 effort 是否适用于所选模型由服务决定。
 - Gemini 映射原生 generationConfig，包含 seed 和两种 penalty；当前推理强度支持低／中／高，Max 不猜测映射。关闭思考使用原生 budget 0，模型不支持关闭时由服务明确拒绝。当前未启用增量 functionCall 参数选项，未知部分参数事件明确拒绝。
 
+## 模型上下文参考值
+
+上下文窗口预设和新选择模型的默认值共用本机已知模型表：DeepSeek Flash／V4 Pro 与 Gemini 4 Argon 为 1,000,000 Token，GPT 6.1 Sol／Terra、GPT 6 Astra／Luna 为 1,050,000 Token，Grok 4.7 为 500,000 Token。只匹配表中完整模型 ID，允许大小写、首尾空白和 `provider/model` 路由前缀；未知子型号、日期后缀或未来版本不会沿用相似名字的数值，未知模型默认 128,000 Token。
+
+这些是配置参考，不是网关实际配额的探测结果；用户应按服务提供的限制调整。共享表不会迁移已保存配置，也不会覆盖用户手填的窗口值。
+
 ## 常用预设与边界
 
 提供 OpenAI Responses、OpenAI Chat、Anthropic Claude、Google Gemini、DeepSeek、通义、硅基流动、Kimi、智谱、OpenRouter、xAI 共 11 个入口。API Key 由用户自行配置，跨来源保留凭据仍受既有保护；预设不是认证配置，也不代表每个模型、网关、付费套餐都已实测。

@@ -11,10 +11,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ai.AiModelContextWindows
 import java.util.Locale
 
 internal data class ContextWindowPreset(val label: Int, val tokens: Int, val provider: Int, val modelId: String, val responsesRequired: Boolean = false)
@@ -22,14 +25,14 @@ internal data class ContextWindowPreset(val label: Int, val tokens: Int, val pro
 /** Recent primary-model reference windows, checked against official API docs on 2026-10-31.
  * Selecting a window never changes the selected model, endpoint or credentials. */
 internal val contextWindowPresets = listOf(
-    ContextWindowPreset(R.string.ai_context_preset_deepseek_flash, 1_000_000, R.string.ai_context_provider_deepseek, "deepseek-flash"),
-    ContextWindowPreset(R.string.ai_context_preset_deepseek_pro, 1_000_000, R.string.ai_context_provider_deepseek, "deepseek-v4-pro"),
-    ContextWindowPreset(R.string.ai_context_preset_sol, 1_050_000, R.string.ai_context_provider_openai, "gpt-6.1-sol", true),
-    ContextWindowPreset(R.string.ai_context_preset_terra, 1_050_000, R.string.ai_context_provider_openai, "gpt-6.1-terra", true),
-    ContextWindowPreset(R.string.ai_context_preset_astra, 1_050_000, R.string.ai_context_provider_openai, "gpt-6-astra"),
-    ContextWindowPreset(R.string.ai_context_preset_luna, 1_050_000, R.string.ai_context_provider_openai, "gpt-6-luna"),
-    ContextWindowPreset(R.string.ai_context_preset_gemini, 1_000_000, R.string.ai_context_provider_google, "gemini-4-argon"),
-    ContextWindowPreset(R.string.ai_context_preset_grok, 500_000, R.string.ai_context_provider_xai, "grok-4.7"),
+    ContextWindowPreset(R.string.ai_context_preset_deepseek_flash, AiModelContextWindows.defaultTokens("deepseek-flash"), R.string.ai_context_provider_deepseek, "deepseek-flash"),
+    ContextWindowPreset(R.string.ai_context_preset_deepseek_pro, AiModelContextWindows.defaultTokens("deepseek-v4-pro"), R.string.ai_context_provider_deepseek, "deepseek-v4-pro"),
+    ContextWindowPreset(R.string.ai_context_preset_sol, AiModelContextWindows.defaultTokens("gpt-6.1-sol"), R.string.ai_context_provider_openai, "gpt-6.1-sol", true),
+    ContextWindowPreset(R.string.ai_context_preset_terra, AiModelContextWindows.defaultTokens("gpt-6.1-terra"), R.string.ai_context_provider_openai, "gpt-6.1-terra", true),
+    ContextWindowPreset(R.string.ai_context_preset_astra, AiModelContextWindows.defaultTokens("gpt-6-astra"), R.string.ai_context_provider_openai, "gpt-6-astra"),
+    ContextWindowPreset(R.string.ai_context_preset_luna, AiModelContextWindows.defaultTokens("gpt-6-luna"), R.string.ai_context_provider_openai, "gpt-6-luna"),
+    ContextWindowPreset(R.string.ai_context_preset_gemini, AiModelContextWindows.defaultTokens("gemini-4-argon"), R.string.ai_context_provider_google, "gemini-4-argon"),
+    ContextWindowPreset(R.string.ai_context_preset_grok, AiModelContextWindows.defaultTokens("grok-4.7"), R.string.ai_context_provider_xai, "grok-4.7"),
 )
 
 internal fun tokenWindowLabel(tokens: Long): String {
@@ -56,7 +59,8 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
                 onClick = { draft.windowTokens = tokens.toString(); changed() }, label = { Text(tokenWindowLabel(tokens.toLong())) })
         }
     }
-    OutlinedTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth(),
+    val windowDescription = stringResource(R.string.ai_options_context_tokens)
+    OutlinedTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth().semantics { contentDescription = windowDescription },
         enabled = editable, singleLine = true, label = { Text(stringResource(R.string.ai_options_context_tokens)) },
         supportingText = { Text(stringResource(R.string.ai_context_window_range)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))

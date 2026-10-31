@@ -7,9 +7,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 /** Test-only warm-up for devices that block an app's initial background Activity launch. */
 internal fun warmDeviceActivity() {
     check(Looper.myLooper() != Looper.getMainLooper())
-    val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    val automation = instrumentation.uiAutomation
     ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(
-        "am start -W -n dev.zakocoder.app/.MainActivity"
+        "am start -W -n ${instrumentation.targetContext.packageName}/dev.zakocoder.app.MainActivity"
     )).use { stream ->
         val buffer = ByteArray(4096)
         while (stream.read(buffer) >= 0) {
