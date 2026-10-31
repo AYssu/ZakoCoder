@@ -75,6 +75,19 @@ APK 的 `assets/licenses/` 保留 PRoot COPYING、GPL v3、talloc LGPL v3 和 sh
 | zipalign | `e8856fb24b10095eb6e940c577ce96d89ddbfc45aa0f7eeaef1597ef68f11a12` |
 | split-select | `fb7f0c3c87dbd4243d7e1277ba64ded2399389244058b6a4c969cc615360766c` |
 
+## 可选 Flutter 开发工具包
+
+用户显式安装后在设备 Ubuntu 中下载，不随 ZakoCoder APK 分发 Flutter SDK、Dart SDK、引擎、QEMU 或 guest 运行库：
+
+- Flutter **3.47.9**：官方仓库 `https://github.com/flutter/flutter`，固定提交 `c197ca5199e9ee5661e865596c9c07294dfab51c`。安装以 Git tag 获取并核对完整 HEAD；引擎版本固定 `89c39edfdfae2949f6806e4a315c0c08522238b7`。Flutter 自有代码采用 BSD-3-Clause，下载后的原始 `LICENSE`、版权及附属组件声明保留。
+- Dart SDK **3.13.7** 与匹配引擎由上述固定 Flutter SDK 的官方下载逻辑通过 HTTPS 获取；对应 Dart 源码提交由同一 Flutter 源码 `DEPS` 固定为 `416e33b0ffaef062a60ec966bb8c82ed2b83f128`，来源 `https://github.com/dart-lang/sdk`。Dart 自有代码 BSD-3-Clause，SDK／引擎各自附属库按原分发许可证保留。没有把 Flutter 或引擎整体宣称为只有一种许可；官方制品不宣称为本项目自编译。
+- 独立 QEMU **9.2.1+ds-1ubuntu5.2**：Ubuntu ARM64 `qemu-user` 包，来源 `https://ports.ubuntu.com/ubuntu-ports/pool/universe/q/qemu/qemu-user_9.2.1+ds-1ubuntu5.2_arm64.deb`，SHA-256 `bb3ff9cb31b508bf6ce1b3f6bb4afe2b9a4d20a625a5d102ea3d78d753e5d4d0`。只提取未修改的静态 `qemu-x86_64` 到 Flutter SDK 的 `.zakocoder/qemu/`，不安装该发行版的系统包、不升级 Ubuntu 或替换系统 QEMU。二进制 SHA-256 为 `90458b484b67436a47c480fbfaad909cda316020dfb514e3ee40726521605d38`。
+- QEMU 对应源码及 Ubuntu 补丁：`https://archive.ubuntu.com/ubuntu/pool/main/q/qemu/qemu_9.2.1+ds-1ubuntu5.2.dsc`，上游源码 `qemu_9.2.1+ds.orig.tar.xz` 的 SHA-256 为 `3d7e2940fee4ebc21ed1a39667050226aa2292f885115ebdd12c8e390071bdc5`，打包补丁 `qemu_9.2.1+ds-1ubuntu5.2.debian.tar.xz` 的 SHA-256 为 `c41a0537879a711ae0cc0224160ca33c650231a266bae68da51ed8e60868af66`，三者均在该目录。QEMU 主要采用 GPL-2.0-or-later，组件采用各自许可；包内完整 `copyright` 原样保留在二进制旁，`SOURCE.txt` 记录下载、对应源码与摘要，不将独立下载当作免除许可义务。
+- `libc6-amd64-cross` 来自设备配置的 Ubuntu 签名 APT 仓库，版本随仓库更新，不宣称固定可复现；glibc 主要采用 LGPL-2.1-or-later。准确包版本、版权、例外与来源以 guest `dpkg-query`、`/usr/share/doc` 和 APT source 元数据为准。QEMU 和 cross glibc 仅供 guest 中 Android arm64 AOT 工具运行，未链接到 ZakoCoder APK；如另行分发这些包、环境镜像或修改后的组合，应同时核对对应源码、通知及再分发义务。
+- 安装脚本、Android arm64 profile／release 的 `gen_snapshot` QEMU 启动包装、Dart 基础词法规则和 Flutter 应用模板为 ZakoCoder 自有实现；不修改或替换上游 x86_64 二进制，保留原始工具与许可。平台目录由用户执行 Flutter 自身的 `create` 命令生成，平台代码适用其上游声明。
+
+安装方式、额外 Android SDK 许可、实际验收和目标限制见 [Flutter 开发](docs/FLUTTER.md)。固定框架与引擎提交不等于锁定整个 pub／APT／Maven 依赖树；安装与工程构建仍需网络。
+
 ## Maven、构建与其他依赖
 
 精确版本统一见 `gradle/libs.versions.toml`。

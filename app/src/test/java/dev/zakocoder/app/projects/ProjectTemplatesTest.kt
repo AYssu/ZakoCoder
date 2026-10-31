@@ -15,7 +15,7 @@ class ProjectTemplatesTest {
     }
 
     @Test fun entriesAreOfferedInTheDocumentedOrder() {
-        assertEquals(listOf(ProjectTemplate.Web, ProjectTemplate.Node, ProjectTemplate.Python,
+        assertEquals(listOf(ProjectTemplate.Web, ProjectTemplate.Node, ProjectTemplate.Python, ProjectTemplate.Flutter,
             ProjectTemplate.AndroidJava, ProjectTemplate.AndroidKotlin, ProjectTemplate.AndroidNative,
             ProjectTemplate.Cpp, ProjectTemplate.Go, ProjectTemplate.Rust, ProjectTemplate.Other),
             ProjectTemplates.entries)

@@ -198,7 +198,6 @@
     <string name="bundle_jdk_description">Java 运行环境、javac 编译器</string>
     <string name="bundle_cpp">C / C++</string>
     <string name="bundle_cpp_description">C/C++ 编译器、Make、CMake</string>
-    <string name="bundle_manual_description">需自行准备兼容工具并配置 PATH</string>
     <string name="bundle_manual">手动配置</string>
     <string name="bundle_unknown">未检测</string>
     <string name="bundle_ready">已就绪</string>

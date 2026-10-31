@@ -21,7 +21,7 @@ object ToolBundles {
         ToolBundle("cpp", R.string.bundle_cpp, R.string.bundle_cpp_description, setOf("cc", "make", "cmake")),
         ToolBundle("android", R.string.kind_android, R.string.bundle_android_description, setOf("android-sdk", "java", "javac")),
         ToolBundle("android-ndk", R.string.bundle_android_ndk, R.string.bundle_android_ndk_description, setOf("android-ndk")),
-        ToolBundle("flutter", R.string.kind_flutter, R.string.bundle_manual_description, setOf("flutter"), manual = true),
+        ToolBundle("flutter", R.string.kind_flutter, R.string.bundle_flutter_description, setOf("flutter")),
     )
     fun status(bundle: ToolBundle, checks: List<ToolCheck>): BundleStatus {
         val matches = checks.filter { it.id in bundle.tools }

@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="bundle_flutter_description">Flutter / Dart · Android 与 Web 开发</string>
+    <string name="flutter_toolchain_abi_unsupported">Flutter 工具包当前仅支持 ARM64 Ubuntu 运行环境。</string>
+    <string name="flutter_toolchain_storage_required">安装 Flutter 至少需要 8 GiB 可用空间；项目、依赖和 Android 工具包另占空间。</string>
+    <string name="flutter_install_details">安装固定版本 Flutter、Dart 与 Android/Web 引擎缓存，下载及解包可能需要较长时间。Android APK 还需单独安装 Android 和 NDK 工具包并接受 SDK 许可证。ARM64 APK 的 AOT 编译使用 QEMU，速度取决于设备。</string>
+    <string name="flutter_build_help" tools:ignore="TypographyDashes">在项目终端运行 flutter pub get、flutter analyze 和 flutter test。Web 使用 flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8080，再打开网页预览。APK 构建需先安装 Android 和 NDK 工具包。</string>
+</resources>

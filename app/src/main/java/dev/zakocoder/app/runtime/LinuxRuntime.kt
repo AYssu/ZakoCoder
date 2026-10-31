@@ -49,6 +49,10 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
     fun requireAndroidToolchainSupport() {
         require(architecture == RuntimeArchitecture.Arm64) { context.getString(R.string.android_toolchain_abi_unsupported) }
     }
+
+    fun requireFlutterToolchainSupport() {
+        require(architecture == RuntimeArchitecture.Arm64) { context.getString(R.string.flutter_toolchain_abi_unsupported) }
+    }
     private val nativeDirectory get() = context.applicationInfo.nativeLibraryDir
     val imageVersion: String get() = image.getString("version")
 
@@ -267,7 +271,10 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         val ndkMarker = File(target, AndroidNdkToolchain.MARKER.removePrefix("/"))
         val ndkReady = androidReady && ndkMarker.isFile && ndkMarker.length() == AndroidNdkToolchain.VERSION.length + 1L &&
             ndkMarker.readText().trim() == AndroidNdkToolchain.VERSION
-        val path = listOf(settings.additionalPath, if (androidReady) AndroidToolchain.PATH else "",
+        val flutterMarker = File(target, FlutterToolchain.MARKER.removePrefix("/"))
+        val flutterReady = architecture == RuntimeArchitecture.Arm64 && flutterMarker.isFile &&
+            flutterMarker.length() == FlutterToolchain.VERSION.length + 1L && flutterMarker.readText().trim() == FlutterToolchain.VERSION
+        val path = listOf(settings.additionalPath, if (flutterReady) FlutterToolchain.PATH else "", if (androidReady) AndroidToolchain.PATH else "",
             if (ndkReady) AndroidNdkToolchain.PATH else "", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             .filter(String::isNotEmpty).joinToString(":")
         // HTTP exports http_proxy/https_proxy; SOCKS5 exports only ALL_PROXY (never a fake http_proxy).
@@ -283,6 +290,7 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             "/usr/bin/env", "-i", "HOME=/root", "TERM=xterm-256color", "LANG=C.UTF-8",
             "PATH=$path", "TMPDIR=/tmp", "DEBIAN_FRONTEND=noninteractive",
         )
+        if (flutterReady) args += FlutterToolchain.environment
         if (projectId != null) {
             val source = projectDirectory?.invoke(projectId) ?: File(workspaces, projectId).also {
                 require(it.isDirectory && !Files.isSymbolicLink(it.toPath()) &&

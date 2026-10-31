@@ -4,7 +4,7 @@ import java.util.Locale
 
 /** Filename and optional first-line detection only; never executes an interpreter. */
 object EditorLanguageResolver {
-    val bundled = listOf("kotlin", "java", "javascript", "typescript", "python", "shell", "json", "c", "diff",
+    val bundled = listOf("kotlin", "dart", "java", "javascript", "typescript", "python", "shell", "json", "c", "diff",
         "batch", "markdown", "html", "css", "yaml", "toml", "xml", "sql", "go", "rust", "dockerfile", "makefile")
 
     fun resolve(path: String, firstLine: String = ""): String? {
@@ -17,6 +17,7 @@ object EditorLanguageResolver {
         val detected = when (name.substringAfterLast('.', "")) {
             "kt", "kts" -> "kotlin"
             "java" -> "java"
+            "dart" -> "dart"
             "js", "jsx", "mjs", "cjs" -> "javascript"
             "ts", "tsx", "mts", "cts" -> "typescript"
             "py", "pyw", "pyi" -> "python"

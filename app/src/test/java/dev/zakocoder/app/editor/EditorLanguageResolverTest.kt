@@ -6,7 +6,7 @@ import java.util.Locale
 
 class EditorLanguageResolverTest {
     @Test fun commonExtensionsSelectBundledLexers() {
-        val examples = mapOf("src/Main.kt" to "kotlin", "build.gradle.kts" to "kotlin", "Main.java" to "java",
+        val examples = mapOf("src/Main.kt" to "kotlin", "build.gradle.kts" to "kotlin", "Main.java" to "java", "lib/main.DART" to "dart",
             "index.jsx" to "javascript", "main.tsx" to "typescript", "types.pyi" to "python",
             "start.sh" to "shell", "setup.fish" to "shell", "build.BAT" to "batch", "launch.cmd" to "batch",
             "README.md" to "markdown", "notes.markdown" to "markdown", "index.html" to "html",

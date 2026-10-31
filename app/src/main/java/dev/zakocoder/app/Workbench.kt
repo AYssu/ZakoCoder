@@ -516,6 +516,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     fun installToolBundles(ids: Set<String>, acceptAndroidLicense: Boolean = false) = run(R.string.install_selected_bundles, foreground = true, recheckTools = true) {
         check(mutable.value.installed)
         if (ids.any { it == "android" || it == "android-ndk" }) runtime.requireAndroidToolchainSupport()
+        if ("flutter" in ids) {
+            runtime.requireFlutterToolchainSupport()
+            require(withContext(Dispatchers.IO) { runtime.freeBytes() } >= 8L * 1024 * 1024 * 1024) {
+                context.getString(R.string.flutter_toolchain_storage_required)
+            }
+        }
         require("android" !in ids || acceptAndroidLicense) { context.getString(R.string.android_sdk_license_required) }
         if ("android" in ids) require(withContext(Dispatchers.IO) {
             AndroidToolchain.supportsProxy(settingsRepository.proxyForRuntime())
@@ -543,6 +549,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         }
         if ("android" in ids) {
             val script = withContext(Dispatchers.IO) { context.assets.open("android-build/install.sh").bufferedReader().use { it.readText() } }
+            val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
+            append(context.getString(R.string.command_exit, result.exitCode))
+            check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+        }
+        if ("flutter" in ids) {
+            val script = withContext(Dispatchers.IO) { context.assets.open("flutter-build/install.sh").bufferedReader().use { it.readText() } }
             val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }

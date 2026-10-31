@@ -137,6 +137,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
         if (state.project == null && ToolBundles.status(bundle, checks) == BundleStatus.Ready) Text(stringResource(R.string.select_project_first), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
         if (bundle.id == "android") Text(stringResource(R.string.android_build_help), style = MaterialTheme.typography.bodySmall)
         if (bundle.id == "android-ndk") Text(stringResource(R.string.android_ndk_build_help), style = MaterialTheme.typography.bodySmall)
+        if (bundle.id == "flutter") Text(stringResource(R.string.flutter_build_help), style = MaterialTheme.typography.bodySmall)
         if (bundle.manual) Text(stringResource(R.string.manual_toolchain), style = MaterialTheme.typography.bodySmall)
         else if (ToolBundles.status(bundle, checks) != BundleStatus.Ready) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
             managing = true; onSelected((selected + bundle.id).distinct()); detail = null
@@ -190,6 +191,7 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
                 Text(stringResource(R.string.android_ndk_install_details), style = MaterialTheme.typography.bodySmall)
                 if (!canInstallNdk) Text(stringResource(R.string.android_ndk_sdk_required), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            if ("flutter" in ids) Text(stringResource(R.string.flutter_install_details), style = MaterialTheme.typography.bodySmall)
             if ("android" in ids) {
                 Text(stringResource(R.string.android_install_details), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = {
@@ -206,7 +208,7 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
                     Text(stringResource(R.string.android_sdk_license), style = MaterialTheme.typography.bodySmall)
                 }
             }
-            WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids, androidLicense) }, enabled = !state.busy && !state.checkingTools && (packages.isNotEmpty() || ids.any { it == "android" || it == "android-ndk" }) && canInstallNdk && ("android" !in ids || androidLicense), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
+            WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids, androidLicense) }, enabled = !state.busy && !state.checkingTools && (packages.isNotEmpty() || ids.any { it == "android" || it == "android-ndk" || it == "flutter" }) && canInstallNdk && ("android" !in ids || androidLicense), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
             OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }

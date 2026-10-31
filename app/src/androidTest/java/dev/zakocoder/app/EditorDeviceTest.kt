@@ -27,6 +27,43 @@ class EditorDeviceTest {
             flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
     }
+    @Test(timeout = 120000) fun flutterTemplateCanBeCreatedOpenedEditedAndSaved(): Unit = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            await { !workbench.state.value.loading && !workbench.state.value.busy }
+            val previous = workbench.state.value.selectedId
+            var owned: String? = null
+            try {
+                val name = "Flutter review ${java.util.UUID.randomUUID().toString().take(8)}"
+                click("添加项目"); click("创建空项目")
+                setField(0, name)
+                click("Flutter")
+                scrollFileIntoView("创建"); click("创建")
+                await { !workbench.state.value.busy && workbench.state.value.project?.name == name }
+                val project = requireNotNull(workbench.state.value.project); owned = project.id
+                val root = withContext(Dispatchers.IO) { workbench.projects.directory(project.id) }
+                val source = File(root, "lib/main.dart")
+                val original = withContext(Dispatchers.IO) {
+                    assertTrue(File(root, "pubspec.yaml").readText().contains("sdk: flutter"))
+                    source.readText()
+                }
+                click("浏览文件"); click("lib"); click("main.dart")
+                await { editor(scenario) != null && !workbench.editor.state.value.loading }
+                input(scenario, "\n// Flutter editor acceptance\n")
+                await { workbench.editor.state.value.dirty }
+                instrumentation.runOnMainSync { editor(scenario)?.hideSoftInput() }
+                click("保存")
+                await { !workbench.editor.state.value.saving && !workbench.editor.state.value.dirty }
+                assertEquals(original + "\n// Flutter editor acceptance\n", withContext(Dispatchers.IO) { source.readText() })
+                screenshot("flutter-created-edited-saved")
+            } finally {
+                withContext(NonCancellable) {
+                    instrumentation.runOnMainSync { workbench.editor.close() }
+                    owned?.let { id -> instrumentation.runOnMainSync { workbench.removeProject(id) }; await { !workbench.state.value.busy } }
+                    previous?.let { id -> instrumentation.runOnMainSync { workbench.select(id) }; await { !workbench.state.value.busy } }
+                }
+            }
+        }
+    }
     @Test(timeout = 90000) fun visibleImeAndStoppedActivityRetainUnsavedBuffer(): Unit = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             await { !workbench.state.value.loading && !workbench.state.value.busy }

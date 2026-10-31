@@ -33,13 +33,19 @@ PRoot／loader 已使用固定 NDK 自编译，完整输入与测试见[独立�
 | 交互 Shell | 可选 Zsh，默认 Bash |
 | Android | JDK 17、SDK Platform 36、Build Tools 36.0.0、Gradle 8.13 与 Linux ARM64 AAPT2／AIDL／zipalign／split-select；用户确认 SDK 许可后安装 |
 | Android NDK | 可选社区 GNU/Linux ARM64 NDK r28c、APT CMake、Ninja、Python；要求 Android 工具包已安装或同批安装 |
-| Flutter | 仅检测，兼容 SDK 和额外工具链由使用者安装 |
+| Flutter | 可选固定 Flutter 3.47.9／Dart 3.13.7，官方框架与引擎；ARM64，额外至少 8 GiB 可用空间；Android APK 另需 Android 工具包，见 [Flutter 开发](FLUTTER.md) |
 
 工具包独立于项目存在；类型识别只推荐，不隐式勾选或安装。包名来自固定白名单，多选后展示去重安装清单，确认后执行 APT；保留签名验证，不跳过校验。探针真实执行版本命令，分别表示缺失、失败及就绪。运行配置和安装改变后刷新，手动修改环境后可主动重检。发行版版本未必满足项目要求，当前无任意包市场、卸载或通用版本管理。
 
 项目识别为有界扫描，不执行清单。依赖计划检查根清单，支持 npm ci/install、独立 `.venv` 与 pip、go mod download、cargo fetch、Gradle wrapper dependencies；在没有 Ubuntu 时也可识别计划，执行仍要求环境就绪并确认 cwd 和脚本。项目或依赖安装脚本可能有副作用，不能当作纯下载。嵌套工程、Maven 和 C/C++ 系统依赖需明确手动处理。
 
 PRoot 硬链接模拟使用持久 `rootfs/.zakocoder-links`，统一将规范化路径传入 `PROOT_L2S_DIR`；新 PTY 和命令共用准备逻辑。该目录不随下载缓存清理，不自动修复历史断链，也不提供额外隔离。
+
+## Flutter 开发环境
+
+Flutter 是独立可选工具包，安装到 guest `/opt/zakocoder/flutter`；需先安装 Ubuntu，并预留至少 8 GiB 可用空间。安装固定官方 tag，核对 Git HEAD 与引擎版本，下载官方 Dart／引擎制品，安装成功后才标记就绪。安装和 APT 操作需要用户确认；首次下载及后续项目依赖会访问 GitHub、Flutter 存储、pub 和 Maven 等上游。新终端与项目命令获得工具路径，已打开的终端需要重新创建。
+
+手机 ARM64 运行官方 ARM64 Dart；Android arm64 profile／release AOT 中仍需运行的 x86_64 `gen_snapshot` 由受限包装器调用独立固定 QEMU 9.2.1 与 Ubuntu APT `libc6-amd64-cross`。包装只覆盖这两个目标，不代表整个 x86_64 SDK、其他 ABI 或任意 Linux 工具均可执行。独立 QEMU 不升级或替换系统包。Android SDK 与 NDK 需要另行安装，SDK 许可需明确确认；其他插件需要的 CMake 或特定工具版本也需另行准备。详细操作、来源和实际验证状态见 [Flutter 开发](FLUTTER.md) 与 [第三方说明](../THIRD_PARTY.md)。
 
 ## Android Debug 构建
 
