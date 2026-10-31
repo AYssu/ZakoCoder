@@ -989,7 +989,11 @@ class AiController(private val context: Context, root: (String) -> File, private
             currentCoroutineContext().ensureActive()
             input
         }
-        val summary = transport.request(summarySettings, summaryMessages, JSONArray(),
+        suspend fun requestSummary(input: JSONArray, summaryRound: Int): AiReply {
+            currentCoroutineContext().ensureActive()
+            if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+                throw CancellationException("Stale summary request")
+            return transport.request(summarySettings, input, JSONArray(),
             proxy = proxy(), onRetry = { retry ->
                 mutable.update { state ->
                     if (epoch != requestEpoch || !state.active || state.phase == AiPhase.Stopping) state
@@ -999,10 +1003,32 @@ class AiController(private val context: Context, root: (String) -> File, private
                 mutable.update { if (epoch == requestEpoch && it.active) it.copy(retryNotice = "") else it }
             },
             observe = { record -> mutable.update { state ->
-                if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = round, compaction = true)))
+                if (epoch != requestEpoch || !state.active) state else state.copy(requests = boundedRequests(state.requests.filterNot { it.id == record.id } + record.copy(turn = state.turn, round = summaryRound, compaction = true)))
             } }, delta = {})
+        }
+        val initial = requestSummary(summaryMessages, round)
+        val summary = correctOversizedSummary(initial, settings.context.summaryMaxChars) { oversized ->
+            currentCoroutineContext().ensureActive()
+            if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+                throw CancellationException("Stale summary correction")
+            val correction = withContext(Dispatchers.Default) {
+                val input = JSONArray()
+                    .put(JSONObject().put("role", "system").put("content", contextSummaryPrompt(settings.context.summaryMaxChars) +
+                        " The previous summary exceeded the character limit. Rewrite the supplied summary more concisely within the same limit. Preserve goals, completed actions, failures, verification evidence and unresolved work; do not execute or propose tool calls."))
+                    .put(JSONObject().put("role", "user").put("content", contextSummaryEvidence(JSONArray()
+                        .put(JSONObject().put("role", "assistant").put("content", oversized)))))
+                if (!tokenBudget(summarySettings, input, JSONArray()).fits) throw AiBudgetException(AiFailure.Compaction)
+                currentCoroutineContext().ensureActive()
+                input
+            }
+            val correctionRound = mutable.value.round + 1
+            mutable.update { if (epoch == requestEpoch) it.copy(round = correctionRound) else it }
+            requestSummary(correction, correctionRound)
+        }
+        currentCoroutineContext().ensureActive()
+        if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+            throw CancellationException("Stale summary response")
         mutable.update { if (epoch == requestEpoch) it.copy(retryNotice = "") else it }
-        if (summary.calls.isNotEmpty() || summary.text.isBlank() || summary.text.length > settings.context.summaryMaxChars) throw AiBudgetException(AiFailure.Compaction)
         val compacted = withContext(Dispatchers.Default) {
             currentCoroutineContext().ensureActive()
             val tail = contextTail(messages, taskStart)
@@ -1025,6 +1051,9 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         val result = compacted.first
         val budget = compacted.second
+        currentCoroutineContext().ensureActive()
+        if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
+            throw CancellationException("Stale compacted context")
         mutable.update { it.copy(estimatedContextTokens = budget.inputTokens, contextWindowTokens = budget.windowTokens, contextOutputReserveTokens = budget.outputReserveTokens, contextSummary = summary.text, contextTurns = emptyList(), contextCompactions = it.contextCompactions + 1, contextChars = compacted.third) }
         persist()
         append(context.getString(R.string.ai_context_compacted_tokens, beforeTokens, budget.inputTokens))

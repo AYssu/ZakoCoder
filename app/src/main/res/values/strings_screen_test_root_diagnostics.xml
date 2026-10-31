@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_test_root_command_exit">屏幕测试命令失败（阶段：%1$s，退出码：%2$d）；请重新观察实际状态。</string>
+    <string name="screen_test_root_diagnostic">屏幕测试读取失败（阶段：%1$s）；请重新观察实际状态。</string>
+</resources>

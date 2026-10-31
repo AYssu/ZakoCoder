@@ -6,6 +6,12 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 
 class RootScreenTestSafetyTest {
+    @Test fun systemTimeoutExitsAreNotReportedAsUiRejection() {
+        assertTrue(RootScreenTestBackend.isTimeoutExit(124))
+        assertFalse(RootScreenTestBackend.isTimeoutExit(137))
+        listOf(0, 1, 2, 126, 127, 143).forEach { assertFalse(RootScreenTestBackend.isTimeoutExit(it)) }
+    }
+
     @Test fun modelTextRemainsOneLiteralShellArgumentAcrossQuotesAndSubstitutionSyntax() {
         listOf("", "hello world", "'; printf INJECTED; #", "$(printf injected)", "`printf injected`", "a\nb", "a\\b", "100% s", "中文").forEach { text ->
             val child = ProcessBuilder("/bin/sh", "-c", "printf '%s' " + RootScreenTestBackend.shellQuote(text)).start()
