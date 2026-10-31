@@ -6,5 +6,14 @@
   "artifacts": {
     "libzakocoder_proot.so": "e7daf3d5389253950284bcb18b8fb0e5f0f38bca15bd8bfa4d275e3a1420e7ef",
     "libzakocoder_loader.so": "32ac7e2a23ad4170e92c4578f642c65b19fad3830bd0a1c6f37a60e880cc97e7"
+  },
+  "architectures": {
+    "x86_64": {
+      "abi": "x86_64",
+      "artifacts": {
+        "libzakocoder_proot.so": "5e0b2b085965661adbc0f701005ca7d63fdcf9dcb79e603bc7fe84c82354d63a",
+        "libzakocoder_loader.so": "feab2863c28683ffa4e028976b8417d8dbb3c1e3d631c862f4097efdafcb5537"
+      }
+    }
   }
 }

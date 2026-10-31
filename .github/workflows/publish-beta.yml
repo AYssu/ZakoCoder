@@ -1,0 +1,301 @@
+name: Publish Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Beta version (MAJOR.MINOR.PATCH-beta.N)
+        required: true
+        default: 0.1.0-beta.1
+        type: string
+      version_code:
+        description: Android versionCode (strictly greater than every published build)
+        required: true
+        default: '1001'
+        type: string
+      target_ref:
+        description: main or a full commit SHA already merged into main
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: signed-beta-publication
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main' && github.repository == 'AYssu/ZakoCoder'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+      version: ${{ steps.resolve.outputs.version }}
+      version_code: ${{ steps.resolve.outputs.version_code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Validate immutable trusted target and unused Beta version
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA_VERSION: ${{ inputs.version }}
+          BETA_VERSION_CODE: ${{ inputs.version_code }}
+          TARGET_REF: ${{ inputs.target_ref }}
+        run: |
+          python3 scripts/beta_release.py resolve --target-ref "$TARGET_REF" \
+            --version "$BETA_VERSION" --version-code "$BETA_VERSION_CODE" \
+            --repository "$GITHUB_REPOSITORY" --github-output "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BETA_VERSION: ${{ needs.resolve.outputs.version }}
+      BETA_VERSION_CODE: ${{ needs.resolve.outputs.version_code }}
+      SOURCE_COMMIT: ${{ needs.resolve.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - name: Check repository, installers, unit tests and Release Lint; build multi-ABI Release QA
+        run: |
+          set -euo pipefail
+          python3 scripts/check_repository.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          ./gradlew :app:assembleRelease :app:lintRelease :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest \
+            -PbetaRelease=true -PbetaVersion="$BETA_VERSION" -PbetaVersionCode="$BETA_VERSION_CODE" \
+            -PcompatibilityAbis=arm64-v8a,x86_64 --stacktrace
+          mkdir -p out/candidate out/qa out/r8-symbols/multiabi out/runtime-evidence
+          cp app/build/outputs/apk/release/app-release-unsigned.apk out/qa-unsigned.apk
+          cp -R app/build/outputs/mapping/release/. out/r8-symbols/multiabi/
+      - name: Verify corresponding native sources, artifacts and runtime evidence
+        run: |
+          set -euo pipefail
+          python3 native-runtime/checks/verify.py > out/runtime-evidence/static-verification.txt
+          python3 -m unittest discover -s native-runtime/checks -p 'test_*.py' -v > out/runtime-evidence/regression-tests.txt 2>&1
+          python3 native-runtime/bundle_sources.py --output out/candidate/native-runtime-sources.tar.gz
+          rm out/candidate/native-runtime-sources.tar.gz.sha256
+          cp native-runtime/build/build-record.json native-runtime/artifacts.lock.json native-runtime/toolchain.lock.json native-runtime/VALIDATION.md out/runtime-evidence/
+          cp docs/ANDROID_COMPATIBILITY.md out/runtime-evidence/
+          tar -czf out/candidate/runtime-validation.tar.gz -C out/runtime-evidence .
+          cp LICENSE out/candidate/LICENSE.txt
+          cp THIRD_PARTY.md out/candidate/THIRD_PARTY.md
+          tar -czf out/candidate/licenses.tar.gz app/src/main/assets/licenses native-runtime/licenses LICENSE THIRD_PARTY.md
+      - name: Build public ARM64 Release from the same source and version
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleRelease -PbetaRelease=true -PbetaVersion="$BETA_VERSION" \
+            -PbetaVersionCode="$BETA_VERSION_CODE" -PcompatibilityAbis=arm64-v8a --stacktrace
+          cp app/build/outputs/apk/release/app-release-unsigned.apk out/arm64-unsigned.apk
+          mkdir -p out/r8-symbols/arm64-v8a
+          cp -R app/build/outputs/mapping/release/. out/r8-symbols/arm64-v8a/
+      - name: Sign both Release candidates with the configured key or existing CI Debug key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.ZAKOCODER_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ZAKOCODER_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ZAKOCODER_RELEASE_KEY_PASSWORD }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$RELEASE_KEYSTORE_BASE64$RELEASE_STORE_PASSWORD$RELEASE_KEY_ALIAS$RELEASE_KEY_PASSWORD" ]]; then
+            for name in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+              if [[ -z "${!name}" ]]; then
+                echo "::error::Incomplete release signing configuration: $name is missing; refusing Debug fallback."
+                exit 1
+              fi
+            done
+            key_base64="$RELEASE_KEYSTORE_BASE64"
+            export ACTIVE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" ACTIVE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+            key_alias="$RELEASE_KEY_ALIAS"
+            signing_kind=release
+          else
+            if [[ -z "$DEBUG_KEYSTORE_BASE64" ]]; then
+              echo '::error::Missing ZAKOCODER_DEBUG_KEYSTORE_BASE64; no signing key will be generated.'
+              exit 1
+            fi
+            key_base64="$DEBUG_KEYSTORE_BASE64"
+            export ACTIVE_STORE_PASSWORD=android ACTIVE_KEY_PASSWORD=android
+            key_alias=androiddebugkey
+            signing_kind=debug-reused-for-beta
+          fi
+          key_dir=$(mktemp -d "$RUNNER_TEMP/zako-beta-signing.XXXXXX")
+          trap 'rm -rf "$key_dir"' EXIT
+          umask 077
+          printf '%s' "$key_base64" | base64 --decode > "$key_dir/release.keystore"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          public_apk="out/candidate/ZakoCoder-$BETA_VERSION-arm64.apk"
+          qa_apk=out/qa/ZakoCoder-release-qa-multiabi.apk
+          zipalign="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          "$zipalign" -f -P 16 4 out/arm64-unsigned.apk "$key_dir/arm64-aligned.apk"
+          "$zipalign" -f -P 16 4 out/qa-unsigned.apk "$key_dir/qa-aligned.apk"
+          "$signer" sign --ks "$key_dir/release.keystore" --ks-key-alias "$key_alias" \
+            --ks-pass env:ACTIVE_STORE_PASSWORD --key-pass env:ACTIVE_KEY_PASSWORD \
+            --out "$public_apk" "$key_dir/arm64-aligned.apk"
+          "$signer" sign --ks "$key_dir/release.keystore" --ks-key-alias "$key_alias" \
+            --ks-pass env:ACTIVE_STORE_PASSWORD --key-pass env:ACTIVE_KEY_PASSWORD \
+            --out "$qa_apk" "$key_dir/qa-aligned.apk"
+          "$signer" verify "$public_apk"
+          "$signer" verify "$qa_apk"
+          "$zipalign" -c -P 16 4 "$public_apk"
+          "$zipalign" -c -P 16 4 "$qa_apk"
+          certificate=$("$signer" verify --print-certs "$public_apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          qa_certificate=$("$signer" verify --print-certs "$qa_apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          [[ -n "$certificate" && "$certificate" == "$qa_certificate" ]]
+          rm -f "$public_apk.idsig" "$qa_apk.idsig"
+          python3 scripts/beta_release.py metadata --directory out/candidate --version "$BETA_VERSION" \
+            --version-code "$BETA_VERSION_CODE" --commit "$SOURCE_COMMIT" --certificate "$certificate" --signing-key-kind "$signing_kind" \
+            --run-url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+      - name: Preserve minifier mapping separately (not a Release asset)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: beta-r8-symbols-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/r8-symbols/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload signed candidates for validation
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: beta-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/candidate/
+            out/qa/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  device-validation:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BETA_VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Restore signed candidates from this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name "beta-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out
+      - name: Start dedicated official API 35 emulator
+        run: |
+          set -euo pipefail
+          sdkmanager 'emulator' 'build-tools;36.0.0' 'system-images;android-35;google_apis;x86_64'
+          printf 'no\n' | avdmanager create avd --force --name beta-release --package 'system-images;android-35;google_apis;x86_64'
+          sudo chmod a+rw /dev/kvm
+          mkdir -p out/device-validation
+          "$ANDROID_HOME/emulator/emulator" -avd beta-release -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -memory 2048 > out/device-validation/emulator.log 2>&1 &
+          timeout 180 adb -s emulator-5554 wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [[ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then
+              booted=true
+              break
+            fi
+            sleep 2
+          done
+          [[ "$booted" == true ]]
+          adb -s emulator-5554 shell input keyevent 82
+      - name: Verify signed minified Release in real UI and compare with ARM64 public APK
+        run: |
+          python3 scripts/release_smoke.py --serial emulator-5554 \
+            --apk out/qa/ZakoCoder-release-qa-multiabi.apk --comparison-apk "out/candidate/ZakoCoder-$BETA_VERSION-arm64.apk" \
+            --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --output out/device-validation
+      - name: Collect diagnostics and stop dedicated emulator
+        if: always()
+        run: |
+          mkdir -p out/device-validation
+          adb -s emulator-5554 logcat -d > out/device-validation/logcat.txt 2>&1 || true
+          adb -s emulator-5554 emu kill || true
+      - name: Preserve actual smoke evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: beta-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/device-validation/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: [resolve, build, device-validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Restore candidates and finalize internal validation records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --name "beta-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out
+          gh run download "$GITHUB_RUN_ID" --name "beta-validation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" --dir out/device-validation
+          python3 scripts/beta_release.py finalize --directory out/candidate \
+            --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk --report out/device-validation/report.json
+      - name: Preserve source and validation records in Actions
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: beta-release-records-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/candidate/BUILD.json
+            out/candidate/BUILD.txt
+            out/candidate/native-runtime-sources.tar.gz
+            out/candidate/runtime-validation.tar.gz
+            out/candidate/release-validation.tar.gz
+            out/candidate/licenses.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish only the APK and its checksum as pre-release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/beta_release.py publish --repository "$GITHUB_REPOSITORY" \
+            --directory out/candidate --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk \
+            --report out/device-validation/report.json

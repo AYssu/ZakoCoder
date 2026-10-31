@@ -8,6 +8,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
 import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.*
 import org.junit.Assert.*
@@ -22,6 +25,68 @@ class EditorDeviceTest {
     @Before fun windows() {
         instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply {
             flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+    }
+    @Test(timeout = 90000) fun visibleImeAndStoppedActivityRetainUnsavedBuffer(): Unit = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            await { !workbench.state.value.loading && !workbench.state.value.busy }
+            val previous = workbench.state.value.selectedId
+            var owned: String? = null
+            try {
+                val name = "editor-lifecycle-${java.util.UUID.randomUUID()}"
+                instrumentation.runOnMainSync { workbench.create(name) }
+                await { !workbench.state.value.busy && workbench.state.value.project?.name == name }
+                val project = requireNotNull(workbench.state.value.project); owned = project.id
+                val source = withContext(Dispatchers.IO) {
+                    File(workbench.projects.directory(project.id), "main.py").apply { writeText("print('saved source')\n") }
+                }
+                click("浏览文件"); click("main.py")
+                await { editor(scenario) != null && !workbench.editor.state.value.loading }
+                val view = requireNotNull(editor(scenario))
+                await("editor attached and focused application window before keyboard touch") {
+                    var ready = false
+                    instrumentation.runOnMainSync { ready = ViewCompat.isAttachedToWindow(view) && view.hasWindowFocus() && view.width > 0 && view.height > 0 }
+                    ready
+                }
+                tapEditorWithRealInput(view)
+                instrumentation.waitForIdleSync()
+                instrumentation.runOnMainSync {
+                    view.requestFocus()
+                    view.showSoftInput()
+                    view.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                        .showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+                await("real software keyboard becomes visible") { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+                screenshot("editor-ime-visible")
+                val visible = android.graphics.Rect()
+                val frame = android.graphics.Rect()
+                instrumentation.runOnMainSync {
+                    assertTrue("Editor remains visible with the real IME", view.getGlobalVisibleRect(visible))
+                    view.getWindowVisibleDisplayFrame(frame)
+                }
+                assertTrue("Editor has usable space above the keyboard", visible.height() > 0 && visible.top < frame.bottom)
+                input(scenario, "# unsaved across stop/resume\n")
+                val draft = workbench.editor.state.value.document!!.content.toString()
+                instrumentation.runOnMainSync { view.hideSoftInput() }
+                await("software keyboard hides before Activity stop") { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) != true }
+                scenario.moveToState(Lifecycle.State.CREATED)
+                assertTrue(workbench.editor.state.value.dirty)
+                scenario.moveToState(Lifecycle.State.RESUMED)
+                await("unsaved editor buffer restored after Activity resumes") { editor(scenario)?.text?.toString() == draft }
+                assertTrue(workbench.editor.state.value.dirty)
+                assertEquals("print('saved source')\n", withContext(Dispatchers.IO) { source.readText() })
+                screenshot("editor-ime-lifecycle")
+            } finally {
+                withContext(NonCancellable) {
+                    await { !workbench.editor.state.value.loading && !workbench.editor.state.value.saving }
+                    instrumentation.runOnMainSync { workbench.editor.close() }
+                    owned?.let { id ->
+                        instrumentation.runOnMainSync { workbench.removeProject(id) }
+                        await { !workbench.state.value.busy && workbench.state.value.projects.none { it.id == id } }
+                    }
+                    previous?.let { id -> instrumentation.runOnMainSync { workbench.select(id) }; await { !workbench.state.value.busy } }
+                }
+            }
         }
     }
     @Test(timeout = 150000) fun editSaveSearchRecreateDiscardAndConflict(): Unit = runBlocking {
@@ -205,12 +270,13 @@ class EditorDeviceTest {
                 } }
                 click("浏览文件")
                 for ((file, text) in examples) {
-                    click(file); await { editor(scenario) != null }
-                    await { colored(scenario, 0) }
+                    click(file); await("native editor opened for $file") { editor(scenario) != null }
+                    await("lexical spans ready for $file") { colored(scenario, 0) }
                     assertEquals(text, editor(scenario)!!.text.toString())
                     click("返回文件列表")
                 }
-                click("large-valid.txt"); await { editor(scenario) != null }
+                scrollFileIntoView("large-valid.txt")
+                click("large-valid.txt"); await("large valid text editor opened") { editor(scenario) != null }
                 assertEquals(18001, editor(scenario)!!.lineCount)
                 input(scenario, "尾行可编辑")
                 click("保存"); await { !workbench.editor.state.value.saving && !workbench.editor.state.value.dirty }
@@ -240,12 +306,61 @@ class EditorDeviceTest {
         fun walk(v: View) { if (v is CodeEditor) found = v; if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i)) }
         scenario.onActivity { walk(it.window.decorView) }; return found
     }
-    private fun input(scenario: ActivityScenario<MainActivity>, value: String) {
+    private suspend fun tapEditorWithRealInput(view: CodeEditor) {
+        val attempts = mutableListOf<String>()
+        repeat(3) { attempt ->
+            val bounds = android.graphics.Rect()
+            var ready = false
+            await("focused editor before real touch attempt ${attempt + 1}") {
+                instrumentation.runOnMainSync {
+                    ready = ViewCompat.isAttachedToWindow(view) && view.hasWindowFocus() &&
+                        view.getGlobalVisibleRect(bounds) && bounds.width() > 0 && bounds.height() > 0
+                }
+                ready
+            }
+            val x = bounds.left + bounds.width() / 3f
+            val y = bounds.top + minOf(bounds.height() / 4f, 80 * view.resources.displayMetrics.density)
+            val downTime = android.os.SystemClock.uptimeMillis()
+            fun inject(action: Int): Boolean {
+                val time = android.os.SystemClock.uptimeMillis()
+                val event = android.view.MotionEvent.obtain(downTime, time, action, x, y, 0)
+                event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                return try { instrumentation.uiAutomation.injectInputEvent(event, true) }
+                finally { event.recycle() }
+            }
+            val down = inject(android.view.MotionEvent.ACTION_DOWN)
+            delay(60)
+            val up = inject(android.view.MotionEvent.ACTION_UP)
+            val detail = "attempt=${attempt + 1} down=$down up=$up bounds=$bounds x=$x y=$y downTime=$downTime attached=${ViewCompat.isAttachedToWindow(view)} windowFocus=${view.hasWindowFocus()} editorFocus=${view.hasFocus()}"
+            attempts += detail
+            android.util.Log.i("CompatibilityEditor", detail)
+            if (down && up) return
+            inject(android.view.MotionEvent.ACTION_CANCEL)
+            delay(150)
+        }
+        recordFailure("Inject a complete real editor touch", attempts.joinToString("; "))
+        throw AssertionError("No complete real editor touch injected: ${attempts.joinToString("; ")}")
+    }
+    private suspend fun input(scenario: ActivityScenario<MainActivity>, value: String) {
         val view = editor(scenario) ?: error("Missing CodeEditor")
+        await("attached, focused and editable native input connection") {
+            var ready = false
+            instrumentation.runOnMainSync {
+                if (ViewCompat.isAttachedToWindow(view) && view.hasWindowFocus() &&
+                    !workbench.editor.state.value.loading) {
+                    view.requestFocus()
+                    ready = view.hasFocus() && view.isEditable && view.onCheckIsTextEditor()
+                }
+            }
+            ready
+        }
+        instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
-            view.requestFocus(); view.setSelection(view.lineCount - 1, view.text.getColumnCount(view.lineCount - 1))
-            assertTrue(view.onCheckIsTextEditor())
-            assertTrue(view.onCreateInputConnection(EditorInfo())!!.commitText(value, 1))
+            view.setSelection(view.lineCount - 1, view.text.getColumnCount(view.lineCount - 1))
+            val connection = requireNotNull(view.onCreateInputConnection(EditorInfo())) { "Focused editor returned no input connection" }
+            // A fresh connection is used exactly once: retries could insert the same text twice.
+            assertTrue("Fresh native input connection commits text: attached=${ViewCompat.isAttachedToWindow(view)} windowFocus=${view.hasWindowFocus()} focus=${view.hasFocus()} editable=${view.isEditable}",
+                connection.commitText(value, 1))
         }
     }
     private fun find(label: String): AccessibilityNodeInfo? {
@@ -276,13 +391,64 @@ class EditorDeviceTest {
         delay(250)
     }
     private suspend fun click(label: String) {
-        await { find(label) != null }
+        await("visible navigation control: $label") { find(label) != null }
         var node = find(label)!!
         while (!node.isClickable && node.parent != null) node = node.parent
         assertTrue("Click $label", node.performAction(AccessibilityNodeInfo.ACTION_CLICK)); delay(250)
     }
-    private suspend fun await(condition: suspend () -> Boolean) {
-        withTimeout(20000) { while (!condition()) delay(100) }
+    private suspend fun scrollFileIntoView(fileName: String) {
+        repeat(8) {
+            if (find(fileName)?.isVisibleToUser == true) return
+            var scrollable: AccessibilityNodeInfo? = null
+            fun visit(node: AccessibilityNodeInfo) {
+                if (node.isVisibleToUser && node.isScrollable &&
+                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD }) scrollable = node
+                repeat(node.childCount) { node.getChild(it)?.let(::visit) }
+            }
+            instrumentation.uiAutomation.windows.mapNotNull { it.root }
+                .filter { it.packageName?.toString() == instrumentation.targetContext.packageName }.forEach(::visit)
+            val target = requireNotNull(scrollable) { "No project file list can scroll to $fileName" }
+            assertTrue("Scroll project file list toward $fileName", target.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
+            delay(250)
+        }
+        await("file visible after scrolling its project list: $fileName") { find(fileName)?.isVisibleToUser == true }
+    }
+    private suspend fun await(label: String = "editor state", condition: suspend () -> Boolean) {
+        val location = Throwable().stackTrace.firstOrNull {
+            it.className.startsWith(EditorDeviceTest::class.java.name) && !it.methodName.startsWith("await")
+        }
+        val ready = withTimeoutOrNull(20000) { while (!condition()) delay(100); true }
+        if (ready != true) {
+            val failure = AssertionError("Editor stage timed out: $label at $location")
+            try { recordFailure(label, location.toString()) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (diagnostic: Exception) { failure.addSuppressed(diagnostic) }
+            throw failure
+        }
+    }
+    private suspend fun recordFailure(label: String, location: String) {
+        val state = workbench.editor.state.value
+        val lines = mutableListOf("stage=$label at $location",
+            "selectedProject=${workbench.state.value.selectedId} appLoading=${workbench.state.value.loading} appBusy=${workbench.state.value.busy}",
+            "editorProject=${state.projectId} path=${state.path} loading=${state.loading} saving=${state.saving} dirty=${state.dirty} conflict=${state.conflict} error=${state.error} tabs=${state.tabs.size} documentChars=${state.document?.content?.length}")
+        fun walk(node: AccessibilityNodeInfo, depth: Int) {
+            if (lines.size >= 200) return
+            if (node.isVisibleToUser) {
+                val rect = android.graphics.Rect().also(node::getBoundsInScreen)
+                lines += "${" ".repeat(depth.coerceAtMost(12))}package=${node.packageName} id=${node.viewIdResourceName} text=${node.text?.take(300)} desc=${node.contentDescription} clickable=${node.isClickable} bounds=$rect"
+            }
+            repeat(node.childCount) { node.getChild(it)?.let { child -> walk(child, depth + 1) } }
+        }
+        instrumentation.uiAutomation.windows.forEach { it.root?.let { root -> walk(root, 0) } }
+        val image = instrumentation.uiAutomation.takeScreenshot()
+        try { withContext(Dispatchers.IO) {
+            val directory = File(instrumentation.targetContext.cacheDir,
+                "compatibility/editor/api-${android.os.Build.VERSION.SDK_INT}/${java.util.UUID.randomUUID()}").apply { mkdirs() }
+            File(directory, "failure.txt").writeText(lines.joinToString("\n"))
+            image?.let { bitmap -> File(directory, "failure.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
+            println("EDITOR_DIAGNOSTICS ${directory.absolutePath}")
+        } } finally { image?.recycle() }
+        lines.forEach { println("EDITOR_DIAGNOSTIC $it") }
     }
     private suspend fun screenshot(name: String) {
         delay(300)

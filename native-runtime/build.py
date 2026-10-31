@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline Android ARM64 PRoot + external loader build. No Gradle/app dependency."""
+"""Offline Android PRoot + external loader build. No Gradle/app dependency."""
 import argparse
 import fcntl
 import hashlib
@@ -29,12 +29,12 @@ def verify_sources():
     return lock
 
 
-def fingerprint(ndk):
+def fingerprint(ndk, abi="arm64-v8a"):
     """Include all build inputs; a changed recipe never reuses previous artifacts."""
     paths = [ROOT / "build.py", ROOT / "toolchain.lock.json", ROOT / "talloc-cross-answers.txt"]
     paths += sorted((ROOT / "patches").glob("*.patch"))
     paths += [ndk / "source.properties"]
-    return hashlib.sha256("".join(sha256(p) for p in paths).encode()).hexdigest()
+    return hashlib.sha256(("".join(sha256(p) for p in paths) + abi).encode()).hexdigest()
 
 
 def run(args, cwd, env, log):
@@ -43,28 +43,33 @@ def run(args, cwd, env, log):
     subprocess.run(list(map(str, args)), cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
 
 
-def build(ndk, build_dir, force=False):
+def build(ndk, build_dir, force=False, abi="arm64-v8a"):
+    if abi not in ("arm64-v8a", "x86_64"):
+        raise ValueError(f"Unsupported ABI: {abi}")
+    if abi != "arm64-v8a":
+        build_dir = build_dir / abi
     build_dir = build_dir.resolve()
     build_dir.mkdir(parents=True, exist_ok=True)
     with (build_dir / ".build.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        return _build(ndk, build_dir, force)
+        return _build(ndk, build_dir, force, abi)
 
 
-def _build(ndk, build_dir, force):
+def _build(ndk, build_dir, force, abi):
     lock = verify_sources()
     ndk = ndk.resolve()
     properties = (ndk / "source.properties").read_text()
     if f"Pkg.Revision = {lock['ndk']}" not in properties.splitlines():
         raise ValueError(f"Expected Android NDK {lock['ndk']}")
     tools = ndk / "toolchains/llvm/prebuilt" / lock["host"] / "bin"
-    cc = tools / f"aarch64-linux-android{lock['api']}-clang"
+    target = "aarch64-linux-android" if abi == "arm64-v8a" else "x86_64-linux-android"
+    cc = tools / f"{target}{lock['api']}-clang"
     if not cc.is_file():
         raise ValueError(f"Missing Linux x86_64 NDK compiler: {cc}")
     build_dir = build_dir.resolve()
-    output = build_dir / "jniLibs" / lock["abi"]
+    output = build_dir / "jniLibs" / abi
     stamp = build_dir / "build-record.json"
-    identity = fingerprint(ndk)
+    identity = fingerprint(ndk, abi)
     if not force and stamp.is_file():
         record = json.loads(stamp.read_text())
         if record["inputFingerprint"] == identity and all(
@@ -96,7 +101,10 @@ def _build(ndk, build_dir, force):
         with log_path.open("w") as log:
             run(["patch", "-p1", "--batch", "--forward", "-i", ROOT / "patches/0001-shmem-private-tmp.patch"], shmem, env, log)
             run(["patch", "-p1", "--batch", "--forward", "-i", ROOT / "patches/0002-proot-string-header.patch"], proot, env, log)
-            shutil.copyfile(ROOT / "talloc-cross-answers.txt", talloc / "cross-answers.txt")
+            answers = (ROOT / "talloc-cross-answers.txt").read_text()
+            if abi == "x86_64":
+                answers = answers.replace('machine type: "aarch64"', 'machine type: "x86_64"')
+            (talloc / "cross-answers.txt").write_text(answers)
             run(["./configure", "--prefix=/__zakocoder_build_only__", "--disable-rpath", "--disable-python",
                  "--cross-compile", "--cross-answers=cross-answers.txt"], talloc, env, log)
             run([sys.executable, "buildtools/bin/waf", "build", "--targets=talloc", "-j4"], talloc, env, log)
@@ -127,7 +135,7 @@ def _build(ndk, build_dir, force):
         print(log_path.read_text()[-6000:], file=sys.stderr)
         raise
     record = {"schemaVersion": 1, "inputFingerprint": identity, "ndk": lock["ndk"],
-              "abi": lock["abi"], "api": lock["api"],
+              "abi": abi, "api": lock["api"],
               "artifacts": {name: sha256(output / name) for name in NAMES}}
     stamp.write_text(json.dumps(record, indent=2) + "\n")
     return output
@@ -137,6 +145,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ndk", type=Path, default=os.environ.get("ANDROID_NDK_HOME") or os.environ.get("ANDROID_NDK_ROOT"))
     parser.add_argument("--build-dir", type=Path, default=ROOT / "build")
+    parser.add_argument("--abi", choices=("arm64-v8a", "x86_64"), default="arm64-v8a")
     parser.add_argument("--force", action="store_true", help="rebuild in a fresh source tree")
     parser.add_argument("--verify-sources", action="store_true", help="verify vendored archives without a toolchain")
     args = parser.parse_args()
@@ -146,7 +155,7 @@ def main():
         return
     if not args.ndk:
         parser.error("set ANDROID_NDK_HOME or pass --ndk (NDK 28.2.13676358)")
-    print(build(args.ndk, args.build_dir, args.force))
+    print(build(args.ndk, args.build_dir, args.force, args.abi))
 
 
 if __name__ == "__main__":

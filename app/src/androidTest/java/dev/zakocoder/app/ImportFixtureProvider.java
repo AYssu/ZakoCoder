@@ -6,6 +6,8 @@ import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
+import android.os.Binder;
+import android.os.Bundle;
 import android.provider.OpenableColumns;
 import java.io.IOException;
 import java.io.FileNotFoundException;
@@ -14,6 +16,29 @@ import java.nio.charset.StandardCharsets;
 /** Test APK only. Java keeps its separate provider process independent of the target's Kotlin runtime. */
 public final class ImportFixtureProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
+    /** Starts only the sibling fixture and revokes its grants; never returns document data or grants. */
+    @Override public Bundle call(String method, String arg, Bundle extras) {
+        if (!"reset-compatibility-saf-fixture".equals(method)) return super.call(method, arg, extras);
+        if (!"compatibility-root".equals(arg)) throw new SecurityException("Only the owned SAF fixture is supported");
+        String testPackage = getContext().getPackageName();
+        if (!testPackage.endsWith(".test")) throw new SecurityException("Not a test APK");
+        String targetPackage = testPackage.substring(0, testPackage.length() - ".test".length());
+        String[] callers = getContext().getPackageManager().getPackagesForUid(Binder.getCallingUid());
+        boolean authorized = false;
+        if (callers != null) for (String caller : callers) {
+            if (targetPackage.equals(caller)) authorized = true;
+        }
+        if (!authorized) throw new SecurityException("Only the exact compatibility target may reset its fixture");
+        long identity = Binder.clearCallingIdentity();
+        try {
+            // The sibling is acquired as its own UID, preserving MANAGE_DOCUMENTS protection
+            // against the target app before and after the real system picker grant.
+            return getContext().getContentResolver().call(testPackage + ".compatibility-documents",
+                "revoke-compatibility-fixture", "compatibility-root", null);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
     @Override public String getType(Uri uri) { return "text/plain"; }
     @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
         MatrixCursor result = new MatrixCursor(new String[]{OpenableColumns.DISPLAY_NAME});

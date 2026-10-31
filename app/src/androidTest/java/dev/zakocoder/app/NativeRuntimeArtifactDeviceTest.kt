@@ -18,7 +18,14 @@ class NativeRuntimeArtifactDeviceTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val manifest = JSONObject(context.assets.open("runtime-artifacts.json").bufferedReader().use { it.readText() })
         assertTrue(manifest.getJSONObject("nativeSource").getBoolean("selfBuilt"))
-        val artifacts = manifest.getJSONArray("nativeArtifacts")
+        // PackageManager's installed ISA directory identifies the actual process ABI.
+        // SUPPORTED_ABIS also lists unselected ABIs and is not an artifact selector.
+        val selected = when (File(context.applicationInfo.nativeLibraryDir).name) {
+            "arm64" -> manifest
+            "x86_64" -> manifest.getJSONObject("architectures").getJSONObject("x86_64")
+            else -> error("No native artifact contract for the installed app ABI")
+        }
+        val artifacts = selected.getJSONArray("nativeArtifacts")
         repeat(artifacts.length()) { index ->
             val artifact = artifacts.getJSONObject(index)
             val file = File(context.applicationInfo.nativeLibraryDir, artifact.getString("name"))

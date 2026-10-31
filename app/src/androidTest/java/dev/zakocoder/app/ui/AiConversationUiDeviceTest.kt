@@ -211,7 +211,7 @@ class AiConversationUiDeviceTest {
                 nodes { list -> compact.all { expected -> list.any { text(it) == expected } } }
             }
             assertFalse("No retention notice in the conversation footer", nodes { list ->
-                list.any { text(it) == context.getString(R.string.ai_usage_partial) }
+                list.any { text(it) == "部分请求未提供用量或已超出保留范围" }
             })
         }
     }

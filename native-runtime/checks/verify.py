@@ -10,14 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 NAMES = ("libzakocoder_proot.so", "libzakocoder_loader.so")
 
 
-def inspect_elf(data, loader=False):
+def inspect_elf(data, loader=False, abi="arm64-v8a"):
+    machines = {"arm64-v8a": 183, "x86_64": 62}
+    if abi not in machines:
+        raise ValueError(f"Unsupported ABI: {abi}")
     if data[:7] != b"\x7fELF\x02\x01\x01" or len(data) < 64:
         raise ValueError("Expected little-endian ELF64")
     kind, machine = struct.unpack_from("<HH", data, 16)
     entry, phoff = struct.unpack_from("<QQ", data, 24)
     phsize, count = struct.unpack_from("<HH", data, 54)
-    if machine != 183 or kind != (2 if loader else 3) or not entry:
-        raise ValueError("Expected ARM64 static loader or PIE PRoot executable")
+    if machine != machines[abi] or kind != (2 if loader else 3) or not entry:
+        raise ValueError(f"Expected {'ARM64' if abi == 'arm64-v8a' else abi} static loader or PIE PRoot executable")
     if phsize != 56 or not count or phoff + count * phsize > len(data):
         raise ValueError("Invalid ELF program headers")
     headers = [struct.unpack_from("<IIQQQQQQ", data, phoff + i * phsize) for i in range(count)]
@@ -33,7 +36,7 @@ def inspect_elf(data, loader=False):
     if loader:
         if interpreter or dynamic:
             raise ValueError("Loader must be freestanding without interpreter/dynamic dependencies")
-        return {"kind": "static ARM64 loader", "needed": []}
+        return {"kind": f"static {abi} loader", "needed": []}
     if interpreter != [b"/system/bin/linker64"] or len(dynamic) != 1:
         raise ValueError("PRoot must use the Android linker64")
     h = dynamic[0]
@@ -54,26 +57,29 @@ def inspect_elf(data, loader=False):
         raise ValueError("RPATH/RUNPATH must not refer to build/Termux paths")
     if not values.get(0x6ffffffb, 0) & 0x08000000:
         raise ValueError("PRoot must have the PIE flag")
-    return {"kind": "Android ARM64 PIE", "needed": needed}
+    return {"kind": f"Android {abi} PIE", "needed": needed}
 
 
-def verify(directory, expected):
+def verify(directory, expected, abi="arm64-v8a"):
     report = {}
     for name in NAMES:
         data = (directory / name).read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if expected.get(name) != digest:
             raise ValueError(f"Pinned runtime checksum mismatch: {name}")
-        report[name] = dict(inspect_elf(data, loader=name == NAMES[1]), sha256=digest)
+        report[name] = dict(inspect_elf(data, loader=name == NAMES[1], abi=abi), sha256=digest)
     return report
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("directory", nargs="?", type=Path, default=ROOT / "build/jniLibs/arm64-v8a")
+    parser.add_argument("directory", nargs="?", type=Path)
+    parser.add_argument("--abi", choices=("arm64-v8a", "x86_64"), default="arm64-v8a")
     args = parser.parse_args()
-    expected = json.loads((ROOT / "artifacts.lock.json").read_text())["artifacts"]
-    print(json.dumps(verify(args.directory, expected), indent=2))
+    lock = json.loads((ROOT / "artifacts.lock.json").read_text())
+    expected = (lock if args.abi == "arm64-v8a" else lock["architectures"][args.abi])["artifacts"]
+    directory = args.directory or (ROOT / "build" / ("jniLibs/arm64-v8a" if args.abi == "arm64-v8a" else "x86_64/jniLibs/x86_64"))
+    print(json.dumps(verify(directory, expected, args.abi), indent=2))
 
 
 if __name__ == "__main__":

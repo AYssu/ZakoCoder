@@ -23,8 +23,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 scripts/check_repository.py
-      - run: python3 scripts/test_android_installer.py
-      - run: python3 scripts/test_ndk_installer.py
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
   pr-title:
     runs-on: ubuntu-latest
@@ -63,4 +62,4 @@ jobs:
           python3 -m unittest discover -s native-runtime/checks -p 'test_*.py' -v
           python3 native-runtime/bundle_sources.py
       # Automatic CI does not upload APKs; build-apk.yml provides manual Debug test artifacts.
-      # Production release packaging remains blocked pending distribution-material and device-coverage review.
+      # Beta publication is a separate manually dispatched, signed and validated workflow; stable release remains gated.

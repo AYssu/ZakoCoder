@@ -4,6 +4,8 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
 import kotlinx.coroutines.*
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.MockResponse
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +14,7 @@ import org.junit.Test
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class AiConversationDeviceTest {
     @org.junit.Before fun foreground() = warmDeviceActivity()
@@ -21,6 +24,13 @@ class AiConversationDeviceTest {
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.permissionsLoading }
     private fun controller(f: AiDeviceTest.Fixture) = AiController(context, { f.root }, { _, _ -> false }, { _, _ -> error("No commands") }, {}, {}, f.transport, f.config, history = f.history)
+
+    private fun requestEntries(messages: JSONArray): List<JSONObject> =
+        (0 until messages.length()).map { messages.getJSONObject(it) }.also { entries ->
+            assertEquals("system", entries.first().getString("role"))
+            assertEquals(1, entries.count { it.getString("role") == "system" })
+            assertTrue(entries.drop(1).all { it.getString("role") in setOf("user", "assistant", "tool") })
+        }
 
     @Test(timeout = 120000) fun incrementalReplyContextReloadNewSwitchAndDelete() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -47,8 +57,19 @@ class AiConversationDeviceTest {
                 f.enqueue("标记是 cedar-42。")
                 main { ai.send("标记是什么？") }; await { !ai.state.value.active }
                 val request = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
-                assertEquals(listOf("system", "user", "assistant", "user", "user"), (0 until request.length()).map { request.getJSONObject(it).getString("role") })
-                assertTrue(request.getJSONObject(1).getString("content").contains("cedar-42"))
+                val retained = requestEntries(request)
+                val expectedReply = buildString {
+                    repeat(10) { n -> append(if (n == 0) "## 流式标题\n\n" else "增量-$n\n") }
+                }
+                // Rule/capability snapshots are user-level messages too. Verify actual
+                // conversation contents and order rather than their shifting positions.
+                val dialogue = retained.filter {
+                    it.getString("role") == "assistant" ||
+                        (it.getString("role") == "user" && it.optString("content") in listOf("记住标记 cedar-42", "标记是什么？"))
+                }
+                assertEquals(listOf("user", "assistant", "user"), dialogue.map { it.getString("role") })
+                assertEquals(listOf("记住标记 cedar-42", expectedReply, "标记是什么？"), dialogue.map { it.getString("content") })
+                assertTrue(retained.none { it.getString("role") == "tool" || it.has("tool_calls") })
                 lateinit var restored: AiController
                 main { restored = controller(f); restored.select("conversation-fixture") }; ready(restored)
                 assertEquals(2, restored.state.value.turn)
@@ -112,25 +133,98 @@ class AiConversationDeviceTest {
                 f.enqueue("第二轮回复。")
                 main { ai.send("第二个问题") }; await { !ai.state.value.active }
                 val messages = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
-                assertEquals(listOf("system", "user", "assistant", "tool", "assistant", "user", "user"), (0 until messages.length()).map { messages.getJSONObject(it).getString("role") })
-                assertEquals("read-pair", messages.getJSONObject(2).getJSONArray("tool_calls").getJSONObject(0).getString("id"))
-                assertEquals("read-pair", messages.getJSONObject(3).getString("tool_call_id"))
-                repeat(8) { round ->
-                    f.enqueue("后续回复 $round")
-                    if (round == 6) f.enqueue("压缩记录：第一个完整工具轮次已读取 readme.txt，read-pair 返回 source content；后续问题按顺序处理。")
-                    main { ai.send("后续问题 $round") }; await { !ai.state.value.active }
-                    assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS))
-                    if (round == 6) {
-                        val summary = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8())
-                        assertFalse(summary.has("tools"))
+                val retained = requestEntries(messages)
+                val firstPrompt = retained.indices.single { retained[it].optString("content") == "第一个完整工具轮次" }
+                val callIndex = retained.indices.single { retained[it].has("tool_calls") }
+                val resultIndex = retained.indices.single { retained[it].getString("role") == "tool" }
+                val replyIndex = retained.indices.single { retained[it].getString("role") == "assistant" && retained[it].optString("content") == "已读取。" }
+                val nextPrompt = retained.indices.single { retained[it].optString("content") == "第二个问题" }
+                assertTrue("The prior full tool turn precedes the new user prompt",
+                    firstPrompt < callIndex && callIndex < resultIndex && resultIndex < replyIndex && replyIndex < nextPrompt)
+                assertEquals("user", retained[firstPrompt].getString("role"))
+                assertEquals("user", retained[nextPrompt].getString("role"))
+                assertEquals("assistant", retained[callIndex].getString("role"))
+                val calls = retained[callIndex].getJSONArray("tool_calls")
+                assertEquals(1, calls.length())
+                val call = calls.getJSONObject(0)
+                assertEquals("read-pair", call.getString("id"))
+                assertEquals("read_file", call.getJSONObject("function").getString("name"))
+                assertEquals("readme.txt", JSONObject(call.getJSONObject("function").getString("arguments")).getString("path"))
+                assertEquals(call.getString("id"), retained[resultIndex].getString("tool_call_id"))
+                assertTrue("Retain real tool output, not only its call ID", retained[resultIndex].getString("content").contains("source content"))
+                assertEquals(listOf(callIndex, replyIndex), retained.indices.filter { retained[it].getString("role") == "assistant" })
+                // Compression is governed by tokens, schema overhead and the configured
+                // threshold, not a fixed number of user turns. Use a deliberately bounded
+                // fixture window plus growing actual replies, and dispatch by request type.
+                val profile = f.config.catalog().active!!
+                f.config.saveProfile(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null,
+                    profile.parameters, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70)))
+                val summaryRequests = ConcurrentLinkedQueue<JSONObject>()
+                val normalRequests = ConcurrentLinkedQueue<JSONObject>()
+                f.server.dispatcher = object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse {
+                        val body = JSONObject(request.body.readUtf8())
+                        val isSummary = body.getJSONArray("messages").getJSONObject(0).getString("content")
+                            .startsWith("Summarize the supplied conversation/tool JSON")
+                        val reply = if (isSummary) {
+                            summaryRequests.add(body)
+                            "压缩记录：第一个完整工具轮次已读取 readme.txt，read-pair 返回 source content；后续问题按顺序处理。"
+                        } else {
+                            normalRequests.add(body)
+                            "后续回复 ${normalRequests.size} " + "a".repeat(12000)
+                        }
+                        val delta = JSONObject().put("content", reply)
+                        return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(
+                            "data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", delta)))}\n\n" +
+                                "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
                     }
                 }
-                assertEquals(2, ai.state.value.contextTurns.size)
-                assertTrue(ai.state.value.contextSummary.contains("read-pair"))
-                assertEquals(1, ai.state.value.contextCompactions)
-                assertFalse(ai.state.value.contextTurns.any { it.contains("read-pair") })
-                assertEquals(10, ai.state.value.timeline.count { it.role == AiRole.User })
-                assertTrue(ai.state.value.contextTurns.sumOf { it.length } <= AI_RETAINED_CONTEXT_CHARS)
+                repeat(8) { round ->
+                    main { assertTrue(ai.send("后续问题 $round")) }; await { !ai.state.value.active }
+                    assertEquals("Continuation $round must finish despite any intervening summary", AiPhase.Completed, ai.state.value.phase)
+                    assertEquals(round + 1, normalRequests.size)
+                    val sent = normalRequests.last().getJSONArray("messages")
+                    assertTrue(requestEntries(sent).any { it.optString("role") == "user" && it.optString("content") == "后续问题 $round" })
+                }
+                assertTrue("The small token window must cause a real summary request", summaryRequests.isNotEmpty())
+                summaryRequests.forEach { assertFalse(it.has("tools")) }
+                assertTrue("Summarization must receive the prior call ID", summaryRequests.first().toString().contains("read-pair"))
+                assertTrue("Summarization must receive the actual tool result", summaryRequests.first().toString().contains("source content"))
+                // Every remaining or restored tool batch must still have exactly paired
+                // assistant calls/results; metadata must never split a pending batch.
+                fun assertPaired(entries: List<JSONObject>) {
+                    val pending = mutableSetOf<String>()
+                    entries.forEach { message ->
+                        when (message.getString("role")) {
+                            "assistant" -> {
+                                assertTrue(pending.isEmpty())
+                                message.optJSONArray("tool_calls")?.let { calls ->
+                                    repeat(calls.length()) { assertTrue(pending.add(calls.getJSONObject(it).getString("id"))) }
+                                }
+                            }
+                            "tool" -> assertTrue(pending.remove(message.getString("tool_call_id")))
+                            else -> assertTrue(pending.isEmpty())
+                        }
+                    }
+                    assertTrue(pending.isEmpty())
+                }
+                normalRequests.forEach { assertPaired(requestEntries(it.getJSONArray("messages"))) }
+                val state = ai.state.value
+                assertTrue(state.contextTurns.isNotEmpty() && state.contextTurns.size < 10)
+                assertTrue(state.contextSummary.contains("read-pair"))
+                assertEquals(summaryRequests.size, state.contextCompactions)
+                assertTrue(state.requests.any { it.compaction && it.complete })
+                assertFalse(state.contextTurns.any { it.contains("read-pair") })
+                assertEquals(10, state.timeline.count { it.role == AiRole.User })
+                assertTrue(state.contextTurns.sumOf { it.length } <= AI_RETAINED_CONTEXT_CHARS)
+                val saved = f.history.load("context-window").state!!
+                assertEquals(state.contextSummary, saved.contextSummary)
+                assertEquals(state.contextCompactions, saved.contextCompactions)
+                assertEquals(state.contextTurns, saved.contextTurns)
+                saved.contextTurns.forEach { encoded ->
+                    val turn = JSONArray(encoded)
+                    assertPaired((0 until turn.length()).map { turn.getJSONObject(it) })
+                }
             }
         }
     }

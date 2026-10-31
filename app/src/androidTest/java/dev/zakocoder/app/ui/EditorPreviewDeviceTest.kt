@@ -5,12 +5,16 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
-import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ActivityScenario
@@ -42,19 +46,35 @@ class EditorPreviewDeviceTest {
             Thread.sleep(60)
         }
     }
-    private fun find(label: String): AccessibilityNodeInfo? {
-        fun visit(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-            if (node.isVisibleToUser && (node.text?.toString() == label || node.contentDescription?.toString() == label)) return node
-            return (0 until node.childCount).firstNotNullOfOrNull { node.getChild(it)?.let(::visit) }
+    /** Inspect the mounted Compose tree, without a stale platform accessibility snapshot. */
+    private fun <T> nodes(scenario: ActivityScenario<MainActivity>, block: (List<SemanticsNode>) -> T): T {
+        var result: T? = null
+        scenario.onActivity { activity ->
+            val all = mutableListOf<SemanticsNode>()
+            fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
+            fun visit(view: View) {
+                if (!view.isShown) return
+                if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
+                if (view is ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
+            }
+            visit(activity.window.decorView)
+            result = block(all)
         }
-        return instrumentation.uiAutomation.windows.mapNotNull { it.root }
-            .filter { it.packageName?.toString() == context.packageName }.firstNotNullOfOrNull(::visit)
+        @Suppress("UNCHECKED_CAST")
+        return result as T
     }
-    private fun click(label: String) {
-        await("visible $label") { find(label) != null }
-        var node = requireNotNull(find(label))
-        while (!node.isClickable && node.parent != null) node = node.parent
-        assertTrue(label, node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+    private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)
+        ?.joinToString("\n") { it.text }.orEmpty()
+    private fun visible(scenario: ActivityScenario<MainActivity>, label: String) = nodes(scenario) { all ->
+        all.any { text(it) == label && it.boundsInWindow.width > 0 && it.boundsInWindow.height > 0 }
+    }
+    private fun click(scenario: ActivityScenario<MainActivity>, label: String) {
+        await("visible $label") { visible(scenario, label) }
+        nodes(scenario) { all ->
+            var node: SemanticsNode? = all.single { text(it) == label }
+            while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
+            assertTrue(label, requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+        }
         instrumentation.waitForIdleSync()
     }
     private fun editor(scenario: ActivityScenario<MainActivity>): CodeEditor? {
@@ -91,9 +111,6 @@ class EditorPreviewDeviceTest {
     }
 
     @Test(timeout = 90000) fun markdownPreviewUsesUnsavedBufferAndPreservesUndoAndSelection() {
-        instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply {
-            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-        }
         val token = UUID.randomUUID().toString()
         val root = File(context.cacheDir, "editor-preview-$token").apply { mkdirs() }
         val isolated = object : ContextWrapper(context) {
@@ -125,12 +142,15 @@ class EditorPreviewDeviceTest {
                             }
                         }
                     } }
-                    await("native editor attached") { editor(scenario) != null }
+                    await("native editor bound to current buffer") { editor(scenario)?.text === buffer }
                     instrumentation.runOnMainSync { controller.replaceAll("Original", "Edited") }
+                    await("unsaved buffer updated before preview") {
+                        controller.state.value.document?.content?.toString() == original.replace("Original", "Edited") && controller.state.value.dirty
+                    }
                     val view = requireNotNull(editor(scenario))
                     instrumentation.runOnMainSync { view.setSelection(2, 2) }
-                    click(context.getString(R.string.editor_mode_preview))
-                    await("preview displays unsaved heading") { find("Edited heading") != null && editor(scenario) == null }
+                    click(scenario, context.getString(R.string.editor_mode_preview))
+                    await("preview displays unsaved heading") { visible(scenario, "Edited heading") && editor(scenario) == null }
                     assertSame(buffer, controller.state.value.document!!.content)
                     assertTrue(controller.state.value.dirty)
                     assertEquals(original, source.readText())
@@ -139,7 +159,7 @@ class EditorPreviewDeviceTest {
                             check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
                         } } finally { bitmap.recycle() }
                     }
-                    click(context.getString(R.string.editor_mode_edit))
+                    click(scenario, context.getString(R.string.editor_mode_edit))
                     await("native editor restored") { editor(scenario)?.text === buffer }
                     val restored = requireNotNull(editor(scenario))
                     instrumentation.runOnMainSync {

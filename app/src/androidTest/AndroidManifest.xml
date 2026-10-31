@@ -3,5 +3,13 @@
         <!-- Test APK only: serves fixed test bytes, never application files. Removed with the test APK. -->
         <provider android:name="dev.zakocoder.app.ImportFixtureProvider"
             android:authorities="${applicationId}.import-fixture" android:exported="true" />
+        <provider android:name="dev.zakocoder.app.CompatibilityDocumentsProvider"
+            android:authorities="${applicationId}.compatibility-documents"
+            android:exported="true" android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
     </application>
 </manifest>

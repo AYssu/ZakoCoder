@@ -47,7 +47,7 @@ class AiLiveUiDeviceTest {
         return instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.mapNotNull(::walk).firstOrNull()
     }
     private suspend fun click(label: String, long: Boolean = false) {
-        val tabLabels = listOf(context.getString(R.string.ai_process), context.getString(R.string.ai_requests), context.getString(R.string.ai_skills), context.getString(R.string.project_validation))
+        val tabLabels = listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_changes_title))
         if (label in tabLabels && find(label) == null) {
             repeat(3) {
                 if (find(label) == null) {
@@ -243,11 +243,14 @@ class AiLiveUiDeviceTest {
                     val run = runs.firstOrNull { it.kind == kind } ?: error("Model did not execute configured $kind")
                     assertEquals(kind, 0, run.exit); assertEquals(ProjectVerification.Unchanged, run.verification(source))
                 }
+                click(context.getString(R.string.ai_more))
                 click(context.getString(R.string.project_validation))
                 await { !w.projectTasks.state.value.sourceChecking && w.projectTasks.state.value.currentSource != null }
                 repeat(8) { if (!visibleText(context.getString(R.string.project_check_passed))) scrollProcess() }
                 assertTrue("Actual test result visible", visibleText(context.getString(R.string.project_check_passed)))
                 screenshot("live-ui-validation")
+                click(context.getString(R.string.close))
+                click(context.getString(R.string.ai_changes_title))
                 val changes = withContext(Dispatchers.IO) { w.ai.checkpointChanges(w.ai.state.value.checkpointId!!) }
                 assertEquals(setOf("src/cart.py", "src/view.py"), changes.map { it.path }.toSet())
                 for (path in listOf("src/cart.py", "src/view.py")) {
@@ -261,7 +264,7 @@ class AiLiveUiDeviceTest {
                 }
                 val item = w.terminal.sessions.single { it.projectId == id }
                 assertTrue(item.session.isRunning)
-                click(context.getString(R.string.ai_process))
+                click(context.getString(R.string.ai_conversation))
                 val open = context.getString(R.string.ai_open_terminal, item.number)
                 // Process history is a vertical list; reveal the model's terminal event from the end.
                 repeat(24) { if (find(open)?.isVisibleToUser != true) scrollProcess(false) }

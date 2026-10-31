@@ -2,6 +2,7 @@ package dev.zakocoder.app
 
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +21,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /** Actual native entry sheet and shared controls; no Workbench, user storage or network. */
 class MobileEntryUiDeviceTest {
@@ -49,6 +51,33 @@ class MobileEntryUiDeviceTest {
         delay(150)
     }
     private fun bounds(label: String) = Rect().also { clickable(label).getBoundsInScreen(it) }
+    private fun geometry(labels: List<String>, density: Float): String = buildString {
+        append("density=$density contextDensity=${context.resources.displayMetrics.density} ")
+        labels.forEach { label ->
+            append("$label=[")
+            var node = find(label)
+            repeat(5) {
+                node?.let { current ->
+                    val rect = Rect().also(current::getBoundsInScreen)
+                    append("${current.className}:clickable=${current.isClickable}:visible=${current.isVisibleToUser}:$rect;")
+                    node = current.parent
+                }
+            }
+            append("] ")
+        }
+    }
+    private suspend fun stableBounds(labels: List<String>): List<Rect> {
+        // Sheet semantics appear during its entrance animation, before visible bounds settle.
+        var previous: List<Rect>? = null
+        var stable = 0
+        await("Stable visible controls: ${labels.joinToString()}") {
+            val current = labels.map(::bounds)
+            stable = if (current == previous && current.all { !it.isEmpty }) stable + 1 else 0
+            previous = current
+            stable >= 5
+        }
+        return requireNotNull(previous)
+    }
     private suspend fun shot(name: String) {
         delay(300)
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
@@ -64,12 +93,15 @@ class MobileEntryUiDeviceTest {
         }
         val imported = AtomicInteger(); val created = AtomicInteger(); val cloned = AtomicInteger(); val dismissed = AtomicInteger()
         val compactClicks = AtomicInteger()
+        val renderedDensity = AtomicReference<Float>()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             for (dark in listOf(false, true)) {
                 val suffix = if (dark) "dark" else "light"
                 scenario.onActivity { activity -> activity.setContent {
                     CompositionLocalProvider(LocalWorkbenchDark provides dark,
                         LocalDensity provides Density(LocalDensity.current.density, 1.3f)) {
+                        val density = LocalDensity.current.density
+                        androidx.compose.runtime.SideEffect { renderedDensity.set(density) }
                         MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                             AddProjectSheet(true, { dismissed.incrementAndGet() }, { imported.incrementAndGet() },
                                 { created.incrementAndGet() }, { cloned.incrementAndGet() })
@@ -80,10 +112,12 @@ class MobileEntryUiDeviceTest {
                 val createLabel = context.getString(R.string.mobile_create_empty)
                 val cloneLabel = context.getString(R.string.git_clone)
                 await("three project choices") { find(importLabel) != null && find(createLabel) != null && find(cloneLabel) != null }
-                val rects = listOf(importLabel, createLabel, cloneLabel).map(::bounds)
-                assertTrue(rects.zipWithNext().all { (a, b) -> a.bottom <= b.top })
-                val density = context.resources.displayMetrics.density
-                assertTrue(rects.all { it.height() >= 48 * density - 1 })
+                val labels = listOf(importLabel, createLabel, cloneLabel)
+                val rects = stableBounds(labels)
+                val density = requireNotNull(renderedDensity.get())
+                val diagnostic = geometry(labels, density)
+                assertTrue("Project choices overlap: $diagnostic", rects.zipWithNext().all { (a, b) -> a.bottom <= b.top })
+                assertTrue("Every visible project choice needs a 48dp target: $diagnostic", rects.all { it.height() >= 48 * density - 1 })
                 shot("project-choices-$suffix")
                 val previous = listOf(imported.get(), created.get(), cloned.get())
                 click(importLabel)
@@ -111,14 +145,16 @@ class MobileEntryUiDeviceTest {
                 } }
                 val tool = context.getString(R.string.ai_tool_read)
                 await("tool header") { find(tool) != null }
-                val left = bounds("打开代码"); val right = bounds("查看终端"); val header = bounds(tool)
+                val controlLabels = listOf("打开代码", "查看终端", tool)
+                val (left, right, header) = stableBounds(controlLabels)
                 assertTrue(left.right <= right.left)
-                assertTrue(listOf(left, right, header).all { it.height() >= 48 * density - 1 })
-                assertEquals(context.getString(R.string.mobile_collapsed), clickable(tool).stateDescription?.toString())
+                assertTrue("Controls need 48dp targets: ${geometry(controlLabels, density)}",
+                    listOf(left, right, header).all { it.height() >= 48 * density - 1 })
+                assertEquals(context.getString(R.string.mobile_collapsed), AccessibilityNodeInfoCompat.wrap(clickable(tool)).stateDescription?.toString())
                 assertNull(find("ACTUAL_TOOL_DETAIL"))
                 click(tool)
                 await("expanded output") { find("ACTUAL_TOOL_DETAIL") != null }
-                assertEquals(context.getString(R.string.mobile_expanded), clickable(tool).stateDescription?.toString())
+                assertEquals(context.getString(R.string.mobile_expanded), AccessibilityNodeInfoCompat.wrap(clickable(tool)).stateDescription?.toString())
                 shot("touch-controls-$suffix")
                 click(tool); await("collapsed output") { find("ACTUAL_TOOL_DETAIL") == null }
                 val prior = compactClicks.get(); click("打开代码"); assertEquals(prior + 1, compactClicks.get())

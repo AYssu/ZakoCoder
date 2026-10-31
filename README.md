@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml"><img src="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/status-0.1.0--dev-2563EB" alt="开发预览版 0.1.0-dev" />
-  <img src="https://img.shields.io/badge/Android-8.0%2B%20%C2%B7%20ARM64-334155" alt="Android 8.0+ · ARM64" />
+  <img src="https://img.shields.io/badge/status-Beta%20preparation-2563EB" alt="Beta 准备中" />
+  <img src="https://img.shields.io/badge/Android-11%E2%80%9317%20%C2%B7%20ARM64-334155" alt="Beta 测试目标 Android 11–17 · ARM64" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-334155" alt="Apache-2.0" /></a>
 </p>
 
@@ -27,7 +27,7 @@
 
 ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项目整合文件管理、代码编辑、Linux 开发环境和 AI 协作，让开发者在手机上完成修改、运行、审阅与验证。工具调用、权限审批和文件变更均有独立入口，执行过程可查看，源码修改可核对。
 
-项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前为开发预览版，面向 ARM64 真机；已验证设备为 Android 13，其他系统版本与工程兼容性仍在完善。
+项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前正在准备 `0.1.0-beta.1`，面向 ARM64 真机。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名 Beta 的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
 
 ## 功能概览
 
@@ -47,11 +47,13 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ## 开始使用
 
-### 获取测试安装包
+### 获取安装包
 
-测试 APK 由维护者通过 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动构建。成功运行的 **Artifacts** 中包含 ARM64 Debug APK、自编译 PRoot／loader、运行时对应源码包、校验摘要和构建信息；产物保留 14 天。没有可用产物时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；构建详情和本次固定提交的完整源码入口在发布页，以实际存在的发布为准。首次版本计划为 `0.1.0-beta.1`，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次 Beta 为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
-当前尚无正式 Release APK。PRoot 与 loader 已改为仓库内源码自行编译，正式发布构建仍等待分发材料与设备覆盖审查；测试包入口与签名兼容性见[打包说明](docs/RELEASING.md#手动打包测试-apk)。
+开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 提供 ARM64 Debug APK、自编译运行时、对应源码、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+
+Beta 的 Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
 
 ### 完成第一个项目
 
@@ -73,7 +75,7 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 
 | 项目 | 当前支持 |
 | --- | --- |
-| 设备 | Android 8.0+，ARM64 真机；当前设备验证覆盖 Android 13。x86_64 / 模拟器尚未适配。 |
+| 设备 | Beta 面向 ARM64、Android 11–17；已有 AOSP x86_64 系统基线和 Android 13 ARM64 真机记录，不保证全部厂商设备。最低 SDK 仍为 Android 8.0，但完整开发环境未验收；实验 x86_64 仅用于基础兼容性验证，不含 Android SDK／NDK 工具包。见[实际结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)。 |
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
 | 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
@@ -128,10 +130,11 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 | --- | --- |
 | [贡献指南](CONTRIBUTING.md) | 分支、Commit、PR、审查及合并流程。 |
 | [开发与测试](docs/DEVELOPMENT.md) | 工具链、源码构建、仓库检查与真机验证。 |
+| [Android 兼容性](docs/ANDROID_COMPATIBILITY.md) | 系统版本矩阵、隔离测试包、进程恢复、覆盖升级及手动 CI。 |
 | [界面规范](docs/DESIGN.md) | 原生页面结构、交互与移动布局约定。 |
 | [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
 | [Git 工作流](docs/GIT.md) · [语言服务](docs/LSP.md) | 仓库同步、认证、冲突处理及可选本机补全与诊断。 |
-| [发布流程](docs/RELEASING.md) | 测试包构建、签名和正式发行条件。 |
+| [发布流程](docs/RELEASING.md) · [更新记录](CHANGELOG.md) | Debug／Beta 打包、发布签名与分发条件。 |
 | [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |
 
 <details>

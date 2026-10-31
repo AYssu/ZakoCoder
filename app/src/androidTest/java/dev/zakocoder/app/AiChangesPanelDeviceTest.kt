@@ -140,7 +140,7 @@ class AiChangesPanelDeviceTest {
                 } }
                 await("persisted second path with empty volatile lists") { find("b.py") != null }
                 assertNull(find(context.getString(R.string.ai_changes_snapshot_empty)))
-                assertNull(find(context.getString(R.string.ai_undo_file, "b.py")))
+                assertNull(find("撤销：b.py"))
                 screenshot("changes-reloaded")
                 click(context.getString(R.string.project_validation_turn, 2)); click(context.getString(R.string.project_validation_turn, 1))
                 await("paused first checkpoint") { entered.isCompleted }

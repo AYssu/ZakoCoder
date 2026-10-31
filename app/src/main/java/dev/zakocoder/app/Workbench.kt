@@ -515,6 +515,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     fun installToolBundles(ids: Set<String>, acceptAndroidLicense: Boolean = false) = run(R.string.install_selected_bundles, foreground = true, recheckTools = true) {
         check(mutable.value.installed)
+        if (ids.any { it == "android" || it == "android-ndk" }) runtime.requireAndroidToolchainSupport()
         require("android" !in ids || acceptAndroidLicense) { context.getString(R.string.android_sdk_license_required) }
         if ("android" in ids) require(withContext(Dispatchers.IO) {
             AndroidToolchain.supportsProxy(settingsRepository.proxyForRuntime())
