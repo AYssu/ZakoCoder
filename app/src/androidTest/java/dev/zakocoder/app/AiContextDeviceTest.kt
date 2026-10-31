@@ -47,6 +47,32 @@ class AiContextDeviceTest {
         assertTrue(pending.isEmpty())
     }
 
+    @Test(timeout = 90000) fun userTurnAndRestartPreserveEveryPriorRequestMessage() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(contextWindowTokens = 256000, autoCompress = false))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("prefix-restart") }; ready(ai)
+            val prior = mutableListOf<JSONArray>()
+            repeat(3) { turn ->
+                if (turn == 2) {
+                    val saved = f.history.load("prefix-restart").state!!
+                    assertTrue(JSONArray(saved.contextTurns.first()).getJSONObject(0).getString("content").startsWith("User-selected skills for this task."))
+                    main { ai = controller(f); ai.select("prefix-restart") }; ready(ai)
+                    assertFalse(ai.state.value.historyError)
+                }
+                f.server.enqueue(response("verified response $turn"))
+                main { assertTrue(ai.send("Continue user task $turn")) }; await { !ai.state.value.active }
+                assertEquals(AiPhase.Completed, ai.state.value.phase)
+                val messages = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
+                prior.lastOrNull()?.let { previous ->
+                    assertTrue(messages.length() > previous.length())
+                    repeat(previous.length()) { index -> assertEquals("Prefix changed at message $index", previous.getJSONObject(index).toString(), messages.getJSONObject(index).toString()) }
+                }
+                prior.add(messages)
+            }
+        }
+    }
+
     @Test(timeout = 180000) fun unlimitedRoundsToolsRepeatedCompactionAndRestartKeepContext() = runBlocking {
         run {
             AiDeviceTest.Fixture(context).use { f ->
@@ -66,7 +92,7 @@ class AiContextDeviceTest {
                         val messages = body.getJSONArray("messages"); paired(messages)
                         // Fresh manifest evidence is pinned separately from the lossy summary after every compaction.
                         val metadata = (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
-                            .single { it.startsWith("User-selected skills for this task.") }
+                            .last { it.startsWith("User-selected skills for this task.") }
                         if (stableMetadata == null) stableMetadata = metadata else assertEquals(stableMetadata, metadata)
                         assertFalse(metadata.contains("current_task_changes"))
                         val stateUpdates = (0 until messages.length()).map { messages.getJSONObject(it) }

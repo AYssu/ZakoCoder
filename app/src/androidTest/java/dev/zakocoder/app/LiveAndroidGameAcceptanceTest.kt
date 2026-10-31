@@ -30,6 +30,78 @@ class LiveAndroidGameAcceptanceTest {
     private val arguments get() = InstrumentationRegistry.getArguments()
     private val context get() = instrumentation.targetContext
 
+    @Test(timeout = 65 * 60 * 1000L)
+    fun paidDeepSeekTenUserTurns() = runBlocking {
+        optIn("deepseek-ten-turns")
+        val workbench = applicationWorkbench()
+        ready(workbench)
+        check(!workbench.ai.state.value.active) { "Never interrupt an existing task" }
+        await(30000) { !workbench.ai.models.state.value.loading }
+        val catalog = workbench.ai.models.state.value.catalog
+        val candidates = catalog.profiles.filter { it.model.contains("deepseek", true) }
+        val selected = catalog.active?.takeIf { it in candidates } ?: candidates.singleOrNull()
+        checkNotNull(selected) { "Select one existing DeepSeek configuration before this paid test" }
+        val minimumWindow = arguments.getString("deepseekMinimumWindowTokens")?.toInt() ?: 0
+        check(selected.context.contextWindowTokens >= minimumWindow) {
+            "Selected context window ${selected.context.contextWindowTokens} is below requested $minimumWindow"
+        }
+        if (catalog.activeId != selected.id) {
+            main { workbench.ai.models.activate(selected.id) }
+            await(30000) { !workbench.ai.models.state.value.saving && workbench.ai.models.state.value.catalog.activeId == selected.id }
+        }
+        val resumeProject = arguments.getString("deepseekResumeProjectId").orEmpty()
+        val firstTask = arguments.getString("deepseekResumeTaskIndex")?.toInt() ?: 1
+        require(firstTask in 1..10 && (resumeProject.isNotEmpty() || firstTask == 1))
+        val project = if (resumeProject.isEmpty()) {
+            val before = workbench.state.value.projects.map { it.id }.toSet()
+            main { workbench.create("DeepSeek Cache 10 Turns ${System.currentTimeMillis()}", ProjectTemplate.Python) }
+            await(120000) { !workbench.state.value.busy && workbench.state.value.projects.any { it.id !in before } }
+            workbench.state.value.projects.single { it.id !in before }
+        } else {
+            require(UUID.fromString(resumeProject).toString() == resumeProject)
+            workbench.state.value.projects.single { it.id == resumeProject }
+        }
+        main { workbench.ai.select(project.id) }
+        aiReady(workbench, project.id)
+        val recorder = Recorder("deepseek-ten-turns", project.id)
+        try {
+            recorder.write("model_selection", JSONObject().put("model", selected.model).put("protocol", selected.protocol.name)
+                .put("host", java.net.URI(selected.endpoint).host).put("contextWindowTokens", selected.context.contextWindowTokens))
+            val tasks = listOf(
+                "把此 Python 模板改成最小任务清单命令行程序：main.py 提供 add/list，数据保存当前项目 tasks.json，标准库实现，不装依赖。先读取现有文件再改，实际运行验证。",
+                "在刚才程序中增加 done ID，把对应任务标为完成；list 显示完成状态，实际验证添加、完成、列出链路。",
+                "新增 unittest 测试文件，用临时目录隔离数据。至少覆盖添加、列表、完成与不存在ID四种情况，实际运行测试并修复失败。",
+                "增加 list --status pending|done|all 过滤选项，默认 all；新增测试并运行，不重复创建项目。",
+                "完善输入校验：拒绝空白任务、非法ID、未知状态，错误以非零退出码返回，不能覆盖已有数据。补测试并实际运行。",
+                "任务增加稳定递增ID和创建时间；列表支持 --sort id|title，确保旧数据可读。补针对排序和旧数据的测试，运行验证。",
+                "增加 export CSV路径 命令，使用标准库csv，正确处理中文、逗号、引号与换行。补测试并实际运行。",
+                "数据写入改为同目录临时文件后原子替换，损坏JSON应明确报错并保留原文件。新增损坏数据和写入安全测试，执行验证。",
+                "审查此前实现的路径和输入边界，确认不使用eval/exec或shell拼接；只修实际发现的问题，补必要回归并运行。",
+                "最终验收：真实执行完整 unittest 与一次 CLI 添加、筛选、完成、CSV导出演示；更新 README，列出修改文件、实际测试数和退出码、剩余限制。不要假报验证成功。"
+            )
+            val scope = "\n本轮仅操作当前测试项目，不读其他项目、密钥或系统配置，不联网不安装依赖，不调用屏幕、SSH或终端交互工具；命令只用当前项目内 Python 标准库验证。回复简短，完成本轮后停止，等待下一轮。"
+            tasks.forEachIndexed { index, prompt ->
+                if (index + 1 < firstTask) return@forEachIndexed
+                val expectedTurn = workbench.ai.state.value.turn + 1
+                recorder.write("user_turn_begin", JSONObject().put("index", index + 1).put("prompt", prompt))
+                withTimeout(6 * 60 * 1000L) { runTask(workbench, project.id, prompt + scope, recorder, maxRequests = 20) }
+                val state = workbench.ai.state.value
+                check(state.turn == expectedTurn)
+                recorder.write("user_turn_complete", JSONObject().put("index", index + 1).put("turn", state.turn)
+                    .put("round", state.round).put("toolCount", state.toolCount).put("contextCompactions", state.contextCompactions))
+                instrumentation.sendStatus(0, Bundle().apply { putInt("completedUserTurns", index + 1) })
+            }
+            val state = workbench.ai.state.value
+            withContext(Dispatchers.IO) {
+                val restored = requireNotNull(AiHistoryStore(context).load(project.id, state.conversationId).state)
+                check(restored.turn == state.turn && restored.phase == AiPhase.Completed)
+                check(restored.contextTurns == state.contextTurns)
+            }
+            recorder.write("stage_result", JSONObject().put("passed", true)
+                .put("completedUserTurnsThisRun", 11 - firstTask).put("lastCompletedTaskIndex", 10))
+        } finally { recorder.close() }
+    }
+
     @Test(timeout = 8 * 60 * 1000L)
     fun paidModelReadOnlyCacheObservation() = runBlocking {
         optIn("cache")

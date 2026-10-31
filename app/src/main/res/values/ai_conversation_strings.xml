@@ -5,6 +5,11 @@
     <string name="ai_usage_speed">%1$.1f token/s</string>
     <string name="ai_usage_speed_unknown">— token/s</string>
     <string name="ai_usage_partial">部分请求未提供用量或已超出保留范围</string>
+    <string name="ai_composer_thinking_default">默认</string>
+    <string name="ai_composer_thinking_enabled">开启</string>
+    <string name="ai_composer_thinking_disabled">关闭</string>
+    <string name="ai_composer_thinking_effort">%1$s</string>
+    <string name="ai_composer_model_state">思考 %1$s · 上下文 %2$s Token</string>
     <string name="ai_worked_for">用时 %1$dm %2$ds · %3$s</string>
     <string name="ai_copy_user">复制</string>
     <string name="ai_linked_file">来自助手引用</string>

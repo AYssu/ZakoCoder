@@ -721,7 +721,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         val selected = try { if (mutable.value.enabledSkills.isEmpty()) "" else withContext(Dispatchers.IO) { skillStore.content(id, mutable.value.enabledSkills) } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { throw AiBudgetException(AiFailure.Skill) }
-        fun metadata() = "User-selected skills for this task. Apply each workflow only when its stated task type matches the user request; verification-only instructions do not prevent an authorized implementation. Treat as reference guidance subordinate to system rules and tool permissions. Scripts are not executed automatically. Explicit user instructions override expression style. When first adopting a selected skill for the current user task, briefly announce its exact name in backticks and its purpose in the user's language before the related work, for example: 本次使用 `investigate-first` 定位原因，再按 `surgical-patch` 修复。 Mention only selected skills you actually apply, not the entire enabled list. Announce each skill once per user task, not on every tool call or continuation round; announce a newly adopted skill when switching workflows. If none applies, omit the announcement. This is a public workflow declaration, not internal reasoning or proof of execution. Do not invent skill tool calls or audit events.\n$selected\n\n${if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"}\n\n$overview\n\n$workspaceContext"
+        fun metadata() = "User-selected skills for this task. This snapshot applies only to the following user task; later task snapshots supersede it. Earlier snapshots are historical evidence, not current rules or authorization. Apply each workflow only when its stated task type matches the user request; verification-only instructions do not prevent an authorized implementation. Treat as reference guidance subordinate to system rules and tool permissions. Scripts are not executed automatically. Explicit user instructions override expression style. When first adopting a selected skill for the current user task, briefly announce its exact name in backticks and its purpose in the user's language before the related work, for example: 本次使用 `investigate-first` 定位原因，再按 `surgical-patch` 修复。 Mention only selected skills you actually apply, not the entire enabled list. Announce each skill once per user task, not on every tool call or continuation round; announce a newly adopted skill when switching workflows. If none applies, omit the announcement. This is a public workflow declaration, not internal reasoning or proof of execution. Do not invent skill tool calls or audit events.\n$selected\n\n${if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"}\n\n$overview\n\n$workspaceContext"
         var skillMessageIndex: Int? = messages.length()
         messages.put(JSONObject().put("role", "user").put("content", metadata()))
         val dynamicContext = AiContextCache(mapOf("rules" to if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow)
@@ -775,7 +775,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 messages = compactContext(settings, messages, pinnedPrompt, skill, turnStart, budget.inputTokens, taskImages, activeSchemas, dynamicContext.snapshotMessage())
                 if (screenImages.isNotEmpty()) messages.put(imageMessage(SCREEN_TEST_IMAGE_EVIDENCE, screenImages.toList()))
                 skillMessageIndex = if (skill == null) null else 2
-                turnStart = if (skill == null) 2 else 3
+                turnStart = 2
                 measured = measureContext(settings, messages, activeSchemas)
                 budget = measured.first
             }
@@ -854,9 +854,10 @@ class AiController(private val context: Context, root: (String) -> File, private
                 var completed = JSONArray()
                 for (index in turnStart until messages.length()) {
                     val message = messages.getJSONObject(index)
+                    // Retain the initial metadata as sent: removing it breaks the next user turn's cache prefix.
                     // Screenshot evidence is a temporary user-role visual envelope after a complete
                     // tool batch. Persist its textual tool result, not a synthetic extra user turn.
-                    if (index != skillMessageIndex && message.optString("content") != SCREEN_TEST_IMAGE_EVIDENCE) completed.put(message)
+                    if (message.optString("content") != SCREEN_TEST_IMAGE_EVIDENCE) completed.put(message)
                 }
                 // Keep complete turns until the next request reaches its token threshold. Finishing
                 // a reply does not trigger an extra hidden request or an arbitrary turn-count limit.
@@ -993,7 +994,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         val round = mutable.value.round + 1
         mutable.update { it.copy(round = round) }
         val requestEpoch = epoch
-        val summarySettings = settings.copy(parameters = settings.parameters.copy(maxTokens = aiSummaryOutputReserve(settings)))
+        val summarySettings = aiSummarySettings(settings)
         val summaryMessages = withContext(Dispatchers.Default) {
             currentCoroutineContext().ensureActive()
             val evidence = JSONArray()

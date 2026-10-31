@@ -197,6 +197,22 @@ class AiConversationUiDeviceTest {
             await("animated usage reaches actual totals") { nodes { list -> listOf(total, input, output).all { expected -> list.any { text(it) == expected } } } }
             await("completed task duration shown") { nodes { list -> list.any { text(it).contains("1m 4s") } } }
             assertFalse(nodes { list -> list.any { text(it) == unknown } })
+            instrumentation.runOnMainSync {
+                state = state.copy(requests = listOf(
+                    AiRequestLog(turn = 1, round = 2, elapsed = 2000, firstText = 1000,
+                        inputTokens = 1_234_567, outputTokens = 12_345, complete = true),
+                    AiRequestLog(turn = 1, round = 3, complete = true)))
+            }
+            val compact = listOf(
+                context.getString(R.string.ai_usage_input, "↑", "1.23M"),
+                context.getString(R.string.ai_usage_output, "↓", "12.35K"),
+                context.getString(R.string.ai_usage_total, "Σ", "1.25M"))
+            await("large totals compact while missing usage is not invented") {
+                nodes { list -> compact.all { expected -> list.any { text(it) == expected } } }
+            }
+            assertFalse("No retention notice in the conversation footer", nodes { list ->
+                list.any { text(it) == context.getString(R.string.ai_usage_partial) }
+            })
         }
     }
 }
