@@ -111,6 +111,16 @@ class RootScreenTestSafetyTest {
         assertFalse(uncovered(dump, 50, 150))
         assertNull(RootScreenTestBackend.focusedWindow(dump.substringAfter("WINDOW MANAGER WINDOWS")))
     }
+    @Test fun freshFinalWindowEvidenceRejectsChangedFocusAndNewOverlappingOverlay() {
+        val fresh = detailedOemDump()
+        assertTrue(uncovered(fresh))
+        val changedFocus = fresh.replace("mCurrentFocus=Window{target u0 dev.example.fixture/", "mCurrentFocus=Window{target u0 dev.unrelated.app/")
+        assertEquals("dev.unrelated.app", RootScreenTestBackend.focusedWindow(changedFocus)?.second)
+        assertFalse(uncovered(changedFocus))
+        // A newly covering visible overlay must be rejected using this same final dump.
+        val covering = fresh.replace("frame=[0,0][1080,94]", "frame=[0,0][1080,500]")
+        assertFalse(uncovered(covering))
+    }
     @Test fun lastWindowCannotBorrowGlobalVisibilityOrFrameEvidence() {
         val dump = detailedOemDump()
         // Opposite global flags do not invalidate the last real WindowState.

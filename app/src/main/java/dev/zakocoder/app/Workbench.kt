@@ -24,6 +24,10 @@ import kotlinx.coroutines.flow.update
     val settings: AppSettings = AppSettings(), val proxyDisplay: String = "", val sessions: List<TerminalItem> = emptyList(), val terminalRevision: Int = 0,
  ) { val project get() = projects.singleOrNull { it.id == selectedId } }
 
+/** One-shot UI navigation, always scoped to the screen session that requested it. */
+data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
+    val requestId: String = java.util.UUID.randomUUID().toString())
+
 private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String)
 
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
@@ -40,6 +44,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private val settingsRepository = SettingsRepository(context)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
+    private val mutableAssistantNavigation = MutableStateFlow<AssistantNavigationRequest?>(null)
+    val assistantNavigation = mutableAssistantNavigation.asStateFlow()
+    fun ackAssistantNavigation(requestId: String) {
+        mutableAssistantNavigation.update { if (it?.requestId == requestId) null else it }
+    }
     internal val gitCredentials = dev.zakocoder.app.git.GitCredentialStore(context)
     private val gitCredentialAccess = dev.zakocoder.app.git.GitCredentialAccess(gitCredentials, runtime.root)
     val git: dev.zakocoder.app.git.ProjectGit = dev.zakocoder.app.git.ProjectGit(context,
@@ -227,6 +236,37 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
+        screenTests.bindOverlayActions(returnToApp = { projectId, lease ->
+            if (screenTests.taskLease(projectId) == lease && mutable.value.projects.any { it.id == projectId }) {
+                val request = AssistantNavigationRequest(projectId, lease)
+                mutableAssistantNavigation.value = request
+                try {
+                    context.startActivity(Intent(context, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    ackAssistantNavigation(request.requestId)
+                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
+                } catch (_: SecurityException) {
+                    ackAssistantNavigation(request.requestId)
+                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
+                }
+            }
+        }, stopTask = { projectId, lease ->
+            if (screenTests.stopOverlayTask(projectId, lease)) ai.stopForScreenLease(projectId, lease)
+        })
+        scope.launch {
+            screenTests.state.collect {
+                if (!screenOverlayActive()) releaseService()
+                else try { service() }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: SecurityException) { screenTests.reportOverlayServiceFailure() }
+                catch (_: IllegalStateException) {
+                    // Includes Android's foreground/background service start restrictions.
+                    // Keep this collector alive; a later explicit opt-in may retry.
+                    screenTests.reportOverlayServiceFailure()
+                }
+            }
+        }
         scope.launch { ssh.load() }
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
         // A Git operation spans several commands and credential cleanup. Keep ownership
@@ -279,11 +319,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     fun serviceDestroyed(service: DevelopmentService) {
         if (foregroundService === service) {
             foregroundService = null
-            if (mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
+            if (screenOverlayActive() || mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
         }
     }
+    private fun screenOverlayActive() = screenTests.state.value.let { it.active && it.overlayEnabled && it.overlayGranted }
     private fun releaseService() {
-        if (!mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
+        if (!screenOverlayActive() && !mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null

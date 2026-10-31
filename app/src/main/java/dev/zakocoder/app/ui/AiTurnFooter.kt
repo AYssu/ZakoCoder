@@ -27,7 +27,6 @@ internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifi
             Text(if (speed == null) stringResource(R.string.ai_usage_speed_unknown) else stringResource(R.string.ai_usage_speed, speed),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (usage.partial) Text(stringResource(R.string.ai_usage_partial), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (timing?.finished != null) {
             val seconds = ((timing.finished - timing.started).coerceAtLeast(0) / 1000)
             val date = remember(timing.finished) { SimpleDateFormat("MMM d '·' HH:mm", Locale.getDefault()).format(Date(timing.finished)) }
@@ -40,6 +39,6 @@ internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifi
 @Composable
 private fun UsageCount(symbol: String, value: Long?, label: Int) {
     val animated by animateFloatAsState((value ?: 0).toFloat(), tween(450), label = "usage")
-    Text(stringResource(label, symbol, if (value == null) "—" else animated.toLong().toString()),
+    Text(stringResource(label, symbol, if (value == null) "—" else tokenWindowLabel(animated.toLong())),
         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.AtomicFile
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import dev.zakocoder.app.R
 import dev.zakocoder.app.projects.ApkInstallCopy
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,8 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
@@ -54,10 +57,42 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     @Volatile private var selected: Selection? = null
     @Volatile private var operation: Job? = null
     private val rootBackend = RootScreenTestBackend(this.context)
+    private var overlayReturn: (String, String) -> Unit = { _, _ -> }
+    private var overlayStop: (String, String) -> Unit = { project, lease -> stopOverlayTask(project, lease) }
+    private val overlayScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val overlay = ScreenTestOverlay(this.context,
+        { visible -> mutableState.update { it.copy(overlayVisible = visible) } },
+        { project, lease ->
+            if (taskLease(project) == lease) {
+                try { overlayReturn(project, lease) } finally { setOverlayEnabled(false) }
+            }
+        }, { project, lease -> if (taskLease(project) == lease) overlayStop(project, lease) },
+        { code -> mutableState.update { it.copy(overlayEnabled = false, overlayFailure = code, overlayGranted = Settings.canDrawOverlays(this.context)) } })
+    fun stopOverlayTask(expectedProject: String, expectedLease: String): Boolean = synchronized(selectionLock) {
+        if (selected?.projectId != expectedProject || selected?.sessionId != expectedLease) false
+        else { stopWithReason("overlay_stop"); true }
+    }
+    fun bindOverlayActions(returnToApp: (String, String) -> Unit, stopTask: (String, String) -> Unit) {
+        overlayReturn = returnToApp; overlayStop = stopTask
+    }
+    fun reportOverlayServiceFailure() {
+        mutableState.update { it.copy(overlayEnabled = false, overlayFailure = "foreground_service") }
+    }
+    fun setOverlayEnabled(enabled: Boolean) {
+        mutableState.update { it.copy(overlayEnabled = enabled && Settings.canDrawOverlays(this.context), overlayFailure = "") }
+        refresh()
+    }
+    fun openOverlaySettings() {
+        this.context.startActivity(android.content.Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            "package:${this.context.packageName}".toUri()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
     private val connectionCallback: () -> Unit = ::refresh
 
     init {
         ScreenTestAccessibilityService.connectionListeners += java.lang.ref.WeakReference(connectionCallback)
+        overlayScope.launch {
+            state.collect { current -> overlay.update(current.overlayEnabled && current.overlayGranted && current.active && !current.busy, current.projectId, current.projectId?.let(::taskLease)) }
+        }
         refresh()
     }
 
@@ -66,7 +101,8 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
         val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
             ?.split(':')?.any { ComponentName.unflattenFromString(it) == component } == true
         mutableState.update { it.copy(enabled = enabled, connected = ScreenTestAccessibilityService.isConnected(),
-            rootGranted = rootBackend.granted, installAllowed = context.packageManager.canRequestPackageInstalls()) }
+            rootGranted = rootBackend.granted, installAllowed = context.packageManager.canRequestPackageInstalls(),
+            overlayGranted = Settings.canDrawOverlays(context)) }
     }
 
     fun setAccess(access: ScreenTestAccess) {
@@ -103,6 +139,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 busy = false, shareScreenshots = false, summary = message(R.string.screen_test_stopped)) }
             ScreenTestAccessibilityService.instance?.stop()
             rootBackend.stop()
+            overlayScope.launch { overlay.remove() }
             running
         }
         running?.cancel()
@@ -193,6 +230,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             }
             try {
                 withTimeout(20_000) {
+                    overlay.hideForAction()
                     val result = withContext(Dispatchers.IO) {
                         currentCoroutineContext().ensureActive()
                         check(epoch.get() == generation && selected === selection) { message(R.string.screen_test_stopped) }

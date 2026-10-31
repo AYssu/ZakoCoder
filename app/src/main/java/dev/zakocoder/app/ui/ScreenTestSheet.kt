@@ -47,6 +47,10 @@ internal data class ScreenTestUiModel(
     val shareScreenshots: Boolean = false,
     val rootGranted: Boolean = false,
     val installAllowed: Boolean = false,
+    val overlayEnabled: Boolean = false,
+    val overlayGranted: Boolean = false,
+    val overlayVisible: Boolean = false,
+    val overlayFailure: String = "",
 )
 
 internal data class ScreenTestApkUi(val path: String, val packageName: String, val label: String, val debuggable: Boolean)
@@ -69,6 +73,7 @@ internal fun ScreenTestSheet(controller: ScreenTestController, projectId: String
     val unavailable = stringResource(R.string.screen_test_service_unavailable)
     val rootDenied = stringResource(R.string.screen_test_root_denied)
     val installSettingsUnavailable = stringResource(R.string.screen_test_install_settings_unavailable)
+    val overlaySettingsUnavailable = stringResource(R.string.screen_overlay_settings_unavailable)
     val current = state.projectId == projectId && projectId != null
     DisposableEffect(controller, owner) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) controller.refresh() }
@@ -91,7 +96,7 @@ internal fun ScreenTestSheet(controller: ScreenTestController, projectId: String
         ScreenTestPanel(
             model = ScreenTestUiModel(projectName, projectId != null, state.packageName.takeIf { current }, state.apkPath.takeIf { current },
                 state.enabled, state.connected, state.busy, state.summary.takeIf { current }.orEmpty(), current && state.reportPath != null,
-                state.access, state.active, current && state.shareScreenshots, state.rootGranted, state.installAllowed),
+                state.access, state.active, current && state.shareScreenshots, state.rootGranted, state.installAllowed, state.overlayEnabled, state.overlayGranted, state.overlayVisible, state.overlayFailure),
             working = working,
             error = error,
             onChoose = { choosing = true; discover() },
@@ -121,6 +126,12 @@ internal fun ScreenTestSheet(controller: ScreenTestController, projectId: String
                     try { controller.setScreenshotSharing(it, false) }
                     catch (failure: IllegalStateException) { error = failure.message?.takeIf { it.isNotBlank() } ?: fallback }
                 }
+            },
+            onOverlayEnabled = controller::setOverlayEnabled,
+            onOverlaySettings = {
+                try { controller.openOverlaySettings() }
+                catch (_: android.content.ActivityNotFoundException) { error = overlaySettingsUnavailable }
+                catch (_: SecurityException) { error = overlaySettingsUnavailable }
             },
             onStop = controller::stop,
             onReport = {
@@ -164,7 +175,8 @@ internal fun ScreenTestSheet(controller: ScreenTestController, projectId: String
 internal fun ScreenTestPanel(model: ScreenTestUiModel, working: Boolean = false, error: String? = null,
                              onChoose: () -> Unit, onEnable: () -> Unit, onStop: () -> Unit, onReport: () -> Unit,
                              onAccess: (ScreenTestAccess) -> Unit = {}, onRoot: () -> Unit = {}, onShare: (Boolean) -> Unit = {},
-                             onInstallPermission: () -> Unit = {}) {
+                             onInstallPermission: () -> Unit = {}, onOverlayEnabled: (Boolean) -> Unit = {},
+                             onOverlaySettings: () -> Unit = {}) {
     if (!model.hasProject) {
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Text(stringResource(R.string.screen_test_no_project), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
@@ -229,6 +241,37 @@ internal fun ScreenTestPanel(model: ScreenTestUiModel, working: Boolean = false,
                 modifier = Modifier.semantics { contentDescription = shareLabel })
         }
         Text(stringResource(R.string.screen_test_share_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    ScreenTestGroup(stringResource(R.string.screen_overlay_title)) {
+        val overlayLabel = stringResource(R.string.screen_overlay_switch)
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(overlayLabel, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = model.overlayEnabled && model.overlayGranted, onCheckedChange = onOverlayEnabled,
+                enabled = model.overlayGranted && !working,
+                modifier = Modifier.semantics { contentDescription = overlayLabel })
+        }
+        Text(stringResource(R.string.screen_overlay_description), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (model.overlayFailure.isNotBlank()) {
+            ScreenTestError(stringResource(when (model.overlayFailure) {
+                "permission", "window_permission" -> R.string.screen_overlay_failure_permission
+                "foreground_service" -> R.string.screen_overlay_failure_background
+                else -> R.string.screen_overlay_failure_window
+            }))
+            Text(stringResource(R.string.screen_overlay_failure_fallback), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (model.overlayGranted) TextButton(onClick = { onOverlayEnabled(true) }, enabled = !working,
+                modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.screen_overlay_retry)) }
+        } else Text(stringResource(when {
+            !model.overlayGranted -> R.string.screen_overlay_permission_needed
+            !model.overlayEnabled -> R.string.screen_overlay_off
+            model.overlayVisible -> R.string.screen_overlay_visible
+            !model.active -> R.string.screen_overlay_waiting_target
+            else -> R.string.screen_overlay_temporarily_hidden
+        }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!model.overlayGranted) TextButton(onClick = onOverlaySettings, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.screen_overlay_open_settings))
+        }
     }
     ScreenTestGroup(stringResource(R.string.screen_test_run)) {
         SelectionContainer { Text(model.summary.ifBlank { stringResource(R.string.screen_test_idle) }, style = MaterialTheme.typography.bodyMedium) }

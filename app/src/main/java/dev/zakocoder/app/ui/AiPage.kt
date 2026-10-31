@@ -206,7 +206,6 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column {
-            if (state.active && state.turn > 0) Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { AiTurnFooter(state, state.turn) }
             Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
                 IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
                 TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(R.string.ai_prompt), fontSize = 13.sp) },
@@ -222,15 +221,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         }
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            val switchDescription = stringResource(R.string.ai_switch_model)
-            TextButton(onClick = { modelPicker = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = switchDescription },
-                contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Text(models.catalog.active?.model ?: stringResource(R.string.ai_choose_model), Modifier.weight(1f), maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.width(4.dp))
-                WorkbenchIcon(Glyph.ChevronDown, Modifier.size(16.dp))
-            }
+            AiComposerModelButton(models.catalog.active, onClick = { modelPicker = true }, modifier = Modifier.weight(1f))
             val permissionState = stringResource(R.string.ai_permission_current, stringResource(state.policy.default.label), state.policy.overrides.size)
             val permissionDescription = stringResource(R.string.ai_permissions)
             TextButton(onClick = { permissions = true }, enabled = project != null,

@@ -219,7 +219,14 @@ open class AiHistoryStore(private val directory: File) {
             for (messageIndex in 1 until turn.length()) {
                 val message = turn.getJSONObject(messageIndex)
                 when (message.getString("role")) {
-                    "user" -> require(!seenAssistant && pending.isEmpty())
+                    "user" -> {
+                        // App-generated dynamic evidence is appended only after a complete tool
+                        // batch. Ordinary user turns keep the original pre-assistant ordering.
+                        val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
+                            message.keys().asSequence().toSet() == setOf("role", "content") &&
+                            turn.getJSONObject(messageIndex - 1).optString("role") == "tool"
+                        require(pending.isEmpty() && (!seenAssistant || stateUpdate))
+                    }
                     "assistant" -> {
                         seenAssistant = true
                         require(pending.isEmpty())

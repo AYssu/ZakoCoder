@@ -1,7 +1,6 @@
 package dev.zakocoder.app
 
 import android.content.ContextWrapper
-import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
 import kotlinx.coroutines.*
@@ -48,12 +47,39 @@ class AiContextDeviceTest {
         assertTrue(pending.isEmpty())
     }
 
+    @Test(timeout = 90000) fun userTurnAndRestartPreserveEveryPriorRequestMessage() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(contextWindowTokens = 256000, autoCompress = false))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("prefix-restart") }; ready(ai)
+            val prior = mutableListOf<JSONArray>()
+            repeat(3) { turn ->
+                if (turn == 2) {
+                    val saved = f.history.load("prefix-restart").state!!
+                    assertTrue(JSONArray(saved.contextTurns.first()).getJSONObject(0).getString("content").startsWith("User-selected skills for this task."))
+                    main { ai = controller(f); ai.select("prefix-restart") }; ready(ai)
+                    assertFalse(ai.state.value.historyError)
+                }
+                f.server.enqueue(response("verified response $turn"))
+                main { assertTrue(ai.send("Continue user task $turn")) }; await { !ai.state.value.active }
+                assertEquals(AiPhase.Completed, ai.state.value.phase)
+                val messages = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
+                prior.lastOrNull()?.let { previous ->
+                    assertTrue(messages.length() > previous.length())
+                    repeat(previous.length()) { index -> assertEquals("Prefix changed at message $index", previous.getJSONObject(index).toString(), messages.getJSONObject(index).toString()) }
+                }
+                prior.add(messages)
+            }
+        }
+    }
+
     @Test(timeout = 180000) fun unlimitedRoundsToolsRepeatedCompactionAndRestartKeepContext() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        run {
             AiDeviceTest.Fixture(context).use { f ->
                 configure(f, AiContextOptions(contextWindowTokens = 64000, compressionThresholdPercent = 70))
                 val normal = AtomicInteger(); val summaries = AtomicInteger()
                 val prompt = "ORIGINAL_TASK_KEEP_EXACT: inspect only; no edits"
+                var stableMetadata: String? = null
                 f.server.dispatcher = object : Dispatcher() {
                     override fun dispatch(request: RecordedRequest): MockResponse {
                         val body = JSONObject(request.body.readUtf8())
@@ -66,9 +92,17 @@ class AiContextDeviceTest {
                         val messages = body.getJSONArray("messages"); paired(messages)
                         // Fresh manifest evidence is pinned separately from the lossy summary after every compaction.
                         val metadata = (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
-                            .single { it.startsWith("User-selected skills for this task.") }
-                        assertTrue(metadata.contains("current_task_changes"))
-                        assertTrue(metadata.contains("observed_changed_items"))
+                            .last { it.startsWith("User-selected skills for this task.") }
+                        if (stableMetadata == null) stableMetadata = metadata else assertEquals(stableMetadata, metadata)
+                        assertFalse(metadata.contains("current_task_changes"))
+                        val stateUpdates = (0 until messages.length()).map { messages.getJSONObject(it) }
+                            .filter { it.optString("role") == "user" && it.optString("content").startsWith(AI_CONTEXT_UPDATE) }
+                        assertTrue(stateUpdates.isNotEmpty())
+                        val latestChanges = stateUpdates.map { it.getString("content") }
+                            .last { it.contains("SECTION changes") }
+                        assertTrue(latestChanges.contains("current_task_changes"))
+                        assertTrue(latestChanges.contains("observed_changed_items"))
+                        assertTrue(latestChanges.contains("\"sealed\":false"))
                         assertTrue(messages.toString().contains(prompt))
                         return if (n <= 24) response("inspection round $n " + "a".repeat(10000), (1..3).map { AiCall("call-$n-$it", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}") })
                         else response("DONE_WITHOUT_EDITS")
@@ -94,6 +128,8 @@ class AiContextDeviceTest {
                 assertEquals(saved.contextSummary, restored.state.value.contextSummary)
                 assertFalse(restored.state.value.historyError)
                 // Dispatch still asserts the exact original task survives in compressed memory.
+                // A new user task may take a fresh initial project snapshot; stability is task scoped.
+                stableMetadata = null
                 main { restored.send("Continue checking") }; await { !restored.state.value.active }
                 assertEquals(AiPhase.Completed, restored.state.value.phase)
             }
@@ -101,7 +137,7 @@ class AiContextDeviceTest {
     }
 
     @Test(timeout = 120000) fun failedSummaryPreservesProgressAndDoesNotReplayTools() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        run {
             AiDeviceTest.Fixture(context).use { f ->
                 configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
@@ -129,7 +165,7 @@ class AiContextDeviceTest {
     }
 
     @Test(timeout = 120000) fun invalidSummaryCannotExecuteTools() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        run {
             AiDeviceTest.Fixture(context).use { f ->
                 configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
@@ -151,7 +187,7 @@ class AiContextDeviceTest {
     }
 
     @Test(timeout = 120000) fun stopCancelsPendingSummaryWithoutExecutingItsToolCalls() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use {
+        run {
             AiDeviceTest.Fixture(context).use { f ->
                 configure(f, AiContextOptions(contextWindowTokens = 56000, compressionThresholdPercent = 70))
                 File(f.root, "project").mkdirs(); File(f.root, "project/large.txt").writeText(("x".repeat(999) + "\n").repeat(64))
@@ -210,8 +246,17 @@ class AiContextDeviceTest {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     val body = JSONObject(request.body.readUtf8())
                     if (isSummary(body)) {
-                        summaries.incrementAndGet()
-                        assertTrue(body.getJSONArray("messages").getJSONObject(0).getString("content").contains("at most 2000 characters"))
+                        val summaryNumber = summaries.incrementAndGet()
+                        val summaryMessages = body.getJSONArray("messages")
+                        val instruction = summaryMessages.getJSONObject(0).getString("content")
+                        assertTrue(instruction.contains("at most 2000 characters"))
+                        assertFalse(body.has("tools"))
+                        assertTrue(summaryNumber in 1..2)
+                        if (summaryNumber == 2) {
+                            assertTrue(instruction.contains("The previous summary exceeded the character limit"))
+                            assertTrue(instruction.contains("Rewrite the supplied summary more concisely within the same limit"))
+                            assertTrue(summaryMessages.getJSONObject(1).getString("content").contains("s".repeat(2001)))
+                        }
                         return response("s".repeat(2001))
                     }
                     normal.incrementAndGet()
@@ -222,8 +267,11 @@ class AiContextDeviceTest {
             main { ai = controller(f); ai.select("configured-summary") }; ready(ai); withoutSkills(ai)
             main { ai.send("Inspect with a short summary") }; await { !ai.state.value.active }
             assertEquals(AiFailure.Compaction, ai.state.value.failureKind)
-            assertEquals(1, normal.get()); assertEquals(1, summaries.get())
+            assertEquals(1, normal.get()); assertEquals(2, summaries.get())
             assertTrue(ai.state.value.contextSummary.isEmpty())
+            assertTrue(f.history.load("configured-summary").state!!.contextSummary.isEmpty())
+            assertEquals(1, ai.state.value.toolCount)
+            assertEquals(0, ai.state.value.contextCompactions)
         }
     }
     @Test(timeout = 100000) fun largerConfiguredContextSurvivesRestartBeyondLegacyRetentionLimit() = runBlocking {

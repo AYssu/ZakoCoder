@@ -286,13 +286,13 @@ class AiMultimodalControllerDeviceTest {
             assertEquals(AiPhase.Completed, ai.state.value.phase)
             assertEquals(0, ai.state.value.contextCompactions)
             val contextTurn = JSONArray(ai.state.value.contextTurns.single())
-            assertEquals(listOf(image), decodeAiImages(contextTurn.getJSONObject(0).getJSONArray("zako_images")))
+            assertEquals(listOf(image), decodeAiImages((0 until contextTurn.length()).map(contextTurn::getJSONObject).single { it.has("zako_images") }.getJSONArray("zako_images")))
             val normalRequest = JSONObject(f.server.takeRequest(2, TimeUnit.SECONDS)!!.body.readUtf8())
             assertEquals(1, imageUrls(normalRequest).size)
             lateinit var reopened: AiController
             main { reopened = controller(f); reopened.select("compressed-image") }; ready(reopened)
             assertFalse(reopened.state.value.historyError)
-            assertEquals(listOf(image), decodeAiImages(JSONArray(reopened.state.value.contextTurns.single()).getJSONObject(0).getJSONArray("zako_images")))
+            assertEquals(listOf(image), decodeAiImages(JSONArray(reopened.state.value.contextTurns.single()).let { turn -> (0 until turn.length()).map(turn::getJSONObject).single { it.has("zako_images") }.getJSONArray("zako_images") }))
             f.enqueue("followup image remains available")
             main { assertTrue(reopened.send("Continue reviewing the same screenshot")) }; await { !reopened.state.value.active }
             assertEquals(AiPhase.Completed, reopened.state.value.phase)
