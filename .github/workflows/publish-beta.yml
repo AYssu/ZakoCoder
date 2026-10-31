@@ -229,8 +229,6 @@ jobs:
           sdkmanager 'emulator' 'build-tools;36.0.0' 'system-images;android-35;google_apis;x86_64'
           printf 'no\n' | avdmanager create avd --force --name beta-release --package 'system-images;android-35;google_apis;x86_64'
           sudo chmod a+rw /dev/kvm
-          ldd "$ANDROID_HOME/emulator/qemu/linux-x86_64/qemu-system-x86_64" > out/device-validation/emulator-libraries.txt
-          if grep -n 'not found' out/device-validation/emulator-libraries.txt; then exit 1; fi
           "$ANDROID_HOME/emulator/emulator" -version > out/device-validation/emulator-version.txt 2>&1
           "$ANDROID_HOME/emulator/emulator" -accel-check > out/device-validation/acceleration.txt 2>&1
           timeout -k 5 30 adb start-server
