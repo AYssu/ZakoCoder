@@ -9,9 +9,8 @@
     <string name="mcp_error_transport">连接方式缺失、冲突或不受支持。请使用 stdio、http（Streamable HTTP）或 sse；type 与 transport 同时填写时须一致。未保存。</string>
     <string name="mcp_error_fields">配置字段类型、长度或组合不正确。args 应为字符串数组，env 与 headers 应为字符串映射；网络服务不能同时填写 command、args 或 env。未保存。</string>
     <string name="mcp_error_headers">请求头不合法。名称不能重复（忽略大小写），值不能包含换行；Host、Content-Type、Accept 等协议头由应用管理。未保存。</string>
-    <string name="mcp_error_url">服务地址不合法。请填写完整的 http:// 或 https:// 地址，并检查主机及端口（1–65535）。未保存。</string>
+    <string name="mcp_error_url">服务地址不合法。请填写完整的 http:// 或 https:// 域名或 IP 地址，并检查主机及端口（1–65535）。未保存。</string>
     <string name="mcp_error_url_secrets">服务地址不能包含用户名、密码、查询参数或片段。请将认证信息放在 headers 中。未保存。</string>
-    <string name="mcp_error_http_blocked">此地址不允许使用明文 HTTP。公网 MCP 请使用 HTTPS；HTTP 仅支持回环和 10.*、172.16–31.*、192.168.* 内网 IPv4，不支持内网域名。未保存。</string>
     <string name="mcp_error_duplicate_server">已存在同名 MCP 服务。请编辑已有服务，或修改配置中的服务名后重新导入。原配置未覆盖。</string>
     <string name="mcp_error_dns">无法解析 MCP 服务域名。请检查域名、手机网络和 DNS 设置；未自动重试。</string>
     <string name="mcp_error_connect">无法连接 MCP 服务。请检查服务是否启动、监听地址、端口、防火墙，以及手机是否能访问该网络；未自动重试。</string>

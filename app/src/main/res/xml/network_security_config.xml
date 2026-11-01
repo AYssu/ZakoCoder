@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
-    <!-- User-configured MCP and model endpoints may use literal private IPv4 addresses. Android's
-         domain rules cannot represent IP ranges, so cleartext eligibility is checked by
-         McpConfigParser before each MCP request and AiConfigStore.endpoint before each model
-         request. Public model endpoints require HTTPS; local HTTP uses the same host policy. -->
+    <!-- User-configured model and MCP endpoints support HTTP domains and IP addresses.
+         Endpoint validators reject unsupported schemes; transports reject redirects. -->
     <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">localhost</domain>

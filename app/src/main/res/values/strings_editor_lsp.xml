@@ -18,7 +18,7 @@
     <string name="editor_lsp_diagnostic_count">当前文件诊断：%1$d 项</string>
     <string name="editor_lsp_diagnostic_help">诊断可能包含错误、警告或提示；请在编辑器中查看标记。数量不是构建结果。</string>
     <string name="editor_lsp_idle_help">尚未连接当前文件的语言服务，可尝试重新连接。</string>
-    <string name="editor_lsp_unsupported_help">当前接入 Python、JavaScript 和 TypeScript 文件。此文件继续使用现有语法高亮；完整项目编译与其他语言服务尚未接入。</string>
+    <string name="editor_lsp_unsupported_help">当前可为 Python、JS / TS、Java、Kotlin、C / C++、Go、Rust 和 Dart 文件连接实验性语言服务。此文件继续使用现有基础编辑能力；语言服务不代表完整 IDE 或构建验证。</string>
     <string name="editor_lsp_runtime_help">请先在环境页安装 Ubuntu，再返回连接语言服务。代码仍可编辑。</string>
     <string name="editor_lsp_checking_help">正在检查本机 Ubuntu 中是否已安装对应服务，不会自动下载工具。</string>
     <string name="editor_lsp_starting_help">正在启动语言服务并初始化当前文件。首次连接可能需要一些时间。</string>
@@ -39,4 +39,20 @@
     <string name="editor_lsp_hide_diagnostics">收起本地诊断</string>
     <string name="editor_lsp_copy_diagnostics">复制诊断详情</string>
     <string name="editor_lsp_local_diagnostics_help">语言服务本地日志，最多显示末尾 4000 字符，已过滤常见凭据格式。可能包含文件路径；复制分享前请核对内容。</string>
+    <string name="editor_lsp_java">Java · Eclipse JDT LS</string>
+    <string name="editor_lsp_java_dependencies">需要 Ubuntu 与网络。确认后将安装必要的 Ubuntu 依赖及 Eclipse JDT LS；项目依赖和构建配置仍需自行准备，补全与诊断属于实验性支持。</string>
+    <string name="editor_lsp_kotlin">Kotlin · Kotlin Language Server</string>
+    <string name="editor_lsp_kotlin_dependencies">需要 Ubuntu 与网络。确认后将安装必要的 Ubuntu 依赖及 Kotlin Language Server；项目依赖和构建配置仍需自行准备，补全与诊断属于实验性支持。</string>
+    <string name="editor_lsp_cpp">C / C++ · clangd</string>
+    <string name="editor_lsp_cpp_dependencies">需要 Ubuntu 与网络。确认后将安装必要的 Ubuntu 依赖及 clangd；项目依赖和构建配置仍需自行准备，补全与诊断属于实验性支持。</string>
+    <string name="editor_lsp_go">Go · gopls</string>
+    <string name="editor_lsp_go_dependencies">需要 Ubuntu 与网络。确认后将安装必要的 Ubuntu 依赖及 gopls；项目依赖和构建配置仍需自行准备，补全与诊断属于实验性支持。</string>
+    <string name="editor_lsp_rust">Rust · rust-analyzer</string>
+    <string name="editor_lsp_rust_dependencies">需要 Ubuntu 与网络。确认后将安装必要的 Ubuntu 依赖及 rust-analyzer；项目依赖和构建配置仍需自行准备，补全与诊断属于实验性支持。</string>
+    <string name="editor_lsp_dart">Dart · Dart Analysis Server</string>
+    <string name="editor_lsp_dart_dependencies">使用 Flutter 工具包自带的 Dart 分析服务。缺少 Flutter 时会一并联网安装，需要支持的 ARM64 Ubuntu 环境及至少 8 GiB 可用空间；项目依赖仍需通过 pub get 准备。</string>
+    <string name="editor_lsp_disabled">LSP · 已关闭</string>
+    <string name="editor_lsp_enabled_label">启用代码智能</string>
+    <string name="editor_lsp_disabled_help">默认关闭，不检测或启动语言服务。主动开启后为当前文件连接，切换文件时沿用设置；关闭会释放服务进程。安装工具包不会自动开启。</string>
+    <string name="editor_lsp_setting_failed">代码智能开关未能保存，重启后可能恢复原设置，请重新调整。</string>
 </resources>

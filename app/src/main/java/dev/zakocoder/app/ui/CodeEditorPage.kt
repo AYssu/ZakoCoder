@@ -40,7 +40,7 @@ import io.github.rosemoe.sora.widget.EditorSearcher
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 
 @Composable
-internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.zakocoder.app.editor.lsp.LspServer) -> Unit)? = null, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
+internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.zakocoder.app.editor.lsp.LspServer) -> Unit)? = null, lspEnabled: Boolean = false, onLspEnabledChanged: (Boolean) -> Unit = {}, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
     val state by controller.state.collectAsStateWithLifecycle()
     val document = state.document
     val language = document?.let { controller.languages.language(state.path, it.content.getLineString(0)) }
@@ -74,6 +74,15 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
         lifecycleOwner.lifecycle.addObserver(observer)
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) controller.checkDisk()
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(controller, editor, document, state.projectId, state.path, language, lspEnabled, showingPreview) {
+        val view = editor
+        if (lspEnabled && !showingPreview && view != null && document != null && view.text === document.content) {
+            controller.lsp?.attach(view, requireNotNull(state.projectId), state.path) {
+                if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false)
+            }
+        }
+        onDispose { view?.let { controller.lsp?.detach(it, restoreSyntax = true) } }
     }
     var searching by rememberSaveable(state.path) { mutableStateOf(false) }
     var query by rememberSaveable(state.path) { mutableStateOf("") }
@@ -198,9 +207,6 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
                     }
                     // TextMate attachEditor reloads its theme; apply search colors after attachment.
                     colorScheme.setColor(EditorColorScheme.MATCHED_TEXT_BACKGROUND, if (dark) 0xFF344B68.toInt() else 0xFFDCE9FF.toInt())
-                    controller.lsp?.attach(this, requireNotNull(state.projectId), state.path) {
-                        if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false)
-                    }
                     editor = this
                 }
             }, modifier = Modifier.fillMaxWidth().weight(1f).background(if (dark) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface).padding(8.dp), onRelease = {
@@ -210,9 +216,9 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
             })
         } else Spacer(Modifier.weight(1f))
         if (document != null && !showingPreview) controller.lsp?.let { lsp ->
-            EditorLspStatus(lsp, requireNotNull(state.projectId), state.path,
+            EditorLspStatus(lsp, requireNotNull(state.projectId), state.path, enabled = lspEnabled, onEnabledChanged = onLspEnabledChanged,
                 onInstall = { server -> onInstallLsp?.invoke(server) }, onRetry = {
-                    editor?.let { view -> lsp.attach(view, requireNotNull(state.projectId), state.path) {
+                    editor?.takeIf { lspEnabled }?.let { view -> lsp.attach(view, requireNotNull(state.projectId), state.path) {
                         if (language == null) EmptyLanguage() else TextMateLanguage.create("source.zako.$language", false)
                     } }
                 })

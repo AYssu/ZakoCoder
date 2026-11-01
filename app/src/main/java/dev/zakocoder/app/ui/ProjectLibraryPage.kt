@@ -262,8 +262,8 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     if (git) { ProjectGitPage(workbench, project.id, close = { git = false }); return }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
     if (editor.projectId == project.id && !showReferencedDirectory) {
-        CodeEditorPage(workbench.editor, onInstallLsp = { server ->
-            workbench.installToolBundles(setOf(if (server == dev.zakocoder.app.editor.lsp.LspServer.Python) "lsp-python" else "lsp-typescript"))
+        CodeEditorPage(workbench.editor, lspEnabled = state.settings.editorLspEnabled, onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
+            workbench.installToolBundles(setOf(server.bundleId))
         }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
         return
     }

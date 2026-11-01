@@ -11,7 +11,7 @@
 | Anthropic Messages | `/messages` | `x-api-key`、`anthropic-version` | `tool_use` / `tool_result`；保留原始 thinking、签名及 redacted thinking 内容块。 |
 | Gemini GenerateContent | `/models/{model}:streamGenerateContent?alt=sse` | `x-goog-api-key` | `functionCall` / `functionResponse`；保留原始 parts、thoughtSignature 及原生调用 ID 对应关系。 |
 
-模型地址支持 HTTPS；本地网关还可使用 HTTP，限 localhost、127.0.0.1、[::1] 和 RFC1918 私网 IPv4（10/8、172.16/12、192.168/16）。不解析域名来猜测内网身份，不支持公网 HTTP。HTTP 会明文传输请求和认证信息，仅在可信本机／局域网使用。切换协议、主机或有效端口必须重新填写或清除原密钥和自定义请求头；所有协议均禁止重定向。Gemini 的密钥放在请求头，不放 URL；模型可填写普通 ID 或 `models/` 前缀 ID，拒绝其他路径结构。基础地址不包含生成路径；Chat、Responses、Messages 与 `/models` 的常见完整路径会在保存时归一化。支持自定义兼容网关，但必须选择网关实际提供的协议。错误时不会擅自切换协议或发送到其他供应商。
+模型地址支持 HTTP / HTTPS 域名或 IP，可指定端口，不限制本机、内网或公网，也不通过 DNS 解析判断地址位置。地址必须具有有效主机和端口，不允许 URL 内嵌凭据、查询参数或片段。HTTP 连接不加密。切换协议、主机或有效端口必须重新填写或清除原密钥和自定义请求头；所有协议均禁止重定向。Gemini 的密钥放在请求头，不放 URL；模型可填写普通 ID 或 `models/` 前缀 ID，拒绝其他路径结构。基础地址不包含生成路径；Chat、Responses、Messages 与 `/models` 的常见完整路径会在保存时归一化。支持自定义兼容网关，但必须选择网关实际提供的协议。错误时不会擅自切换协议或发送到其他供应商。
 
 模型发现分别读取 OpenAI / Anthropic 的 `data[].id` 或 Gemini 的 `models[].name`。原生 Gemini 过滤不支持 generateContent 的模型；Anthropic、Gemini 按协议分页，有页数与总项数限制。没有列表权限或服务不提供列表时，可以手填模型。
 

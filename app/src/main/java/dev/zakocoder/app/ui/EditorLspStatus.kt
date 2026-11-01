@@ -24,15 +24,17 @@ import dev.zakocoder.app.editor.lsp.*
 @Composable
 internal fun EditorLspStatus(controller: EditorLspController, projectId: String, path: String,
     onInstall: (LspServer) -> Unit, onRetry: () -> Unit,
+    enabled: Boolean = true, onEnabledChanged: ((Boolean) -> Unit)? = null,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
-    EditorLspStatusContent(state, projectId, path, onInstall, onRetry)
+    EditorLspStatusContent(state, projectId, path, onInstall, onRetry, enabled, onEnabledChanged)
 }
 
 /** Stateless rendering is shared with device UI tests; it never creates a process or starts IO. */
 @Composable
 internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, path: String,
     onInstall: (LspServer) -> Unit, onRetry: () -> Unit,
+    enabled: Boolean = true, onEnabledChanged: ((Boolean) -> Unit)? = null,
 ) {
     var expanded by remember(projectId, path) { mutableStateOf(false) }
     var installing by remember(projectId, path) { mutableStateOf(false) }
@@ -43,7 +45,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
     val current = if (server == null) state.copy(phase = LspPhase.Unsupported, server = null, diagnosticCount = 0, code = "")
         else if (state.projectId != projectId || state.path != path || state.server != null && state.server != server) EditorLspState(LspPhase.Idle, server) else state
     val localDiagnostics = remember(current.stderr) { AiLogRedactor("").clean(current.stderr).takeLast(4000) }
-    val label = lspStatusLabel(current)
+    val label = if (enabled) lspStatusLabel(current) else stringResource(R.string.editor_lsp_disabled)
     val description = stringResource(R.string.editor_lsp_status_description, label)
     TextButton(onClick = { expanded = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), shape = RoundedCornerShape(12.dp)) {
@@ -51,6 +53,15 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
             color = if (current.phase == LspPhase.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
     }
     if (expanded) WorkbenchSheet(stringResource(R.string.editor_lsp_title), { expanded = false }) {
+        if (onEnabledChanged != null) {
+            val toggleLabel = stringResource(R.string.editor_lsp_enabled_label)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(toggleLabel, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Switch(checked = enabled, onCheckedChange = onEnabledChanged, modifier = Modifier.semantics { contentDescription = toggleLabel })
+            }
+        }
+        if (!enabled) Text(stringResource(R.string.editor_lsp_disabled_help), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(label, style = MaterialTheme.typography.titleSmall)
@@ -62,9 +73,9 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
                 }
             }
         }
-        Text(stringResource(lspPhaseHelp(current.phase)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (current.phase == LspPhase.Checking || current.phase == LspPhase.Starting) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (current.phase == LspPhase.Ready) {
+        if (enabled) Text(stringResource(lspPhaseHelp(current.phase)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (enabled && (current.phase == LspPhase.Checking || current.phase == LspPhase.Starting)) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (enabled && current.phase == LspPhase.Ready) {
             Text(stringResource(R.string.editor_lsp_diagnostic_count, current.diagnosticCount), style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.editor_lsp_diagnostic_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -87,7 +98,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
         if (current.phase == LspPhase.MissingServer && server != null) {
             Button(onClick = { installing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_install)) }
         }
-        if (current.phase in setOf(LspPhase.Idle, LspPhase.MissingServer, LspPhase.Failed, LspPhase.RuntimeUnavailable)) {
+        if (enabled && current.phase in setOf(LspPhase.Idle, LspPhase.MissingServer, LspPhase.Failed, LspPhase.RuntimeUnavailable)) {
             OutlinedButton(onClick = { expanded = false; onRetry() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_retry)) }
         }
     }
@@ -97,7 +108,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(lspServerLabel(server)), style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.editor_lsp_install_network), style = MaterialTheme.typography.bodySmall)
-                Text(stringResource(if (server == LspServer.Python) R.string.editor_lsp_python_dependencies else R.string.editor_lsp_typescript_dependencies), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(lspServerDependencies(server)), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.editor_lsp_install_location, server.executable), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                 TextButton(onClick = { scriptExpanded = !scriptExpanded }) { Text(stringResource(if (scriptExpanded) R.string.editor_lsp_hide_script else R.string.editor_lsp_show_script)) }
                 if (scriptExpanded) SelectionContainer { Text(server.installScript, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
@@ -119,7 +130,26 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
         LspPhase.Failed -> R.string.editor_lsp_failed
     })
 }
-private fun lspServerLabel(server: LspServer) = if (server == LspServer.Python) R.string.editor_lsp_python else R.string.editor_lsp_typescript
+private fun lspServerLabel(server: LspServer) = when (server) {
+    LspServer.Python -> R.string.editor_lsp_python
+    LspServer.TypeScript -> R.string.editor_lsp_typescript
+    LspServer.Java -> R.string.editor_lsp_java
+    LspServer.Kotlin -> R.string.editor_lsp_kotlin
+    LspServer.Cpp -> R.string.editor_lsp_cpp
+    LspServer.Go -> R.string.editor_lsp_go
+    LspServer.Rust -> R.string.editor_lsp_rust
+    LspServer.Dart -> R.string.editor_lsp_dart
+}
+private fun lspServerDependencies(server: LspServer) = when (server) {
+    LspServer.Python -> R.string.editor_lsp_python_dependencies
+    LspServer.TypeScript -> R.string.editor_lsp_typescript_dependencies
+    LspServer.Java -> R.string.editor_lsp_java_dependencies
+    LspServer.Kotlin -> R.string.editor_lsp_kotlin_dependencies
+    LspServer.Cpp -> R.string.editor_lsp_cpp_dependencies
+    LspServer.Go -> R.string.editor_lsp_go_dependencies
+    LspServer.Rust -> R.string.editor_lsp_rust_dependencies
+    LspServer.Dart -> R.string.editor_lsp_dart_dependencies
+}
 private fun lspPhaseHelp(phase: LspPhase) = when (phase) {
     LspPhase.Idle -> R.string.editor_lsp_idle_help
     LspPhase.Unsupported -> R.string.editor_lsp_unsupported_help

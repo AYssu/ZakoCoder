@@ -4,4 +4,16 @@
     <string name="bundle_lsp_python_description">安装独立的 Python LSP 环境，为编辑器提供诊断及补全，需要联网下载依赖。</string>
     <string name="bundle_lsp_typescript">JavaScript / TypeScript 语言服务</string>
     <string name="bundle_lsp_typescript_description">安装独立的 TypeScript LSP 工具，为 JS / TS 文件提供诊断及补全，需要 Node.js 和联网下载依赖。</string>
+    <string name="bundle_lsp_java">Java 语言服务</string>
+    <string name="bundle_lsp_java_description">按需安装 Eclipse JDT LS，为 Java 文件提供实验性补全与诊断；需 Ubuntu 和网络，项目依赖仍需自行准备。</string>
+    <string name="bundle_lsp_kotlin">Kotlin 语言服务</string>
+    <string name="bundle_lsp_kotlin_description">按需安装 Kotlin Language Server，为 Kotlin 文件提供实验性补全与诊断；需 Ubuntu 和网络，项目依赖仍需自行准备。</string>
+    <string name="bundle_lsp_cpp">C / C++ 语言服务</string>
+    <string name="bundle_lsp_cpp_description">按需安装 clangd，为 C / C++ 文件提供实验性补全与诊断；需 Ubuntu 和网络，项目依赖仍需自行准备。</string>
+    <string name="bundle_lsp_go">Go 语言服务</string>
+    <string name="bundle_lsp_go_description">按需安装 gopls，为 Go 文件提供实验性补全与诊断；需 Ubuntu 和网络，项目依赖仍需自行准备。</string>
+    <string name="bundle_lsp_rust">Rust 语言服务</string>
+    <string name="bundle_lsp_rust_description">按需安装 rust-analyzer，为 Rust 文件提供实验性补全与诊断；需 Ubuntu 和网络，项目依赖仍需自行准备。</string>
+    <string name="bundle_lsp_dart">Dart 语言服务</string>
+    <string name="bundle_lsp_dart_description">使用 Flutter 工具包自带的 Dart 分析服务，提供实验性补全与诊断；缺少 Flutter 时会一并安装，需要 Ubuntu、网络及足够存储空间。</string>
 </resources>

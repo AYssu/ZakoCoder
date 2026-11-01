@@ -8,11 +8,17 @@ import io.github.rosemoe.sora.lsp.client.languageserver.serverdefinition.CustomL
 import io.github.rosemoe.sora.lsp.editor.LspEditor
 import io.github.rosemoe.sora.lsp.editor.LspProject
 import io.github.rosemoe.sora.widget.CodeEditor
+import io.github.rosemoe.sora.event.ContentChangeEvent
+import org.eclipse.lsp4j.TextDocumentSyncKind
+import java.util.concurrent.atomic.AtomicReference
+import io.github.rosemoe.sora.lsp.requests.Timeout
+import io.github.rosemoe.sora.lsp.requests.Timeouts
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.eclipse.lsp4j.CompletionParams
+import org.eclipse.lsp4j.DocumentDiagnosticParams
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.TextDocumentIdentifier
 import java.lang.ref.WeakReference
@@ -30,6 +36,8 @@ class EditorLspController(
     private val settings: () -> AppSettings,
     private val available: () -> Boolean,
 ) {
+    // Sora otherwise abandons initialization after 10 seconds, before the guest JVM is warm.
+    init { Timeout[Timeouts.INIT] = 180_000 }
     private val hostDirectory = context.filesDir
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(EditorLspState())
@@ -39,7 +47,7 @@ class EditorLspController(
     private var session: Session? = null
     private var owner: WeakReference<CodeEditor>? = null
     private data class Session(val projectId: String, val path: String, val view: WeakReference<CodeEditor>, val project: LspProject,
-        val editor: LspEditor, val connection: UbuntuLspConnection, val languageFactory: () -> Language, val released: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean())
+        val editor: LspEditor, val connection: UbuntuLspConnection, val languageFactory: () -> Language, val released: java.util.concurrent.atomic.AtomicBoolean = java.util.concurrent.atomic.AtomicBoolean(), var unsubscribe: (() -> Unit)? = null)
 
     /** Supply a NEW syntax Language instance: CodeEditor destroys its previous Language on replace. */
     fun attach(view: CodeEditor, projectId: String, path: String, languageFactory: () -> Language) {
@@ -67,7 +75,8 @@ class EditorLspController(
                 ensureActive()
                 val project = LspProject(lspProjectPath(projectId))
                 val extension = path.substringAfterLast('.')
-                val wire = LspWireAdapter(lspProjectPath(projectId), document, server.languageFor(extension)) { diagnosticPath ->
+                val snapshot = AtomicReference(view.text.toString())
+                val wire = LspWireAdapter(lspProjectPath(projectId), document, server.languageFor(extension), documentSnapshot = { snapshot.get() }) { diagnosticPath ->
                     if (diagnosticPath == document) project.diagnosticsContainer.setDiagnostics(io.github.rosemoe.sora.lsp.utils.FileUri(document), mutableListOf())
                 }
                 val connection = UbuntuLspConnection(command, hostDirectory, { text ->
@@ -80,10 +89,12 @@ class EditorLspController(
                 val active = Session(projectId, path, WeakReference(view), project, editor, connection, languageFactory)
                 created = active
                 session = active
+                val receipt = view.subscribeEvent(ContentChangeEvent::class.java) { _, _ -> snapshot.set(view.text.toString()) }
+                active.unsubscribe = { receipt.unsubscribe() }
                 editor.wrapperLanguage = languageFactory()
                 editor.editor = view
                 mutable.value = mutable.value.copy(phase = LspPhase.Starting)
-                try { withTimeout(25_000) { editor.connect() } }
+                try { withTimeout(server.connectTimeoutMillis) { editor.connect() } }
                 catch (timeout: TimeoutCancellationException) {
                     currentCoroutineContext().ensureActive()
                     if (ticket == generation) {
@@ -92,15 +103,46 @@ class EditorLspController(
                     }
                     return@launch
                 }
+                // Sora 0.23.6 uses the insertion END as incremental range.end. Send full
+                // snapshots instead, which the selected servers accept, including after setText.
+                editor.textDocumentSyncKind = TextDocumentSyncKind.Full
                 ensureActive()
                 if (ticket != generation) return@launch
                 mutable.value = mutable.value.copy(phase = LspPhase.Ready, diagnosticCount = editor.diagnostics.size)
+                val pullsDiagnostics = withContext(Dispatchers.IO) { editor.languageServerWrapper.getServerCapabilities()?.diagnosticProvider != null }
+                var nextPull = 0L
                 while (isActive && ticket == generation && session === active) {
                     delay(500)
                     if (!connection.isAlive) {
                         mutable.value = mutable.value.copy(phase = LspPhase.Failed, code = "lsp_server_exited")
                         view.setEditorLanguage(languageFactory())
                         break
+                    }
+                    val currentText = snapshot.get()
+                    // Apply the same interval after success, unchanged reports and failures.
+                    if (pullsDiagnostics && wire.hasSentSnapshot(currentText) &&
+                        System.nanoTime() >= nextPull) {
+                        try {
+                            val future = editor.requestManager?.diagnostic(DocumentDiagnosticParams(TextDocumentIdentifier(lspFileUri(projectId, path))))
+                            val report = future?.let { withTimeout(15_000) { it.awaitLsp() } }
+                            if (report?.isLeft == true && currentText == snapshot.get() && ticket == generation && session === active) {
+                                val lines = currentText.split('\n')
+                                val items = report.left.items.filter { item ->
+                                    val start = item.range?.start; val end = item.range?.end
+                                    start != null && end != null && start.line in lines.indices && end.line in lines.indices &&
+                                        start.character in 0..lines[start.line].length && end.character in 0..lines[end.line].length &&
+                                        (end.line > start.line || end.line == start.line && end.character >= start.character)
+                                }
+                                project.diagnosticsContainer.setDiagnostics(io.github.rosemoe.sora.lsp.utils.FileUri(document), items.toMutableList())
+                                editor.diagnostics = items
+                                mutable.value = mutable.value.copy(code = "")
+                            }
+                        } catch (timeout: TimeoutCancellationException) {
+                            currentCoroutineContext().ensureActive()
+                            mutable.value = mutable.value.copy(code = "lsp_diagnostics_timeout")
+                        } catch (cancelled: CancellationException) { throw cancelled }
+                        catch (_: Exception) { mutable.value = mutable.value.copy(code = "lsp_diagnostics_failed") }
+                        nextPull = System.nanoTime() + 3_000_000_000L
                     }
                     mutable.value = mutable.value.copy(diagnosticCount = editor.diagnostics.size)
                 }
@@ -148,6 +190,7 @@ class EditorLspController(
     private suspend fun release(active: Session) = withContext(NonCancellable + Dispatchers.IO) {
         // Close the transport before Sora shutdown, so blocked initialization cannot respawn it.
         if (!active.released.compareAndSet(false, true)) return@withContext
+        withContext(Dispatchers.Main.immediate) { active.unsubscribe?.invoke(); active.unsubscribe = null }
         active.connection.close()
         runCatching { active.project.dispose() }
     }

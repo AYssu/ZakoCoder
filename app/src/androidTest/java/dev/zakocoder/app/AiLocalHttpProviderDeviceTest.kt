@@ -21,6 +21,23 @@ class AiLocalHttpProviderDeviceTest {
         catch (_: AiOriginChanged) { }
     }
 
+    @Test fun publicHttpDomainsAndIpAddressesAreAcceptedByEveryProtocolWithoutMakingRequests() {
+        for (host in listOf("api.example.org", "8.8.8.8", "[2001:db8::1]")) {
+            assertTrue(NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(host.removePrefix("[").removeSuffix("]")))
+            for (protocol in AiApiProtocol.entries) {
+                val base = "http://$host:8765/v1"
+                val config = AiConfig(endpoint = base, model = "fixture-model", protocol = protocol)
+                val expected = when (protocol) {
+                    AiApiProtocol.Gemini -> "$base/models/fixture-model:streamGenerateContent?alt=sse"
+                    else -> base + protocol.requestPath
+                }
+                assertEquals(expected, AiProviderRouting.requestUrl(config))
+                assertEquals("$base/models", AiProviderRouting.modelsUrl(config).toString())
+                assertTrue(runCatching { AiProviderRouting.requestUrl(config.copy(endpoint = "http://user:fixture@api.example.org/v1")) }.isFailure)
+            }
+        }
+    }
+
     @Test(timeout = 60000) fun localHttpCatalogDiscoveryAndStreamingToolProbeUseActualCleartextConnection() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
             MockWebServer().use { server ->

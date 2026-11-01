@@ -110,7 +110,7 @@ class McpFailureUiDeviceTest {
                 show(true)
                 await("Import source field") { nodes { all -> all.count { it.config.getOrNull(SemanticsActions.SetText) != null } >= 2 } }
                 val drafts = listOf("""{"token":"ui-fixture-only",}""" to "JsonSyntax",
-                    """{"type":"http","url":"http://8.8.8.8/mcp"}""" to "HttpNotAllowed")
+                    """{"type":"http","url":"http:///mcp"}""" to "Url")
                 for ((draft, reason) in drafts) {
                     nodes { all -> assertTrue(all.last { it.config.getOrNull(SemanticsActions.SetText) != null }
                         .config[SemanticsActions.SetText].action?.invoke(AnnotatedString(draft)) == true) }

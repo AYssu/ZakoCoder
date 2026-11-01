@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mcp_import_formats_hint">粘贴单个服务配置（type、url 或 command 等），也支持 mcpServers 包装。全部导入为停用状态，忽略 autoApprove；不会覆盖已有同名服务。配置可能含密钥，默认隐藏。</string>
+    <string name="mcp_import_formats_hint">粘贴单个服务配置（type、url 或 command 等），也支持 mcpServers 包装；网络服务支持 HTTP / HTTPS 域名或 IP。全部导入为停用状态，忽略 autoApprove；不会覆盖已有同名服务。配置可能含密钥，默认隐藏。</string>
     <string name="mcp_import_single_name">单个服务名称（可选）</string>
     <string name="mcp_import_single_name_hint">只用于没有 mcpServers 包装的配置；留空优先使用 JSON 的 name，否则命名为 Imported MCP。</string>
 </resources>
