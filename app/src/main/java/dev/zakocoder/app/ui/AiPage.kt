@@ -173,19 +173,30 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
                 if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
                     AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
-                        onRetry = if (!state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
+                        onRetry = if (!state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
                             retryTarget = state.timeline.first { it.turn == entry.turn && it.role == AiRole.User }; editingMessage = false
                         }) else null,
-                        onEdit = if (entry.role == AiRole.User && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured) ({ retryTarget = entry; editingMessage = true }) else null,
+                        onEdit = if (entry.role == AiRole.User && !state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured) ({ retryTarget = entry; editingMessage = true }) else null,
                         onRequests = if (state.requests.any { it.turn == entry.turn }) ({ detailPanel = "requests" }) else null)
                 }
                 else state.events.find { it.id == entry.toolId }?.let { event ->
                     val terminalId = if (event.tool in setOf(dev.zakocoder.app.ai.AiTool.StartTerminal, dev.zakocoder.app.ai.AiTool.ReadTerminal, dev.zakocoder.app.ai.AiTool.SendTerminalInput) && event.status == dev.zakocoder.app.ai.AiToolStatus.Succeeded)
                         runCatching { org.json.JSONObject(event.output).getString("terminal_id") }.getOrNull() else null
                     val terminal = workbenchState.sessions.singleOrNull { it.id == terminalId && it.projectId == state.projectId }
-                    AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } })
+                    val question = state.questions.singleOrNull { it.eventId == event.id }
+                    if (question != null) {
+                        val projectId = state.projectId
+                        val continuation = state.questionContinuation?.takeIf { it.questionId == question.id }
+                        val canAnswer = continuation != null && projectId != null && !state.active && !state.restoring && !state.historyError && state.configured &&
+                            !state.permissionsLoading && !state.permissionsSaving && !models.loading && !models.saving && !workbenchState.busy
+                        AiQuestionCard(question, enabled = canAnswer,
+                            onAnswer = { answer -> if (projectId != null && !workbench.ai.answerQuestion(projectId, state.conversationId, question.id, answer)) messageActionError = true },
+                            onResume = if (continuation != null && question.answer != null && !state.active) ({
+                                if (projectId != null && !workbench.ai.resumeQuestion(projectId, state.conversationId, question.id)) messageActionError = true
+                            }) else null)
+                    } else AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } })
                 }
-                if (entry.turn > 0 && state.timeline.getOrNull(index + 1)?.turn != entry.turn && !(state.active && entry.turn == state.turn))
+                if (entry.turn > 0 && state.timeline.getOrNull(index + 1)?.turn != entry.turn && !((state.active || state.questionContinuation != null) && entry.turn == state.turn))
                     AiTurnFooter(state, entry.turn)
             }
             items(state.drafts, key = { "draft-${it.index}" }) { draft -> Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -217,15 +228,15 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column {
             Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.Bottom) {
-                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
-                TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(R.string.ai_prompt), fontSize = 13.sp) },
+                IconButton(onClick = { attaching = true }, enabled = project != null && !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, modifier = Modifier.padding(bottom = 4.dp)) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_context_attach)) }
+                TextField(input, { if (it.length <= 16000) input = it }, enabled = !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving, placeholder = { Text(stringResource(if (state.questionContinuation != null) R.string.ai_question_composer_hint else R.string.ai_prompt), fontSize = 13.sp) },
                     modifier = Modifier.weight(1f), maxLines = 4, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, lineHeight = 20.sp),
                     colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface, disabledContainerColor = MaterialTheme.colorScheme.surface,
                         focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent))
-                IconButton(onClick = { if (state.active) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; panel = 0; follow = true } },
-                    enabled = if (state.active) state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && !workbenchState.busy,
+                IconButton(onClick = { if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; panel = 0; follow = true } },
+                    enabled = if (state.active || state.questionContinuation != null) !state.restoring && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && !workbenchState.busy,
                     modifier = Modifier.padding(bottom = 4.dp)) {
-                    WorkbenchIcon(if (state.active) Glyph.Close else Glyph.Send, description = stringResource(if (state.active) R.string.ai_stop else R.string.ai_send), tint = if (state.active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                    WorkbenchIcon(if (state.active || state.questionContinuation != null) Glyph.Close else Glyph.Send, description = stringResource(if (state.active || state.questionContinuation != null) R.string.ai_stop else R.string.ai_send), tint = if (state.active || state.questionContinuation != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 }
             }
         }

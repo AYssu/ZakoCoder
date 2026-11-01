@@ -1,0 +1,19 @@
+<resources>
+    <string name="ai_tool_ask_user">询问用户</string>
+    <string name="ai_tool_ask_user_desc">向用户提出一个问题，等待选择或自定义回答后继续当前任务</string>
+    <string name="ai_question_title">助手提问</string>
+    <string name="ai_question_waiting">等待回答</string>
+    <string name="ai_question_answered">已回答</string>
+    <string name="ai_question_your_answer">你的回答</string>
+    <string name="ai_question_custom">自定义回答</string>
+    <string name="ai_question_custom_hint">也可以直接写下你的想法</string>
+    <string name="ai_question_waiting_note">任务已暂停。选择一项或填写回答后继续。</string>
+    <string name="ai_question_submit">提交回答并继续</string>
+    <string name="ai_question_resume">继续任务</string>
+    <string name="ai_question_resume_note">回答已保存，继续原任务，无需再次回答。</string>
+    <string name="ai_question_character_count">%1$d / %2$d 字符</string>
+    <string name="ai_question_cancelled">已取消</string>
+    <string name="ai_question_cancelled_note">此问题已取消，无需回答。</string>
+    <string name="ai_question_single_call">提问必须单独调用，请先询问用户再执行其他操作</string>
+    <string name="ai_question_composer_hint">请先回答对话中的问题，或停止当前任务</string>
+</resources>

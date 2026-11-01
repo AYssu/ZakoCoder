@@ -19,6 +19,7 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     SshRemote("ssh_remote", R.string.ai_ssh_tool, R.string.ai_ssh_tool_desc, true),
     AndroidTest("android_test", R.string.ai_screen_test_tool, R.string.ai_screen_test_tool_desc, true),
     UseMcp("use_mcp", R.string.ai_tool_mcp, R.string.ai_tool_mcp_desc, true),
+    AskUser("ask_user", R.string.ai_tool_ask_user, R.string.ai_tool_ask_user_desc),
     UpdatePlan("update_plan", R.string.ai_tool_plan, R.string.ai_tool_plan_desc);
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }
@@ -34,7 +35,7 @@ enum class AiToolStatus(val label: Int) {
     Succeeded(R.string.ai_status_succeeded), Failed(R.string.ai_status_failed), Denied(R.string.ai_status_denied), Cancelled(R.string.ai_status_cancelled), Incomplete(R.string.ai_status_incomplete);
     val terminal get() = this !in setOf(Queued, Waiting, Running)
 }
-enum class AiPhase(val label: Int) { Compacting(R.string.ai_phase_compacting), Idle(R.string.ai_phase_idle), Requesting(R.string.ai_phase_requesting), Receiving(R.string.ai_phase_receiving),
+enum class AiPhase(val label: Int) { Compacting(R.string.ai_phase_compacting), Idle(R.string.ai_phase_idle), Requesting(R.string.ai_phase_requesting), Receiving(R.string.ai_phase_receiving), AwaitingAnswer(R.string.ai_question_waiting),
     Waiting(R.string.ai_status_waiting), Executing(R.string.ai_phase_executing), Stopping(R.string.ai_phase_stopping), Completed(R.string.ai_phase_completed), Failed(R.string.ai_status_failed), Cancelled(R.string.ai_status_cancelled) }
 enum class AiDecision { Once, TaskTarget, TaskTool, Reject }
 data class AiToolEvent(val id: String, val callId: String, val tool: AiTool?, val name: String, val input: String, val reason: String,
