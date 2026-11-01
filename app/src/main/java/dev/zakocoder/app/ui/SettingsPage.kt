@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,6 +124,14 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         notificationStatus = notifications.status()
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
+    var usageOpen by rememberSaveable { mutableStateOf(false) }
+    if (usageOpen) {
+        val usage by workbench.ai.usageStatistics.collectAsStateWithLifecycle()
+        LaunchedEffect(Unit) { workbench.ai.refreshUsageStatistics() }
+        AiFullScreen(stringResource(R.string.ai_usage_dashboard), { usageOpen = false }) {
+            AiUsageDashboard(usage, state.projects.associate { it.id to it.name }, workbench.ai::refreshUsageStatistics)
+        }
+    }
     var sshLicenseOpen by remember { mutableStateOf(false) }
     if (sshLicenseOpen) {
         var licenseFailed by remember { mutableStateOf(false) }
@@ -140,6 +150,32 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.selectedId, state.project?.name.orEmpty()) { capabilityPackagesOpen = false }
     var aiPermissions by remember { mutableStateOf(false) }
     if (aiPermissions) AiPermissionsSheet(workbench, state.projects.find { it.id == workbench.ai.state.value.projectId }?.name.orEmpty(), { aiPermissions = false })
+    var appPermissionsOpen by rememberSaveable { mutableStateOf(false) }
+    var rootRequestBusy by remember { mutableStateOf(false) }
+    var rootRequestError by remember { mutableStateOf("") }
+    val permissionScope = rememberCoroutineScope()
+    val rootDeniedMessage = stringResource(R.string.screen_test_root_denied)
+    val rootFailedMessage = stringResource(R.string.screen_test_operation_failed)
+    if (appPermissionsOpen) {
+        val screenPermissions by workbench.screenTests.state.collectAsStateWithLifecycle()
+        AppPermissionsPage(rootGranted = screenPermissions.rootGranted, rootBusy = rootRequestBusy, rootError = rootRequestError,
+            onRequestRoot = {
+                permissionScope.launch {
+                    rootRequestBusy = true; rootRequestError = ""
+                    try {
+                        workbench.screenTests.setAccess(dev.zakocoder.app.screentest.ScreenTestAccess.Root)
+                        if (!workbench.screenTests.requestRootAccess()) rootRequestError = rootDeniedMessage
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: Exception) { rootRequestError = rootFailedMessage }
+                    finally { rootRequestBusy = false }
+                }
+            }, onToolPermissions = {
+                workbench.ai.select(state.selectedId)
+                if (workbench.ai.state.value.projectId == state.selectedId) { appPermissionsOpen = false; aiPermissions = true }
+            }, onBack = { appPermissionsOpen = false },
+            toolsEnabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
+            backgroundServiceRunning = state.backgroundServiceRunning, backgroundServiceError = state.backgroundServiceError)
+    }
     var editing by remember { mutableStateOf<String?>(null) }
     var confirmZsh by remember { mutableStateOf(false) }
     val notConfigured = stringResource(R.string.not_configured)
@@ -152,6 +188,9 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 24.dp)) {
         item { SettingsGroup(stringResource(R.string.nav_ai)) {
             SettingsRow(stringResource(R.string.ai_settings), models.catalog.active?.name ?: notConfigured, glyph = Glyph.Ai, onClick = onModels)
+            SettingsDivider()
+            SettingsRow(stringResource(R.string.ai_usage_dashboard), stringResource(R.string.ai_usage_dashboard_hint), glyph = Glyph.History,
+                onClick = { usageOpen = true })
             SettingsDivider()
             SettingsRow(stringResource(R.string.ai_extensions), stringResource(R.string.ai_extensions_types), glyph = Glyph.Extensions, onClick = onExtensions)
             SettingsDivider()
@@ -222,6 +261,9 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             }
         } }
         item { SettingsGroup(stringResource(R.string.application_settings)) {
+            SettingsRow(stringResource(R.string.app_permissions_title), stringResource(R.string.app_permissions_hint), glyph = Glyph.Shield,
+                onClick = { appPermissionsOpen = true })
+            SettingsDivider()
             SettingsRow(stringResource(R.string.running_notifications), stringResource(notificationStatus.label()), glyph = Glyph.Bell, onClick = { editing = "notifications" })
         } }
         item {

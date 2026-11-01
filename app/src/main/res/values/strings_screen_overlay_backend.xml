@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="screen_overlay_handle">测试</string>
+    <string name="screen_overlay_handle">助手 · 测试</string>
     <string name="screen_overlay_expand">展开或收起屏幕测试操作，可拖动</string>
     <string name="screen_overlay_return">返回助手</string>
     <string name="screen_overlay_stop">停止任务</string>
     <string name="screen_overlay_collapse">收起屏幕测试操作，可拖动</string>
     <string name="screen_overlay_frame_timeout">悬浮窗隐藏后未及时完成画面同步；本次未执行屏幕操作，请重试。</string>
     <string name="screen_overlay_remove_failed">悬浮窗未能安全隐藏，本次未执行屏幕操作。请关闭悬浮权限后重试。</string>
+    <string name="screen_overlay_conversation_empty">展开查看测试状态，或返回助手继续对话。</string>
+    <string name="screen_test_stage_timeout">屏幕测试在 %1$s 阶段超过 %2$d 秒。未自动重放操作，请返回助手检查后台运行权限、目标前台状态，并重新观察后继续。</string>
+    <string name="screen_test_root_stage_timeout">Root 屏幕操作在 %1$s 阶段超过 %2$d 秒。请检查目标界面及后台运行状态，重新观察后继续；未自动重放输入。</string>
+    <string name="screen_test_stage_frame">画面同步</string>
+    <string name="screen_test_stage_artifact">安装包校验</string>
+    <string name="screen_test_stage_foreground">前台窗口检查</string>
+    <string name="screen_test_stage_occlusion">窗口遮挡检查</string>
+    <string name="screen_test_stage_nodes">界面节点读取</string>
+    <string name="screen_test_stage_input">界面输入</string>
+    <string name="screen_test_stage_access">Root 权限检查</string>
+    <string name="screen_test_stage_accessibility">无障碍操作</string>
+    <string name="screen_test_stage_root">Root 界面操作</string>
+    <string name="screen_test_stage_operation">界面操作</string>
 </resources>

@@ -38,12 +38,16 @@ import dev.zakocoder.app.WorkbenchState
 internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onProjectPath: (String, String) -> Unit = { _, _ -> }) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
+    val usageStatistics by workbench.ai.usageStatistics.collectAsStateWithLifecycle()
     val entryAnimations = remember(state.projectId, state.conversationId) { LiveEntryAnimations(state.timeline.map { it.id }) }
     entryAnimations.observe(state.timeline.map { it.id }, state.active)
     val extensions by workbench.mcp.state.collectAsStateWithLifecycle()
     var commands by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     var commandsTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
     var checkpoints by remember { mutableStateOf(false) }
+    var retryTarget by remember(state.projectId, state.conversationId) { mutableStateOf<dev.zakocoder.app.ai.AiEntry?>(null) }
+    var editingMessage by remember { mutableStateOf(false) }
+    var messageActionError by remember(state.projectId, state.conversationId) { mutableStateOf(false) }
     var attaching by remember { mutableStateOf(false) }
     var imageTarget by remember { mutableStateOf<Pair<String?, String>?>(null) }
     val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -128,6 +132,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 }
             }
         }
+        if (messageActionError) Text(stringResource(R.string.ai_message_retry_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.active) AiRetryStatus(state.retryNotice)
@@ -167,7 +172,12 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             itemsIndexed(state.timeline, key = { _, entry -> entry.id }) { index, entry ->
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
                 if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
-                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id)
+                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
+                        onRetry = if (!state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
+                            retryTarget = state.timeline.first { it.turn == entry.turn && it.role == AiRole.User }; editingMessage = false
+                        }) else null,
+                        onEdit = if (entry.role == AiRole.User && !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured) ({ retryTarget = entry; editingMessage = true }) else null,
+                        onRequests = if (state.requests.any { it.turn == entry.turn }) ({ detailPanel = "requests" }) else null)
                 }
                 else state.events.find { it.id == entry.toolId }?.let { event ->
                     val terminalId = if (event.tool in setOf(dev.zakocoder.app.ai.AiTool.StartTerminal, dev.zakocoder.app.ai.AiTool.ReadTerminal, dev.zakocoder.app.ai.AiTool.SendTerminalInput) && event.status == dev.zakocoder.app.ai.AiToolStatus.Succeeded)
@@ -239,12 +249,24 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
     }
     }
+    retryTarget?.let { selected ->
+        val ownerProject = state.projectId
+        val ownerConversation = state.conversationId
+        AiMessageRetryDialog(selected, editingMessage, onDismiss = { retryTarget = null }, onConfirm = { text ->
+            retryTarget = null
+            if (ownerProject != null) uiScope.launch {
+                val sent = workbench.ai.retryTurn(ownerProject, ownerConversation, selected.turn, text)
+                if (sent) { panel = 0; follow = true }
+                else if (workbench.ai.state.value.let { it.projectId == ownerProject && it.conversationId == ownerConversation }) messageActionError = true
+            }
+        })
+    }
     if (modelPicker) AiModelPicker(workbench.ai, { modelPicker = false },
         onAdd = { modelPicker = false; onAddModel() }, onManage = { modelPicker = false; onModels() })
     if (detailPanel == "requests") AiFullScreen(stringResource(R.string.ai_requests), { detailPanel = null }) {
         detailState.SaveableStateProvider("${state.projectId}:${state.conversationId}:requests") {
             Box(Modifier.padding(horizontal = 20.dp)) { AiTaskPlanPanel(state, 2, visible = !keyboardOpen) }
-            AiRequestsPanel(state, Modifier.weight(1f).padding(horizontal = 16.dp))
+            AiRequestsPanel(state, Modifier.weight(1f).padding(horizontal = 16.dp), usageState = usageStatistics, onRefreshUsage = workbench.ai::refreshUsageStatistics)
         }
     }
     if (detailPanel == "validation") AiFullScreen(stringResource(R.string.project_validation), { detailPanel = null }) {
@@ -348,7 +370,8 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 
 @Suppress("DEPRECATION")
 @Composable
-internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}) {
+internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}, onRetry: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     val visibleResponse = if (entry.role == AiRole.Assistant) smoothStreamingText(entry.id, entry.text, responseStreaming, animateOnMount) else entry.text
     val visibleReasoning = if (entry.role == AiRole.Assistant) smoothStreamingText("${entry.id}:reasoning", entry.reasoning, reasoningStreaming, animateOnMount) else entry.reasoning
@@ -359,21 +382,35 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
             else entry.images.forEach { Text(it.displayName, style = MaterialTheme.typography.labelSmall) }
             // Sent image metadata remains attached to this user turn after restart.
             var actions by remember(entry.id) { mutableStateOf(false) }
-            if (entry.text.isNotEmpty()) Box {
-                Surface(onClick = { actions = true }, shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
+            Box {
+                if (entry.text.isEmpty()) IconButton(onClick = { actions = true }) {
+                    WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_message_actions))
+                } else Surface(onClick = { actions = true }, shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
                     color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.widthIn(max = 300.dp)) {
                     androidx.compose.foundation.text.selection.SelectionContainer {
                         if (entry.text.isNotEmpty()) Text(entry.text, Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 13.sp, lineHeight = 21.sp)
                     }
                 }
                 if (actions) MessageCopyPopup(onDismiss = { actions = false },
-                    onCopy = { clipboard.setText(AnnotatedString(entry.text)); actions = false })
+                    onCopy = { clipboard.setText(AnnotatedString(entry.text)); actions = false },
+                    onEdit = onEdit?.let { action -> { actions = false; action() } },
+                    onRetry = onRetry?.let { action -> { actions = false; action() } },
+                    onRequests = onRequests?.let { action -> { actions = false; action() } })
             }
         }
         AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction)
             if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink)
-            if (entry.text.isNotEmpty()) IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }, modifier = Modifier.size(36.dp)) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row {
+                if (entry.text.isNotEmpty()) IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (onRetry != null || onRequests != null) Box {
+                    var actions by remember(entry.id) { mutableStateOf(false) }
+                    IconButton(onClick = { actions = true }) { WorkbenchIcon(Glyph.More, Modifier.size(16.dp), description = stringResource(R.string.ai_message_actions)) }
+                    if (actions) MessageCopyPopup({ actions = false }, { clipboard.setText(AnnotatedString(entry.text)); actions = false },
+                        onRetry = onRetry?.let { action -> { actions = false; action() } },
+                        onRequests = onRequests?.let { action -> { actions = false; action() } })
+                }
+            }
         }
         AiRole.Notice -> Text(entry.text, Modifier.padding(vertical = 4.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

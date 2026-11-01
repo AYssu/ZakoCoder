@@ -2,7 +2,7 @@
 <resources>
     <string name="screen_overlay_title">屏幕测试悬浮入口</string>
     <string name="screen_overlay_switch">显示悬浮入口</string>
-    <string name="screen_overlay_description">默认关闭。测试期间显示状态，并提供返回助手、停止测试入口；不保证后台持续运行。此开关不代替目标应用授权、Root 或无障碍授权，也不改变 AI 工具审批规则。</string>
+    <string name="screen_overlay_description">默认关闭。开启后以收起入口显示；展开可显示本轮公开对话摘录及测试状态，不显示思考或工具原始输出，并提供返回助手、停止测试入口；不保证后台持续运行。此开关不代替目标应用授权、Root 或无障碍授权，也不改变 AI 工具审批规则。</string>
     <string name="screen_overlay_permission_needed">尚未获得悬浮权限。请先前往系统授权，返回后再手动开启；拒绝授权仍可在助手内操作。</string>
     <string name="screen_overlay_open_settings">前往系统授权</string>
     <string name="screen_overlay_off">已授权，悬浮入口已关闭。</string>

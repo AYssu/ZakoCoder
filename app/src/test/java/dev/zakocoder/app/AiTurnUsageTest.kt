@@ -26,4 +26,30 @@ class AiTurnUsageTest {
         assertTrue(turnUsage(emptyList(), 4).partial)
     }
 
+    @Test fun cachePercentUsesWeightedInputAcrossRounds() {
+        val usage = turnUsage(listOf(
+            AiRequestLog(turn = 1, inputTokens = 1000, cachedTokens = 900),
+            AiRequestLog(turn = 1, inputTokens = 9000, cachedTokens = 100),
+            AiRequestLog(turn = 2, inputTokens = 50, cachedTokens = 50)), 1)
+        assertEquals(1000L, usage.cached)
+        assertEquals(10.0, usage.cachePercent!!, 0.0001)
+    }
+    @Test fun unknownCacheNeverBecomesZeroOrMisleadingPercent() {
+        val usage = turnUsage(listOf(AiRequestLog(turn = 1, inputTokens = 1000, cachedTokens = 900),
+            AiRequestLog(turn = 1, inputTokens = 1000)), 1)
+        assertNull(usage.cached); assertNull(usage.cachePercent)
+        assertNull(turnUsage(emptyList(), 1).cachePercent)
+    }
+    @Test fun explicitZeroCacheIsKnownAndInvalidDenominatorRemainsUnknown() {
+        val zero = turnUsage(listOf(AiRequestLog(turn = 1, inputTokens = 100, cachedTokens = 0)), 1)
+        assertEquals(0L, zero.cached); assertEquals(0.0, zero.cachePercent!!, 0.001)
+        assertNull(turnUsage(listOf(AiRequestLog(turn = 1, inputTokens = 0, cachedTokens = 0)), 1).cachePercent)
+        assertNull(turnUsage(listOf(AiRequestLog(turn = 1, inputTokens = 50, cachedTokens = 100)), 1).cachePercent)
+        assertNull(turnUsage(listOf(AiRequestLog(turn = 1, cachedTokens = 100)), 1).cachePercent)
+    }
+    @Test fun overflowingCacheCountRemainsUnknown() {
+        val usage = turnUsage(listOf(AiRequestLog(turn = 1, cachedTokens = Long.MAX_VALUE),
+            AiRequestLog(turn = 1, cachedTokens = 1)), 1)
+        assertNull(usage.cached); assertNull(usage.cachePercent)
+    }
 }

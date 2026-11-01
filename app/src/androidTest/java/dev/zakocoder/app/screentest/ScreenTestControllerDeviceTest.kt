@@ -31,6 +31,8 @@ class ScreenTestControllerDeviceTest {
     @Test fun noSelectionCannotControlForegroundAndStatusDoesNotClaimInstallation() = runBlocking {
         withController { controller, _ ->
             val output = JSONObject(controller.execute("project", JSONObject().put("action", "status")).output)
+            assertTrue(output.getBoolean("targetSelectionRequired"))
+            assertEquals(0, output.getJSONArray("candidates").length())
             assertFalse(output.getBoolean("selected"))
             assertFalse(output.getBoolean("installed"))
             assertFalse(controller.state.value.active)
@@ -126,6 +128,50 @@ class ScreenTestControllerDeviceTest {
                     generateSequence(error) { it.cause }.any { it.suppressed.isNotEmpty() })
                 assertFalse(controller.state.value.active)
             }
+        }
+    }
+
+    @Test fun previewDoesNotGrantTargetAndApprovalRequiresTheExactPreviewedBytes() = runBlocking {
+        withFixtureController { controller, _, _, _ ->
+            controller.stop()
+            val proposal = controller.previewApk("project", "app-debug.apk")
+            assertEquals("app-debug.apk", proposal.apk.relativePath)
+            assertEquals(64, proposal.sha256.length)
+            assertFalse(controller.state.value.active)
+            assertEquals(null, controller.taskLease("project"))
+            val rejected = runCatching { controller.selectApk("project", proposal.apk.relativePath, "0".repeat(64)) }.exceptionOrNull()
+            assertTrue(rejected is ScreenTestException)
+            assertFalse(controller.state.value.active)
+            controller.selectApk("project", proposal.apk.relativePath, proposal.sha256)
+            assertTrue(controller.state.value.active)
+        }
+    }
+
+    @Test fun overlayConversationRejectsOtherProjectsAndRevokedLeases() = runBlocking {
+        withFixtureController { controller, _, _, _ ->
+            val lease = requireNotNull(controller.taskLease("project"))
+            controller.updateOverlayConversation("project", lease, "正在检查构建后的页面")
+            assertEquals("正在检查构建后的页面", controller.state.value.overlayConversation)
+            controller.updateOverlayConversation("other-project", lease, "不能跨项目")
+            controller.updateOverlayConversation("project", "old-lease", "不能跨任务")
+            assertEquals("正在检查构建后的页面", controller.state.value.overlayConversation)
+            controller.stop()
+            controller.updateOverlayConversation("project", lease, "已经撤销")
+            assertEquals("", controller.state.value.overlayConversation)
+        }
+    }
+
+    @Test fun statusDiscoversCurrentDebugArtifactsWithoutSelectingOrGranting() = runBlocking {
+        withFixtureController { controller, _, _, _ ->
+            controller.stop()
+            val output = JSONObject(controller.execute("project", JSONObject().put("action", "status")).output)
+            assertTrue(output.getBoolean("targetSelectionRequired"))
+            assertFalse(output.getBoolean("selected"))
+            val candidate = output.getJSONArray("candidates").getJSONObject(0)
+            assertEquals("app-debug.apk", candidate.getString("path"))
+            assertTrue(candidate.getBoolean("debuggable"))
+            assertFalse(controller.state.value.active)
+            assertFalse(controller.state.value.shareScreenshots)
         }
     }
 

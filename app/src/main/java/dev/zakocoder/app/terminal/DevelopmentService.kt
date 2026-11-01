@@ -12,6 +12,29 @@ import dev.zakocoder.app.R
 import dev.zakocoder.app.ZakoApplication
 
 class DevelopmentService : Service() {
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var taskActive = false
+    private val executionLock by lazy {
+        getSystemService(android.os.PowerManager::class.java).newWakeLock(
+            android.os.PowerManager.PARTIAL_WAKE_LOCK, "$packageName:development-task"
+        ).apply { setReferenceCounted(false) }
+    }
+    private val renewLock = object : Runnable {
+        override fun run() {
+            if (!taskActive) return
+            if (executionLock.isHeld) executionLock.release()
+            executionLock.acquire(10 * 60 * 1000L)
+            handler.postDelayed(this, 5 * 60 * 1000L)
+        }
+    }
+    /** Idle terminals and an idle floating control do not keep the CPU awake. */
+    fun setTaskActive(active: Boolean) {
+        if (taskActive == active) return
+        taskActive = active
+        handler.removeCallbacks(renewLock)
+        if (active) renewLock.run() else if (executionLock.isHeld) executionLock.release()
+    }
+
     override fun onCreate() {
         super.onCreate()
         getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -32,6 +55,7 @@ class DevelopmentService : Service() {
         return START_NOT_STICKY
     }
     override fun onDestroy() {
+        setTaskActive(false)
         (application as ZakoApplication).workbench.serviceDestroyed(this)
         super.onDestroy()
     }

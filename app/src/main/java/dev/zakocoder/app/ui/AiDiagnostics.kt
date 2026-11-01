@@ -29,13 +29,14 @@ import dev.zakocoder.app.ai.*
 
 @Suppress("DEPRECATION")
 @Composable
-internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier) {
+internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usageState: AiUsageState? = null, onRefreshUsage: () -> Unit = {}) {
     var selected by remember(state.conversationId) { mutableStateOf<String?>(null) }
     var limits by remember { mutableStateOf(false) }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+        item { AiSessionUsageSummary(usageState, state.projectId, state.conversationId, onRefreshUsage) }
         item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_request_retained, state.requests.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            IconButton(onClick = { limits = true }, modifier = Modifier.size(32.dp)) { WorkbenchIcon(Glyph.Info, Modifier.size(16.dp), description = stringResource(R.string.ai_data_details)) }
+            IconButton(onClick = { limits = true }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Info, Modifier.size(16.dp), description = stringResource(R.string.ai_data_details)) }
         } }
         if (state.taskDiagnostic.isNotBlank()) item {
             Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)

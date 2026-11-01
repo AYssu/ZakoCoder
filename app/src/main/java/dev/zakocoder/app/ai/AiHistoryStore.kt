@@ -150,7 +150,8 @@ open class AiHistoryStore(private val directory: File) {
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
         .put("timeline", JSONArray(state.timeline.map { JSONObject().put("id", it.id).put("text", it.text).put("tool", it.toolId)
-            .put("role", it.role.name).put("turn", it.turn).put("reasoning", it.reasoning).put("reasoningTruncated", it.reasoningTruncated).put("images", JSONArray(it.images.map(::encodeAiImage))) }))
+            .put("role", it.role.name).put("turn", it.turn).put("reasoning", it.reasoning).put("reasoningTruncated", it.reasoningTruncated).put("images", JSONArray(it.images.map(::encodeAiImage)))
+            .put("inputLength", it.inputLength).put("inputReferences", JSONArray(it.inputReferences.map(::encodeRetryReference))) }))
         .put("events", JSONArray(state.events.map { e -> JSONObject().put("id", e.id).put("call", e.callId).put("name", e.name)
             .put("input", e.input).put("reason", e.reason).put("target", e.target).put("status", e.status.name)
             .put("turn", e.turn).put("permission", e.permission.name).put("source", sources.indexOf(e.permissionSource))
@@ -169,6 +170,9 @@ open class AiHistoryStore(private val directory: File) {
         require(timeline.size <= 512 && timeline.map { it.id }.distinct().size == timeline.size)
         require(timeline.sumOf { it.text.length + it.reasoning.length } <= 512000)
         timeline.forEach {
+            require(it.inputLength == null || (it.role == AiRole.User && it.inputLength in 0..minOf(16000, it.text.length)))
+            require(it.role == AiRole.User || it.inputReferences.isEmpty())
+            require(it.inputReferences.size <= 4 && it.inputReferences.all { ref -> ref.text.length <= 6000 })
             require(it.reasoning.length <= AI_REASONING_DISPLAY_LIMIT)
             require(it.role == AiRole.Assistant || (it.reasoning.isEmpty() && !it.reasoningTruncated))
             require(it.role == AiRole.User || it.images.isEmpty())
@@ -194,7 +198,8 @@ open class AiHistoryStore(private val directory: File) {
             }, if (it.isNull("tool")) null else it.getString("tool").take(100), role, it.getInt("turn"),
                 if (it.has("reasoning")) it.getString("reasoning") else "",
                 if (it.has("reasoningTruncated")) it.getBoolean("reasoningTruncated") else false,
-                if (it.has("images")) decodeAiImages(it.getJSONArray("images")) else emptyList())
+                if (it.has("images")) decodeAiImages(it.getJSONArray("images")) else emptyList(),
+                if (it.isNull("inputLength")) null else it.getInt("inputLength"), decodeRetryReferences(it.optJSONArray("inputReferences")))
         } }
         validateTimeline(timeline)
         require(json.getInt("turn") in 0..1000000)
@@ -286,4 +291,20 @@ open class AiHistoryStore(private val directory: File) {
         val legacyFailed = !json.has("recovery") && state.phase == AiPhase.Failed
         return if (pendingRecovery.isNotBlank() || interrupted || legacyFailed) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state
     }
+}
+
+/** Additive metadata: older histories fall back to their literal displayed input. */
+private fun encodeRetryReference(reference: AiReference): JSONObject = JSONObject().put("path", reference.path)
+    .put("text", reference.text).put("kind", reference.kind).put("line", reference.startLine)
+    .put("unsaved", reference.unsaved).put("truncated", reference.truncated).put("name", reference.displayName)
+private fun decodeRetryReferences(array: JSONArray?): List<AiReference> {
+    if (array == null) return emptyList()
+    require(array.length() <= 4)
+    return (0 until array.length()).map { index -> array.getJSONObject(index).let { ref ->
+        val path = ref.getString("path").also { require(it.length <= 4096) }
+        val text = ref.getString("text").also { require(it.length <= 6000) }
+        val kind = ref.getString("kind").also { require(it.length <= 64) }
+        val name = if (ref.isNull("name")) null else ref.getString("name").also { require(it.length <= 1000) }
+        AiReference(path, text, kind, if (ref.isNull("line")) null else ref.getInt("line"), ref.getBoolean("unsaved"), ref.getBoolean("truncated"), name)
+    } }
 }
