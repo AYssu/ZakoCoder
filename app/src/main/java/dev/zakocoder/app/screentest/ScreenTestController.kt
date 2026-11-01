@@ -98,7 +98,15 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     init {
         ScreenTestAccessibilityService.connectionListeners += java.lang.ref.WeakReference(connectionCallback)
         overlayScope.launch {
-            state.collect { current -> overlay.update(current.overlayEnabled && current.overlayGranted && current.active && !current.busy, current.projectId, current.projectId?.let(::taskLease), current.packageName.orEmpty(), current.summary, current.overlayConversation) }
+            state.collect { current ->
+                synchronized(selectionLock) {
+                    // A queued old state must never be rendered with a newly selected lease.
+                    if (mutableState.value == current) overlay.update(
+                        current.overlayEnabled && current.overlayGranted && current.active && !current.overlaySuppressed,
+                        current.projectId, current.projectId?.let(::taskLease), current.packageName.orEmpty(),
+                        current.summary, current.overlayConversation, progress = current.overlayProgress)
+                }
+            }
         }
         refresh()
     }
@@ -143,7 +151,8 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             val running = operation
             operation = null
             mutableState.update { it.copy(packageName = null, apkPath = null, active = false,
-                busy = false, shareScreenshots = false, overlayConversation = "", summary = message(R.string.screen_test_stopped)) }
+                busy = false, shareScreenshots = false, overlayConversation = "", overlaySuppressed = false,
+                overlayProgress = ScreenOverlayProgress(ScreenOverlayPhase.Cancelled, title = message(R.string.screen_overlay_progress_stopped)), summary = message(R.string.screen_test_stopped)) }
             ScreenTestAccessibilityService.instance?.stop()
             rootBackend.stop()
             overlayScope.launch { overlay.remove() }
@@ -217,7 +226,8 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             check(epoch.get() == generation) { message(R.string.screen_test_stopped) }
             selected = selection
             mutableState.update { it.copy(projectId = projectId, packageName = inspected.apk.packageName, apkPath = relativePath,
-                active = true, shareScreenshots = false, overlayConversation = "", summary = message(R.string.screen_test_ready),
+                active = true, shareScreenshots = false, overlayConversation = "", overlaySuppressed = false,
+                overlayProgress = ScreenOverlayProgress(title = message(R.string.screen_test_ready)), summary = message(R.string.screen_test_ready),
                 reportPath = reportFile(projectId).absolutePath) }
         }
         inspected.apk
@@ -242,13 +252,12 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 if (value.projectId != projectId || !mutableState.value.active) throw ScreenTestException(message(R.string.screen_test_need_selection))
                 if (expectedSession != null && value.sessionId != expectedSession) throw ScreenTestException(message(R.string.screen_test_lease_changed))
                 operation = job
-                mutableState.update { it.copy(busy = true) }
+                mutableState.update { it.copy(busy = true, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Verifying)) }
                 value to epoch.get()
             }
             var stage = "overlay_sync"
             try {
                 withTimeout(screenActionTimeoutMillis(action)) {
-                    overlay.hideForAction()
                     stage = "artifact_verification"
                     val result = withContext(Dispatchers.IO) {
                         currentCoroutineContext().ensureActive()
@@ -259,6 +268,8 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                             "launch" -> launch(selection)
                             else -> {
                                 verifyInstalled(selection)
+                                stage = "overlay_sync"
+                                suppressOverlay(selection, action)
                                 stage = "${mutableState.value.access.name.lowercase()}_$action"
                                 when (mutableState.value.access) {
                                     ScreenTestAccess.Normal -> error(message(R.string.screen_test_need_accessibility))
@@ -290,7 +301,11 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                         report(selection, action, true, if (action == "assert_text") "assertion_passed" else "request_completed",
                             result.imageUri?.lastPathSegment)
                     }
-                    mutableState.update { it.copy(summary = result.output.take(800)) }
+                    synchronized(selectionLock) {
+                        if (epoch.get() == generation && selected === selection) mutableState.update {
+                            it.copy(summary = result.output.take(800), overlayProgress = overlayProgress(action, ScreenOverlayPhase.Succeeded))
+                        }
+                    }
                     if (action == "finish") { operation = null; stopWithReason("tool_finished") }
                     result
                 }
@@ -299,20 +314,37 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 rootBackend.stop()
                 val detail = context.getString(R.string.screen_test_stage_timeout, screenTestStageLabel(context, stage), screenActionTimeoutMillis(action) / 1000)
                 reportCancellation(selection, action, "timeout:$stage", error)
-                mutableState.update { it.copy(summary = detail) }
+                synchronized(selectionLock) {
+                    if (epoch.get() == generation && selected === selection) mutableState.update {
+                        it.copy(summary = detail, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Failed))
+                    }
+                }
                 throw ScreenTestException(detail, error)
             } catch (cancelled: CancellationException) {
                 reportCancellation(selection, action, "cancelled", cancelled)
+                synchronized(selectionLock) {
+                    if (epoch.get() == generation && selected === selection) mutableState.update {
+                        it.copy(overlayEnabled = false, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Cancelled))
+                    }
+                }
                 throw cancelled
             } catch (error: Exception) {
                 val safe = safeError(error)
                 withContext(Dispatchers.IO) { report(selection, action, false,
                     (safe.cause as? ScreenTestTimeoutDiagnostic)?.let { "timeout:${it.stage}; " }.orEmpty() + safe.message.orEmpty()) }
-                mutableState.update { it.copy(summary = safe.message.orEmpty()) }
+                synchronized(selectionLock) {
+                    if (epoch.get() == generation && selected === selection) mutableState.update {
+                        it.copy(summary = safe.message.orEmpty(), overlayProgress = overlayProgress(action, ScreenOverlayPhase.Failed))
+                    }
+                }
                 throw safe
             } finally {
-                operation = null
-                mutableState.update { it.copy(busy = false) }
+                synchronized(selectionLock) {
+                    if (epoch.get() == generation && selected === selection) {
+                        operation = null
+                        mutableState.update { it.copy(busy = false, overlaySuppressed = false) }
+                    }
+                }
             }
         }
     }
@@ -366,6 +398,47 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
         }
     }
 
+    private fun overlayProgress(action: String, phase: ScreenOverlayPhase): ScreenOverlayProgress {
+        val actionLabel = message(when (action) {
+            "install" -> R.string.screen_overlay_action_install
+            "launch" -> R.string.screen_overlay_action_launch
+            "observe" -> R.string.screen_overlay_action_observe
+            "click", "long_click" -> R.string.screen_overlay_action_click
+            "swipe" -> R.string.screen_overlay_action_swipe
+            "input_text" -> R.string.screen_overlay_action_input
+            "back" -> R.string.screen_overlay_action_back
+            "assert_text" -> R.string.screen_overlay_action_assert
+            "screenshot" -> R.string.screen_overlay_action_screenshot
+            else -> R.string.screen_overlay_action_finish
+        })
+        val title = context.getString(when (phase) {
+            ScreenOverlayPhase.Verifying -> R.string.screen_overlay_progress_verifying
+            ScreenOverlayPhase.Acting -> R.string.screen_overlay_progress_acting
+            ScreenOverlayPhase.Succeeded -> R.string.screen_overlay_progress_succeeded
+            ScreenOverlayPhase.Failed -> R.string.screen_overlay_progress_failed
+            ScreenOverlayPhase.Cancelled -> R.string.screen_overlay_progress_cancelled
+            ScreenOverlayPhase.Ready -> R.string.screen_overlay_progress_ready
+        }, actionLabel)
+        val detail = if (phase == ScreenOverlayPhase.Succeeded) when (action) {
+            "install" -> message(R.string.screen_test_install_pending)
+            "launch" -> message(R.string.screen_test_launch_requested)
+            else -> ""
+        } else ""
+        return ScreenOverlayProgress(phase, action, title, detail)
+    }
+
+    /** Suppress before removal so unrelated conversation emissions cannot recreate the window. */
+    private suspend fun suppressOverlay(selection: Selection, action: String) {
+        currentCoroutineContext().ensureActive()
+        synchronized(selectionLock) {
+            check(selected === selection && mutableState.value.active) { message(R.string.screen_test_stopped) }
+            mutableState.update { it.copy(overlaySuppressed = true, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Acting)) }
+        }
+        overlay.hideForAction()
+        currentCoroutineContext().ensureActive()
+        check(selected === selection) { message(R.string.screen_test_stopped) }
+    }
+
     private suspend fun install(selection: Selection): ScreenTestResult {
         check(context.packageManager.canRequestPackageInstalls()) { message(R.string.screen_test_install_permission) }
         // A rebuild may change bytes, but cannot change the package, signer, or debug-only boundary.
@@ -387,6 +460,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             currentCoroutineContext().ensureActive()
             check(selected === selection) { message(R.string.screen_test_stopped) }
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.apk-files", copy)
+            suppressOverlay(selection, "install")
             withContext(Dispatchers.Main.immediate) {
                 context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -405,6 +479,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
         check(intent.component?.packageName == selection.apk.packageName) { message(R.string.screen_test_changed_identity) }
         currentCoroutineContext().ensureActive()
         check(selected === selection) { message(R.string.screen_test_stopped) }
+        suppressOverlay(selection, "launch")
         withContext(Dispatchers.Main.immediate) { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         return ScreenTestResult(message(R.string.screen_test_launch_requested))
     }

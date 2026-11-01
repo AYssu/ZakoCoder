@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="debug_overlay_target">测试目标</string>
+    <string name="debug_overlay_recent_chat">最近对话</string>
+    <string name="debug_overlay_latest">回到最新</string>
+    <string name="debug_overlay_waiting">等待下一步操作</string>
+    <string name="debug_overlay_empty">屏幕操作和本轮公开对话会显示在这里。</string>
+    <string name="debug_overlay_screen_yield">读屏、截图和触控时会暂时让出屏幕，完成后恢复。</string>
+    <string name="debug_overlay_return">返回对话</string>
+    <string name="debug_overlay_stop">停止</string>
+    <string name="debug_overlay_details">查看调试详情</string>
+    <string name="debug_overlay_minimize">收起调试详情</string>
+</resources>

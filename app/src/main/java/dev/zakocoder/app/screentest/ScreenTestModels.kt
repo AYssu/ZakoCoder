@@ -14,6 +14,15 @@ data class ScreenTestApkProposal(val apk: ScreenTestApk, val sha256: String)
 
 enum class ScreenTestAccess { Normal, Accessibility, Root }
 
+enum class ScreenOverlayPhase { Ready, Verifying, Acting, Succeeded, Failed, Cancelled }
+
+data class ScreenOverlayProgress(
+    val phase: ScreenOverlayPhase = ScreenOverlayPhase.Ready,
+    val action: String = "",
+    val title: String = "",
+    val detail: String = "",
+)
+
 data class ScreenTestState(
     val projectId: String? = null,
     val packageName: String? = null,
@@ -33,6 +42,8 @@ data class ScreenTestState(
     val overlayVisible: Boolean = false,
     val overlayFailure: String = "",
     val overlayConversation: String = "",
+    val overlaySuppressed: Boolean = false,
+    val overlayProgress: ScreenOverlayProgress = ScreenOverlayProgress(),
 )
 
 data class ScreenTestResult(val output: String, val imageUri: Uri? = null)
