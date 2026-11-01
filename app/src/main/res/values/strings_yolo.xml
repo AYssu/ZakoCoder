@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_permission_preset_yolo">YOLO · 全自动</string>
+    <string name="ai_permission_preset_yolo_desc">自动允许所有助手工具，包括 MCP、屏幕操作与 SSH。仅对当前项目生效。</string>
+    <string name="ai_permission_yolo_confirm_title">开启 YOLO 全自动模式？</string>
+    <string name="ai_permission_yolo_warning">将为「%1$s」自动允许全部助手工具，并替换已有的禁止规则。AI 可修改文件、执行命令、使用已启用的 MCP、屏幕及 SSH 能力，可能产生无法由检查点恢复的外部副作用。\n\n系统权限、安装确认、SSH 主机信任和能力包开关仍需你管理；屏幕目标仍限当前项目的有效 Debug APK，截图分享仍由你单独控制。\n\n此选择会保存在当前项目，重启后继续生效。切换回普通模式可恢复逐次审批；已经开始的操作需停止任务才能中止。</string>
+    <string name="ai_permission_yolo_boundary">当前项目已自动授权全部工具。系统授权、SSH 主机信任及能力包开关仍独立管理，截图分享仍由你控制。</string>
+    <string name="ai_permission_yolo_rule">YOLO 项目授权</string>
+    <string name="ai_permission_retained_denials">当前保留 %1$d 项禁止规则；普通与高权限会保留它们，YOLO 确认后将全部替换。</string>
+</resources>

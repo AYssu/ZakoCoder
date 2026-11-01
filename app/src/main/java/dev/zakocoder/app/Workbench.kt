@@ -34,6 +34,7 @@ private data class WorkbenchInitial(val projects: List<Project>, val settings: A
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val updates = dev.zakocoder.app.updates.AppUpdates(context, scope)
     val runtime = LinuxRuntime(context) { settingsRepository.loadProxyCredentials() }
     val projects = ProjectRepository(context, runtime.workspaces)
     init { runtime.projectDirectory = projects::directory }

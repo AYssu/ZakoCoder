@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_current_project">当前项目</string>
+    <string name="home_terminal_sessions">%1$d 个终端运行中</string>
+    <string name="home_project_actions">%1$s 的更多操作</string>
+    <string name="home_environment_manage">管理开发环境</string>
+</resources>

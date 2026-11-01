@@ -110,7 +110,7 @@ private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Setti
 private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant) }
 
 @Composable
-internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}) {
+internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}) {
     val context = LocalContext.current
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
@@ -261,6 +261,8 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             }
         } }
         item { SettingsGroup(stringResource(R.string.application_settings)) {
+            SettingsRow(stringResource(R.string.update_title), stringResource(R.string.update_summary), glyph = Glyph.Environment, onClick = onUpdates)
+            SettingsDivider()
             SettingsRow(stringResource(R.string.app_permissions_title), stringResource(R.string.app_permissions_hint), glyph = Glyph.Shield,
                 onClick = { appPermissionsOpen = true })
             SettingsDivider()

@@ -19,13 +19,13 @@ class AiPermissionStore(context: Context, name: String = "ai-permissions-v1") {
         val overrides = json.getJSONObject("tools")
         return AiPolicy(AiPermission.valueOf(json.getString("default")), AiTool.entries.mapNotNull { tool ->
             overrides.optString(tool.wire).takeIf { it.isNotEmpty() }?.let { tool to AiPermission.valueOf(it) }
-        }.toMap())
+        }.toMap(), yolo = json.opt("yolo") == true)
     }
     @Synchronized fun save(id: String, policy: AiPolicy) {
         require(id.isNotEmpty() && id.length <= 100)
         val json = read()
         val tools = JSONObject(); policy.overrides.forEach { (tool, permission) -> tools.put(tool.wire, permission.name) }
-        json.put(id, JSONObject().put("default", policy.default.name).put("tools", tools))
+        json.put(id, JSONObject().put("default", policy.default.name).put("tools", tools).put("yolo", policy.yolo))
         val stream = file.startWrite()
         try { stream.write(json.toString().toByteArray()); file.finishWrite(stream) }
         catch (error: Exception) { file.failWrite(stream); throw error }

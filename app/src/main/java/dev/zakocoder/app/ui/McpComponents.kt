@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
+import dev.zakocoder.app.mcp.McpBearerCredentials
 import dev.zakocoder.app.mcp.McpController
 import dev.zakocoder.app.mcp.McpServer
 import dev.zakocoder.app.mcp.McpTransport
@@ -229,7 +230,7 @@ private fun remoteOrigin(value: String): String = runCatching {
 }.getOrDefault("")
 
 @Composable
-private fun McpServerEditor(controller: McpController, initial: McpServer?, editable: Boolean, close: () -> Unit) {
+internal fun McpServerEditor(controller: McpController, initial: McpServer?, editable: Boolean, close: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val id = remember { initial?.id ?: UUID.randomUUID().toString() }
@@ -239,7 +240,10 @@ private fun McpServerEditor(controller: McpController, initial: McpServer?, edit
     var command by remember { mutableStateOf(initial?.command.orEmpty()) }
     var args by remember { mutableStateOf(JSONArray(initial?.args ?: emptyList<String>()).toString()) }
     var environment by remember { mutableStateOf(JSONObject(initial?.env ?: emptyMap<String, String>()).toString()) }
-    var headers by remember { mutableStateOf(JSONObject(initial?.headers ?: emptyMap<String, String>()).toString()) }
+    val credentialFields = remember { McpBearerCredentials.split(initial?.headers.orEmpty()) }
+    var bearerToken by remember { mutableStateOf(credentialFields.token) }
+    var revealToken by remember { mutableStateOf(false) }
+    var headers by remember { mutableStateOf(JSONObject(credentialFields.otherHeaders).toString()) }
     var reveal by remember { mutableStateOf(false) }
     var invalid by remember { mutableStateOf(false) }
     var credentialsCleared by remember { mutableStateOf(false) }
@@ -264,12 +268,24 @@ private fun McpServerEditor(controller: McpController, initial: McpServer?, edit
                 } else {
                     OutlinedTextField(url, { value ->
                         if (value.length <= 2048) {
-                            if (remoteOrigin(value) != remoteOrigin(url) && headers != "{}") { headers = "{}"; credentialsCleared = true }
+                            if (remoteOrigin(value) != remoteOrigin(url) && (headers != "{}" || bearerToken.isNotEmpty())) {
+                                headers = "{}"; bearerToken = ""; revealToken = false; credentialsCleared = true
+                            }
                             url = value
-                        invalid = false
+                            invalid = false
                         }
                     }, label = { Text(stringResource(R.string.mcp_url)) }, enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
                     if (credentialsCleared) Text(stringResource(R.string.mcp_credentials_cleared), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    OutlinedTextField(bearerToken, { if (it.length <= 8192) { bearerToken = it; invalid = false } },
+                        label = { Text(stringResource(R.string.mcp_bearer_token)) },
+                        supportingText = { Text(stringResource(R.string.mcp_bearer_hint)) },
+                        trailingIcon = { TextButton(onClick = { revealToken = !revealToken }, enabled = enabled) {
+                            Text(stringResource(if (revealToken) R.string.mcp_bearer_hide else R.string.mcp_bearer_show), style = MaterialTheme.typography.labelSmall)
+                        } },
+                        singleLine = true, enabled = enabled,
+                        visualTransformation = if (revealToken) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                        modifier = Modifier.fillMaxWidth())
                 }
                 Surface(shape = RoundedCornerShape(16.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
                     Column(Modifier.fillMaxWidth()) {
@@ -282,7 +298,7 @@ private fun McpServerEditor(controller: McpController, initial: McpServer?, edit
                             if (transport == McpTransport.Stdio) {
                                 McpSecretField(args, { if (it.length <= 65536) { args = it; invalid = false } }, R.string.mcp_args, enabled, reveal)
                                 McpSecretField(environment, { if (it.length <= 131072) { environment = it; invalid = false } }, R.string.mcp_env, enabled, reveal)
-                            } else McpSecretField(headers, { if (it.length <= 131072) { headers = it; invalid = false } }, R.string.mcp_headers, enabled, reveal)
+                            } else McpSecretField(headers, { if (it.length <= 131072) { headers = it; invalid = false } }, R.string.mcp_other_headers, enabled, reveal)
                             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(reveal, { reveal = it })
                                 Text(stringResource(R.string.mcp_reveal), style = MaterialTheme.typography.bodySmall)
@@ -305,7 +321,7 @@ private fun McpServerEditor(controller: McpController, initial: McpServer?, edit
                             url = if (transport == McpTransport.Stdio) "" else url.trim(), command = if (transport == McpTransport.Stdio) command.trim() else "",
                             args = (0 until values.length()).map { values.get(it) as? String ?: error("string") },
                             env = if (transport == McpTransport.Stdio) objectValues(environment) else emptyMap(),
-                            headers = if (transport == McpTransport.Stdio) emptyMap() else objectValues(headers), enabled = false)
+                            headers = if (transport == McpTransport.Stdio) emptyMap() else McpBearerCredentials.headers(bearerToken, objectValues(headers)), enabled = false)
                     }.getOrNull()
                     invalid = server == null
                     if (server != null) scope.launch { controller.save(server).join(); if (controller.state.value.error.isEmpty()) close() }

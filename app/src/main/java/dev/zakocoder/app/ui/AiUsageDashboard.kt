@@ -48,6 +48,8 @@ internal fun AiUsageDashboard(
             until.atStartOfDay(zone).toInstant().toEpochMilli(), projectId = project, model = model)
     }
     val summary = remember(filtered) { AiUsageStatistics.summarize(filtered.requests, filtered.tools) }
+    val buckets = remember(filtered, first, period, zone) { AiUsageCharts.buckets(filtered, first, period == "day", zone) }
+    val modelCounts = remember(filtered) { AiUsageCharts.models(filtered) }
     val unknownProject = stringResource(R.string.ai_usage_removed_project)
     val allProjects = stringResource(R.string.ai_usage_all_projects)
     val allModels = stringResource(R.string.ai_usage_all_models)
@@ -104,6 +106,10 @@ internal fun AiUsageDashboard(
                 if (state.incomplete) Text(stringResource(R.string.ai_usage_incomplete), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 if (state.truncated) UsageRetainedNote(state)
                 AiUsageSummaryCard(summary)
+            }
+            if (filtered.requests.isNotEmpty() || filtered.tools.isNotEmpty()) {
+                item { UsageTrendCard(buckets, period == "day", zone) }
+                if (modelCounts.isNotEmpty()) item { UsageModelDistribution(modelCounts) }
             }
             item { UsageScopeNote(state) }
         }

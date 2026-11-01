@@ -47,7 +47,6 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     var creating by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     var templateName by rememberSaveable { mutableStateOf(ProjectTemplate.Other.name) }
-    var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var removing by remember { mutableStateOf<Project?>(null) }
     var actions by remember { mutableStateOf<Project?>(null) }
@@ -59,33 +58,23 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     else Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
-            FilledTonalButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.primary)) {
+            if (state.projects.isNotEmpty()) FilledTonalButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.primary)) {
                 WorkbenchIcon(Glyph.Add, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.mobile_add_project))
             }
         }
         }
         BoxWithConstraints(Modifier.weight(1f)) {
-        // Banner (42), following gap (14) and bottom inset (20) leave the empty state's real viewport.
-        val emptyHeight = (maxHeight - 76.dp).coerceAtLeast(320.dp)
+        // Reserve space for the environment summary; empty content remains scrollable on short screens.
+        val emptyHeight = (maxHeight - 112.dp).coerceAtLeast(320.dp)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            Surface(onClick = onEnvironment, shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatusDot(if (state.installed) ReadyGreen else WaitingAmber)
-                    Text(stringResource(if (state.installed) R.string.library_environment_ready else R.string.library_environment_missing),
-                        Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text(if (state.installed && state.bundleTools.isEmpty()) stringResource(if (state.checkingTools) R.string.checking_tools else R.string.bundle_unknown)
-                        else if (state.installed) stringResource(R.string.library_environment_summary,
-                            state.bundleTools.count { it.status == dev.zakocoder.app.runtime.ToolStatus.Ready }, dev.zakocoder.app.runtime.DevelopmentTools.catalog.size)
-                        else stringResource(R.string.library_environment_short), fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal,
-                        color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    WorkbenchIcon(Glyph.Next, Modifier.size(14.dp), tint = TertiaryText)
-                }
-            }
+            ProjectEnvironmentSummary(state.installed,
+                if (state.installed && state.bundleTools.isEmpty()) stringResource(if (state.checkingTools) R.string.checking_tools else R.string.bundle_unknown)
+                else if (state.installed) stringResource(R.string.library_environment_summary,
+                    state.bundleTools.count { it.status == dev.zakocoder.app.runtime.ToolStatus.Ready }, dev.zakocoder.app.runtime.DevelopmentTools.catalog.size)
+                else stringResource(R.string.library_environment_short), onEnvironment)
         }
         if (state.projects.isEmpty()) item {
             Column(Modifier.fillMaxWidth().height(emptyHeight).padding(start = 20.dp, end = 20.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -103,46 +92,27 @@ PageHeading(stringResource(R.string.projects_title)) {
             }
         } else {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.projects_section), style = MaterialTheme.typography.titleSmall)
-                    Text(stringResource(R.string.project_count, state.projects.size), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { searching = !searching; if (!searching) query = "" }, Modifier.size(48.dp)) {
-                        WorkbenchIcon(Glyph.Search, Modifier.size(17.dp), description = stringResource(R.string.search_projects), tint = TertiaryText)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.projects_section), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.project_count, state.projects.size), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
                     }
+                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.search_projects)) },
+                        leadingIcon = { WorkbenchIcon(Glyph.Search) }, singleLine = true, shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface),
+                        trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.clear_search)) } })
                 }
-                if (searching) OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.search_projects)) },
-                    leadingIcon = { WorkbenchIcon(Glyph.Search) }, singleLine = true, shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface),
-                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.clear_search)) } })
             }
             val results = state.projects.filter { it.name.contains(query, ignoreCase = true) }.sortedByDescending { it.id == state.selectedId }
             if (results.isEmpty()) item { Text(stringResource(R.string.project_search_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(results, key = { it.id }) { project ->
-                Surface(shape = RoundedCornerShape(18.dp), shadowElevation = cardElevation(), border = cardBorder()) {
-                    Column(Modifier.fillMaxWidth().combinedClickable(onClick = { workbench.select(project.id); onOpened(project.id) },
-                        onLongClickLabel = stringResource(R.string.project_actions), onLongClick = { actions = project }).padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            IconTile(Glyph.Projects)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(project.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                ProjectKindsText(project)
-                                val boundPath = workbench.projects.bindingPath(project.id)
-                                Text(stringResource(if (boundPath == null) R.string.local_project_managed_label else R.string.local_project_bound_label),
-                                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                if (boundPath != null) Text(boundPath, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            IconButton(onClick = { actions = project }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CompactAction(stringResource(R.string.nav_ai), { onAi(project.id) }, Modifier.weight(1f), enabled = !state.busy)
-                            CompactAction(stringResource(R.string.open_terminal), { onTerminal(project.id) }, Modifier.weight(1f), primary = true, enabled = !state.busy)
-                            CompactAction(stringResource(R.string.browse_files), { workbench.select(project.id); onOpened(project.id) }, Modifier.weight(1f), enabled = !state.busy)
-                        }
-                    }
-                }
+                HomeProjectCard(project = project, boundPath = workbench.projects.bindingPath(project.id),
+                    selected = project.id == state.selectedId,
+                    runningTerminals = state.sessions.count { it.projectId == project.id && it.session.isRunning },
+                    enabled = !state.busy,
+                    onOpen = { workbench.select(project.id); onOpened(project.id) },
+                    onActions = { actions = project }, onAi = { onAi(project.id) }, onTerminal = { onTerminal(project.id) })
             }
             item { Text(stringResource(R.string.project_card_hint), Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center) }
         }
@@ -196,6 +166,63 @@ PageHeading(stringResource(R.string.projects_title)) {
         text = { Text(stringResource(if (workbench.projects.isBound(project.id)) R.string.local_project_unbind_confirmation else R.string.remove_confirmation, project.name)) },
         confirmButton = { TextButton(onClick = { removing = null; onOpened(null); workbench.removeProject(project.id) }) { Text(stringResource(R.string.remove)) } },
         dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }) }
+}
+
+@Composable
+internal fun ProjectEnvironmentSummary(installed: Boolean, summary: String, onOpen: () -> Unit) {
+    Surface(onClick = onOpen, shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatusDot(if (installed) ReadyGreen else WaitingAmber)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(if (installed) R.string.library_environment_ready else R.string.library_environment_missing),
+                    style = MaterialTheme.typography.titleSmall)
+                Text(summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            WorkbenchIcon(Glyph.Next, Modifier.size(18.dp), description = stringResource(R.string.home_environment_manage), tint = TertiaryText)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun HomeProjectCard(project: Project, boundPath: String?, selected: Boolean, runningTerminals: Int,
+    enabled: Boolean, onOpen: () -> Unit, onActions: () -> Unit, onAi: () -> Unit, onTerminal: () -> Unit) {
+    Surface(shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxWidth().combinedClickable(enabled = enabled, onClick = onOpen,
+            onLongClickLabel = stringResource(R.string.project_actions), onLongClick = onActions)
+            .padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (selected || runningTerminals > 0) FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (selected) Text(stringResource(R.string.home_current_project), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                if (runningTerminals > 0) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    StatusDot(ReadyGreen)
+                    Text(stringResource(R.string.home_terminal_sessions, runningTerminals), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                IconTile(Glyph.Projects)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(project.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    ProjectKindsText(project)
+                }
+                IconButton(onClick = onActions, enabled = enabled) {
+                    WorkbenchIcon(Glyph.More, description = stringResource(R.string.home_project_actions, project.name))
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(if (boundPath == null) R.string.local_project_managed_label else R.string.local_project_bound_label),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (boundPath != null) Text(boundPath, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CompactAction(stringResource(R.string.nav_ai), onAi, Modifier.weight(1f), enabled = enabled)
+                CompactAction(stringResource(R.string.open_terminal), onTerminal, Modifier.weight(1f), enabled = enabled)
+                CompactAction(stringResource(R.string.browse_files), onOpen, Modifier.weight(1f), primary = true, enabled = enabled)
+            }
+        }
+    }
 }
 
 @Composable
