@@ -17,6 +17,7 @@ data class AppSettings(
     val additionalPath: String = "",
     val dns: String = "223.5.5.5,119.29.29.29",
     val proxy: String = "",
+    val editorLspEnabled: Boolean = false,
 )
 
 /**
@@ -34,7 +35,12 @@ class SettingsRepository(private val context: Context) {
         additionalPath = preferences.getString("path", "")!!,
         dns = preferences.getString("dns", AppSettings().dns)!!,
         proxy = preferences.getString("proxy", "")!!,
+        editorLspEnabled = preferences.getBoolean("editor-lsp-enabled", false),
     )
+
+    fun saveEditorLspEnabled(enabled: Boolean) {
+        preferences.edit { putBoolean("editor-lsp-enabled", enabled) }
+    }
 
     fun validate(settings: AppSettings) {
         require(settings.terminalFontSp in 10..28) { context.getString(dev.zakocoder.app.R.string.invalid_font) }
@@ -55,6 +61,7 @@ class SettingsRepository(private val context: Context) {
             }
         }
     }
+    // The editor switch is saved independently: a stale environment form must not overwrite it.
     fun save(settings: AppSettings) {
         validate(settings)
         val previousEndpoint = preferences.getString("proxy", "")!!.trim()

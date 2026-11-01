@@ -12,7 +12,7 @@ import javax.net.ssl.SSLException
 /** Only fixed categories and numeric HTTP status leave the transport. Never retain exception text. */
 enum class McpFailureReason {
     JsonSyntax, DuplicateJsonKey, ConfigShape, ConfigSize, ServerCount, UnknownField,
-    Transport, Fields, Headers, Url, UrlSecrets, HttpNotAllowed, DuplicateServer,
+    Transport, Fields, Headers, Url, UrlSecrets, DuplicateServer,
     Dns, Connect, Tls, Network, HttpStatus, Redirect,
 }
 
@@ -40,7 +40,6 @@ internal object McpDiagnostics {
             McpFailureReason.Headers -> R.string.mcp_error_headers
             McpFailureReason.Url -> R.string.mcp_error_url
             McpFailureReason.UrlSecrets -> R.string.mcp_error_url_secrets
-            McpFailureReason.HttpNotAllowed -> R.string.mcp_error_http_blocked
             McpFailureReason.DuplicateServer -> R.string.mcp_error_duplicate_server
             McpFailureReason.Dns -> R.string.mcp_error_dns
             McpFailureReason.Connect -> R.string.mcp_error_connect

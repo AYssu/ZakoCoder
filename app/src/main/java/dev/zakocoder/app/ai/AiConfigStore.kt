@@ -5,7 +5,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import android.util.Base64
-import dev.zakocoder.app.mcp.McpCleartextHosts
 import java.io.File
 import java.net.URI
 import java.security.KeyStore
@@ -32,8 +31,6 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
             val base = value.trim().trimEnd('/').removeSuffix("/chat/completions").removeSuffix("/responses").removeSuffix("/messages").removeSuffix("/models")
             val uri = URI(base)
             require(uri.scheme in setOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && (uri.port == -1 || uri.port in 1..65535))
-            // Use the same literal-host policy as MCP; do not resolve arbitrary DNS into trust.
-            require(uri.scheme != "http" || McpCleartextHosts.allowed(uri.host))
             require(base.length <= 2048)
             return base
         }

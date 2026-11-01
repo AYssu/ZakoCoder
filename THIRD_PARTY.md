@@ -34,6 +34,33 @@ LSP 新增传递依赖 Eclipse LSP4J 0.24.0（`org.eclipse.lsp4j` 与 `org.eclip
 
 按需下载的语言服务器不打包进 APK：Python LSP Server 1.13.1（MIT，https://github.com/python-lsp/python-lsp-server ）及 Pyflakes 3.4.0（MIT，https://github.com/PyCQA/pyflakes ）；TypeScript Language Server 4.4.0（MIT，https://github.com/typescript-language-server/typescript-language-server ）与 TypeScript 5.9.3（Apache-2.0，https://github.com/microsoft/TypeScript ）。安装保留 pip/npm 分发包的许可证及依赖元数据，工具目录独立于用户工程；间接依赖由包管理器解析，不宣称完整锁定依赖树。
 
+## 按需安装的其他语言服务
+
+以下工具只在用户确认后下载到设备 Ubuntu，不内置 APK。安装保留原始版权、许可证及依赖元数据；公开上游源码的许可证不替代分发包中其他组件各自的声明。
+
+| 组件 | 固定版本或版本来源 | 官方来源与许可 |
+| --- | --- | --- |
+| Eclipse JDT Language Server | **1.46.1**，发布制品 `jdt-language-server-1.46.1-202504011455.tar.gz` | `https://github.com/eclipse-jdtls/eclipse.jdt.ls/tree/v1.46.1`；下载 `https://download.eclipse.org/jdtls/milestones/1.46.1/jdt-language-server-1.46.1-202504011455.tar.gz`；EPL-2.0，所附组件保留各自声明。未修改服务代码。 |
+| Kotlin Language Server | **263.7084.0**，Linux ARM64 官方独立分发 | `https://github.com/Kotlin/kotlin-lsp/releases/tag/kotlin-lsp/v263.7084.0`；下载 `https://download.jetbrains.com/language-server/kotlin-server/263.7084.0/kotlin-server-263.7084.0-aarch64.tar.gz`。公开仓库 Apache-2.0；官方明确分发包含闭源部分，不能将整个分发包称为 Apache-2.0 或完全开源，具体组件以分发声明为准。 |
+| clangd / LLVM | Ubuntu 签名 APT 仓库的 `clangd`，准确版本由设备仓库决定 | `https://clangd.llvm.org/`、`https://github.com/llvm/llvm-project`；LLVM 主要采用 Apache-2.0 WITH LLVM-exception，Ubuntu 分包与所含组件按各自版权文件保留。 |
+| gopls / Go | Ubuntu 签名 APT 仓库的 `gopls`、`golang-go`，准确版本由设备仓库决定 | `https://go.dev/gopls/`、`https://go.googlesource.com/tools`、`https://go.dev/`；主要采用 BSD-3-Clause，保留依赖及包内声明。 |
+| rust-analyzer | **2026-10-26**，官方 GNU Linux ARM64／x86_64 发行 | `https://github.com/rust-lang/rust-analyzer/releases/tag/2026-10-26`；下载前缀 `https://github.com/rust-lang/rust-analyzer/releases/download/2026-10-26/`；MIT OR Apache-2.0，第三方依赖遵循各自许可。未修改二进制。 |
+| Rust 工具链与源码 | Ubuntu 签名 APT 仓库的 `rustc`、`cargo`、`rust-src`，准确版本由设备仓库决定 | `https://www.rust-lang.org/`、`https://github.com/rust-lang/rust`、`https://github.com/rust-lang/cargo`；主要采用 MIT OR Apache-2.0，编译器附属组件和例外按原包声明保留。 |
+| Dart Language Server | 复用下文 Flutter **3.47.9** 内的 Dart SDK **3.13.7** | `https://github.com/dart-lang/sdk`、`https://dart.dev/tools/dart-language-server`；不额外下载 SDK，许可、源码提交与分发方式沿用下文 Flutter／Dart 记录。 |
+
+| 下载制品 | SHA-256 |
+| --- | --- |
+| JDT LS 1.46.1 `.tar.gz` | `f435fdf6db3aa0d1598ef0f11f80bb20e09e67009001382719c313eff07de02c` |
+| Kotlin LSP 263.7084.0 Linux ARM64 `.tar.gz` | `450ab7c1d80e48106aa429b48cb4226d82ca12a8a2400447ae02386794780cac` |
+| `rust-analyzer-aarch64-unknown-linux-gnu.gz`，2026-10-26 | `1b225c4c9ae329ca96e8a75a5bbcb5562a7f1d25c57c8b55d3e02299a3dbe836` |
+| `rust-analyzer-x86_64-unknown-linux-gnu.gz`，2026-10-26 | `4c83773525f93b636ed79761389568b4d2a89c05fa7ecc440245032d49ad80ce` |
+
+JDT LS 使用 Ubuntu `openjdk-21-jdk-headless`，明确选择 JDK 21 路径，保留安装前已有的 Java 工具路径（原自动选择会固定为手动模式；原来未安装时可使用 JDK 21 默认值）；OpenJDK 主要采用 GPL-2.0 WITH Classpath-exception，原包及附属组件声明以 guest `/usr/share/doc` 为准。Kotlin 独立分发包含 JetBrains Runtime **25.0.4.1+1-b601.61**（Linux GNU aarch64），来源 `https://github.com/JetBrains/JetBrainsRuntime`；JBR 主要采用 GPL-2.0 WITH Classpath-exception，保留分发包的 `jbr/legal/` 与 `license/`，不将附属组件统一归入单一许可证。
+
+Kotlin 分发内容中的唯一配置调整发生在通过摘要校验的安装暂存目录：`bin/intellij-server.vmoptions` 最大堆从 2048 MiB 改为 1024 MiB、代码缓存从 512 MiB 改为 256 MiB，并关闭 OOM 堆转储；服务与 JBR 二进制未修改。Kotlin 当前仅提供 ARM64 安装入口，服务处于 Alpha，工程兼容与设备资源边界见 [语言服务](docs/LSP.md)。
+
+APT 的 clangd、gopls、Go、Rust、JDK 和构建依赖不固定整个依赖树；准确已安装版本、版权、补丁和源码来源通过 guest `dpkg-query`、`/usr/share/doc/<package>/copyright` 及 APT source 元数据核对。安装服务不等于验证全部工程或手机架构；如另行分发运行环境、修改后的工具或镜像，仍需独立履行对应组件的通知及源码提供义务。
+
 ## PRoot 与 loader：仓库内源码自行编译
 
 `native-runtime/` 是独立构建子项目，包含完整未修改的源码归档、固定工具链清单、独立补丁、构建脚本、产物锁及测试；无需从 OperitTerminalCore 下载二进制。来源、准确摘要和分发要求见 [子项目说明](native-runtime/README.md)、[工具链锁](native-runtime/toolchain.lock.json) 和 [验证记录](native-runtime/VALIDATION.md)。

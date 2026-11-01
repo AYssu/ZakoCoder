@@ -20,8 +20,13 @@ internal class LspWireAdapter(
     projectPath: String,
     documentPath: String,
     private val languageId: String,
+    private val documentSnapshot: (() -> String)? = null,
     private val beforeDiagnostics: (String) -> Unit = {},
 ) {
+    @Volatile private var sentVersion: Int = -1
+    @Volatile private var sentText: String? = null
+    internal fun hasSentSnapshot(text: String): Boolean = sentText == text
+    private val visibleDocument = documentPath
     private val uriMap = listOf(projectPath, documentPath).associate { path ->
         "file://$path" to URI("file", "", path, null).toASCIIString()
     }
@@ -30,31 +35,51 @@ internal class LspWireAdapter(
         val value = objectValue.opt(key)
         if (value is String) objectValue.put(key, uri(value))
     }
-    private fun folders(values: JSONArray?) {
-        if (values != null) for (index in 0 until values.length()) values.optJSONObject(index)?.let { normalize(it, "uri") }
+    private fun folders(values: JSONArray?, requireNames: Boolean = false) {
+        if (values != null) for (index in 0 until values.length()) values.optJSONObject(index)?.let {
+            normalize(it, "uri")
+            if (requireNames && it.optString("name").isBlank()) {
+                val path = runCatching { URI(it.optString("uri")).path }.getOrNull().orEmpty()
+                it.put("name", path.trimEnd('/').substringAfterLast('/').ifBlank { "workspace" })
+            }
+        }
     }
     fun outgoing(message: JSONObject): JSONObject {
         val method = message.optString("method")
         val params = message.optJSONObject("params") ?: return message
         when {
             method == "initialize" -> {
-                normalize(params, "rootUri"); folders(params.optJSONArray("workspaceFolders"))
+                normalize(params, "rootUri"); folders(params.optJSONArray("workspaceFolders"), requireNames = true)
                 // Sora 0.23.6 renders basic pushed diagnostics but omits this capability.
                 // TypeScript language server 4.4.0 disables all diagnostics without it.
                 val capabilities = params.optJSONObject("capabilities") ?: JSONObject().also { params.put("capabilities", it) }
                 val document = capabilities.optJSONObject("textDocument") ?: JSONObject().also { capabilities.put("textDocument", it) }
                 if (!document.has("publishDiagnostics")) document.put("publishDiagnostics", JSONObject())
+                // Sora sends codeActionLiteralSupport={} without the required codeActionKind.
+                // We expose no code-action UI, so omit the unsupported capability entirely
+                // instead of inventing action kinds to satisfy strict servers.
+                document.remove("codeAction")
+                document.put("diagnostic", JSONObject().put("dynamicRegistration", false).put("relatedDocumentSupport", false))
             }
             method.startsWith("textDocument/") -> params.optJSONObject("textDocument")?.let { document ->
                 normalize(document, "uri")
-                if (method == "textDocument/didOpen") document.put("languageId", languageId)
+                if (method == "textDocument/didOpen") {
+                    document.put("languageId", languageId)
+                    sentText = document.optString("text")
+                    sentVersion = document.optInt("version", -1)
+                } else if (method == "textDocument/didChange") {
+                    sentVersion = document.optInt("version", -1)
+                    val changes = params.optJSONArray("contentChanges")
+                    val full = changes?.optJSONObject((changes.length() - 1).coerceAtLeast(0))
+                    if (full != null && !full.has("range")) sentText = full.optString("text")
+                }
             }
-            method == "workspace/didChangeWorkspaceFolders" -> params.optJSONObject("event")?.let { event -> folders(event.optJSONArray("added")); folders(event.optJSONArray("removed")) }
+            method == "workspace/didChangeWorkspaceFolders" -> params.optJSONObject("event")?.let { event -> folders(event.optJSONArray("added"), requireNames = true); folders(event.optJSONArray("removed"), requireNames = true) }
             method == "workspace/didChangeWatchedFiles" -> folders(params.optJSONArray("changes"))
         }
         return message
     }
-    fun incoming(message: JSONObject): JSONObject {
+    fun incoming(message: JSONObject): JSONObject? {
         if (message.optString("method") != "textDocument/publishDiagnostics") return message
         val params = message.optJSONObject("params") ?: throw IOException("Invalid diagnostics parameters")
         val diagnostics = params.optJSONArray("diagnostics") ?: throw IOException("Invalid diagnostics list")
@@ -62,6 +87,29 @@ internal class LspWireAdapter(
         val documentUri = params.opt("uri") as? String ?: throw IOException("Missing diagnostic URI")
         val parsed = try { URI(documentUri) } catch (_: Exception) { throw IOException("Invalid diagnostic URI") }
         if (parsed.scheme != "file" || parsed.rawAuthority?.isNotEmpty() == true || parsed.query != null || parsed.fragment != null) throw IOException("Invalid diagnostic URI")
+        if (parsed.path == visibleDocument) {
+            // A late response must neither clear newer diagnostics nor address old line indices.
+            if (params.has("version") && params.optInt("version", -1) < sentVersion) return null
+            val current = documentSnapshot?.invoke()
+            if (current != null) {
+                if (sentText != null && current != sentText) return null
+                val lines = current.split('\n')
+                val valid = JSONArray()
+                for (index in 0 until diagnostics.length()) {
+                    val diagnostic = diagnostics.optJSONObject(index) ?: continue
+                    val range = diagnostic.optJSONObject("range") ?: continue
+                    fun position(key: String): Pair<Int, Int>? {
+                        val point = range.optJSONObject(key) ?: return null
+                        val line = point.optInt("line", -1); val column = point.optInt("character", -1)
+                        return if (line in lines.indices && column in 0..lines[line].length) line to column else null
+                    }
+                    val start = position("start") ?: continue
+                    val end = position("end") ?: continue
+                    if (end.first > start.first || end.first == start.first && end.second >= start.second) valid.put(diagnostic)
+                }
+                params.put("diagnostics", valid)
+            }
+        }
         // The upstream client adds diagnostics instead of replacing. Clear only this explicitly
         // named document, including an empty server array, immediately before its handler runs.
         beforeDiagnostics(parsed.path ?: throw IOException("Missing diagnostic path"))
@@ -141,7 +189,7 @@ internal class LspFrameOutput(private val target: OutputStream, private val tran
     }
 }
 
-internal class LspFrameInput(private val source: InputStream, private val transform: (JSONObject) -> JSONObject) : InputStream() {
+internal class LspFrameInput(private val source: InputStream, private val transform: (JSONObject) -> JSONObject?) : InputStream() {
     private var frame = ByteArrayInputStream(ByteArray(0))
     private fun next(): Boolean {
         val header = ByteArrayOutputStream()
@@ -165,8 +213,13 @@ internal class LspFrameInput(private val source: InputStream, private val transf
                     if (count == 0) throw IOException("Invalid zero-byte JSON-RPC read")
                     cursor += count
                 }
-                frame = ByteArrayInputStream(encodeFrame(transform(decodeJson(body))))
-                return true
+                val transformed = transform(decodeJson(body))
+                if (transformed != null) {
+                    frame = ByteArrayInputStream(encodeFrame(transformed))
+                    return true
+                }
+                header.reset()
+
             }
         }
     }

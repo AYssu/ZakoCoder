@@ -548,8 +548,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     fun installToolBundles(ids: Set<String>, acceptAndroidLicense: Boolean = false) = run(R.string.install_selected_bundles, foreground = true, recheckTools = true) {
         check(mutable.value.installed)
+        val selectedTools = ids.flatMap { id -> ToolBundles.catalog.single { it.id == id }.tools }.toSet()
+        val installFlutter = "flutter" in ids || "flutter" in selectedTools &&
+            mutable.value.bundleTools.none { it.id == "flutter" && it.status == ToolStatus.Ready }
         if (ids.any { it == "android" || it == "android-ndk" }) runtime.requireAndroidToolchainSupport()
-        if ("flutter" in ids) {
+        if (installFlutter) {
             runtime.requireFlutterToolchainSupport()
             require(withContext(Dispatchers.IO) { runtime.freeBytes() } >= 8L * 1024 * 1024 * 1024) {
                 context.getString(R.string.flutter_toolchain_storage_required)
@@ -573,20 +576,13 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
         }
-        for ((bundle, server) in listOf("lsp-python" to dev.zakocoder.app.editor.lsp.LspServer.Python,
-            "lsp-typescript" to dev.zakocoder.app.editor.lsp.LspServer.TypeScript)) {
-            if (bundle in ids) {
-                val result = runtime.execute(server.installScript, null, mutable.value.settings, output = ::append)
-                check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
-            }
-        }
         if ("android" in ids) {
             val script = withContext(Dispatchers.IO) { context.assets.open("android-build/install.sh").bufferedReader().use { it.readText() } }
             val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
         }
-        if ("flutter" in ids) {
+        if (installFlutter) {
             val script = withContext(Dispatchers.IO) { context.assets.open("flutter-build/install.sh").bufferedReader().use { it.readText() } }
             val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
@@ -597,6 +593,14 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             val result = runtime.execute(script, null, mutable.value.settings, timeoutMillis = 90 * 60 * 1000L, output = ::append)
             append(context.getString(R.string.command_exit, result.exitCode))
             check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+        }
+        for (server in dev.zakocoder.app.editor.lsp.LspServer.entries) {
+            if (server.bundleId in ids) {
+                val result = runtime.execute(server.installScript, null, mutable.value.settings,
+                    timeoutMillis = 30 * 60 * 1000L, output = ::append)
+                append(context.getString(R.string.command_exit, result.exitCode))
+                check(result.exitCode == 0) { context.getString(R.string.command_failed, result.exitCode) }
+            }
         }
     }
     fun repairPackages() = run(R.string.repair_packages, foreground = true, recheckTools = true) {
@@ -633,7 +637,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             input
         }
         val previous = mutable.value.settings
-        val runtimeChanged = settings.copy(terminalFontSp = previous.terminalFontSp, terminalShell = previous.terminalShell) != previous
+        val runtimeChanged = settings.copy(terminalFontSp = previous.terminalFontSp, terminalShell = previous.terminalShell, editorLspEnabled = previous.editorLspEnabled) != previous
         run(R.string.save_settings, recheckTools = runtimeChanged) {
             val stored = withContext(Dispatchers.IO) {
                 settingsRepository.validate(input)
@@ -641,9 +645,22 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 settingsRepository.save(input)
                 settingsRepository.load() to settingsRepository.proxyDisplay()
             }
-            mutable.update { it.copy(settings = stored.first, proxyDisplay = stored.second,
+            mutable.update { it.copy(settings = stored.first.copy(editorLspEnabled = it.settings.editorLspEnabled), proxyDisplay = stored.second,
                 tools = if (runtimeChanged) emptyList() else it.tools,
                 bundleTools = if (runtimeChanged) emptyList() else it.bundleTools, message = context.getString(R.string.settings_saved)) }
+        }
+    }
+    private val editorLspSettingsMutex = kotlinx.coroutines.sync.Mutex()
+    fun setEditorLspEnabled(enabled: Boolean) {
+        mutable.update { it.copy(settings = it.settings.copy(editorLspEnabled = enabled)) }
+        if (!enabled) editor.lsp?.detach()
+        scope.launch {
+            editorLspSettingsMutex.lock()
+            try { withContext(Dispatchers.IO) { settingsRepository.saveEditorLspEnabled(enabled) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                mutable.update { it.copy(message = context.getString(R.string.editor_lsp_setting_failed), messageIsError = true) }
+            } finally { editorLspSettingsMutex.unlock() }
         }
     }
     fun clearCache() = run(R.string.clear_cache) { withContext(Dispatchers.IO) { runtime.clearDownloadCache() } }

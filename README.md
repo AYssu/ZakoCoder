@@ -34,7 +34,7 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 | 工作场景 | 你可以做什么 |
 | --- | --- |
 | **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
-| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS 可选本机语言服务，Dart 提供基础词法着色。 |
+| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart 可选实验性本机语言服务。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情，按日／月、项目和模型筛选本机用量；在任务内选择或填写回答，重启后继续待答任务。 |
 | **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
@@ -83,13 +83,13 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android、Flutter 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
 | Flutter 工程 | 可选固定 Flutter 3.47.9／Dart 3.13.7 工具包、Dart 模板与基础着色；ARM64 Ubuntu 中的依赖、分析、Widget 测试及 Web 构建已有真机记录，Android APK 与完整应用流程的验收状态见 [Flutter 开发](docs/FLUTTER.md)。 |
-| 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
-| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，可选实验性 Python／JS／TS LSP 补全与诊断。暂不提供 Java／Kotlin 语言服务或完整重构。 |
+| 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设；地址支持 HTTP / HTTPS 域名或 IP，可指定端口，HTTP 不加密。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
+| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，可选实验性 Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart LSP 补全与诊断；Kotlin 仅 Ubuntu ARM64。暂不提供完整重构，工程和设备适用性需分别验证。 |
 | Git | 公开／私有 HTTPS 克隆、按仓库保存令牌、状态、暂存、提交、获取／快进拉取／推送、分支管理及冲突编辑入口；不提供强推、rebase 或 Git SSH 密钥管理。 |
 
 Git 与语言服务均使用同一项目及手机上的 Ubuntu 环境。Git 拉取默认仅快进，分叉需明确合并；冲突处理后保存并标记解决，再提交。领先／落后数量来自最近获取的记录。已有 `ssh://` 远端使用终端配置的身份与严格主机校验，不提供密钥管理界面，详见 [Git 工作流](docs/GIT.md)。
 
-语言服务需按需联网安装，仅为当前可见文件建立连接。Python 与 JavaScript／TypeScript 提供实验性补全和诊断，不能代替项目构建，也不代表其他语言已具备语义支持；依赖解析和设备适用性见[语言服务说明](docs/LSP.md)。
+语言服务默认关闭，需从编辑器底部 LSP 入口主动开启；工具包按需联网安装，仅为当前可见文件建立连接。按文件类型连接对应服务，提供实验性补全和诊断，不能代替项目构建；Java／Kotlin 需要 JVM，Dart 复用 Flutter 工具包。新增语言已有最小工程的单台真机验证，复杂工程仍需单独验收；依赖解析和设备适用性见[语言服务说明](docs/LSP.md)。
 
 「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包，按项目启用且默认关闭。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；普通、无障碍和 Root 方式的权限分别授权，截图分享默认关闭，目标仍限用户选择的项目调试 APK。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
 

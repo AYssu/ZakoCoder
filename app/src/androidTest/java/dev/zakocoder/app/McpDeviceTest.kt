@@ -70,7 +70,7 @@ class McpDeviceTest {
                 """{"mcpServers":{"x":{"type":"sse","url":"https://example.com/mcp?token=secret"}}}""",
                 """{"mcpServers":{"x":{"command":"a","args":[1]}}}""",
                 """{"mcpServers":{"x":{"command":"a","url":"https://example.com"}}}""",
-                """{"mcpServers":{"x":{"type":"http","url":"http://example.com/mcp"}}}"""
+                """{"mcpServers":{"x":{"type":"http","url":"http:///mcp"}}}"""
             )) {
                 try { McpConfigParser.parse(invalid); fail("invalid accepted") } catch (_: McpException) { }
             }

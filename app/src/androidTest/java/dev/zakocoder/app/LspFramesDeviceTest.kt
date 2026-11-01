@@ -71,7 +71,7 @@ class LspFramesDeviceTest {
         val request = JSONObject().put("method", "workspace/executeCommand").put("params", JSONObject().put("arguments", JSONArray().put(JSONObject().put("uri", "file://$path"))))
         assertEquals("file://$path", wire.outgoing(request).getJSONObject("params").getJSONArray("arguments").getJSONObject(0).getString("uri"))
         val response = JSONObject().put("id", 1).put("result", JSONObject().put("uri", "file://$path"))
-        assertEquals("file://$path", wire.incoming(response).getJSONObject("result").getString("uri"))
+        assertEquals("file://$path", wire.incoming(response)!!.getJSONObject("result").getString("uri"))
     }
     @Test fun rejectsDuplicateOversizedTruncatedAndNonUtf8Frames() {
         val badFrames = listOf(
@@ -137,7 +137,7 @@ class LspFramesDeviceTest {
         } finally { executor.shutdownNow() }
     }
 
-    @Test fun initializeAdvertisesActualBasicPushDiagnosticsWithoutInventingAdvancedSupport() {
+    @Test fun initializeAdvertisesPushAndPullDiagnosticsWithoutDynamicOrRelatedDocumentSupport() {
         val wire = LspWireAdapter(root, path, "typescript")
         val initialize = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("method", "initialize")
             .put("params", JSONObject().put("rootUri", "file://$root").put("capabilities", JSONObject()
@@ -146,10 +146,170 @@ class LspFramesDeviceTest {
         assertTrue(document.has("publishDiagnostics"))
         assertEquals(0, document.getJSONObject("publishDiagnostics").length())
         assertFalse(document.getJSONObject("completion").getBoolean("dynamicRegistration"))
+        val pull = document.getJSONObject("diagnostic")
+        assertEquals(2, pull.length())
+        assertFalse(pull.getBoolean("dynamicRegistration"))
+        assertFalse(pull.getBoolean("relatedDocumentSupport"))
+        // Unsupported upstream flags cannot override the implementation's narrower support.
+        document.put("diagnostic", JSONObject().put("dynamicRegistration", true).put("relatedDocumentSupport", true))
+        val normalizedPull = wire.outgoing(initialize).getJSONObject("params").getJSONObject("capabilities")
+            .getJSONObject("textDocument").getJSONObject("diagnostic")
+        assertEquals(2, normalizedPull.length())
+        assertFalse(normalizedPull.getBoolean("dynamicRegistration"))
+        assertFalse(normalizedPull.getBoolean("relatedDocumentSupport"))
         val existing = JSONObject().put("relatedInformation", false)
         document.put("publishDiagnostics", existing)
         assertEquals(false, wire.outgoing(initialize).getJSONObject("params").getJSONObject("capabilities")
             .getJSONObject("textDocument").getJSONObject("publishDiagnostics").getBoolean("relatedInformation"))
+    }
+
+    @Test fun initializeRemovesUnsupportedCodeActionsFromSoraCapabilityShape() {
+        // Captured Sora 0.23.6 initialize shape: literal support has no codeActionKind.
+        // Strict Dart/Kotlin servers reject this payload before initialize can complete.
+        val params = JSONObject("""{"capabilities":{"textDocument":{
+            "codeAction":{"dynamicRegistration":false,"codeActionLiteralSupport":{}},
+            "completion":{"dynamicRegistration":false},
+            "hover":{"dynamicRegistration":false},
+            "publishDiagnostics":{"relatedInformation":false}
+        }}}""")
+        val document = params.getJSONObject("capabilities").getJSONObject("textDocument")
+        assertFalse(document.getJSONObject("codeAction").getJSONObject("codeActionLiteralSupport").has("codeActionKind"))
+        val completion = document.getJSONObject("completion").toString()
+        val hover = document.getJSONObject("hover").toString()
+        val diagnostics = document.getJSONObject("publishDiagnostics").toString()
+        val initialize = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("method", "initialize").put("params", params)
+        val wire = LspWireAdapter(root, path, "dart")
+        val output = ByteArrayOutputStream()
+        LspFrameOutput(output, wire::outgoing).use { it.write(frame(initialize)) }
+        val actual = message(output.toByteArray()).getJSONObject("params").getJSONObject("capabilities").getJSONObject("textDocument")
+        assertFalse("Code actions have no supported UI and must not be advertised", actual.has("codeAction"))
+        assertEquals(completion, actual.getJSONObject("completion").toString())
+        assertEquals(hover, actual.getJSONObject("hover").toString())
+        assertEquals(diagnostics, actual.getJSONObject("publishDiagnostics").toString())
+    }
+
+    private fun diagnostic(startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, text: String = "fixture"): JSONObject =
+        JSONObject().put("message", text).put("range", JSONObject()
+            .put("start", JSONObject().put("line", startLine).put("character", startColumn))
+            .put("end", JSONObject().put("line", endLine).put("character", endColumn)))
+
+    private fun diagnosticNotification(version: Int?, values: JSONArray): JSONObject {
+        val params = JSONObject().put("uri", URI("file", "", path, null).toASCIIString()).put("diagnostics", values)
+        if (version != null) params.put("version", version)
+        return JSONObject().put("jsonrpc", "2.0").put("method", "textDocument/publishDiagnostics").put("params", params)
+    }
+
+    private fun fullChange(version: Int, text: String): JSONObject = JSONObject().put("jsonrpc", "2.0")
+        .put("method", "textDocument/didChange").put("params", JSONObject()
+            .put("textDocument", JSONObject().put("uri", "file://$path").put("version", version))
+            .put("contentChanges", JSONArray().put(JSONObject().put("text", text))))
+
+    @Test fun staleDiagnosticVersionsDoNotClearNewerResultsAndInputContinuesToNextFrame() {
+        var cleared = 0
+        var current = "latest\n"
+        val wire = LspWireAdapter(root, path, "python", documentSnapshot = { current }) { cleared++ }
+        wire.outgoing(open("initial\n"))
+        wire.outgoing(fullChange(2, current))
+        val stale = diagnosticNotification(1, JSONArray().put(diagnostic(0, 0, 0, 1, "old")))
+        assertNull(wire.incoming(stale))
+        assertEquals("Discarding old diagnostics must preserve the displayed new results", 0, cleared)
+        val response = JSONObject().put("jsonrpc", "2.0").put("id", 91).put("result", "following response")
+        val source = LspFrameInput(ByteArrayInputStream(frame(stale) + frame(response)), wire::incoming)
+        val forwarded = source.use { it.readBytes() }
+        assertEquals(91, message(forwarded).getInt("id"))
+        assertEquals("following response", message(forwarded).getString("result"))
+        assertEquals(1, Regex("Content-Length:").findAll(forwarded.toString(Charsets.UTF_8)).count())
+        assertEquals(0, cleared)
+        // An old empty publication must not remove currently valid diagnostics either.
+        assertNull(wire.incoming(diagnosticNotification(1, JSONArray())))
+        assertEquals(0, cleared)
+        assertNotNull(wire.incoming(diagnosticNotification(2, JSONArray().put(diagnostic(0, 0, 0, 1, "latest")))))
+        assertEquals(1, cleared)
+    }
+
+    @Test fun editingBeforeDidChangeDropsDiagnosticsEvenWhenServerVersionMatchesLastSent() {
+        var cleared = 0
+        var current = "original\n"
+        val wire = LspWireAdapter(root, path, "python", documentSnapshot = { current }) { cleared++ }
+        wire.outgoing(open(current))
+        current = "new\n"
+        val late = diagnosticNotification(1, JSONArray().put(diagnostic(0, 0, 0, 1)))
+        assertNull("UI edit must invalidate diagnostics before debounce sends didChange", wire.incoming(late))
+        assertNull("Unversioned diagnostics must respect the unsent UI snapshot", wire.incoming(diagnosticNotification(null, JSONArray())))
+        assertEquals(0, cleared)
+        wire.outgoing(fullChange(2, current))
+        assertNotNull(wire.incoming(diagnosticNotification(2, JSONArray().put(diagnostic(0, 0, 0, 1)))))
+        assertEquals(1, cleared)
+    }
+
+    @Test fun outOfBoundsDiagnosticCoordinatesAreFilteredWhileValidAndEmptyUpdatesStillReplace() {
+        var cleared = 0
+        val current = "🙂x\nok"
+        val wire = LspWireAdapter(root, path, "python", documentSnapshot = { current }) { cleared++ }
+        wire.outgoing(open(current))
+        val values = JSONArray()
+            .put(diagnostic(0, 2, 0, 3, "UTF16 x"))
+            .put(diagnostic(0, 3, 1, 2, "valid multiline"))
+            .put(diagnostic(99, 0, 99, 1, "missing line"))
+            .put(diagnostic(-1, 0, 0, 1, "negative line"))
+            .put(diagnostic(0, -1, 0, 1, "negative column"))
+            .put(diagnostic(0, 0, 0, 4, "past line end"))
+            .put(diagnostic(1, 1, 0, 1, "reversed lines"))
+            .put(diagnostic(0, 2, 0, 1, "reversed columns"))
+            .put(JSONObject().put("message", "missing range"))
+            .put("not a diagnostic")
+        val accepted = requireNotNull(wire.incoming(diagnosticNotification(1, values)))
+            .getJSONObject("params").getJSONArray("diagnostics")
+        assertEquals(2, accepted.length())
+        assertEquals("UTF16 x", accepted.getJSONObject(0).getString("message"))
+        assertEquals("valid multiline", accepted.getJSONObject(1).getString("message"))
+        assertEquals(1, cleared)
+        val empty = requireNotNull(wire.incoming(diagnosticNotification(1, JSONArray())))
+        assertEquals(0, empty.getJSONObject("params").getJSONArray("diagnostics").length())
+        assertEquals("A current empty update must still clear prior diagnostics", 2, cleared)
+    }
+
+    @Test fun initializeWorkspaceFoldersReceiveRequiredNamesAndPreserveExplicitNames() {
+        val project = "/workspace/测试 # 项目"
+        val encoded = URI("file", "", project, null).toASCIIString()
+        val wire = LspWireAdapter(project, "$project/Main.kt", "kotlin")
+        val folders = JSONArray()
+            .put(JSONObject().put("uri", "file://$project"))
+            .put(JSONObject().put("uri", encoded).put("name", "   "))
+            .put(JSONObject().put("uri", encoded).put("name", "User workspace name"))
+            .put(JSONObject().put("uri", "file:///").put("name", ""))
+        val initialize = JSONObject().put("method", "initialize").put("params", JSONObject()
+            .put("rootUri", "file://$project").put("workspaceFolders", folders))
+        val params = wire.outgoing(initialize).getJSONObject("params")
+        assertEquals(encoded, params.getString("rootUri"))
+        val actual = params.getJSONArray("workspaceFolders")
+        assertEquals(encoded, actual.getJSONObject(0).getString("uri"))
+        assertEquals("测试 # 项目", actual.getJSONObject(0).getString("name"))
+        assertEquals("测试 # 项目", actual.getJSONObject(1).getString("name"))
+        assertEquals("User workspace name", actual.getJSONObject(2).getString("name"))
+        assertEquals("workspace", actual.getJSONObject(3).getString("name"))
+    }
+
+    @Test fun workspaceFolderChangeNormalizesNamesForAddedAndRemovedButNotWatchedFiles() {
+        val project = "/workspace/测试 # 项目"
+        val encoded = URI("file", "", project, null).toASCIIString()
+        val wire = LspWireAdapter(project, "$project/Main.kt", "kotlin")
+        val change = JSONObject().put("method", "workspace/didChangeWorkspaceFolders")
+            .put("params", JSONObject().put("event", JSONObject()
+                .put("added", JSONArray().put(JSONObject().put("uri", "file://$project")))
+                .put("removed", JSONArray().put(JSONObject().put("uri", encoded).put("name", "")))))
+        val event = wire.outgoing(change).getJSONObject("params").getJSONObject("event")
+        for (key in listOf("added", "removed")) {
+            val folder = event.getJSONArray(key).getJSONObject(0)
+            assertEquals(encoded, folder.getString("uri"))
+            assertEquals("测试 # 项目", folder.getString("name"))
+        }
+        val watched = JSONObject().put("method", "workspace/didChangeWatchedFiles").put("params", JSONObject()
+            .put("changes", JSONArray().put(JSONObject().put("uri", "file://$project").put("type", 2))))
+        val file = wire.outgoing(watched).getJSONObject("params").getJSONArray("changes").getJSONObject(0)
+        assertEquals(encoded, file.getString("uri"))
+        assertEquals(2, file.getInt("type"))
+        assertFalse("File change records have no WorkspaceFolder name field", file.has("name"))
     }
 
 }

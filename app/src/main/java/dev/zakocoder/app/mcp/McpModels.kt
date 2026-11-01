@@ -96,7 +96,6 @@ object McpConfigParser {
         require(!uri.host.isNullOrBlank())
         require(uri.port == -1 || uri.port in 1..65535)
         checkConfig(uri.scheme in setOf("https", "http"), McpFailureReason.Url)
-        checkConfig(uri.scheme != "http" || McpCleartextHosts.allowed(uri.host), McpFailureReason.HttpNotAllowed)
         uri
     }
     internal fun sameOrigin(first: String, second: String): Boolean {

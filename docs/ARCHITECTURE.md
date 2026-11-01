@@ -31,7 +31,7 @@ ProjectApkInstaller 在用户确认后于 IO 线程生成有界 APK 缓存副本
 
 EditorController 持有最多 8 个 Content 缓冲；EditorFileStore 限量读取 UTF-8，保存前检查原始字节摘要，写同目录临时文件、同步并保留权限后原子替换。草稿独立保存文本、基线及光标，只有显式保存修改源码。磁盘变化采样绑定文档与代际，不重设保存基线；外部进程不受应用锁约束，最终检查与替换间仍可能竞争。
 
-EditorLspController 为可见文档持有一个本机语言服务会话，使用 Sora LSP 接入固定的 Ubuntu Python／TypeScript 服务。LspProcess 使用独立二进制 stdio 与所属 PID；帧适配器校正文档 URI 和语言标识，并按通知替换诊断。连接、重试及释放绑定视图和代际，失败恢复基础语法；未保存缓冲不会自动写入项目文件，详见[语言服务](LSP.md)。
+EditorLspController 为可见文档持有一个本机语言服务会话，使用 Sora LSP 按文件类型接入 Ubuntu Python、JS／TS、Java、Kotlin、C/C++、Go、Rust 或 Dart 服务。服务命令和安装依赖由自有注册表明确指定，不从工程文本生成可执行命令。Java 使用独立 JDK 21 与按项目目录区分的索引缓存；Kotlin ARM64 分发包自带 JBR，Dart 复用 Flutter SDK，clangd／gopls 由 APT 提供。固定下载制品校验摘要后在暂存目录安装，Kotlin 仅在校验后的暂存分发包调整内存参数并保留许可。LspProcess 使用独立二进制 stdio 与所属 PID；帧适配器校正文档 URI 和语言标识，并按通知替换诊断。连接、重试及释放绑定视图和代际，失败恢复基础语法；未保存缓冲不会自动写入项目文件，详见[语言服务](LSP.md)。
 
 ProjectGit 在整个同步或合并期间保持独立忙状态和前台服务；普通构建任务与 AI 任务在入口检查该状态。取消后重新读取磁盘状态，读取失败或输出截断时禁止使用旧状态变更仓库。网络操作采用明确远端、固定传输策略和 URL 重写预检；HTTPS 凭据按项目及来源路径加密保存，经临时 FIFO 送给 ASKPASS，结束清理，启动先清旧遗留。PRoot 仍与终端共享 UID，不能视为凭据沙箱，详见 [Git 工作流](GIT.md)。
 
@@ -41,7 +41,7 @@ AI 会话位于 `noBackupFilesDir/ai-history-v1`，检查点与恢复进度独�
 
 AiModelsController 管理配置元数据，AiConfigStore 原子保存配置并通过 Android Keystore AES-GCM 加密密钥。密钥不回显、不写入 SavedState 或项目导出；跨服务源复用要求显式处理。旧单配置兼容读取，首次管理修改写新目录；新目录存在时不复活旧配置。
 
-ChatTransport 统一管理 HTTPS 请求、取消、日志与模型请求重试，Chat Completions、Responses、Anthropic Messages 与 Gemini 由独立编解码负责消息转换和结束校验，AiProviderRouting 负责明确协议的路径与认证，禁止明文 HTTP 和重定向。原生签名元数据仅在来源协议重放，日志去除不透明数据与图片编码。模型发现与流式工具测试是显式操作；测试使用无项目副作用的探针工具，结果绑定输入及请求代际。活动任务期间禁止切换或修改配置。
+ChatTransport 统一管理 HTTP(S) 请求、取消、日志与模型请求重试，Chat Completions、Responses、Anthropic Messages 与 Gemini 由独立编解码负责消息转换和结束校验，AiProviderRouting 负责明确协议的路径与认证；模型地址支持 HTTP / HTTPS 域名或 IP，HTTP 不加密，禁止重定向。原生签名元数据仅在来源协议重放，日志去除不透明数据与图片编码。模型发现与流式工具测试是显式操作；测试使用无项目副作用的探针工具，结果绑定输入及请求代际。活动任务期间禁止切换或修改配置。
 
 AiController 持有单个活动任务，时间线、模型计划、工具草稿与实际事件分开建模。AiHistoryStore 的保存、切换及删除串行执行；异步历史与文件引用绑定项目、会话及代际，迟到结果不能覆盖新身份。首次请求前保存，运行中周期保存，最终保存失败可重试而不重放模型或工具；加载损坏不能通过重试写入覆盖。
 

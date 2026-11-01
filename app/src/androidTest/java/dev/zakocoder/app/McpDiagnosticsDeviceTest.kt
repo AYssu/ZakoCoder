@@ -24,7 +24,6 @@ class McpDiagnosticsDeviceTest {
             "{\"mcpServers\":{}}" to McpFailureReason.ServerCount,
             "{\"type\":\"unsupported\"}" to McpFailureReason.Transport,
             "{\"command\":\"python3\",\"unknown\":\"$fixtureSecret\"}" to McpFailureReason.UnknownField,
-            "{\"type\":\"http\",\"url\":\"http://8.8.8.8/mcp\"}" to McpFailureReason.HttpNotAllowed,
             "{\"type\":\"http\",\"url\":\"https://example.invalid/mcp?token=$fixtureSecret\"}" to McpFailureReason.UrlSecrets,
             "{\"type\":\"http\",\"url\":\"not-an-address\"}" to McpFailureReason.Url,
             "{\"type\":\"http\",\"url\":\"https://example.invalid/mcp\",\"headers\":{\"Host\":\"$fixtureSecret\"}}" to McpFailureReason.Headers,

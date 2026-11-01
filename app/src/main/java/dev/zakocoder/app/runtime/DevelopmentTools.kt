@@ -1,6 +1,7 @@
 package dev.zakocoder.app.runtime
 
 import dev.zakocoder.app.projects.ProjectKind
+import dev.zakocoder.app.editor.lsp.LspServer
 import java.io.File
 
 data class DevelopmentTool(val id: String, val probe: String, val packages: List<String>)
@@ -18,8 +19,6 @@ object DevelopmentTools {
         DevelopmentTool("python", "python3 --version", listOf("python3")),
         DevelopmentTool("pip", "python3 -m pip --version", listOf("python3-pip")),
         DevelopmentTool("venv", "python3 -c 'import venv, ensurepip; print(\"venv / ensurepip\")'", listOf("python3-venv")),
-        DevelopmentTool("lsp-python", "/opt/zakocoder/lsp/python/bin/pylsp --version", listOf("python3", "python3-venv")),
-        DevelopmentTool("lsp-typescript", "/opt/zakocoder/lsp/typescript/node_modules/.bin/typescript-language-server --version", listOf("nodejs", "npm", "curl", "ca-certificates")),
         DevelopmentTool("go", "go version", listOf("golang-go")),
         DevelopmentTool("rustc", "rustc --version", listOf("rustc")),
         DevelopmentTool("cargo", "cargo --version", listOf("cargo")),
@@ -31,13 +30,13 @@ object DevelopmentTools {
         DevelopmentTool("android-sdk", AndroidToolchain.PROBE, AndroidToolchain.packages),
         DevelopmentTool("android-ndk", AndroidNdkToolchain.PROBE, AndroidNdkToolchain.packages),
         DevelopmentTool("flutter", FlutterToolchain.PROBE, FlutterToolchain.packages),
-    )
+    ) + LspServer.entries.map { DevelopmentTool(it.bundleId, it.probe, it.packages) }
     fun required(kinds: Set<ProjectKind>): List<DevelopmentTool> {
         val ids = setOf("bash", "git") + kinds.flatMap { it.tools }
         return catalog.filter { it.id in ids }
     }
     fun doctorScript(tools: List<DevelopmentTool>): String = tools.joinToString("\n") { tool ->
-        val executable = when (tool.id) { "python", "pip", "venv" -> "python3"; "lsp-python" -> "/opt/zakocoder/lsp/python/bin/pylsp"; "lsp-typescript" -> "/opt/zakocoder/lsp/typescript/node_modules/.bin/typescript-language-server"; "android-sdk" -> "sdkmanager"; "android-ndk" -> "${AndroidNdkToolchain.PATH}/clang"; else -> tool.id }
+        val executable = LspServer.entries.firstOrNull { it.bundleId == tool.id }?.executable ?: when (tool.id) { "python", "pip", "venv" -> "python3"; "android-sdk" -> "sdkmanager"; "android-ndk" -> "${AndroidNdkToolchain.PATH}/clang"; else -> tool.id }
         """
             if ! command -v $executable >/dev/null 2>&1; then
               printf 'ZAKO_TOOL\t${tool.id}\tMissing\t-\n'
@@ -62,8 +61,44 @@ object DevelopmentTools {
         .flatMap { check -> catalog.single { it.id == check.id }.packages }.distinct().sorted()
     fun installScript(packages: List<String>): String {
         require(packages.isNotEmpty() && packages.all { name -> catalog.any { name in it.packages } })
-        return "set -e\napt-get -o APT::Update::Error-Mode=any update\napt-get install -y --no-install-recommends " + packages.joinToString(" ") + if ("npm" in packages) "\n" + NpmCompatibility.installScript() else ""
+        val preserveJava = if ("openjdk-21-jdk-headless" in packages) preserveJavaAlternativesScript else ""
+        return "set -e\n" + preserveJava + "apt-get -o APT::Update::Error-Mode=any update\napt-get install -y --no-install-recommends " + packages.joinToString(" ") + if ("npm" in packages) "\n" + NpmCompatibility.installScript() else ""
     }
+    /** Preserve existing selected tools; --set intentionally pins previous auto choices as manual. */
+    private val preserveJavaAlternativesScript = """
+        zako_java_choices=${'$'}(mktemp)
+        zako_restore_java() {
+            zako_install_status=${'$'}?
+            trap - EXIT HUP INT TERM
+            set +e
+            while IFS="${'$'}(printf '\t')" read -r zako_java_tool zako_java_value; do
+                if ! update-alternatives --set "${'$'}zako_java_tool" "${'$'}zako_java_value"; then
+                    printf 'Unable to restore Java alternative: %s\n' "${'$'}zako_java_tool" >&2
+                    zako_install_status=1
+                    continue
+                fi
+                zako_java_query=${'$'}(update-alternatives --query "${'$'}zako_java_tool")
+                if [ "${'$'}?" -ne 0 ] || [ "${'$'}(printf '%s\n' "${'$'}zako_java_query" | sed -n 's/^Value: //p')" != "${'$'}zako_java_value" ]; then
+                    printf 'Java alternative verification failed: %s\n' "${'$'}zako_java_tool" >&2
+                    zako_install_status=1
+                fi
+            done < "${'$'}zako_java_choices"
+            rm -f -- "${'$'}zako_java_choices" || zako_install_status=1
+            exit "${'$'}zako_install_status"
+        }
+        trap zako_restore_java EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        for zako_java_tool in java javac jar javadoc javap jcmd jconsole jdb jdeprscan jdeps jfr jimage jinfo jlink jmap jmod jpackage jps jrunscript jshell jstack jstat jstatd keytool rmiregistry serialver; do
+            if zako_java_query=${'$'}(update-alternatives --query "${'$'}zako_java_tool" 2>/dev/null); then
+                zako_java_value=${'$'}(printf '%s\n' "${'$'}zako_java_query" | sed -n 's/^Value: //p')
+                if [ -n "${'$'}zako_java_value" ] && printf '%s\n' "${'$'}zako_java_query" | grep -Fqx -- "Alternative: ${'$'}zako_java_value"; then
+                    printf '%s\t%s\n' "${'$'}zako_java_tool" "${'$'}zako_java_value" >> "${'$'}zako_java_choices"
+                fi
+            fi
+        done
+    """.trimIndent() + "\n"
     /** Only the selected root's manifests produce plans. Monorepo subprojects can be run explicitly in the terminal. */
     fun dependencies(root: File): List<DependencyPlan> = buildList {
         // npm ci removes node_modules first; bundled PRoot can leave simulated hard-link entries behind.

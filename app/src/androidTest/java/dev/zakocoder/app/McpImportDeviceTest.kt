@@ -100,11 +100,26 @@ class McpImportDeviceTest {
         }
     }
 
+    @Test fun publicAndPrivateHttpDomainsAndIpsImportWithoutConnecting() {
+        for (url in listOf("http://example.invalid/mcp", "http://gateway.lan:9127/mcp", "http://8.8.8.8/mcp",
+            "http://10.0.0.2:9127/mcp", "http://127.0.0.1.evil.invalid/mcp", "http://[2001:db8::1]:9127/mcp")) {
+            for (type in listOf("http", "sse")) {
+                val source = """{"type":"$type","url":"$url"}"""
+                val imported = McpConfigParser.parse(source).single()
+                assertEquals(url, imported.url)
+                assertFalse(imported.enabled)
+                val wrapped = McpConfigParser.parse("""{"mcpServers":{"http-fixture":$source}}""").single()
+                assertEquals(url, wrapped.url)
+                assertFalse(wrapped.enabled)
+            }
+        }
+    }
+
     @Test fun singleConfigStillRejectsUnsafeUrlsDuplicatesUnknownFieldsAndInvalidCredentials() {
         val invalid = listOf(
             "{}",
-            """{"type":"http","url":"http://example.invalid/mcp"}""",
-            """{"type":"http","url":"http://127.0.0.1.evil.invalid/mcp"}""",
+            """{"type":"http","url":"http:///mcp"}""",
+            """{"type":"http","url":"http://example.invalid:65536/mcp"}""",
             """{"type":"http","url":"https://user:pass@example.invalid/mcp"}""",
             """{"type":"http","url":"https://example.invalid/mcp?token=placeholder"}""",
             """{"type":"http","type":"sse","url":"https://example.invalid/mcp"}""",

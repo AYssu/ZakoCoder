@@ -107,7 +107,7 @@ class EditorLspIntegrationUiDeviceTest {
                         controller = EditorController(isolated, workbench.projects, {}, lsp = lsp)
                         initialized = true
                         activity.setContent { Theme(dark) {
-                            CodeEditorPage(controller, onInstallLsp = { error("Integration UI test must not install dependencies") })
+                            CodeEditorPage(controller, lspEnabled = true, onInstallLsp = { error("Integration UI test must not install dependencies") })
                         } }
                     }
                     await("Isolated editor ready") { !controller.state.value.loading }
