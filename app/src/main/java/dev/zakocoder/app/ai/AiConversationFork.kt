@@ -35,6 +35,7 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
         conversationId = java.util.UUID.randomUUID().toString(),
         turn = turn - 1,
         timeline = keptTimeline,
+        questions = questions.filter { it.turn in 1 until turn }.map { if (it.answer == null) it.copy(cancelled = true) else it },
         events = keptEvents,
         requests = requests.filter { it.turn in 1 until turn },
         turnTimings = turnTimings.filter { it.turn in 1 until turn },

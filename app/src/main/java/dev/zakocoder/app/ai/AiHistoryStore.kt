@@ -125,6 +125,16 @@ open class AiHistoryStore(private val directory: File) {
                     require(json.getString("id") == name.removeSuffix(".json"))
                     val state = decode(json)
                     state.timeline.forEach { entry -> references += entry.images.map { it.id } }
+                    state.questionContinuation?.let { pending ->
+                        val pendingMessages = JSONArray(pending.messages)
+                        repeat(pendingMessages.length()) { index ->
+                            val message = pendingMessages.getJSONObject(index)
+                            if (message.has("zako_images")) {
+                                require(message.getString("role") == "user")
+                                references += decodeAiImages(message.getJSONArray("zako_images")).map { it.id }
+                            }
+                        }
+                    }
                     val turns = json.getJSONArray("context")
                     for (index in 0 until turns.length()) {
                         val messages = turns.getJSONArray(index)
@@ -148,6 +158,9 @@ open class AiHistoryStore(private val directory: File) {
         .put("checkpointId", state.checkpointId).put("updated", System.currentTimeMillis()).put("turn", state.turn).put("active", state.active)
         .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
+        .put("round", state.round).put("toolCount", state.toolCount)
+        .put("questions", JSONArray(state.questions.map { it.encode() }))
+        .put("questionContinuation", state.questionContinuation?.encode())
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
         .put("timeline", JSONArray(state.timeline.map { JSONObject().put("id", it.id).put("text", it.text).put("tool", it.toolId)
             .put("role", it.role.name).put("turn", it.turn).put("reasoning", it.reasoning).put("reasoningTruncated", it.reasoningTruncated).put("images", JSONArray(it.images.map(::encodeAiImage)))
@@ -165,7 +178,10 @@ open class AiHistoryStore(private val directory: File) {
         .put("contextSummary", state.contextSummary).put("contextCompactions", state.contextCompactions).put("contextChars", state.contextChars)
         .put("taskRecovery", state.taskRecovery).put("taskPrompt", state.taskPrompt).put("enabledSkills", JSONArray(state.enabledSkills))
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
-        .also { validateTimeline(state.timeline) }
+        .also {
+            validateTimeline(state.timeline)
+            validateQuestions(state.questions, state.questionContinuation, state.events, state.turn)
+        }
     private fun validateTimeline(timeline: List<AiEntry>) {
         require(timeline.size <= 512 && timeline.map { it.id }.distinct().size == timeline.size)
         require(timeline.sumOf { it.text.length + it.reasoning.length } <= 512000)
@@ -177,6 +193,16 @@ open class AiHistoryStore(private val directory: File) {
             require(it.role == AiRole.Assistant || (it.reasoning.isEmpty() && !it.reasoningTruncated))
             require(it.role == AiRole.User || it.images.isEmpty())
             if (it.images.isNotEmpty()) AiImages.validateBatch(it.images)
+        }
+    }
+    private fun validateQuestions(questions: List<AiUserQuestion>, continuation: AiQuestionContinuation?, events: List<AiToolEvent>, turn: Int) {
+        require(questions.size <= 64 && questions.map { it.id }.distinct().size == questions.size && questions.map { it.eventId }.distinct().size == questions.size)
+        questions.forEach { it.validate(); require(it.turn <= turn) }
+        continuation?.let { pending ->
+            val question = questions.single { it.id == pending.questionId }
+            require(question.turn == turn)
+            pending.validate(question)
+            require(events.single { it.id == question.eventId }.let { it.tool == AiTool.AskUser && it.callId == pending.callId })
         }
     }
     private fun decode(json: JSONObject): AiState {
@@ -203,16 +229,21 @@ open class AiHistoryStore(private val directory: File) {
         } }
         validateTimeline(timeline)
         require(json.getInt("turn") in 0..1000000)
+        val questionArray = json.optJSONArray("questions") ?: JSONArray()
+        require(questionArray.length() <= 64)
+        val questions = (0 until questionArray.length()).map { AiUserQuestion.decode(questionArray.getJSONObject(it)) }
+        val continuation = if (json.isNull("questionContinuation")) null else AiQuestionContinuation.decode(json.getJSONObject("questionContinuation"))
         val events = json.getJSONArray("events"); require(events.length() <= 64)
         val restored = (0 until events.length()).map { index -> events.getJSONObject(index).let { e ->
             val status = AiToolStatus.valueOf(e.getString("status"))
             AiToolEvent(e.getString("id"), e.getString("call"), AiTool.named(e.getString("name")), e.getString("name"),
                 e.getString("input"), e.getString("reason"), e.getString("target"),
-                if (status.terminal) status else AiToolStatus.Incomplete, AiPermission.valueOf(e.getString("permission")),
+                if (status.terminal) status else if (continuation != null && questions.any { it.id == continuation.questionId && it.eventId == e.getString("id") }) AiToolStatus.Waiting else AiToolStatus.Incomplete, AiPermission.valueOf(e.getString("permission")),
                 sources.getOrElse(e.getInt("source")) { R.string.ai_permission_default_rule }, e.getString("preview"), e.getString("output"),
                 e.getBoolean("truncated"), if (e.isNull("exit")) null else e.getInt("exit"),
                 if (e.isNull("duration")) null else 0L, if (e.isNull("duration")) null else e.getLong("duration"), e.optInt("turn", timeline.find { it.toolId == e.getString("id") }?.turn ?: 0))
         } }
+        validateQuestions(questions, continuation, restored, json.getInt("turn"))
         require(restored.map { it.id }.distinct().size == restored.size)
         require(restored.sumOf { it.input.length + it.preview.length + it.output.length + it.reason.length + it.target.length } <= 512000)
         val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
@@ -276,7 +307,9 @@ open class AiHistoryStore(private val directory: File) {
         val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
             AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
         } }
-        val state = AiState(turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
+        val state = AiState(questions = questions, questionContinuation = continuation,
+            round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
+            toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,
             estimatedContextTokens = json.optLong("estimatedContextTokens", 0).coerceAtLeast(0), contextWindowTokens = json.optInt("contextWindowTokens", 128000).coerceIn(8192, 2097152),
             contextOutputReserveTokens = json.optInt("contextOutputReserveTokens", 8192).coerceAtLeast(0),
@@ -285,11 +318,11 @@ open class AiHistoryStore(private val directory: File) {
             requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),
             taskDiagnostic = json.optString("taskDiagnostic").take(2048),
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
-            historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active"),
-            phase = if (json.getBoolean("active")) AiPhase.Cancelled else AiPhase.valueOf(json.getString("phase")))
-        val interrupted = json.getBoolean("active")
+            historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,
+            phase = if (continuation != null) AiPhase.AwaitingAnswer else if (json.getBoolean("active")) AiPhase.Cancelled else AiPhase.valueOf(json.getString("phase")))
+        val interrupted = json.getBoolean("active") && continuation == null
         val legacyFailed = !json.has("recovery") && state.phase == AiPhase.Failed
-        return if (pendingRecovery.isNotBlank() || interrupted || legacyFailed) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state
+        return if (continuation == null && (pendingRecovery.isNotBlank() || interrupted || legacyFailed)) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state
     }
 }
 
