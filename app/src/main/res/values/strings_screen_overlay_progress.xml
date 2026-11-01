@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_overlay_progress_verifying">%1$s · 校验应用制品</string>
+    <string name="screen_overlay_progress_acting">正在%1$s</string>
+    <string name="screen_overlay_progress_succeeded">%1$s · 请求完成</string>
+    <string name="screen_overlay_progress_failed">%1$s · 未完成，请返回查看原因</string>
+    <string name="screen_overlay_progress_cancelled">%1$s · 已取消</string>
+    <string name="screen_overlay_progress_ready">准备%1$s</string>
+    <string name="screen_overlay_progress_stopped">测试已停止</string>
+    <string name="screen_overlay_action_install">安装应用</string>
+    <string name="screen_overlay_action_launch">启动应用</string>
+    <string name="screen_overlay_action_observe">读取界面</string>
+    <string name="screen_overlay_action_click">操作界面元素</string>
+    <string name="screen_overlay_action_swipe">滑动界面</string>
+    <string name="screen_overlay_action_input">输入内容</string>
+    <string name="screen_overlay_action_back">返回上一页</string>
+    <string name="screen_overlay_action_assert">检查界面文本</string>
+    <string name="screen_overlay_action_screenshot">获取屏幕截图</string>
+    <string name="screen_overlay_action_finish">结束测试</string>
+</resources>

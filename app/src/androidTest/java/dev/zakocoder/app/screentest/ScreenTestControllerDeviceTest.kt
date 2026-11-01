@@ -60,6 +60,9 @@ class ScreenTestControllerDeviceTest {
             assertFalse(controller.state.value.rootGranted)
             assertFalse(controller.state.value.shareScreenshots)
             controller.stop()
+            assertFalse(controller.state.value.overlaySuppressed)
+            assertEquals(ScreenOverlayPhase.Cancelled, controller.state.value.overlayProgress.phase)
+            assertTrue(controller.state.value.overlayConversation.isEmpty())
             controller.setAccess(ScreenTestAccess.Accessibility)
             assertFalse(controller.state.value.active)
             assertFalse(controller.state.value.shareScreenshots)
@@ -110,6 +113,35 @@ class ScreenTestControllerDeviceTest {
         }
     }
 
+    @Test fun normalReadFailureHasActionProgressAndStopRevokesItsLease() = runBlocking {
+        withFixtureController { controller, _, _, _ ->
+            val lease = requireNotNull(controller.taskLease("project"))
+            controller.setAccess(ScreenTestAccess.Normal)
+            val error = runCatching {
+                controller.execute("project", JSONObject().put("action", "observe"), lease)
+            }.exceptionOrNull()
+            assertTrue("Normal mode must not read another application's screen", error is ScreenTestException)
+            val failed = controller.state.value
+            assertEquals(ScreenOverlayPhase.Failed, failed.overlayProgress.phase)
+            assertEquals("observe", failed.overlayProgress.action)
+            assertTrue(failed.overlayProgress.title.isNotBlank())
+            assertFalse(failed.busy)
+            assertFalse(failed.overlaySuppressed)
+            controller.stop()
+            controller.updateOverlayConversation("project", lease, "revoked task must not return")
+            val stale = runCatching {
+                controller.execute("project", JSONObject().put("action", "observe"), lease)
+            }.exceptionOrNull()
+            assertTrue(stale is ScreenTestException)
+            assertFalse(controller.state.value.active)
+            assertFalse(controller.state.value.busy)
+            assertFalse(controller.state.value.overlaySuppressed)
+            assertEquals(ScreenOverlayPhase.Cancelled, controller.state.value.overlayProgress.phase)
+            assertEquals("", controller.state.value.overlayConversation)
+            assertEquals(null, controller.taskLease("project"))
+        }
+    }
+
     @Test fun cancellationRemainsCancellationWhenItsAuditCannotBeWritten() = runBlocking {
         withFixtureController { controller, directory, gate, reportDirectory ->
             coroutineScope {
@@ -119,6 +151,10 @@ class ScreenTestControllerDeviceTest {
                 }
                 try {
                     withContext(Dispatchers.IO) { assertTrue("observe never reached artifact read", gate.entered.await(5, TimeUnit.SECONDS)) }
+                    assertTrue(controller.state.value.busy)
+                    assertFalse("Artifact verification must not suppress the overlay", controller.state.value.overlaySuppressed)
+                    assertEquals(ScreenOverlayPhase.Verifying, controller.state.value.overlayProgress.phase)
+                    assertEquals("observe", controller.state.value.overlayProgress.action)
                     reportDirectory.set(File(directory, "not-a-directory").apply { writeText("blocked") })
                     controller.stop()
                 } finally { gate.release.countDown() }
@@ -127,6 +163,9 @@ class ScreenTestControllerDeviceTest {
                 assertTrue("audit failure should be retained as suppressed evidence",
                     generateSequence(error) { it.cause }.any { it.suppressed.isNotEmpty() })
                 assertFalse(controller.state.value.active)
+                assertFalse(controller.state.value.busy)
+                assertFalse(controller.state.value.overlaySuppressed)
+                assertEquals(ScreenOverlayPhase.Cancelled, controller.state.value.overlayProgress.phase)
             }
         }
     }

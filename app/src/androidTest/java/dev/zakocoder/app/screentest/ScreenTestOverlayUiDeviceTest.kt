@@ -2,18 +2,15 @@ package dev.zakocoder.app.screentest
 
 import android.app.UiAutomation
 import android.content.res.Configuration
-import android.graphics.Rect
-import android.view.WindowInsets
-import android.view.WindowManager
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowInsets
+import android.view.WindowManager
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,19 +30,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
 
-/** Isolated test package only; grants and device access are owned by the test orchestrator. */
+/** Uses real optional windows over an owned fixture, never a user's foreground application. */
+@SdkSuppress(minSdkVersion = 30)
 class ScreenTestOverlayUiDeviceTest {
     @Before fun foreground() = warmDeviceActivity()
-    @Test fun dayConversationAndCollapse() = review(false)
-    @Test fun nightConversationAndCollapse() = review(true)
-
+    @Test fun dayMonitorDetailsAndCaptureRecovery() = review(false)
+    @Test fun nightMonitorDetailsAndCaptureRecovery() = review(true)
     @SdkSuppress(minSdkVersion = 30)
     @Test fun landscapeLongConversationKeepsActionsInsideSafeBounds() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -63,136 +59,132 @@ class ScreenTestOverlayUiDeviceTest {
             check(automation.setRotation(if (autoRotate == 1) UiAutomation.ROTATION_UNFREEZE else userRotation))
         }
     }
-
     private fun review(dark: Boolean, landscape: Boolean = false) = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val target = instrumentation.targetContext
         check(target.packageName.endsWith(".runtimecheck"))
-        assumeTrue("The device owner must grant the isolated test package overlay access", Settings.canDrawOverlays(target))
+        assumeTrue("Owner enables overlay access for the isolated test package", Settings.canDrawOverlays(target))
         val configuration = Configuration(target.resources.configuration).apply {
-            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
             fontScale = 1.3f
         }
         val context = target.createConfigurationContext(configuration)
-        var visible = false
-        var stopped = false
-        val overlay = ScreenTestOverlay(context, { visible = it }, { _, _ -> }, { _, _ -> stopped = true }, { error("Overlay failed: $it") })
+        var visible = false; var stopped = false; var returned = false
+        val overlay = ScreenTestOverlay(context, { visible = it }, { _, _ -> returned = true }, { _, _ -> stopped = true }, { error("Overlay failed: $it") })
         val automation = instrumentation.uiAutomation
-        val previous = automation.serviceInfo
-        val previousFlags = previous.flags
-        automation.serviceInfo = previous.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
+        val serviceInfo = automation.serviceInfo
+        val previousFlags = serviceInfo.flags
+        automation.serviceInfo = serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
         val scenario = ActivityScenario.launch(MainActivity::class.java)
+        val directory = File(target.cacheDir, "debug-overlay-redesign").apply { mkdirs() }
+        val prefix = "${if (dark) "night" else "day"}${if (landscape) "-landscape" else ""}"
+        val conversation = "正在执行工具\n你：检查详情页按钮，确认跳转后能返回列表。\n助手：已经启动应用，正在核对页面节点与按钮位置。下一步会点击详情按钮，检查返回列表的操作。"
+        val longConversation = conversation + "\n详情页应保留项目名称和返回入口；我会先观察当前页面，再执行按钮点击，核对结果后继续下一步。".repeat(12)
+        val running = ScreenOverlayProgress(ScreenOverlayPhase.Verifying, "observe", "读取界面 · 校验应用制品")
+        val succeeded = ScreenOverlayProgress(ScreenOverlayPhase.Succeeded, "observe", "读取界面 · 请求完成", "已恢复监看；读屏和触控时会暂时让出屏幕。")
+        suspend fun update(progress: ScreenOverlayProgress, lease: String = "lease", text: String = conversation) = withContext(Dispatchers.Main) {
+            overlay.update(true, "isolated-project", lease, "dev.zakocoder.fixture", "", text, progress)
+        }
+        fun roots() = automation.windows.mapNotNull { it.root }.filter { it.refresh() }
+        fun descendants(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = buildList {
+            if (!root.refresh()) return@buildList
+            add(root)
+            repeat(root.childCount) { index -> root.getChild(index)?.let { addAll(descendants(it)) } }
+        }
+        fun nodes() = roots().flatMap(::descendants).filter { it.packageName?.toString() == target.packageName }
+        fun hasText(label: String) = nodes().any { it.text?.contains(label) == true || it.contentDescription?.contains(label) == true }
+        fun node(label: String) = nodes().filter {
+            (it.text?.contains(label) == true || it.contentDescription?.contains(label) == true) && it.isVisibleToUser
+        }.sortedByDescending { it.isClickable }.firstOrNull()
+        suspend fun settled() {
+            instrumentation.waitForIdleSync(); automation.waitForIdle(100, 5000); delay(150)
+            withTimeout(5000) { while (withContext(Dispatchers.Main) { overlay.isReadingScrollActive() }) delay(20) }
+            instrumentation.waitForIdleSync()
+        }
+        fun capture(suffix: String) {
+            check(automation.rootInActiveWindow?.packageName?.toString() == target.packageName) { "Do not capture another application's private background" }
+            val bitmap = checkNotNull(automation.takeScreenshot())
+            File(directory, "$prefix-$suffix.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        fun click(label: String) {
+            var candidate = checkNotNull(node(label))
+            while (!candidate.isClickable && candidate.parent != null) candidate = candidate.parent
+            assertTrue("No clickable action for $label", candidate.isClickable)
+            assertTrue("Could not click $label", candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        }
+        fun scrollNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+            if (!root.refresh()) return null
+            if (root.isScrollable) return root
+            repeat(root.childCount) { index -> root.getChild(index)?.let { child -> scrollNode(child)?.let { return it } } }
+            return null
+        }
         try {
             scenario.onActivity { activity -> activity.setContent {
-                MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors,
-                    typography = WorkbenchTypography) {
+                MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                     Surface(Modifier.fillMaxSize()) {
-                        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("屏幕测试界面验收", style = MaterialTheme.typography.titleLarge)
-                            Text("隔离测试背景，不是用户项目或真实会话。", style = MaterialTheme.typography.bodyMedium)
+                        Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("项目预览", style = MaterialTheme.typography.titleLarge)
+                            Text("独立界面验收背景，不是用户项目。", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
             } }
-            instrumentation.waitForIdleSync()
-            withContext(Dispatchers.Main) {
-                overlay.update(true, "isolated-project", "lease", "dev.zakocoder.fixture",
-                    if (landscape) "已连接 · 正在验证页面\n界面节点已读取，等待检查\n所有操作仍受目标权限限制" else "已连接 · 正在验证页面",
-                    "你：检查构建后的按钮是否能够打开详情。\n助手：已启动测试应用，正在读取页面节点并核对跳转结果。".repeat(if (landscape) 8 else 1))
-            }
-            delay(1000)
+            update(running); settled()
             assertTrue(visible)
-            // Custom overlay layout can settle after the window-content event was queued.
-            // Refresh both the root and the returned node: a fresh window list alone still
-            // permits AccessibilityInteractionClient to serve pre-layout child bounds.
-            fun roots() = automation.windows.mapNotNull { it.root }.filter { it.refresh() }
-            fun node(text: String) = roots()
-                .flatMap { it.findAccessibilityNodeInfosByText(text) }
-                .firstOrNull { it.refresh() && it.packageName?.toString() == target.packageName &&
-                    it.text?.toString() == text && it.isVisibleToUser }
-            fun awaitLayoutIdle() {
-                instrumentation.waitForIdleSync()
-                automation.waitForIdle(100, 5_000)
-                instrumentation.waitForIdleSync()
-            }
-            awaitLayoutIdle()
-            assertTrue("The default collapsed entry must not expose conversation", node("dev.zakocoder.fixture") == null)
-            assertTrue(node(context.getString(R.string.screen_overlay_return)) == null)
-            val initialHandle = checkNotNull(node(context.getString(R.string.screen_overlay_handle)))
-            assertTrue(initialHandle.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-            awaitLayoutIdle()
-            assertTrue(node("dev.zakocoder.fixture") != null)
-            assertTrue(node(context.getString(R.string.screen_overlay_return)) != null)
-            val directory = File(target.cacheDir, "screen-overlay-review").apply { mkdirs() }
-            fun capture(suffix: String) {
-                check(automation.rootInActiveWindow?.packageName?.toString() == target.packageName) {
-                    "Do not capture a launcher or another application's private background"
-                }
-                val image = checkNotNull(automation.takeScreenshot())
-                File(directory, "${if (dark) "night" else "day"}${if (landscape) "-landscape" else ""}-$suffix.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                image.recycle()
-            }
-            if (landscape) {
-                val metrics = target.getSystemService(WindowManager::class.java).currentWindowMetrics
-                val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                val safe = Rect(insets.left, insets.top, metrics.bounds.width() - insets.right, metrics.bounds.height() - insets.bottom)
-                fun accessibilityBounds(text: Int): Rect = Rect().also { checkNotNull(node(context.getString(text))).getBoundsInScreen(it) }
-                suspend fun physicalBounds() = withContext(Dispatchers.Main) { overlay.actionBoundsSnapshot() }
-                // Some device accessibility services report offset window coordinates even
-                // after refresh. Verify physical layout with live View screen coordinates;
-                // retain accessibility nodes for discovery, scrolling and actual clicks.
-                val actions = physicalBounds()
-                val returnBounds = checkNotNull(actions[R.string.screen_overlay_return])
-                val stopBounds = checkNotNull(actions[R.string.screen_overlay_stop])
-                val accessibilityReturn = accessibilityBounds(R.string.screen_overlay_return)
-                val accessibilityStop = accessibilityBounds(R.string.screen_overlay_stop)
-                val productGeometry = withContext(Dispatchers.Main) { overlay.geometryDiagnostics() }
-                val boundsDetail = "safe=$safe; metrics=${metrics.bounds}; insets=$insets; return=$returnBounds; stop=$stopBounds; " +
-                    "accessibilityReturn=$accessibilityReturn; accessibilityStop=$accessibilityStop; " +
-                    "accessibilityCoordinatesMatchPhysical=${accessibilityReturn == returnBounds && accessibilityStop == stopBounds}; " +
-                    "orientation=${target.resources.configuration.orientation}; fixtureFontScale=${configuration.fontScale}; product: $productGeometry"
-                instrumentation.sendStatus(0, Bundle().apply {
-                    putString("overlayBounds", boundsDetail)
-                    putString("overlayScreenshot", directory.absolutePath)
-                })
-                // Capture the actual failing layout over the isolated fixture before any assertion.
-                capture("bounds")
-                assertTrue("Return action must remain wholly in the safe viewport: $boundsDetail", safe.contains(returnBounds))
-                assertTrue("Stop action must remain wholly in the safe viewport: $boundsDetail", safe.contains(stopBounds))
-                fun scrollable(root: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
-                    if (!root.refresh()) return null
-                    if (root.className?.toString()?.endsWith("ScrollView") == true && root.isScrollable) return root
-                    repeat(root.childCount) { index -> root.getChild(index)?.let { child -> scrollable(child)?.let { return it } } }
-                    return null
-                }
-                val scroll = checkNotNull(roots().firstNotNullOfOrNull(::scrollable)) {
-                    "Long text in a short window must have a scrollable body"
-                }
-                assertTrue(scroll.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
-                awaitLayoutIdle()
-                val afterScroll = physicalBounds()
-                assertTrue("Return action must stay fixed while body scrolls", returnBounds == afterScroll[R.string.screen_overlay_return])
-                assertTrue("Stop action must stay fixed while body scrolls", stopBounds == afterScroll[R.string.screen_overlay_stop])
-            }
-            capture("conversation")
-            val handle = checkNotNull(node(context.getString(R.string.screen_overlay_handle)))
-            assertTrue(handle.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-            awaitLayoutIdle()
-            assertTrue(node(context.getString(R.string.screen_overlay_return)) == null)
-            capture("collapsed")
-            assertTrue(checkNotNull(node(context.getString(R.string.screen_overlay_handle)))
-                .performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-            awaitLayoutIdle()
-            assertTrue(checkNotNull(node(context.getString(R.string.screen_overlay_stop))).performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
-            delay(100)
-            assertTrue(stopped)
+            capture("monitor-running")
+            instrumentation.sendStatus(0, Bundle().apply { putString("geometry", overlay.geometryDiagnostics()) })
+            assertTrue("The monitor must expose the current action without opening details", hasText(running.title))
+            assertNull(node(context.getString(R.string.debug_overlay_return)))
+            capture("monitor-running")
+            click(context.getString(R.string.screen_overlay_handle)); settled()
+            assertNotNull(node("dev.zakocoder.fixture"))
+            assertNotNull(node(context.getString(R.string.debug_overlay_return)))
+            capture("details")
+            update(running, text = longConversation); settled()
+            val actions = withContext(Dispatchers.Main) { overlay.actionBoundsSnapshot() }
+            val metrics = target.getSystemService(WindowManager::class.java).currentWindowMetrics
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            val safe = Rect(insets.left, insets.top, metrics.bounds.width() - insets.right, metrics.bounds.height() - insets.bottom)
+            actions.values.forEach { assertTrue("Action outside safe viewport: $it, safe=$safe", safe.contains(it)) }
+            assertEquals(2, actions.size)
+            val body = checkNotNull(roots().firstNotNullOfOrNull(::scrollNode)) { "Long conversation must scroll" }
+            assertTrue(body.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)); settled()
+            val reading = withContext(Dispatchers.Main) { overlay.readingSnapshot() }
+            assertFalse("Manual reading must disable following new output", reading.third)
+            val fixed = withContext(Dispatchers.Main) { overlay.actionBoundsSnapshot() }
+            assertEquals(actions, fixed)
+            capture("details-reading")
+            withContext(Dispatchers.Main) { overlay.hideForAction() }; settled()
             assertFalse(visible)
+            assertNull(node(context.getString(R.string.screen_overlay_handle)))
+            capture("capture-hidden")
+            update(succeeded, text = longConversation); settled()
+            assertTrue(visible)
+            val restored = withContext(Dispatchers.Main) { overlay.readingSnapshot() }
+            val maxScroll = withContext(Dispatchers.Main) { overlay.maxScroll() }
+            assertEquals("Temporary hiding must preserve expansion, reading position (clamped to new viewport) and follow mode",
+                reading.copy(second = reading.second.coerceAtMost(maxScroll)), restored)
+            assertNotNull(node(context.getString(R.string.debug_overlay_return)))
+            capture("details-restored")
+            click(context.getString(R.string.debug_overlay_return)); settled(); assertTrue(returned)
+            click(context.getString(R.string.debug_overlay_minimize)); settled()
+            assertTrue(hasText(succeeded.title))
+            capture("monitor-restored")
+            update(ScreenOverlayProgress(ScreenOverlayPhase.Failed, "observe", "读取界面 · 未完成，请返回查看原因")); settled()
+            capture("monitor-failed")
+            update(ScreenOverlayProgress(), "new-lease", ""); settled()
+            assertFalse(withContext(Dispatchers.Main) { overlay.readingSnapshot().first })
+            assertNull(node(context.getString(R.string.debug_overlay_return)))
+            assertFalse(hasText(succeeded.title))
+            capture("monitor-new-target")
+            click(context.getString(R.string.screen_overlay_handle)); settled()
+            click(context.getString(R.string.debug_overlay_stop)); settled()
+            assertTrue(stopped); assertFalse(visible)
             instrumentation.sendStatus(0, Bundle().apply { putString("overlayScreenshot", directory.absolutePath) })
         } finally {
             withContext(Dispatchers.Main) { overlay.remove() }
-            automation.serviceInfo = previous.apply { flags = previousFlags }
+            automation.serviceInfo = serviceInfo.apply { flags = previousFlags }
             scenario.close()
         }
     }
