@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Black-box smoke of the actual minified Beta APK on a fresh dedicated emulator.
+"""Black-box smoke of the actual minified release APK on a fresh dedicated emulator.
 
 Does not add test entry points/CA to the product or touch a physical phone. Only the
 package installed by this run is removed. Evidence is bound to both APK hashes.
@@ -84,12 +84,6 @@ class Device:
         self.shell('input', 'keycombination', 113, 29)  # Ctrl+A
         self.shell('input', 'keyevent', 67)
         self.shell('input', 'text', value)
-        self.hide_keyboard()
-
-    def hide_keyboard(self):
-        state = self.shell('dumpsys', 'input_method')
-        if re.search(r'(?:mInputShown|mIsInputViewShown|isInputViewShown)=true', state):
-            self.shell('input', 'keyevent', 4)
 
     def shot(self, name):
         (self.output / (name + '.png')).write_bytes(self.adb('exec-out', 'screencap', '-p', binary=True))
@@ -153,7 +147,10 @@ def run(args):
         old_night = device.shell('cmd', 'uimode', 'night').strip()
         old_ime = device.shell('settings', 'get', 'secure', 'show_ime_with_hard_keyboard').strip()
         report['stage'] = 'configure-keyboard'
-        device.shell('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', 1)
+        # adb input emulates the emulator hardware keyboard. Keep the soft IME
+        # hidden instead of sending Back based on asynchronous IME state: a stale
+        # state can navigate away from a dirty form rather than hide a keyboard.
+        device.shell('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', 0)
         report['stage'] = 'configure-day-mode'
         device.shell('cmd', 'uimode', 'night', 'no')
         report['stage'] = 'install-release-apk'
@@ -191,6 +188,7 @@ def run(args):
         device.click('back_to_library')
         device.click('nav_settings')
         device.click('ai_settings', scroll=True)
+        report['stage'] = 'model-configuration-edit'
         device.click('ai_models_add_first')
         profile = 'beta-config-' + uuid.uuid4().hex[:8]
         device.text('ai_models_name', profile)

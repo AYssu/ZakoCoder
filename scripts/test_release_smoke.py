@@ -69,6 +69,17 @@ class SmokeSafetyTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Expected visible UI label'):
                 device.saved_model_card(profile)
 
+    def test_text_input_never_sends_back_or_infers_keyboard_visibility(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        with patch.object(device, 'click') as click, patch.object(device, 'shell') as shell:
+            device.text('ai_model', 'smoke-model', scroll=True)
+        click.assert_called_once_with('ai_model', scroll=True)
+        self.assertEqual([
+            unittest.mock.call('input', 'keycombination', 113, 29),
+            unittest.mock.call('input', 'keyevent', 67),
+            unittest.mock.call('input', 'text', 'smoke-model'),
+        ], shell.call_args_list)
+
     def fake_emulator(self):
         device = MagicMock()
         def shell(*args):
@@ -127,6 +138,7 @@ class SmokeSafetyTest(unittest.TestCase):
         self.assertIn('project-and-saved-file-retained-after-real-force-stop', report['checks'])
         self.assertEqual('uninstall-smoke-package', report['cleanupErrors'][0]['stage'])
         self.assertEqual(45, report['cleanupErrors'][0]['timeoutSeconds'])
+        device.shell.assert_any_call('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', 0)
         device.shell.assert_any_call('cmd', 'uimode', 'night', 'yes')
         device.shell.assert_any_call('settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '0')
 
