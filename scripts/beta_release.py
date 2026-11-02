@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import tarfile
 
-VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.([1-9][0-9]*)\Z")
+VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-(?:beta|rc)\.([1-9][0-9]*)\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 PACKAGE = "dev.zakocoder.app"
@@ -33,7 +33,7 @@ def version_code(value):
 
 def validate_inputs(version, code, target_ref="main"):
     if not isinstance(version, str) or not VERSION.fullmatch(version):
-        raise ValueError("Only MAJOR.MINOR.PATCH-beta.N versions are accepted")
+        raise ValueError("Only MAJOR.MINOR.PATCH-beta.N or MAJOR.MINOR.PATCH-rc.N versions are accepted")
     if target_ref != "main" and not COMMIT.fullmatch(target_ref):
         raise ValueError("Target must be main or a full lowercase commit SHA")
     return version_code(code)
@@ -163,9 +163,9 @@ def create_metadata(directory, version, code, commit, certificate, run_url, sign
                 "correspondingSourceSha256": sha256(directory / required[0])}
     (directory / "BUILD.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     (directory / "BUILD.txt").write_text(f"ZakoCoder {version} / Android versionCode {code}\nCommit: {commit}\n"
-        f"ARM64 minified Release Beta; not a stable release.\nAPK SHA-256: {metadata['apkSha256']}\n"
+        f"ARM64 minified pre-release; not a stable release.\nAPK SHA-256: {metadata['apkSha256']}\n"
         f"Certificate SHA-256: {certificate}\nWorkflow: {run_url}\n" +
-        ("Signing key: existing CI Debug key reused for Beta; not the long-term production signing key.\n"
+        ("Signing key: existing CI Debug key reused for pre-release; not the long-term production signing key.\n"
          if signing_key_kind == "debug-reused-for-beta" else "Signing key: configured release key.\n") +
         "Release x86_64 emulator smoke verifies shared application code/resources; it does not prove ARM64 hardware compatibility.\n")
     checksums(directory)
@@ -289,16 +289,20 @@ def publish(repo, directory, qa_apk, report_file):
     key_kind = metadata.get("signingKeyKind")
     if key_kind not in ("release", "debug-reused-for-beta"):
         raise ValueError("BUILD must identify its actual signing key kind")
-    signing_note = ("Signed with the existing CI Debug key for Beta only; this is not the long-term production signing key. "
+    signing_note = ("Signed with the existing CI Debug key for pre-release only; this is not the long-term production signing key. "
                     if key_kind == "debug-reused-for-beta" else "Signed with the configured release key. ")
-    notes = (f"ZakoCoder {version} · ARM64 测试版\n\n"
+    notes = (f"ZakoCoder {version} · ARM64 {'RC 候选版' if '-rc.' in version else '测试版'}\n\n"
+             + ("### 发布阶段\n\n本版本是准备转正式版的 Release Candidate，标记为 Pre-release，尚非稳定版。"
+                "本阶段原则上不新增功能，重点进行问题修复、兼容适配、性能与交互优化，以及安装、升级和数据保留验收。"
+                "如发现问题将发布后续 RC，验收通过后再发布正式版，不承诺固定转正日期。\n\n"
+                if '-rc.' in version else "") +
              "ZakoCoder 是面向 Android 的独立开源 AI 编码工作台，采用 Kotlin + Jetpack Compose 原生开发。"
              "在手机上管理项目、编辑代码、运行 Linux 开发工具，并审阅 AI 的工具调用与文件变更。\n\n"
              "### 主要功能\n\n"
              "- 项目创建、导入与本地目录绑定，Sora 代码编辑及 Markdown 预览。\n"
              "- 按需安装 Ubuntu 与开发工具包，最多 4 个终端会话，支持启动服务和浏览器预览。\n"
              "- 自行配置模型，支持流式对话、文件与图片引用、工具审批、Skill 和 MCP。\n"
-             "- 文件差异审阅、任务检查点、项目验证命令、Git 与实验性 Python／JS／TS LSP。\n\n"
+             "- 文件差异审阅、任务检查点、项目验证命令、Git 与按需启用的实验性多语言 LSP。\n\n"
              "### 安装与开始\n\n"
              "下载下方 ARM64 APK 安装；SHA256SUMS.txt 可用于校验文件。测试版请先备份重要项目。"
              "首次进入可创建或导入项目；终端开发需按需安装 Ubuntu 和工具包，AI 功能需自行配置有额度的模型服务。\n\n"

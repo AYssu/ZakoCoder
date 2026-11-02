@@ -76,6 +76,13 @@ class ReleaseApkGateTest(unittest.TestCase):
     def inspect(self):
         return gate.inspect_apk(self.apk(), Path("aapt"))
 
+    def test_rc_manifest_is_accepted_without_weakening_stable_gate(self):
+        self.manifest = MANIFEST.replace("0.1.0-beta.1", "0.1.0-rc.1")
+        self.assertEqual("0.1.0-rc.1", self.inspect()["versionName"])
+        self.manifest = MANIFEST.replace("0.1.0-beta.1", "0.1.0")
+        with self.assertRaises(ValueError):
+            self.inspect()
+
     def test_valid_beta_and_high_dex_index(self):
         report = self.inspect()
         self.assertEqual("passed", report["status"])

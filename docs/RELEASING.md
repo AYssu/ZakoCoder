@@ -1,14 +1,22 @@
 # 发布流程
 
-仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Beta** 用于维护者确认后的签名预发布。Beta 使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是正式长期发布签名。GitHub Release 必须标记为 **Pre-release**。常规提交和 PR 不自动发布。
+仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Pre-release** 用于维护者确认后的签名预发布。预发布版本使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是正式长期发布签名。GitHub Release 必须标记为 **Pre-release**。常规提交和 PR 不自动发布。
 
-当前准备版本为 `0.1.0-beta.1`。新增 Beta 流程不代表已经发布，也不解除稳定版发行门槛。运行时源码与许可证、Release 构建、最终签名和设备检查必须分别有证据；尚未执行的项目见下方清单。
+当前候选版本为 `0.1.0-rc.1`（versionCode `1004`）；以实际发布结果为准。新增 Beta 流程不代表已经发布，也不解除稳定版发行门槛。运行时源码与许可证、Release 构建、最终签名和设备检查必须分别有证据；尚未执行的项目见下方清单。
 
-## 手动发布 Beta
+## RC 验收阶段
+
+RC 是准备转正式版的候选版本，必须标记 Pre-release，不设为 Latest。本阶段原则上不新增功能，主要进行问题修复、设备和工程适配、性能与交互优化，以及最终签名包的安装、升级和数据保留验收。有变更则递增 RC 序号与 versionCode，不覆盖既有标签和附件；验收通过后再决定正式版，不按时间自动转正。
+
+发布入口同时接受 `MAJOR.MINOR.PATCH-beta.N` 与 `MAJOR.MINOR.PATCH-rc.N`；沿用既有 `betaRelease/betaVersion/betaVersionCode` 构建参数名以保持兼容。稳定版版本仍被构建与制品门槛拒绝。RC 使用现有签名选择规则，不自动生成或更换证书；沿用 CI Debug 证书时仍须明确标注，转正式版前定稿长期签名与升级方案。
+
+RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留，环境安装与终端服务，AI 长任务/取消/恢复，文件审阅与恢复，Git 和按需 LSP，以及后台权限和不同厂商适配。缺陷通过 Issues 模板反馈，附版本、机型、复现和脱敏日志，不发送密钥或私人源码。
+
+## 手动发布预发布版本
 
 1. 选择已完成审查和相关 CI 的提交，核对 [CHANGELOG](../CHANGELOG.md)、[Beta 测试说明](BETA_TESTING.md)及[兼容性结果](ANDROID_COMPATIBILITY_RESULTS.md)。
 2. 确认已有 Actions Secret `ZAKOCODER_DEBUG_KEYSTORE_BASE64` 可用。默认沿用它签署 Beta，无需新增 Secret；也可完整配置下方可选签名。所选密钥缺失或无效时失败，不临时生成替代密钥。
-3. 在 `main` 上打开 **Actions → Publish Beta → Run workflow**：`version` 填 `0.1.0-beta.1`，`version_code` 首次建议 `1001`，后续严格递增；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
+3. 在 `main` 上打开 **Actions → Publish Pre-release → Run workflow**：`version` 填 `0.1.0-rc.1`，`version_code` 本次为 `1004`，后续严格递增；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
 4. 工作流校验仓库、执行 Release 构建及相关检查，先生成未签名 APK，再使用所选密钥签名。QA 通过后创建草稿 Release，上传并逐项下载回读校验 SHA-256，最后设为预发布且不标为 Latest。
 5. 工作流完成签名 R8 QA 的设备检查和制品一致性校验后，下载实际发布的 APK 与摘要复核。发布页面列出实际通过项、已知限制和未验证项，不能把 Debug 矩阵或 x86 QA 写成公开 ARM64 APK 真机验收。
 

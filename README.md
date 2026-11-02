@@ -27,7 +27,7 @@
 
 ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项目整合文件管理、代码编辑、Linux 开发环境和 AI 协作，让开发者在手机上完成修改、运行、审阅与验证。工具调用、权限审批和文件变更均有独立入口，执行过程可查看，源码修改可核对。
 
-项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前正在准备 `0.1.0-beta.1`，面向 ARM64 真机。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名 Beta 的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
+项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前进入 `0.1.0-rc.1` 候选验收阶段，原则上不新增功能，重点进行问题修复和适配优化，面向 ARM64 真机。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名预发布包的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
 
 ## 功能概览
 
@@ -51,7 +51,7 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 获取安装包
 
-Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；构建详情和本次固定提交的完整源码入口在发布页，以实际存在的发布为准。首次版本计划为 `0.1.0-beta.1`，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次 Beta 为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
+Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；构建详情和本次固定提交的完整源码入口在发布页，以实际存在的发布为准。RC 为准备转正式版的候选版本，尚非稳定版，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次预发布为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
 开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 提供 ARM64 Debug APK、自编译运行时、对应源码、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 

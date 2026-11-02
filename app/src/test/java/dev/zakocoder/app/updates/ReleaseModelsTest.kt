@@ -18,6 +18,12 @@ class ReleaseModelsTest {
         assertNull(selectRelease(all, "0.1.0", UpdateChannel.Stable))
         assertNull(selectRelease(all, "0.1.0-dev", UpdateChannel.Beta))
     }
+    @Test fun rcIsOfferedOnlyInPreviewChannelAndCanUpgradeToStable() {
+        val candidates = listOf(release("v0.1.0-beta.2"), release("v0.1.0-rc.1"))
+        assertEquals("v0.1.0-rc.1", selectRelease(candidates, "0.1.0-beta.2", UpdateChannel.Beta)?.tag)
+        assertNull(selectRelease(candidates, "0.1.0-beta.2", UpdateChannel.Stable))
+        assertEquals("v0.1.0", selectRelease(candidates + release("v0.1.0"), "0.1.0-rc.1", UpdateChannel.Stable)?.tag)
+    }
     @Test fun checksumMatchesExactAssetOnlyAndRejectsAmbiguity() {
         val digest = "a".repeat(64)
         assertEquals(digest, releaseChecksum("$digest  app.apk\n", "app.apk"))

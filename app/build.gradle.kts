@@ -16,8 +16,8 @@ val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
 val betaVersion = providers.gradleProperty("betaVersion").orNull
 val betaVersionCode = providers.gradleProperty("betaVersionCode").orNull?.toIntOrNull()
 if (betaRelease) {
-    require(betaVersion?.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[1-9][0-9]*")) == true) {
-        "Beta requires -PbetaVersion=<major>.<minor>.<patch>-beta.<positive number>"
+    require(betaVersion?.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+-(?:beta|rc)\\.[1-9][0-9]*")) == true) {
+        "Beta requires -PbetaVersion=<major>.<minor>.<patch>-(beta|rc).<positive number>"
     }
     require(betaVersionCode != null && betaVersionCode > 0) { "Beta requires a positive -PbetaVersionCode" }
     require(!providers.gradleProperty("compatibilityVersionCode").isPresent) {

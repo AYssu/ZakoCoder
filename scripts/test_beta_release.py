@@ -12,10 +12,12 @@ import beta_release as beta
 
 
 class BetaReleaseTest(unittest.TestCase):
-    def test_accepts_only_beta_semver_and_full_trusted_ref_shape(self):
+    def test_accepts_only_beta_or_rc_semver_and_full_trusted_ref_shape(self):
+        self.assertEqual(1004, beta.validate_inputs("0.1.0-rc.1", 1004))
+        self.assertEqual(1005, beta.validate_inputs("0.1.0-rc.2", 1005))
         self.assertEqual(1001, beta.validate_inputs("0.1.0-beta.1", "1001"))
         self.assertEqual(1002, beta.validate_inputs("1.2.3-beta.12", 1002, "a" * 40))
-        for version in ("0.1.0", "v0.1.0-beta.1", "0.1.0-alpha.1", "0.1.0-rc.1", "0.1.0-beta.0", "01.0.0-beta.1", "0.1.0-beta.01", "0.1.0-beta.1+local", "0.1.0-beta.1\n", "$(touch /tmp/pwn)", "0.1.0-beta.1; echo bad"):
+        for version in ("0.1.0", "v0.1.0-beta.1", "0.1.0-alpha.1", "0.1.0-rc.0", "0.1.0-rc.01", "0.1.0-beta.0", "01.0.0-beta.1", "0.1.0-beta.01", "0.1.0-beta.1+local", "0.1.0-beta.1\n", "$(touch /tmp/pwn)", "0.1.0-beta.1; echo bad"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 beta.validate_inputs(version, 1001)
         for ref in ("feature/test", "-option", "refs/heads/main", "HEAD", "a" * 39, "A" * 40, "main\nother", "main; echo bad"):
@@ -80,13 +82,13 @@ class BetaReleaseTest(unittest.TestCase):
                 beta.require_publishable_target(commit, latest)
             self.assertEqual(1, run.call_count)
 
-    def assets(self, root):
+    def assets(self, root, version="0.1.0-beta.1"):
         directory = root / "public"
         directory.mkdir()
-        (directory / "ZakoCoder-0.1.0-beta.1-arm64.apk").write_bytes(b"signed-arm-fixture")
+        (directory / f"ZakoCoder-{version}-arm64.apk").write_bytes(b"signed-arm-fixture")
         for name in ("native-runtime-sources.tar.gz", "licenses.tar.gz", "runtime-validation.tar.gz", "LICENSE.txt", "THIRD_PARTY.md"):
             (directory / name).write_bytes(name.encode())
-        metadata = beta.create_metadata(directory, "0.1.0-beta.1", 1001, "a" * 40, "b" * 64,
+        metadata = beta.create_metadata(directory, version, 1001, "a" * 40, "b" * 64,
                                         "https://github.com/AYssu/ZakoCoder/actions/runs/123")
         return directory, metadata
 
@@ -255,9 +257,15 @@ class BetaReleaseTest(unittest.TestCase):
                 beta.published_builds("AYssu/ZakoCoder")
 
     def test_successful_publish_uploads_only_apk_and_apk_only_checksums(self):
+        self.successful_publish("0.1.0-beta.1")
+
+    def test_rc_publish_is_preview_with_freeze_policy_and_verified_assets(self):
+        self.successful_publish("0.1.0-rc.1")
+
+    def successful_publish(self, version):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            directory, metadata = self.assets(root)
+            directory, metadata = self.assets(root, version)
             qa = root / "qa.apk"
             qa.write_bytes(b"qa")
             evidence = root / "evidence"
@@ -266,7 +274,7 @@ class BetaReleaseTest(unittest.TestCase):
             report.write_text(json.dumps(self.smoke_report(qa, directory / metadata["apk"], metadata)))
             beta.finalize(directory, qa, report)
             uploads, payloads = {}, []
-            tag = "v0.1.0-beta.1"
+            tag = "v" + version
             def request_json(*args, **kwargs):
                 if "POST" in args:
                     payloads.append(beta.read_json(args[-1]))
@@ -287,7 +295,13 @@ class BetaReleaseTest(unittest.TestCase):
                 beta.publish("AYssu/ZakoCoder", directory, qa, report)
             self.assertEqual({metadata["apk"], "SHA256SUMS.txt"}, set(uploads))
             self.assertEqual(f"{metadata['apkSha256']}  {metadata['apk']}\n".encode(), uploads["SHA256SUMS.txt"])
+            self.assertTrue(payloads[0]["prerelease"])
+            self.assertEqual("false", payloads[0]["make_latest"])
             body = payloads[0]["body"]
+            if "-rc." in version:
+                self.assertIn("原则上不新增功能", body)
+                self.assertIn("尚非稳定版", body)
+                self.assertIn("问题修复、兼容适配", body)
             self.assertIn("### 主要功能", body)
             self.assertIn("### 安装与开始", body)
             self.assertIn("### 测试范围与已知限制", body)
