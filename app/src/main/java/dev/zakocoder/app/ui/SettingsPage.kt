@@ -112,6 +112,7 @@ private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp
 @Composable
 internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}) {
     val context = LocalContext.current
+    val installedVersion = installedAppVersion()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
     val notifications = remember(context) { DevelopmentNotifications(context) }
@@ -270,7 +271,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         } }
         item {
             TextButton(onClick = { editing = "about" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                Text(stringResource(R.string.settings_version_footer, stringResource(R.string.app_version)), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal, color = TertiaryText)
+                Text(stringResource(R.string.settings_version_footer, installedVersion), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal, color = TertiaryText)
             }
         }
     }
@@ -309,21 +310,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                             Text(stringResource(if (option == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua))
                         }
                     }
-                    "about" -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Surface(color = BrandFill, shape = RoundedCornerShape(12.dp)) {
-                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { WorkbenchBrandMark(Modifier.size(28.dp)) }
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)
-                                Text(stringResource(R.string.app_version), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Text(stringResource(R.string.about_description))
-                        Text(stringResource(R.string.validation_artifacts_notice), color = MaterialTheme.colorScheme.error)
-                        Text(stringResource(R.string.licenses_description))
-                        SshLicenseEntry { sshLicenseOpen = true }
-                    }
+                    "about" -> AboutAppContent(installedVersion) { sshLicenseOpen = true }
                     "notifications" -> {
                         Text(stringResource(notificationStatus.label()), color = if (notificationStatus == RunningNotificationStatus.Available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
                         Text(stringResource(R.string.notification_help))
@@ -341,6 +328,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     "shell" -> R.string.shell_help; "source" -> R.string.source_help; "path" -> R.string.path_help;
                     "dns" -> R.string.dns_help; else -> R.string.proxy_help
                 }), style = MaterialTheme.typography.bodySmall)
+                if (field == "proxy") CopyHelp(stringResource(R.string.about_proxy_details_title), stringResource(R.string.about_proxy_details))
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
                 if (informational) {

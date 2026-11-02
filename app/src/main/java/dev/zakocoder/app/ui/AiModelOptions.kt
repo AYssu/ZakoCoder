@@ -74,11 +74,12 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
                     AiThinking.Disabled -> R.string.ai_options_disabled
                 })) }) }
         }
+        CopyHelp(stringResource(R.string.copy_ai_thinking_help_title), stringResource(R.string.copy_ai_thinking_help))
         Text(stringResource(R.string.ai_options_effort), style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             (listOf<AiReasoningEffort?>(null) + AiReasoningEffort.entries).forEach { effort ->
                 FilterChip(selected = draft.effort == effort, enabled = editable, onClick = { draft.effort = effort; changed() },
-                    label = { Text(if (effort == null) stringResource(R.string.ai_options_provider_default) else effort.wire) })
+                    label = { Text(if (effort == null) stringResource(R.string.ai_options_provider_default) else stringResource(effort.labelResource())) })
             }
         }
         OptionField(draft.frequency, { draft.frequency = it; changed() }, R.string.ai_options_frequency, editable,
@@ -92,6 +93,7 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
         HorizontalDivider()
         Text(stringResource(R.string.ai_options_headers), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.ai_options_headers_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CopyHelp(stringResource(R.string.copy_ai_headers_help_title), stringResource(R.string.copy_ai_headers_help))
         if (profile?.headerNames?.isNotEmpty() == true) Text(stringResource(R.string.ai_options_headers_saved, profile.headerNames.joinToString(", ")), style = MaterialTheme.typography.bodySmall)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_options_headers_replace), Modifier.weight(1f)); Switch(draft.replaceHeaders, { draft.replaceHeaders = it; changed() }, enabled = editable)
@@ -113,4 +115,11 @@ private fun OptionField(value: String, update: (String) -> Unit, label: Int, edi
         label = { Text(stringResource(label)) }, isError = invalid,
         supportingText = if (invalid) { { Text(stringResource(hint)) } } else null,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrectEnabled = false))
+}
+
+internal fun AiReasoningEffort.labelResource(): Int = when (this) {
+    AiReasoningEffort.Low -> R.string.ai_effort_low
+    AiReasoningEffort.Medium -> R.string.ai_effort_medium
+    AiReasoningEffort.High -> R.string.ai_effort_high
+    AiReasoningEffort.Max -> R.string.ai_effort_max
 }

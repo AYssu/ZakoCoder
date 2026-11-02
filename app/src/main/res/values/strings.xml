@@ -3,7 +3,6 @@
     <string name="nav_workspace">项目库</string>
     <string name="nav_terminal">终端</string>
     <string name="nav_settings">设置</string>
-    <string name="development_version">开发预览</string>
     <string name="select_project">选择项目目录</string>
     <string name="project_root">项目根目录</string>
     <string name="parent_directory">上一级</string>
@@ -41,7 +40,7 @@
     <string name="environment_title">开发环境</string>
     <string name="runtime_ready">Ubuntu 运行环境已就绪</string>
     <string name="runtime_missing">运行环境尚未安装</string>
-    <string name="runtime_description">Ubuntu 24.04 基础系统，按设备架构选择 ARM64 或 x86_64；下载约 64–68 MB，解包约 300 MB。语言工具链按项目需要安装，不预装示例项目。</string>
+    <string name="runtime_description">Ubuntu 24.04 开发环境，按设备架构安装。开发工具可按项目需要选择。</string>
     <string name="install_runtime">安装运行环境</string>
     <string name="runtime_abi_unsupported">当前应用进程架构不受支持；Linux 环境需要 ARM64 或 x86_64 原生运行库。</string>
     <string name="android_toolchain_abi_unsupported">当前 Android SDK / NDK 工具包仅提供 ARM64 可执行文件，尚不支持此设备架构；基础 Ubuntu 和通用开发工具仍可使用。</string>
@@ -87,14 +86,11 @@
     <string name="save_settings">保存设置</string>
     <string name="settings_saved">设置已保存。Shell 和 PATH 对新建会话生效。</string>
     <string name="clear_cache">清理环境下载缓存</string>
-    <string name="about_description">ZakoCoder 0.1.0-dev · 独立 Android 原生编码工作台\n提供项目、Sora 编辑器、运行环境、终端和兼容协议 AI 编码；模型服务需自行配置。</string>
-    <string name="validation_artifacts_notice">本调试版使用仓库内源码自行编译的 PRoot / loader。正式发布仍需维护者审查源码分发材料与设备验证范围。</string>
-    <string name="licenses_description">Markdown：CommonMark Java 0.24.0，BSD-2-Clause。网络：OkHttp 4.12.0 / Okio 3.6.0，Apache-2.0。代码编辑器：Sora Editor 0.23.6，LGPL-2.1；TextMate 内含 TM4E，EPL-2.0。完整声明见 assets/licenses。终端字体：JetBrains Mono 2.304（SIL OFL 1.1，原始声明随 APK 保存于 assets/licenses）。终端基础库：Termux terminal-emulator / terminal-view（Apache-2.0）。PRoot 源码 GPL-2.0-or-later；静态链接 talloc 后的组合制品按 GPL-3.0-or-later 提供，talloc 为 LGPL-3.0-or-later，libandroid-shmem 为 BSD-3-Clause；Ubuntu 基础系统保留各包 /usr/share/doc 中的许可。版本与摘要见仓库 THIRD_PARTY.md 和 runtime/artifacts.json。</string>
     <string name="service_channel">开发任务与终端</string>
     <string name="service_running">开发任务或终端会话正在运行，点击返回工作台。</string>
     <string name="stop_all">停止全部任务和会话</string>
     <string name="import_runtime">导入离线环境包</string>
-    <string name="offline_runtime_help">仅接受 ubuntu-noble-aarch64-pd-v4.18.0.tar.xz，SHA-256 必须与固定版本一致。下载地址见仓库 runtime/artifacts.json。</string>
+    <string name="offline_runtime_help">请选择与当前设备架构匹配的 Ubuntu 离线环境包，导入时会校验版本和完整性。</string>
     <string name="proxy_label">可选网络代理（http://主机:端口 或 socks5://[用户名:密码@]主机:端口）</string>
     <string name="directory_unreadable">无法读取工作目录，请刷新或重新导入项目。</string>
     <string name="repair_packages">修复中断的软件包配置</string>
@@ -171,11 +167,10 @@
     <string name="application_settings">应用</string>
     <string name="running_notifications">运行通知</string>
     <string name="about_title">关于与开源许可</string>
-    <string name="app_version">0.1.0-dev</string>
     <string name="source_help">保存后用于后续 Ubuntu 软件包安装。</string>
     <string name="path_help">使用 Linux 绝对路径，多个路径用冒号分隔。新建会话后生效。</string>
     <string name="dns_help">逗号分隔多个 IPv4 地址，保存后应用于运行环境。</string>
-    <string name="proxy_help">支持 HTTP 与 SOCKS5 代理，留空关闭；HTTP 不支持用户名和密码。SOCKS5 可写 socks5://用户名:密码@主机:端口（用户名/密码使用百分号编码），用户名与密码必须同时提供。凭据经 Android Keystore 加密保存在本机，设置页只显示打码形式；但终端子进程的环境变量 ALL_PROXY 会包含明文凭据，能读取该进程环境的工具或日志可能看到它。SOCKS5 作用于环境下载、AI 请求及支持 ALL_PROXY 的终端命令；apt 等仅识别 HTTP 代理的工具不会走 SOCKS5。</string>
+    <string name="proxy_help">支持 HTTP 或 SOCKS5 代理，留空即可关闭。HTTP 代理不支持用户名和密码。</string>
     <string name="back_to_terminals">返回终端列表</string>
     <string name="terminal_library_empty">还没有终端</string>
     <string name="terminal_library_help">为项目新建一个会话，点击卡片进入终端。返回列表会保留进程和输出。</string>
@@ -221,7 +216,7 @@
     <string name="terminal_waiting_output">等待终端输出…</string>
     <string name="session_failed">异常退出</string>
     <string name="project_session_count">已有 %1$d 个会话</string>
-    <string name="terminal_shell_help">使用 Bash，工作目录为项目根目录。</string>
+    <string name="terminal_shell_help">使用设置中选择的 Shell，在项目根目录启动。</string>
     <string name="session_minutes">%1$d 分钟</string>
     <string name="terminal_actions">终端操作</string>
     <string name="terminal_close_hint">长按会话可关闭，也可在终端操作菜单中关闭。</string>
@@ -265,7 +260,7 @@
     <string name="shell_zsh">Zsh</string>
     <string name="cache_compact_action">清理缓存</string>
     <string name="cache_compact_size">下载缓存 %1$s</string>
-    <string name="settings_version_footer">ZakoCoder %1$s · 开发预览版</string>
+    <string name="settings_version_footer">ZakoCoder %1$s</string>
 
     <string name="editor_back">返回文件列表</string>
     <string name="editor_saving">正在保存…</string>
@@ -290,9 +285,9 @@
     <string name="editor_disk_check">检查磁盘版本</string>
     <string name="editor_disk_compare">对比磁盘版本</string>
     <string name="editor_disk_load">加载磁盘版本</string>
-    <string name="editor_buffer_version">本地缓冲</string>
+    <string name="editor_buffer_version">当前编辑内容</string>
     <string name="editor_disk_version">磁盘快照</string>
-    <string name="editor_disk_review_help">只读比较打开时的本地缓冲与最近检查的磁盘快照，不会合并或保存。磁盘可能继续变化；关闭对比后可重新检查或明确确认重新加载。</string>
+    <string name="editor_disk_review_help">只读比较当前编辑内容与最近检查到的文件内容，不会合并或保存。文件可能继续变化；关闭对比后可重新检查，或确认重新加载。</string>
     <string name="editor_retry">重试读取</string>
     <string name="editor_language">%1$s</string>
     <string name="editor_plain_text">纯文本</string>
@@ -395,7 +390,7 @@
     <string name="ai_current_plan">当前任务计划</string>
     <string name="ai_plan_expand">展开当前任务计划</string>
     <string name="ai_plan_collapse">收起当前任务计划</string>
-    <string name="ai_plan_reported">模型报告的步骤，不代表验证已通过</string>
+    <string name="ai_plan_reported">任务计划</string>
     <string name="ai_plan_updated">公开计划已更新</string>
     <string name="ai_plan_pending">待执行</string>
     <string name="ai_plan_active">进行中</string>
@@ -408,7 +403,7 @@
     <string name="ai_tool_details">展开工具详情</string>
     <string name="ai_tool_collapse">收起工具详情</string>
     <string name="ai_tool_elapsed">耗时 %1$d ms</string>
-    <string name="ai_output_truncated">显示有界输出；更早的内容已截断</string>
+    <string name="ai_output_truncated">输出过长，仅显示部分内容</string>
     <string name="ai_tool_exit_code">退出码 %1$d</string>
     <string name="ai_task_budget">请求 %1$d · 工具 %2$d</string>
     <string name="ai_receiving_arguments">正在接收工具参数，尚未执行</string>
@@ -620,7 +615,7 @@
     <string name="ai_checkpoint_restored">检查点范围内的文件与目录已恢复。</string>
     <string name="ai_checkpoint_conflict">恢复已停止：文件或权限发生变化、编辑器仍打开，或结果不完整。未覆盖冲突文件，请审阅当前内容。</string>
     <string name="project_commands">构建、测试与运行</string>
-    <string name="project_commands_help">按项目配置 Ubuntu 命令，不自动推测验证成功。命令可修改文件、安装依赖或访问网络，执行前请审阅；日志保存在本机。</string>
+    <string name="project_commands_help">配置项目的构建、测试和运行命令，执行日志保存在本机。命令可能修改文件、安装依赖或访问网络，执行前请确认。</string>
     <string name="project_build">构建</string>
     <string name="project_test">测试</string>
     <string name="project_run">运行</string>
@@ -642,7 +637,7 @@
     <string name="project_check_timeout">执行超时</string>
     <string name="project_check_interrupted">执行中断，结果未知</string>
     <string name="project_validation">验收</string>
-    <string name="project_validation_help">按所选任务轮次显示实际验证，包括 AI 执行和你的手动复核。构建、测试、运行按执行时的配置归类。退出码为 0 只代表该命令成功；请同时检查源文件状态与当前命令配置。</string>
+    <string name="project_validation_help">查看本轮构建、测试和运行记录。文件或命令配置发生变化后，需要重新验证。</string>
     <string name="project_not_verified">本轮未验证</string>
     <string name="project_validation_changes">已记录的修改文件</string>
     <string name="git_title">Git</string>
@@ -656,7 +651,7 @@
     <string name="git_message">提交说明</string>
     <string name="git_name">作者姓名</string>
     <string name="git_email">作者邮箱</string>
-    <string name="git_help">选择文件后暂存，再提交暂存区。提交只写入本地仓库，不会推送；钩子和提交签名在此流程中禁用。</string>
+    <string name="git_help">先暂存要提交的文件，再填写提交说明。提交保存在本地，推送后才会同步到远端。</string>
     <string name="git_clean">工作区没有待提交的修改。</string>
     <string name="git_commit_help">仅提交已暂存内容。作者信息仅用于这次提交，不写入全局配置。</string>
     <string name="editor_draft_error">草稿读取或保存失败，请及时保存源文件。</string>
@@ -727,7 +722,7 @@
     <string name="project_log_find_next">下一处</string>
     <string name="ai_checkpoint_conversation">来源会话 %1$s</string>
     <string name="ai_checkpoint_partial">已确认恢复 %1$d 项；其余尚未完成</string>
-    <string name="ai_checkpoint_unsealed">任务未封存，最终变更尚未确认；请从检查点审阅当前文件。</string>
+    <string name="ai_checkpoint_unsealed">此轮任务尚未完成最终变更记录，请从检查点审阅当前文件。</string>
     <string name="ai_checkpoint_interrupted_review">比较的是当前文件与任务前快照，可能包含你在中断后的修改。审阅并确认后才恢复；文件再次变化会阻止恢复。</string>
     <string name="ai_checkpoint_interrupted_confirm">将当前已审阅的文件与目录恢复到任务开始前，包含中断后你自己的修改。仅恢复快照覆盖的内容；依赖、网络和数据库副作用不会回滚。审阅后发生的修改会阻止恢复。</string>
     <string name="project_validation_historical">历史结果 · 当前文件未验证</string>
@@ -740,7 +735,7 @@
     <string name="project_source_command_changed">命令配置已变化 · 此记录对应旧命令</string>
     <string name="project_source_timeout_changed">当前超时设置与本次运行不同</string>
     <string name="project_source_timeout_unknown">旧记录未保存超时设置</string>
-    <string name="project_source_scope">仅比较最近采样的有界源文件、目录和权限；不含敏感文件、依赖、生成缓存、编辑器及版本控制元数据和外部环境。范围未变不等于全面验收；运行中修改再还原或采样后的修改可能无法识别，终端修改后可重新检查。</string>
+    <string name="project_source_scope">检查范围为最近读取的源文件、目录和权限，不含敏感文件、依赖、生成缓存、编辑器和版本控制数据及外部环境。范围未变不代表全面验证通过；检查后的修改或修改后还原可能无法识别。终端修改后可重新检查。</string>
     <string name="project_source_details">源文件检查范围</string>
     <string name="project_source_counts">最近采样：%1$d 文件 · %2$d 目录</string>
     <string name="project_source_checked_at">最近检查：%1$s</string>

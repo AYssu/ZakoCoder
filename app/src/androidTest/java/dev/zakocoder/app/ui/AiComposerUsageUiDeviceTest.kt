@@ -202,14 +202,14 @@ class AiComposerUsageUiDeviceTest {
     }
     private fun assertModelRow(model: String) = nodes { all ->
         val name = all.single { text(it) == model }
-        val thinking = all.single { text(it) == context.getString(R.string.ai_composer_thinking_effort, "high") }
+        val thinking = all.single { text(it) == context.getString(R.string.ai_composer_thinking_effort, context.getString(R.string.ai_effort_high)) }
         val window = all.single { text(it) == "1M" }
         listOf(name, thinking, window).forEach {
             assertTrue("Composer model metadata must be fully visible", it.boundsInWindow.width > 0 && it.boundsInWindow.height >= it.size.height * .99f)
         }
         assertTrue("Model and thinking share a row", kotlin.math.abs(name.boundsInWindow.center.y - thinking.boundsInWindow.center.y) < 15)
         assertTrue("Thinking and context share a row", kotlin.math.abs(thinking.boundsInWindow.center.y - window.boundsInWindow.center.y) < 15)
-        assertTrue(all.any { it.config.getOrNull(SemanticsProperties.StateDescription) == context.getString(R.string.ai_composer_model_state, context.getString(R.string.ai_composer_thinking_effort, "high"), "1M") })
+        assertTrue(all.any { it.config.getOrNull(SemanticsProperties.StateDescription) == context.getString(R.string.ai_composer_model_state, context.getString(R.string.ai_composer_thinking_effort, context.getString(R.string.ai_effort_high)), "1M") })
     }
     @Composable private fun Theme(dark: Boolean, content: @Composable () -> Unit) {
         val configuration = Configuration(LocalConfiguration.current).apply { uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO }

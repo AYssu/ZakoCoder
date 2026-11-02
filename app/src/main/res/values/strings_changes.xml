@@ -4,7 +4,7 @@
     <string name="ai_changes_no_task">当前会话尚无可审阅任务。</string>
     <string name="ai_changes_missing_checkpoint">此轮没有保留检查点，可能尚未建立或已被淘汰；不能据此判断没有修改。</string>
     <string name="ai_changes_read_failed">无法读取此轮变更，请重试；当前不能确认变更范围。</string>
-    <string name="ai_changes_running">任务正在运行，最终变更尚未封存。</string>
+    <string name="ai_changes_running">任务正在运行，完成后会记录最终变更。</string>
     <string name="ai_changes_restoring">正在恢复工作区，完成后将重新加载变更。</string>
     <string name="ai_changes_snapshot_empty">此检查点记录范围内没有变更。</string>
     <string name="ai_changes_restored_history">此检查点已恢复；下面展示当时记录的历史变更，不代表当前磁盘内容。</string>

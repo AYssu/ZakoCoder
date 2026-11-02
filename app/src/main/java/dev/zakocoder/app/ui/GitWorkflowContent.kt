@@ -84,8 +84,8 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                     if (state.upstream.isNotBlank()) {
                         Text(stringResource(R.string.git_workflow_counts_source, state.upstream), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(stringResource(R.string.git_workflow_counts, state.ahead, state.behind), style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.git_workflow_counts_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(stringResource(R.string.git_workflow_counts_hint), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Text(stringResource(R.string.git_help), style = MaterialTheme.typography.bodySmall)
                     GitAction(stringResource(R.string.git_initialize), enabled = !state.busy && state.statusKnown, onClick = { dialog = "init" })
@@ -144,6 +144,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
             }
             if (state.repository) item {
                 Text(stringResource(R.string.git_workflow_changes, state.entries.size), style = MaterialTheme.typography.titleSmall)
+                CopyHelp(stringResource(R.string.git_commit_help_title), stringResource(R.string.git_commit_help_details))
                 if (state.entries.isEmpty()) Text(stringResource(R.string.git_clean), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(state.entries.filterNot { it.path in state.conflicts }, key = { "file:${it.path}" }) { entry ->

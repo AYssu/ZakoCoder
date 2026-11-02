@@ -5,7 +5,7 @@
     <string name="git_workflow_upstream">跟踪 %1$s</string>
     <string name="git_workflow_no_upstream">尚未设置远端跟踪分支</string>
     <string name="git_workflow_counts">↑ 待推送 %1$d · ↓ 待拉取 %2$d</string>
-    <string name="git_workflow_counts_hint">数量依据最近一次获取的远端记录；获取可更新。</string>
+    <string name="git_workflow_counts_hint">基于最近获取的远端状态；点击「获取」刷新。</string>
     <string name="git_workflow_remote">远端</string>
     <string name="git_workflow_no_remote">未配置远端，暂不能获取、拉取或推送。</string>
     <string name="git_workflow_fetch">获取</string>

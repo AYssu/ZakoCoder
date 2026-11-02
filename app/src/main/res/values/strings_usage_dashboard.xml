@@ -22,10 +22,10 @@
     <string name="ai_usage_session_summary">当前会话汇总</string>
     <string name="ai_usage_unavailable">统计暂不可用，请从设置中打开用量统计。</string>
     <string name="ai_usage_loading">正在读取本机统计…</string>
-    <string name="ai_usage_load_failed">统计记录读取或保存失败，当前数值可能不完整。请重试；不会自动删除记录。</string>
+    <string name="ai_usage_load_failed">统计暂时无法读取或保存，显示的用量可能不完整。请重试。</string>
     <string name="ai_usage_retry">重试读取</string>
     <string name="ai_usage_empty">这个范围还没有记录</string>
-    <string name="ai_usage_empty_hint">可以更换日期、项目或模型。历史请求详情不会补记为完整账单。</string>
+    <string name="ai_usage_empty_hint">暂无记录，试试其他日期、项目或模型。</string>
     <string name="ai_usage_requests">请求次数</string>
     <string name="ai_usage_tools">工具调用次数</string>
     <string name="ai_usage_dashboard_input">输入 Token</string>
@@ -35,10 +35,10 @@
     <string name="ai_usage_unknown">—</string>
     <string name="ai_usage_request_status">失败 %1$d · 未结束 %2$d · 已执行工具 %3$d</string>
     <string name="ai_usage_coverage">有效报告请求：输入 %1$d/%4$d · 输出 %2$d/%4$d · 缓存 %3$d/%4$d</string>
-    <string name="ai_usage_cache_ratio">缓存命中率 %1$s · 仅计算同时报告输入与命中的请求</string>
+    <string name="ai_usage_cache_ratio">缓存命中率 %1$s</string>
     <string name="ai_usage_context_estimate">最近请求上下文估算 %1$s Token\n所选范围最大上下文窗口 %2$s Token</string>
-    <string name="ai_usage_values_hint">用量仅累计服务已报告数值，缺失显示“—”；合计不含重复累加的缓存。上下文是估算和容量，不是计费量。请求包含重试与压缩；工具次数含审批中与未执行的调用。</string>
+    <string name="ai_usage_values_hint">用量以服务返回为准，未提供的数据显示“—”。</string>
     <string name="ai_usage_ledger_scope">从 %1$s 启用本机统计，不补填旧会话。按设备时区分日，跨设备用量不合并。</string>
     <string name="ai_usage_retained_scope">部分早期记录已超出保留范围；保留记录起点为 %1$s，较早范围只显示仍保留的记录。</string>
-    <string name="ai_usage_incomplete">统计曾因本机写入积压遗漏记录，以下仅为已记录用量，不能视为完整总量；切换日期、项目或模型也无法补回遗漏。</string>
+    <string name="ai_usage_incomplete">部分统计记录未能保存，当前用量可能不完整。</string>
 </resources>

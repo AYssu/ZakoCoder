@@ -95,6 +95,7 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
             }
         }
         Text(stringResource(R.string.update_security), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CopyHelp(stringResource(R.string.update_security_details_title), stringResource(R.string.update_security_details_body))
         Spacer(Modifier.height(16.dp))
     }
 }

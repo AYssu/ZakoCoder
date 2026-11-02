@@ -22,8 +22,8 @@
     <string name="update_settings_failed">更新设置保存失败，请重新调整后再试。</string>
     <string name="update_dev_version">当前为开发构建，不能与发布版本直接比较。请从 GitHub Releases 获取正式发布安装包。</string>
     <string name="update_check_failed">检查失败，请确认能够访问 GitHub 后重试。</string>
-    <string name="update_download_failed">下载或安装包校验失败。请重试；仅支持同签名、版本递增的 ARM64 官方安装包。</string>
+    <string name="update_download_failed">下载或安装包校验失败，请重试。</string>
     <string name="update_install_failed">无法打开系统安装界面，请重新下载并检查系统安装权限。</string>
     <string name="update_install_permission">尚未允许安装应用，请再次点击安装更新并授权。</string>
-    <string name="update_security">从本项目 GitHub Releases 下载，校验大小、SHA-256、包名、版本与签名。安装由 Android 系统确认，保留应用数据。</string>
+    <string name="update_security">更新来自官方 GitHub 发布页，安装包会自动校验。安装需系统确认，应用数据会保留。</string>
 </resources>

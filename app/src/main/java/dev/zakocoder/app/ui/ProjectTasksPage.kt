@@ -238,6 +238,7 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
             if (restorationFailed) Text(stringResource(R.string.project_validation_workspace_unknown), color = MaterialTheme.colorScheme.error)
             else if (runs.any { run -> restorations.any { it.invalidates(run.started) } }) Text(stringResource(R.string.project_validation_restored), color = MaterialTheme.colorScheme.error)
             Text(stringResource(R.string.project_validation_help), style = MaterialTheme.typography.bodySmall)
+            CopyHelp(stringResource(R.string.project_validation_help_title), stringResource(R.string.project_validation_help_details))
             UnsavedValidationNotice(unsavedFiles)
             if (turns.size > 1) Box {
                 TextButton(onClick = { turnMenu = true }) { Text(stringResource(R.string.project_validation_turn, selectedTurn)) }

@@ -252,6 +252,7 @@ internal fun ScreenTestPanel(model: ScreenTestUiModel, working: Boolean = false,
         }
         Text(stringResource(R.string.screen_overlay_description), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CopyHelp(stringResource(R.string.screen_overlay_help_title), stringResource(R.string.screen_overlay_help_body))
         if (model.overlayFailure.isNotBlank()) {
             ScreenTestError(stringResource(when (model.overlayFailure) {
                 "permission", "window_permission" -> R.string.screen_overlay_failure_permission

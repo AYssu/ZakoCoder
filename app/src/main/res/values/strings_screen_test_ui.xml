@@ -48,11 +48,11 @@
     <string name="screen_test_access_accessibility">无障碍</string>
     <string name="screen_test_access_accessibility_hint">读取界面、点击、输入与截图</string>
     <string name="screen_test_access_root">Root</string>
-    <string name="screen_test_access_root_hint">已 root 设备的结构化屏幕测试</string>
+    <string name="screen_test_access_root_hint">使用设备 Root 权限读取和操作界面</string>
     <string name="screen_test_access_change_hint">切换方式会停止当前测试，并需要重新选择 APK。</string>
     <string name="screen_test_root_title">设备授权</string>
-    <string name="screen_test_root_granted">已取得 root 授权</string>
-    <string name="screen_test_root_request">申请 root 授权</string>
+    <string name="screen_test_root_granted">已取得 Root 授权</string>
+    <string name="screen_test_root_request">申请 Root 授权</string>
     <string name="screen_test_root_explanation">点击后检查并申请 Root 权限。测试仍限制在你选择的调试应用。</string>
     <string name="screen_test_root_denied">未取得 Root 权限。请检查设备的 Root 权限设置，允许本应用使用后再重试。</string>
     <string name="screen_test_share_title">截图与模型</string>

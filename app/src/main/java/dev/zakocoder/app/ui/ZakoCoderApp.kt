@@ -35,6 +35,7 @@ private enum class Page(val label: Int, val glyph: Glyph) {
 fun ZakoCoderApp(workbench: Workbench) {
     var referencedPath by rememberSaveable { mutableStateOf<String?>(null) }
     val state by workbench.state.collectAsStateWithLifecycle()
+    val updateInfo by workbench.updates.state.collectAsStateWithLifecycle()
     val accessibility = androidx.compose.ui.platform.LocalAccessibilityManager.current
     LaunchedEffect(state.message, state.messageIsError) {
         if (state.message.isNotEmpty() && !state.messageIsError) {
@@ -134,7 +135,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
                     Spacer(Modifier.weight(1f))
                     Surface(color = MaterialTheme.colorScheme.surface, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-                        Text(stringResource(R.string.development_version), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        Text(updateInfo.currentVersion.ifBlank { stringResource(R.string.loading) }, Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             fontSize = 10.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
