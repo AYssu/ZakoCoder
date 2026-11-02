@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed static gate for locally built ZakoCoder Beta APKs.
+"""Fail-closed static gate for locally built ZakoCoder distribution APKs.
 
 No build, download, installation, signing, or application-data access occurs here.
 Signing-certificate equality is deliberately checked separately by apksigner.
@@ -16,7 +16,7 @@ import sys
 import zipfile
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-BETA_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+-(?:beta|rc)\.[1-9][0-9]*")
+BETA_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\.[1-9][0-9]*)?")
 FIXTURE_DESCRIPTORS = (
     b"Lmockwebserver3/", b"Lokhttp3/mockwebserver/", b"Lokhttp3/tls/HeldCertificate;",
     b"Ldev/zakocoder/app/CompatibilityDocumentsProvider;",
@@ -112,7 +112,7 @@ def inspect_apk(apk: Path, aapt: Path) -> dict:
         raise ValueError("APK must use production package dev.zakocoder.app")
     version = _string(attributes.get("android:versionName"), "versionName")
     if not BETA_VERSION.fullmatch(version):
-        raise ValueError("versionName must be major.minor.patch-(beta|rc).N with positive N")
+        raise ValueError("versionName must be major.minor.patch with optional -beta.N or -rc.N (positive N)")
     code = re.fullmatch(r"\(type 0x10\)0x([0-9a-fA-F]+)", attributes.get("android:versionCode", ""))
     if code is None or int(code[1], 16) <= 0:
         raise ValueError("versionCode must be a positive compiled integer")

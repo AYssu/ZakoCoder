@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml"><img src="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/status-Beta%20preparation-2563EB" alt="Beta 准备中" />
-  <img src="https://img.shields.io/badge/Android-11%E2%80%9317%20%C2%B7%20ARM64-334155" alt="Beta 测试目标 Android 11–17 · ARM64" />
+  <a href="https://github.com/AYssu/ZakoCoder/releases/latest"><img src="https://img.shields.io/github/v/release/AYssu/ZakoCoder?color=2563EB" alt="最新正式版下载" /></a>
+  <img src="https://img.shields.io/badge/Android-11%E2%80%9317%20%C2%B7%20ARM64-334155" alt="支持目标 Android 11–17 · ARM64" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-334155" alt="Apache-2.0" /></a>
 </p>
 
@@ -27,7 +27,7 @@
 
 ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项目整合文件管理、代码编辑、Linux 开发环境和 AI 协作，让开发者在手机上完成修改、运行、审阅与验证。工具调用、权限审批和文件变更均有独立入口，执行过程可查看，源码修改可核对。
 
-项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。当前进入 `0.1.0-rc.1` 候选验收阶段，原则上不新增功能，重点进行问题修复和适配优化，面向 ARM64 真机。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名预发布包的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
+项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。首个正式版为 `0.1.0`，面向 ARM64 真机，后续优先进行问题修复和适配优化。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名包的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
 
 ## 功能概览
 
@@ -51,11 +51,11 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 获取安装包
 
-Beta 请从 [Releases](https://github.com/AYssu/ZakoCoder/releases) 选择标记为 **Pre-release** 的版本，下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；构建详情和本次固定提交的完整源码入口在发布页，以实际存在的发布为准。RC 为准备转正式版的候选版本，尚非稳定版，安装、升级与反馈方式见 [Beta 测试说明](docs/BETA_TESTING.md)。本次预发布为不可调试的 Release + R8 包，默认沿用仓库 CI Debug 签名（可选自有签名）；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
+从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
 开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 提供 ARM64 Debug APK、自编译运行时、对应源码、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
-Beta 的 Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
+Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
 
 ### 完成第一个项目
 
@@ -79,7 +79,7 @@ Vite 等工程使用自身的安装和启动命令。按实际输出选择端口
 
 | 项目 | 当前支持 |
 | --- | --- |
-| 设备 | Beta 面向 ARM64、Android 11–17；已有 AOSP x86_64 系统基线和 Android 13 ARM64 真机记录，不保证全部厂商设备。最低 SDK 仍为 Android 8.0，但完整开发环境未验收；实验 x86_64 仅用于基础兼容性验证，不含 Android SDK／NDK 工具包。见[实际结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)。 |
+| 设备 | 面向 ARM64、Android 11–17；已有 AOSP x86_64 系统基线和 Android 13 ARM64 真机记录，不保证全部厂商设备。最低 SDK 仍为 Android 8.0，但完整开发环境未验收；实验 x86_64 仅用于基础兼容性验证，不含 Android SDK／NDK 工具包。见[实际结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)。 |
 | 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android、Flutter 等工具包。 |
 | Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
 | Flutter 工程 | 可选固定 Flutter 3.47.9／Dart 3.13.7 工具包、Dart 模板与基础着色；ARM64 Ubuntu 中的依赖、分析、Widget 测试及 Web 构建已有真机记录，Android APK 与完整应用流程的验收状态见 [Flutter 开发](docs/FLUTTER.md)。 |
@@ -140,7 +140,7 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 | [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
 | [Flutter 开发](docs/FLUTTER.md) | 安装固定 SDK、创建 Dart 项目、分析测试、Web 预览及 Android APK。 |
 | [Git 工作流](docs/GIT.md) · [语言服务](docs/LSP.md) | 仓库同步、认证、冲突处理及可选本机补全与诊断。 |
-| [发布流程](docs/RELEASING.md) · [更新记录](CHANGELOG.md) | Debug／Beta 打包、发布签名与分发条件。 |
+| [发布流程](docs/RELEASING.md) · [更新记录](CHANGELOG.md) | Debug／预发布／正式版打包、发布签名与分发条件。 |
 | [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |
 
 <details>

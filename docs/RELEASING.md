@@ -1,30 +1,36 @@
 # 发布流程
 
-仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Pre-release** 用于维护者确认后的签名预发布。预发布版本使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是正式长期发布签名。GitHub Release 必须标记为 **Pre-release**。常规提交和 PR 不自动发布。
+仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Release** 用于维护者确认后的签名正式版或预发布。两者均使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是独立的长期正式发布密钥。无后缀的正式版设为 Latest，Beta／RC 必须标记为 **Pre-release**，不设为 Latest。常规提交和 PR 不自动发布。
 
-当前候选版本为 `0.1.0-rc.1`（versionCode `1004`）；以实际发布结果为准。新增 Beta 流程不代表已经发布，也不解除稳定版发行门槛。运行时源码与许可证、Release 构建、最终签名和设备检查必须分别有证据；尚未执行的项目见下方清单。
+本次正式版为 `0.1.0`（versionCode `1005`），候选版为 `0.1.0-rc.1`（`1004`）；以实际发布结果为准。维护者已反馈完成 RC 验证并授权转正式版；未提供设备、场景和日志明细的部分不补写为自动化或专项验证通过。运行时源码与许可证、Release 构建、最终签名和设备检查分别记录，已有兼容性限制继续保留。
+
+## 首个正式版的发布决定
+
+本次不新增产品功能，正式发布后优先处理问题修复、兼容适配、性能和交互优化。维护者选择继续沿用现有 CI Debug 证书，以保持现有同签名安装的升级身份；这不是建立了独立长期生产密钥。后续更换签名时必须另行评估覆盖升级并公开迁移方案，不以卸载或清除用户数据作为默认做法。
+
+正式版仍按同一工作流执行仓库检查、Release + R8 构建、签名、设备 QA、源码和附件一致性检查。维护者的 RC 验证反馈不代替当前构建的实际 CI 结果，也不扩大已公开的设备和工程支持范围。
 
 ## RC 验收阶段
 
 RC 是准备转正式版的候选版本，必须标记 Pre-release，不设为 Latest。本阶段原则上不新增功能，主要进行问题修复、设备和工程适配、性能与交互优化，以及最终签名包的安装、升级和数据保留验收。有变更则递增 RC 序号与 versionCode，不覆盖既有标签和附件；验收通过后再决定正式版，不按时间自动转正。
 
-发布入口同时接受 `MAJOR.MINOR.PATCH-beta.N` 与 `MAJOR.MINOR.PATCH-rc.N`；沿用既有 `betaRelease/betaVersion/betaVersionCode` 构建参数名以保持兼容。稳定版版本仍被构建与制品门槛拒绝。RC 使用现有签名选择规则，不自动生成或更换证书；沿用 CI Debug 证书时仍须明确标注，转正式版前定稿长期签名与升级方案。
+发布入口接受正式版 `MAJOR.MINOR.PATCH`、`MAJOR.MINOR.PATCH-beta.N` 与 `MAJOR.MINOR.PATCH-rc.N`；沿用既有 `betaRelease/betaVersion/betaVersionCode` 构建参数名以保持兼容。根据版本后缀决定正式版或预发布，构建与制品门槛均检查实际版本。RC 使用现有签名选择规则，不自动生成或更换证书；沿用 CI Debug 证书时仍须明确标注，正式发布前明确签名选择与升级限制。
 
 RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留，环境安装与终端服务，AI 长任务/取消/恢复，文件审阅与恢复，Git 和按需 LSP，以及后台权限和不同厂商适配。缺陷通过 Issues 模板反馈，附版本、机型、复现和脱敏日志，不发送密钥或私人源码。
 
-## 手动发布预发布版本
+## 手动发布正式版或预发布版本
 
 1. 选择已完成审查和相关 CI 的提交，核对 [CHANGELOG](../CHANGELOG.md)、[Beta 测试说明](BETA_TESTING.md)及[兼容性结果](ANDROID_COMPATIBILITY_RESULTS.md)。
-2. 确认已有 Actions Secret `ZAKOCODER_DEBUG_KEYSTORE_BASE64` 可用。默认沿用它签署 Beta，无需新增 Secret；也可完整配置下方可选签名。所选密钥缺失或无效时失败，不临时生成替代密钥。
-3. 在 `main` 上打开 **Actions → Publish Pre-release → Run workflow**：`version` 填 `0.1.0-rc.1`，`version_code` 本次为 `1004`，后续严格递增；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
-4. 工作流校验仓库、执行 Release 构建及相关检查，先生成未签名 APK，再使用所选密钥签名。QA 通过后创建草稿 Release，上传并逐项下载回读校验 SHA-256，最后设为预发布且不标为 Latest。
+2. 确认已有 Actions Secret `ZAKOCODER_DEBUG_KEYSTORE_BASE64` 可用。默认沿用它签署发布包，无需新增 Secret；也可完整配置下方可选签名。所选密钥缺失或无效时失败，不临时生成替代密钥。
+3. 在 `main` 上打开 **Actions → Publish Release → Run workflow**：`version` 填 `0.1.0`，`version_code` 本次为 `1005`，后续严格递增；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
+4. 工作流校验仓库、执行 Release 构建及相关检查，先生成未签名 APK，再使用所选密钥签名。QA 通过后创建草稿 Release，上传并逐项下载回读校验 SHA-256，最后按版本后缀发布：正式版标为 Latest，Beta／RC 设为预发布且不标为 Latest。
 5. 工作流完成签名 R8 QA 的设备检查和制品一致性校验后，下载实际发布的 APK 与摘要复核。发布页面列出实际通过项、已知限制和未验证项，不能把 Debug 矩阵或 x86 QA 写成公开 ARM64 APK 真机验收。
 
-本流程默认仅打包 **ARM64**。不在 Beta 中附带实验性 x86_64 工具链。构建参数为 `-PbetaRelease=true -PbetaVersion=0.1.0-beta.1 -PbetaVersionCode=1001`，未签名输出为后续签名的输入；不在 Gradle 中保存密钥。完整步骤以 [publish-beta.yml](../.github/workflows/publish-beta.yml) 和 `app/build.gradle.kts` 为准。
+本流程默认仅打包 **ARM64**。不附带实验性 x86_64 工具链。构建参数为 `-PbetaRelease=true -PbetaVersion=0.1.0 -PbetaVersionCode=1005`，未签名输出为后续签名的输入；不在 Gradle 中保存密钥。完整步骤以 [publish-beta.yml](../.github/workflows/publish-beta.yml) 和 `app/build.gradle.kts` 为准。
 
-### 本次 Beta 签名
+### 发布签名
 
-默认只需要已有的 `ZAKOCODER_DEBUG_KEYSTORE_BASE64`，内容为 CI 专用 Debug keystore 的 Base64；使用 `androiddebugkey` 别名和 Android 默认 Debug 口令。Beta 的构建类型仍是 **Release + R8，`debuggable=false`**。默认复用 Debug 证书时，公开构建记录必须明确说明，不将其描述为正式长期签名。
+默认只需要已有的 `ZAKOCODER_DEBUG_KEYSTORE_BASE64`，内容为 CI 专用 Debug keystore 的 Base64；使用 `androiddebugkey` 别名和 Android 默认 Debug 口令。发布包的构建类型仍是 **Release + R8，`debuggable=false`**。默认复用 Debug 证书时，公开构建记录必须明确说明，不将其描述为正式长期签名。
 
 可选签名有两个入口：
 
@@ -33,13 +39,13 @@ RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留
 
 CI 签名材料只在 Secrets 和临时 runner 中使用，不写入聊天、Issue、PR、源码、缓存或制品。工作流校验最终证书，公开证书 SHA-256，并在结束时删除 keystore。CI Debug 密钥仍需保留仓库外备份；更换 Secret 会改变后续签名，Secret 本身不是备份。
 
-默认模式下，使用同一仓库 CI 签名、同一 applicationId 且 versionCode 更高的 Beta 可以覆盖对应 Debug 安装；本地 Android Studio 或其他机器的 Debug 密钥可能不同，必须先核对证书。签名不一致时先确认源码和数据备份，不默认卸载或清数据。
+默认模式下，使用同一仓库 CI 签名、同一 applicationId 且 versionCode 更高的发布包可以覆盖对应 Debug 安装；本地 Android Studio 或其他机器的 Debug 密钥可能不同，必须先核对证书。签名不一致时先确认源码和数据备份，不默认卸载或清数据。
 
-后续稳定版若改用正式发布密钥，必须先说明覆盖升级限制并制定迁移方案；不能承诺当前 Debug 证书签名的安装可直接升级。正式长期签名的建立不作为本次 Beta 的新增配置前提。
+后续稳定版若改用正式发布密钥，必须先说明覆盖升级限制并制定迁移方案；不能承诺当前 Debug 证书签名的安装可直接升级。维护者已明确选择本次正式版继续沿用现有签名，不将正式版名称解释为已更换长期密钥。
 
 ### 发布附件与诊断材料
 
-每个 Beta 仅上传两个自定义 Release 附件：
+每个版本仅上传两个自定义 Release 附件：
 
 - `ZakoCoder-<version>-arm64.apk`：用户安装包。
 - `SHA256SUMS.txt`：该 APK 的 SHA-256 校验摘要。
@@ -52,9 +58,9 @@ CI 签名材料只在 Secrets 和临时 runner 中使用，不写入聊天、Iss
 
 R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，不作为 Release 附件。**公开仓库的 Actions Artifact 不是私密存储：有仓库读取权限且登录的用户仍可能下载。**所有制品均不得含密钥、凭据或用户数据，维护者应在过期前另行保管诊断材料。
 
-## Beta 发布检查
+## 历史 Beta 本地验收记录
 
-以下区分本轮已完成的本地候选检查与仍待发布的门槛。最终资源清理后的本地重建及 API 35 R8 QA 已通过；干净 checkout 已完成 Release 构建，全部 DEX、资源和 assets 与已验收候选一致；原生 PRoot／loader 的独立摘要检查通过。GitHub Actions 尚未实际运行。每次发布需保留对应提交与制品证据。
+以下保留首个 Beta 发布前的本地验收记录与当时待执行项，不代表本次正式版的当前检查状态；当前结果以对应 Actions 运行与发布记录为准。最终资源清理后的本地重建及 API 35 R8 QA 已通过；干净 checkout 已完成 Release 构建，全部 DEX、资源和 assets 与已验收候选一致；原生 PRoot／loader 的独立摘要检查通过。当时 GitHub Actions 尚未实际运行。每次发布需保留对应提交与制品证据。
 
 - [x] 最终本地 Release R8 编译、Release Lint、应用 280 项、终端 145 项及脚本 58 项测试、AndroidTest 编译通过。
 - [x] 最终 API 35 真实 R8 QA 完成项目创建、编辑保存、重启及配置持久化，4 张日夜截图通过。
@@ -71,7 +77,7 @@ R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，不�
 
 首批 Beta 允许在上述检查通过后带明确限制分发：**最终公开 ARM64 Release APK 的真机安装、同签名升级、Ubuntu／终端／HTTP 冒烟仍未完成**。既有真机安装需先核对证书，不能为了验收直接覆盖或卸载用户包。API 35 x86 QA 与同代码／同签名校验能验证 R8 风险的一部分，不能替代这些 ARM64 证据。
 
-稳定版仍需补齐 ARM64 最终包真机与升级验证，并由维护者独立评估设备范围、分发材料和遗留问题。Beta 通道不能用于绕过稳定版门槛。
+上述 ARM64 专项证据的历史缺口不因版本名称改变而自动关闭。本次维护者反馈已完成 RC 验证并授权正式发布，但未提供的细节仍不声明为专项检查通过；设备范围和遗留限制继续如实公开。
 
 ## 本地 Release QA 界面证据
 
@@ -94,8 +100,8 @@ CI 的每次候选会生成自己的截图及绑定制品摘要的报告；本�
 
 ## 版本、数据与事故处理
 
-采用 `MAJOR.MINOR.PATCH`，开发版加 `-dev`，预发布加 `-alpha.N`／`-beta.N`。每次公开 Android 包的 `versionCode` 严格递增。应用更新不自动替换已安装的 Ubuntu；源码导出不是会话、设置与密钥的完整备份。
+采用 `MAJOR.MINOR.PATCH`，开发版加 `-dev`，预发布加 `-alpha.N`／`-beta.N`／`-rc.N`。发布工作流接受正式版、Beta 与 RC，暂不接受 Alpha。每次公开 Android 包的 `versionCode` 严格递增。应用更新不自动替换已安装的 Ubuntu；源码导出不是会话、设置与密钥的完整备份。
 
 持久格式或协议不兼容时需说明迁移、旧数据读取及失败恢复，不能靠清数据或强制降级处理。发现数据损坏、泄密或恶意制品时停止分发，保留脱敏证据，说明影响版本、临时措施与恢复方案；泄漏密钥需撤销和轮换。修复后按同一门槛重新验证。
 
-管理员仍需维护主分支保护、实际 CI 必需检查及安全报告入口。只有维护者明确授权并触发发布流程，才创建标签与预发布；本地检查通过不等于发布授权。
+管理员仍需维护主分支保护、实际 CI 必需检查及安全报告入口。只有维护者明确授权并触发发布流程，才创建标签与正式版或预发布；本地检查通过不等于发布授权。

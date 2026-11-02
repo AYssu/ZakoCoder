@@ -1,17 +1,17 @@
-name: Publish Pre-release
+name: Publish Release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Pre-release version (MAJOR.MINOR.PATCH-beta.N or -rc.N)
+        description: Version (MAJOR.MINOR.PATCH, optionally -beta.N or -rc.N)
         required: true
-        default: 0.1.0-rc.1
+        default: 0.1.0
         type: string
       version_code:
         description: Android versionCode (strictly greater than every published build)
         required: true
-        default: '1004'
+        default: '1005'
         type: string
       target_ref:
         description: main or a full commit SHA already merged into main
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
-      - name: Validate immutable trusted target and unused Beta version
+      - name: Validate immutable trusted target and unused release version
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -311,7 +311,7 @@ jobs:
             out/candidate/licenses.tar.gz
           if-no-files-found: error
           retention-days: 14
-      - name: Publish only the APK and its checksum as pre-release assets
+      - name: Publish only the APK and its checksum as release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
