@@ -1,6 +1,6 @@
 # 发布流程
 
-仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Pre-release** 用于维护者确认后的签名预发布。Beta 使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是正式长期发布签名。GitHub Release 必须标记为 **Pre-release**。常规提交和 PR 不自动发布。
+仓库提供两个手动入口：**Build Debug APK** 保留开发测试包下载；**Publish Pre-release** 用于维护者确认后的签名预发布。预发布版本使用不可调试的 Release 构建及 R8，默认沿用仓库现有 CI Debug 证书，可选配置自己的签名；默认方式不是正式长期发布签名。GitHub Release 必须标记为 **Pre-release**。常规提交和 PR 不自动发布。
 
 当前候选版本为 `0.1.0-rc.1`（versionCode `1004`）；以实际发布结果为准。新增 Beta 流程不代表已经发布，也不解除稳定版发行门槛。运行时源码与许可证、Release 构建、最终签名和设备检查必须分别有证据；尚未执行的项目见下方清单。
 
