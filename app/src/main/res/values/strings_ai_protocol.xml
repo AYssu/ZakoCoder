@@ -18,15 +18,15 @@
     <string name="ai_provider_choose">常用服务</string>
     <string name="ai_provider_presets_hint">选中后只填写地址与协议，保留模型和密钥。更换服务来源时，需要重新填写该服务的密钥及私密请求头；不会自动发送请求。</string>
     <string name="ai_provider_origin_hint">此地址与原配置来源不同。原密钥或私密请求头不能直接复用，请在保存或测试前替换或清除。</string>
-    <string name="ai_provider_openai_responses">OpenAI · Responses</string>
-    <string name="ai_provider_openai_chat">OpenAI · Chat Completions</string>
-    <string name="ai_provider_anthropic">Anthropic · Claude</string>
-    <string name="ai_provider_google">Google · Gemini</string>
+    <string name="ai_provider_openai_responses">OpenAI</string>
+    <string name="ai_provider_openai_chat">OpenAI</string>
+    <string name="ai_provider_anthropic">Anthropic</string>
+    <string name="ai_provider_google">Google</string>
     <string name="ai_provider_deepseek">DeepSeek</string>
-    <string name="ai_provider_qwen">通义千问 · 中国内地</string>
-    <string name="ai_provider_siliconflow">硅基流动 · 中国区</string>
-    <string name="ai_provider_kimi">Kimi · 中国区</string>
-    <string name="ai_provider_zhipu">智谱 · 标准接口</string>
+    <string name="ai_provider_qwen">通义千问</string>
+    <string name="ai_provider_siliconflow">硅基流动</string>
+    <string name="ai_provider_kimi">Kimi</string>
+    <string name="ai_provider_zhipu">智谱</string>
     <string name="ai_provider_openrouter">OpenRouter</string>
-    <string name="ai_provider_xai">xAI · Responses</string>
+    <string name="ai_provider_xai">xAI</string>
 </resources>

@@ -30,7 +30,7 @@ class AiPermissionPresetsTest {
             AiTool.entries.forEach { exception ->
                 AiPermission.entries.forEach { rule ->
                     val original = AiPolicy(default, mapOf(exception to rule))
-                    AiPermissionPreset.entries.forEach { preset ->
+                    listOf(AiPermissionPreset.Normal, AiPermissionPreset.Elevated).forEach { preset ->
                         val result = AiPermissionPresets.apply(original, preset)
                         AiTool.entries.filter { original.permission(it) == AiPermission.Deny }.forEach {
                             assertEquals("$default $exception $rule $preset $it", AiPermission.Deny, result.permission(it))
@@ -48,6 +48,25 @@ class AiPermissionPresetsTest {
         val normal = AiPermissionPresets.apply(elevated, AiPermissionPreset.Normal)
         assertEquals(AiPermission.Deny, elevated.permission(AiTool.UseMcp))
         assertEquals(AiPermission.Deny, normal.permission(AiTool.UseMcp))
+    }
+
+    @Test fun yoloRequiresExplicitModeRatherThanInferringItFromBroadCustomRules() {
+        val yolo = AiPermissionPresets.apply(AiPolicy(AiPermission.Deny, emptyMap()), AiPermissionPreset.Yolo)
+        assertTrue(yolo.yolo)
+        assertTrue(yolo.overrides.isEmpty())
+        AiTool.entries.forEach { tool ->
+            assertEquals(AiPermission.Allow, yolo.permission(tool))
+            assertEquals(R.string.ai_permission_yolo_rule, yolo.source(tool))
+        }
+        assertEquals(AiPermissionPreset.Yolo, AiPermissionPresets.matching(yolo))
+        assertFalse(AiPolicy(AiPermission.Allow, emptyMap()).yolo)
+        assertNull(AiPermissionPresets.matching(AiPolicy(AiPermission.Allow, emptyMap())))
+        assertEquals(AiPolicy(), AiPermissionPresets.apply(yolo, AiPermissionPreset.Normal))
+        val elevated = AiPermissionPresets.apply(yolo, AiPermissionPreset.Elevated)
+        assertFalse(elevated.yolo)
+        assertEquals(AiPermission.Ask, elevated.permission(AiTool.AndroidTest))
+        assertEquals(AiPermission.Ask, elevated.permission(AiTool.UseMcp))
+        assertEquals(AiPermission.Ask, elevated.permission(AiTool.SshRemote))
     }
 
     @Test fun arbitraryRulesAndUnrestrictedMcpAreCustomRatherThanMislabelled() {

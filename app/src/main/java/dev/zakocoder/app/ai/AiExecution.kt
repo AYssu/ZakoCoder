@@ -24,11 +24,11 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }
 enum class AiPermission(val label: Int) { Allow(R.string.ai_permission_allow), Ask(R.string.ai_permission_ask), Deny(R.string.ai_permission_deny) }
-data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }) {
-    // Explicit advanced rules are authoritative here. Capability, target lease and system
-    // authorization remain independent checks at execution; presets still default to Ask.
-    fun permission(tool: AiTool): AiPermission = overrides[tool] ?: default
-    fun source(tool: AiTool) = if (tool in overrides) R.string.ai_permission_tool_rule else R.string.ai_permission_default_rule
+data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }, val yolo: Boolean = false) {
+    // YOLO is a separately confirmed project choice. It grants app tool execution only;
+    // capability packages, target leases and Android/SSH system authorization still apply.
+    fun permission(tool: AiTool): AiPermission = if (yolo) AiPermission.Allow else overrides[tool] ?: default
+    fun source(tool: AiTool) = if (yolo) R.string.ai_permission_yolo_rule else if (tool in overrides) R.string.ai_permission_tool_rule else R.string.ai_permission_default_rule
 }
 enum class AiToolStatus(val label: Int) {
     Queued(R.string.ai_status_queued), Waiting(R.string.ai_status_waiting), Running(R.string.ai_status_running),
@@ -37,7 +37,7 @@ enum class AiToolStatus(val label: Int) {
 }
 enum class AiPhase(val label: Int) { Compacting(R.string.ai_phase_compacting), Idle(R.string.ai_phase_idle), Requesting(R.string.ai_phase_requesting), Receiving(R.string.ai_phase_receiving), AwaitingAnswer(R.string.ai_question_waiting),
     Waiting(R.string.ai_status_waiting), Executing(R.string.ai_phase_executing), Stopping(R.string.ai_phase_stopping), Completed(R.string.ai_phase_completed), Failed(R.string.ai_status_failed), Cancelled(R.string.ai_status_cancelled) }
-enum class AiDecision { Once, TaskTarget, TaskTool, Reject }
+enum class AiDecision { Once, TaskTarget, TaskTool, Reject, PolicyChanged }
 data class AiToolEvent(val id: String, val callId: String, val tool: AiTool?, val name: String, val input: String, val reason: String,
     val target: String, val status: AiToolStatus = AiToolStatus.Queued, val permission: AiPermission = AiPermission.Ask,
     val permissionSource: Int = R.string.ai_permission_default_rule, val preview: String = "", val output: String = "", val truncated: Boolean = false,

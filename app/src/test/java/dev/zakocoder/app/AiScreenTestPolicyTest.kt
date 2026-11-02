@@ -26,13 +26,13 @@ class AiScreenTestPolicyTest {
         listOf(AiTool.AndroidTest, AiTool.SshRemote).forEach { tool ->
             val denied = AiPolicy(AiPermission.Allow, mapOf(tool to AiPermission.Deny))
             assertEquals(AiPermission.Deny, denied.permission(tool))
-            AiPermissionPreset.entries.forEach { preset ->
+            listOf(AiPermissionPreset.Normal, AiPermissionPreset.Elevated).forEach { preset ->
                 assertEquals(AiPermission.Deny, AiPermissionPresets.apply(denied, preset).permission(tool))
             }
         }
     }
     @Test fun elevatedPresetNeverConvertsScreenDenialToApprovalOrPermission() {
-        AiPermissionPreset.entries.forEach { preset ->
+        listOf(AiPermissionPreset.Normal, AiPermissionPreset.Elevated).forEach { preset ->
             val denied = AiPermissionPresets.apply(AiPolicy(AiPermission.Deny, emptyMap()), preset)
             assertEquals(AiPermission.Deny, denied.permission(AiTool.AndroidTest))
             assertEquals(AiPermission.Ask, AiPermissionPresets.apply(AiPolicy(), preset).permission(AiTool.AndroidTest))

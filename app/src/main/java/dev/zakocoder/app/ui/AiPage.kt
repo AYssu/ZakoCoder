@@ -243,7 +243,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             AiComposerModelButton(models.catalog.active, onClick = { modelPicker = true }, modifier = Modifier.weight(1f))
-            val permissionState = stringResource(R.string.ai_permission_current, stringResource(state.policy.default.label), state.policy.overrides.size)
+            val permissionState = stringResource(R.string.ai_permission_current, stringResource(if (state.policy.yolo) R.string.ai_permission_preset_yolo else state.policy.default.label), state.policy.overrides.size)
             val permissionDescription = stringResource(R.string.ai_permissions)
             TextButton(onClick = { permissions = true }, enabled = project != null,
                 contentPadding = PaddingValues(horizontal = 8.dp),
@@ -251,7 +251,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 WorkbenchIcon(Glyph.Shield, Modifier.size(20.dp), description = stringResource(R.string.ai_permissions),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(4.dp))
-                Text(stringResource(state.policy.default.label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(if (state.policy.yolo) R.string.ai_permission_preset_yolo else state.policy.default.label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val extensionSummary = stringResource(R.string.ai_extensions_summary, state.enabledSkills.size, extensions.servers.count { it.enabled })
             IconButton(onClick = onExtensions, modifier = Modifier.semantics { stateDescription = extensionSummary }) {
