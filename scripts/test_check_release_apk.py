@@ -76,12 +76,11 @@ class ReleaseApkGateTest(unittest.TestCase):
     def inspect(self):
         return gate.inspect_apk(self.apk(), Path("aapt"))
 
-    def test_rc_manifest_is_accepted_without_weakening_stable_gate(self):
+    def test_rc_and_stable_manifests_are_accepted(self):
         self.manifest = MANIFEST.replace("0.1.0-beta.1", "0.1.0-rc.1")
         self.assertEqual("0.1.0-rc.1", self.inspect()["versionName"])
         self.manifest = MANIFEST.replace("0.1.0-beta.1", "0.1.0")
-        with self.assertRaises(ValueError):
-            self.inspect()
+        self.assertEqual("0.1.0", self.inspect()["versionName"])
 
     def test_valid_beta_and_high_dex_index(self):
         report = self.inspect()
@@ -94,7 +93,8 @@ class ReleaseApkGateTest(unittest.TestCase):
     def test_reject_wrong_package_dev_versions_flags_and_instrumentation(self):
         edits = [("dev.zakocoder.app\"", "dev.zakocoder.app.runtimecheck\""),
                  ("0.1.0-beta.1", "0.1.0-dev"), ("0.1.0-beta.1", "0.1.0-beta"),
-                 ("0.1.0-beta.1", "0.1.0-beta.0"), ("(type 0x10)0xa", "(type 0x10)0x0"),
+                 ("0.1.0-beta.1", "0.1.0-beta.0"), ("0.1.0-beta.1", "01.0.0"),
+                 ("0.1.0-beta.1", "0.1.0-rc.01"), ("0.1.0-beta.1", "0.1.0+local"), ("(type 0x10)0xa", "(type 0x10)0x0"),
                  ("    E: provider", "    A: android:debuggable(0x1)=(type 0x12)0xffffffff\n    E: provider"),
                  ("    E: provider", "    A: android:testOnly(0x1)=@0x7f000001\n    E: provider"),
                  ("  E: application", "  E: instrumentation\n  E: application")]

@@ -11,17 +11,17 @@ val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCod
     it.toInt().also { code -> require(code > 0) }
 } ?: 1
 
-// Stable distribution remains gated; Beta must opt in with an explicit immutable version.
+// Distribution builds opt in with an explicit immutable version; legacy property names remain compatible.
 val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
 val betaVersion = providers.gradleProperty("betaVersion").orNull
 val betaVersionCode = providers.gradleProperty("betaVersionCode").orNull?.toIntOrNull()
 if (betaRelease) {
-    require(betaVersion?.matches(Regex("[0-9]+\\.[0-9]+\\.[0-9]+-(?:beta|rc)\\.[1-9][0-9]*")) == true) {
-        "Beta requires -PbetaVersion=<major>.<minor>.<patch>-(beta|rc).<positive number>"
+    require(betaVersion?.matches(Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\\.[1-9][0-9]*)?")) == true) {
+        "Release requires -PbetaVersion=<major>.<minor>.<patch> with optional -beta.N or -rc.N"
     }
-    require(betaVersionCode != null && betaVersionCode > 0) { "Beta requires a positive -PbetaVersionCode" }
+    require(betaVersionCode != null && betaVersionCode > 0) { "Release requires a positive -PbetaVersionCode" }
     require(!providers.gradleProperty("compatibilityVersionCode").isPresent) {
-        "Use betaVersionCode alone for Beta builds"
+        "Use betaVersionCode alone for distribution builds"
     }
 }
 
@@ -73,7 +73,7 @@ tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
 tasks.matching { it.name.contains("Release") }.configureEach {
     doFirst {
         check(betaRelease) {
-            "Stable Release remains gated; Beta requires explicit version properties and the distribution checks in docs/RELEASING.md"
+            "Distribution requires explicit version properties and the checks in docs/RELEASING.md"
         }
     }
 }

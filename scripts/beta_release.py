@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed Beta metadata, provenance checks and draft-only GitHub publication.
+"""Fail-closed release metadata, provenance checks and verified GitHub publication.
 
 Never builds/signs APKs or reads signing material. Network mutations occur only in
 an explicit `publish` invocation, after verification of the supplied smoke report.
@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 import tarfile
 
-VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-(?:beta|rc)\.([1-9][0-9]*)\Z")
+VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:beta|rc)\.([1-9][0-9]*))?\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 PACKAGE = "dev.zakocoder.app"
@@ -33,7 +33,7 @@ def version_code(value):
 
 def validate_inputs(version, code, target_ref="main"):
     if not isinstance(version, str) or not VERSION.fullmatch(version):
-        raise ValueError("Only MAJOR.MINOR.PATCH-beta.N or MAJOR.MINOR.PATCH-rc.N versions are accepted")
+        raise ValueError("Use MAJOR.MINOR.PATCH, optionally followed by -beta.N or -rc.N")
     if target_ref != "main" and not COMMIT.fullmatch(target_ref):
         raise ValueError("Target must be main or a full lowercase commit SHA")
     return version_code(code)
@@ -79,7 +79,7 @@ def require_new_tag(repo, tag):
     if gh_json("api", f"repos/{repo}/git/ref/tags/{tag}", allow_missing=True) is not None:
         raise ValueError("Tag already exists; published versions are immutable")
     if gh_json("api", f"repos/{repo}/releases/tags/{tag}", allow_missing=True) is not None:
-        raise ValueError("Release already exists; choose a new Beta version")
+        raise ValueError("Release already exists; choose a new version")
 
 
 def published_builds(repo):
@@ -152,20 +152,20 @@ def create_metadata(directory, version, code, commit, certificate, run_url, sign
     apks = list(directory.glob("*.apk"))
     required = ("native-runtime-sources.tar.gz", "licenses.tar.gz", "runtime-validation.tar.gz", "LICENSE.txt", "THIRD_PARTY.md")
     if len(apks) != 1 or apks[0].name != f"ZakoCoder-{version}-arm64.apk":
-        raise ValueError("Expected exactly the public ARM64 Beta APK")
+        raise ValueError("Expected exactly the public ARM64 release APK")
     if any(not (directory / name).is_file() or (directory / name).is_symlink() for name in required):
         raise ValueError("Corresponding source, licenses and runtime evidence must accompany the APK")
     metadata = {"schemaVersion": 1, "version": version, "versionCode": code, "package": PACKAGE,
                 "commit": commit, "abi": "arm64-v8a", "buildType": "release", "minified": True,
-                "prerelease": True, "signingKeyKind": signing_key_kind, "apk": apks[0].name, "apkSha256": sha256(apks[0]),
+                "prerelease": "-" in version, "signingKeyKind": signing_key_kind, "apk": apks[0].name, "apkSha256": sha256(apks[0]),
                 "signingCertificateSha256": certificate, "workflowRun": run_url,
                 "createdAt": datetime.now(timezone.utc).isoformat(),
                 "correspondingSourceSha256": sha256(directory / required[0])}
     (directory / "BUILD.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     (directory / "BUILD.txt").write_text(f"ZakoCoder {version} / Android versionCode {code}\nCommit: {commit}\n"
-        f"ARM64 minified pre-release; not a stable release.\nAPK SHA-256: {metadata['apkSha256']}\n"
+        f"ARM64 minified {'pre-release' if metadata['prerelease'] else 'stable release'}.\nAPK SHA-256: {metadata['apkSha256']}\n"
         f"Certificate SHA-256: {certificate}\nWorkflow: {run_url}\n" +
-        ("Signing key: existing CI Debug key reused for pre-release; not the long-term production signing key.\n"
+        ("Signing key: existing CI Debug key retained for upgrade continuity; not a dedicated production signing key.\n"
          if signing_key_kind == "debug-reused-for-beta" else "Signing key: configured release key.\n") +
         "Release x86_64 emulator smoke verifies shared application code/resources; it does not prove ARM64 hardware compatibility.\n")
     checksums(directory)
@@ -264,11 +264,11 @@ def publish(repo, directory, qa_apk, report_file):
     metadata = read_json(directory / "BUILD.json")
     version, code, commit = metadata["version"], metadata["versionCode"], metadata["commit"]
     if {path.name for path in directory.iterdir()} != public_files(version, True):
-        raise ValueError("Only the approved public Beta assets may be uploaded")
+        raise ValueError("Only the approved public release assets may be uploaded")
     validate_inputs(version, code)
     validate_commit(commit)
     if (metadata.get("schemaVersion") != 1 or metadata.get("package") != PACKAGE or metadata.get("abi") != "arm64-v8a"
-            or metadata.get("buildType") != "release" or metadata.get("minified") is not True or metadata.get("prerelease") is not True):
+            or metadata.get("buildType") != "release" or metadata.get("minified") is not True or metadata.get("prerelease") is not ("-" in version)):
         raise ValueError("Invalid public build metadata")
     apk = directory / f"ZakoCoder-{version}-arm64.apk"
     if metadata.get("apk") != apk.name or metadata.get("apkSha256") != sha256(apk):
@@ -286,16 +286,17 @@ def publish(repo, directory, qa_apk, report_file):
             raise ValueError("Public smoke report differs from the validated report")
     preflight(repo, version, code)
     tag = "v" + version
+    prerelease = "-" in version
     key_kind = metadata.get("signingKeyKind")
     if key_kind not in ("release", "debug-reused-for-beta"):
         raise ValueError("BUILD must identify its actual signing key kind")
-    signing_note = ("Signed with the existing CI Debug key for pre-release only; this is not the long-term production signing key. "
+    signing_note = ("沿用现有 CI Debug 证书以保持覆盖升级兼容；尚未切换专用正式发布证书。 "
                     if key_kind == "debug-reused-for-beta" else "Signed with the configured release key. ")
-    notes = (f"ZakoCoder {version} · ARM64 {'RC 候选版' if '-rc.' in version else '测试版'}\n\n"
+    notes = (f"ZakoCoder {version} · ARM64 {'RC 候选版' if '-rc.' in version else ('测试版' if prerelease else '正式版')}\n\n"
              + ("### 发布阶段\n\n本版本是准备转正式版的 Release Candidate，标记为 Pre-release，尚非稳定版。"
                 "本阶段原则上不新增功能，重点进行问题修复、兼容适配、性能与交互优化，以及安装、升级和数据保留验收。"
                 "如发现问题将发布后续 RC，验收通过后再发布正式版，不承诺固定转正日期。\n\n"
-                if '-rc.' in version else "") +
+                if '-rc.' in version else ("### 发布阶段\n\n首个正式版本，基于已发布 RC 的功能范围发布。维护者已确认完成本轮验证并批准转正式版；后续主要进行问题修复、兼容适配和体验优化。具体设备覆盖与已知限制见下文。\n\n" if not prerelease else "")) +
              "ZakoCoder 是面向 Android 的独立开源 AI 编码工作台，采用 Kotlin + Jetpack Compose 原生开发。"
              "在手机上管理项目、编辑代码、运行 Linux 开发工具，并审阅 AI 的工具调用与文件变更。\n\n"
              "### 主要功能\n\n"
@@ -304,13 +305,14 @@ def publish(repo, directory, qa_apk, report_file):
              "- 自行配置模型，支持流式对话、文件与图片引用、工具审批、Skill 和 MCP。\n"
              "- 文件差异审阅、任务检查点、项目验证命令、Git 与按需启用的实验性多语言 LSP。\n\n"
              "### 安装与开始\n\n"
-             "下载下方 ARM64 APK 安装；SHA256SUMS.txt 可用于校验文件。测试版请先备份重要项目。"
+             "下载下方 ARM64 APK 安装；SHA256SUMS.txt 可用于校验文件。升级前请先备份重要项目。"
              "首次进入可创建或导入项目；终端开发需按需安装 Ubuntu 和工具包，AI 功能需自行配置有额度的模型服务。\n\n"
              f"使用方法见 [项目介绍](https://github.com/{repo}/blob/{commit}/README.md) 和 "
              f"[Beta 测试指南](https://github.com/{repo}/blob/{commit}/docs/BETA_TESTING.md)。\n\n"
              "### 测试范围与已知限制\n\n"
              "面向 ARM64 设备，测试目标为 Android 11–17；模拟器兼容性基线不代表全部厂商真机。"
-             "最终 ARM64 Release 的真机安装、覆盖升级、Ubuntu／终端／HTTP 链路及真实 16 KiB 页设备仍待补测。"
+             + ("维护者已确认本轮 RC 验证；厂商系统、复杂工程及真实 16 KiB 页设备仍需持续验证。"
+                if not prerelease else "最终 ARM64 Release 的真机安装、覆盖升级、Ubuntu／终端／HTTP 链路及真实 16 KiB 页设备仍待补测。") +
              "绑定目录会直接修改原文件；建议先使用测试项目。项目导出不包含会话、设置和密钥的完整备份。\n\n"
              "### 反馈问题与建议\n\n"
              f"发现问题请到 [Issues](https://github.com/{repo}/issues/new/choose) 选择“缺陷报告”，"
@@ -328,7 +330,7 @@ def publish(repo, directory, qa_apk, report_file):
              f"[原生运行时源码](https://github.com/{repo}/tree/{commit}/native-runtime)\n\n"
              "</details>\n\n<!-- zakocoder-build\n" + json.dumps(metadata, ensure_ascii=False) + "\n-->\n")
     payload = {"tag_name": tag, "target_commitish": commit, "name": tag, "body": notes,
-               "draft": True, "prerelease": True, "make_latest": "false"}
+               "draft": True, "prerelease": prerelease, "make_latest": "false"}
     created = None
     downloads = tempfile.TemporaryDirectory(prefix="zako-beta-downloads-")
     try:
@@ -364,9 +366,9 @@ def publish(repo, directory, qa_apk, report_file):
         require_increasing_code(code, published_builds(repo))
         with tempfile.TemporaryDirectory(prefix="zako-beta-publish-") as temporary:
             body = Path(temporary) / "publish.json"
-            body.write_text(json.dumps({"draft": False, "prerelease": True, "make_latest": "false"}))
+            body.write_text(json.dumps({"draft": False, "prerelease": prerelease, "make_latest": "false" if prerelease else "true"}))
             released = gh_json("api", "--method", "PATCH", f"repos/{repo}/releases/{release_id}", "--input", body)
-        if released.get("draft") or not released.get("prerelease") or released.get("target_commitish") != commit:
+        if released.get("draft") or released.get("prerelease") is not prerelease or released.get("target_commitish") != commit:
             raise ValueError("Published release state was not confirmed")
         print(released["html_url"])
     except BaseException:

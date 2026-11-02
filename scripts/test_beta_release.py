@@ -12,12 +12,14 @@ import beta_release as beta
 
 
 class BetaReleaseTest(unittest.TestCase):
-    def test_accepts_only_beta_or_rc_semver_and_full_trusted_ref_shape(self):
+    def test_accepts_stable_beta_or_rc_semver_and_full_trusted_ref_shape(self):
+        self.assertEqual(1005, beta.validate_inputs("0.1.0", 1005))
+        self.assertEqual(1006, beta.validate_inputs("1.2.3", 1006))
         self.assertEqual(1004, beta.validate_inputs("0.1.0-rc.1", 1004))
         self.assertEqual(1005, beta.validate_inputs("0.1.0-rc.2", 1005))
         self.assertEqual(1001, beta.validate_inputs("0.1.0-beta.1", "1001"))
         self.assertEqual(1002, beta.validate_inputs("1.2.3-beta.12", 1002, "a" * 40))
-        for version in ("0.1.0", "v0.1.0-beta.1", "0.1.0-alpha.1", "0.1.0-rc.0", "0.1.0-rc.01", "0.1.0-beta.0", "01.0.0-beta.1", "0.1.0-beta.01", "0.1.0-beta.1+local", "0.1.0-beta.1\n", "$(touch /tmp/pwn)", "0.1.0-beta.1; echo bad"):
+        for version in ("v0.1.0", "01.0.0", "1.02.3", "1.2.03", "v0.1.0-beta.1", "0.1.0-alpha.1", "0.1.0-rc.0", "0.1.0-rc.01", "0.1.0-beta.0", "01.0.0-beta.1", "0.1.0-beta.01", "0.1.0-beta.1+local", "0.1.0-beta.1\n", "$(touch /tmp/pwn)", "0.1.0-beta.1; echo bad"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 beta.validate_inputs(version, 1001)
         for ref in ("feature/test", "-option", "refs/heads/main", "HEAD", "a" * 39, "A" * 40, "main\nother", "main; echo bad"):
@@ -101,7 +103,7 @@ class BetaReleaseTest(unittest.TestCase):
             self.assertTrue(metadata["minified"])
             self.assertEqual("a" * 40, metadata["commit"])
             self.assertEqual(metadata, beta.read_json(directory / "BUILD.json"))
-            self.assertIn("not the long-term", (directory / "BUILD.txt").read_text())
+            self.assertIn("not a dedicated production signing key", (directory / "BUILD.txt").read_text())
             beta.verify_assets(directory)
 
     def test_corresponding_materials_are_mandatory(self):
@@ -262,10 +264,37 @@ class BetaReleaseTest(unittest.TestCase):
     def test_rc_publish_is_preview_with_freeze_policy_and_verified_assets(self):
         self.successful_publish("0.1.0-rc.1")
 
+    def test_stable_publish_is_latest_with_maintainer_confirmation_and_verified_assets(self):
+        self.successful_publish("0.1.0")
+
+    def test_publish_rejects_inconsistent_prerelease_metadata_before_network(self):
+        for version in ("0.1.0", "0.1.0-beta.1", "0.1.0-rc.1"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                directory, metadata = self.assets(root, version)
+                qa = root / "qa.apk"
+                qa.write_bytes(b"qa")
+                evidence = root / "evidence"
+                evidence.mkdir()
+                report = evidence / "report.json"
+                report.write_text(json.dumps(self.smoke_report(qa, directory / metadata["apk"], metadata)))
+                beta.finalize(directory, qa, report)
+                for invalid in ("-" not in version, None, 1, "true"):
+                    altered = beta.read_json(directory / "BUILD.json") | {"prerelease": invalid}
+                    (directory / "BUILD.json").write_text(json.dumps(altered))
+                    beta.checksums(directory)
+                    with self.subTest(invalid=invalid), patch.object(beta, "gh") as network, patch.object(beta, "gh_json") as json_network:
+                        with self.assertRaisesRegex(ValueError, "metadata"):
+                            beta.publish("AYssu/ZakoCoder", directory, qa, report)
+                        network.assert_not_called()
+                        json_network.assert_not_called()
+
     def successful_publish(self, version):
+        prerelease = "-" in version
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             directory, metadata = self.assets(root, version)
+            self.assertIs(prerelease, metadata["prerelease"])
             qa = root / "qa.apk"
             qa.write_bytes(b"qa")
             evidence = root / "evidence"
@@ -273,14 +302,15 @@ class BetaReleaseTest(unittest.TestCase):
             report = evidence / "report.json"
             report.write_text(json.dumps(self.smoke_report(qa, directory / metadata["apk"], metadata)))
             beta.finalize(directory, qa, report)
-            uploads, payloads = {}, []
+            uploads, payloads, final_payloads = {}, [], []
             tag = "v" + version
             def request_json(*args, **kwargs):
                 if "POST" in args:
                     payloads.append(beta.read_json(args[-1]))
                     return {"id": 7, "draft": True, "tag_name": tag}
                 if "PATCH" in args:
-                    return {"draft": False, "prerelease": True, "target_commitish": metadata["commit"], "html_url": "https://github.com/release"}
+                    final_payloads.append(beta.read_json(args[-1]))
+                    return {"draft": False, "prerelease": prerelease, "target_commitish": metadata["commit"], "html_url": "https://github.com/release"}
                 return {"draft": True, "tag_name": tag, "assets": [
                     {"name": name, "id": index, "size": len(data)} for index, (name, data) in enumerate(sorted(uploads.items()), 1)]}
             def request(*args, **kwargs):
@@ -295,13 +325,20 @@ class BetaReleaseTest(unittest.TestCase):
                 beta.publish("AYssu/ZakoCoder", directory, qa, report)
             self.assertEqual({metadata["apk"], "SHA256SUMS.txt"}, set(uploads))
             self.assertEqual(f"{metadata['apkSha256']}  {metadata['apk']}\n".encode(), uploads["SHA256SUMS.txt"])
-            self.assertTrue(payloads[0]["prerelease"])
+            self.assertIs(prerelease, payloads[0]["prerelease"])
+            latest = "false" if prerelease else "true"
             self.assertEqual("false", payloads[0]["make_latest"])
+            self.assertEqual([{"draft": False, "prerelease": prerelease, "make_latest": latest}], final_payloads)
             body = payloads[0]["body"]
             if "-rc." in version:
                 self.assertIn("原则上不新增功能", body)
                 self.assertIn("尚非稳定版", body)
                 self.assertIn("问题修复、兼容适配", body)
+            if not prerelease:
+                self.assertIn("正式版", body)
+                self.assertIn("维护者", body)
+                self.assertIn("RC", body)
+                self.assertIn("Debug", body)
             self.assertIn("### 主要功能", body)
             self.assertIn("### 安装与开始", body)
             self.assertIn("### 测试范围与已知限制", body)
