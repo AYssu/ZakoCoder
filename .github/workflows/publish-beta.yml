@@ -1,17 +1,17 @@
-name: Publish Beta
+name: Publish Pre-release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Beta version (MAJOR.MINOR.PATCH-beta.N)
+        description: Pre-release version (MAJOR.MINOR.PATCH-beta.N or -rc.N)
         required: true
-        default: 0.1.0-beta.1
+        default: 0.1.0-rc.1
         type: string
       version_code:
         description: Android versionCode (strictly greater than every published build)
         required: true
-        default: '1001'
+        default: '1004'
         type: string
       target_ref:
         description: main or a full commit SHA already merged into main
