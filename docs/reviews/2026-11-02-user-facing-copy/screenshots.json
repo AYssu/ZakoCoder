@@ -1,0 +1,463 @@
+{
+  "source_commit": "b6b1c60996115bf3fc7f7397864b9fbb45efbbf6",
+  "device": "Android 13 / ARM64",
+  "layout": "360dp, fontScale 1.3",
+  "images": [
+    {
+      "file": "day-about-components.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "4f4f142267df8ca13b03b1c547da690c1d0a3260ccd7f04b9bf24e15184babc2"
+    },
+    {
+      "file": "day-about-version.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "0d6189017fe74eb8f9d41fb291c9f4582e6b04d5e6e99f6325607e9b16324832"
+    },
+    {
+      "file": "day-add-project.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "5a4a9c19f3d18d6003a5ee17aac36dc3d94291a4f324b6fd6543c34295590543"
+    },
+    {
+      "file": "day-capability-packages.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "e1c126f5557f00a8da08b89137f944430aecd9055f77df1dd44a6456fa2c72f1"
+    },
+    {
+      "file": "day-composer-active-streaming.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "3929e1fa750514b936058f59686183ccca4b13fb9808e27a84a15ba61a23087a"
+    },
+    {
+      "file": "day-composer-completed-large-usage.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "38f566d090a4d65c216edb09bc0c5f38c227cb3979790ac029f58eee0c4fbf58"
+    },
+    {
+      "file": "day-editor-language-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "2f6fc498d6b50ef257337423f2b87777bf8f6bd692073399f11d20b9811bc4f5"
+    },
+    {
+      "file": "day-environment-management.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "058f0b44e83cfca317685d68a041afc2b180ecdc3ea586c7876fd109179bc1ee"
+    },
+    {
+      "file": "day-git-commit-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "4c565027de1a85a268ccbeb0194240e330c425b4d461f8393ae0b465d7b2d65d"
+    },
+    {
+      "file": "day-help-collapsed.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "ae54e33a90ecd0dd237f4fd95a0472f23c7054c664c2fdb5e40baf8ec2dd391e"
+    },
+    {
+      "file": "day-help-context-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "b270fc08d1585c65af78e365cf1ef90ec00d0117e5156d7d43bb72fcf5ed47a1"
+    },
+    {
+      "file": "day-help-mcp-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "3dbc5a84da8ea7f7a98b1133b9d15c52e79211e207356e929128d017c97122c3"
+    },
+    {
+      "file": "day-help-statistics-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "bb59265ab9acde35d45d58e445fb5309cb09eb5b28f4a9dbda03009d6b323178"
+    },
+    {
+      "file": "day-license-fulltext.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "28584ed59cb3519820ef5f320aaea09e2590cdaba2fa429713019ec6882ce237"
+    },
+    {
+      "file": "day-license-list.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1a4fe65749d8871e2c627105550aa91c03a9f2ced2462229b85f3f33a385b1c0"
+    },
+    {
+      "file": "day-new-terminal.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "b0761f5f35dc9937cf5159e31bc50fcd582495e0b5defaa105f4864a0bb88ea2"
+    },
+    {
+      "file": "day-overlay-settings.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "fcb8b2064049b7b3fca9fc8e588c876605f41333fee5a86e07a7959051a5b376"
+    },
+    {
+      "file": "day-page-composer-model.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "e926ce490fc1d4bcbe99996b79bb4e3a88c4771d7890d5af8ef9aff3b7c68338"
+    },
+    {
+      "file": "day-page-context-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "d1c37b8c139c52e879d690a91c20f9a323dbe23dd751e5b8edd4126c3f463f47"
+    },
+    {
+      "file": "day-page-context-options.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "bfe77461d51d5a200e4aac5b7cb87316be6357a9acbc1055c99c8a42a43d1aac"
+    },
+    {
+      "file": "day-page-mcp-import.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "177a9b03f0c651ad8a4cc8b3e6a77da8cc4a02982e5fca8c3232fce4a8c49c8e"
+    },
+    {
+      "file": "day-page-model-options.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "9d1016ae3ea816e80e968e247a42d559695cfb4d97e438553c530b5e70928ebb"
+    },
+    {
+      "file": "day-page-update-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "c36a30b06de27e48c213b3769219effcc50a52645d176b88c399d57321550aff"
+    },
+    {
+      "file": "day-page-usage-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "f2c984c8999bf445c62157dc81ce5a0045f271e9bf1f1627df29ea05860b1982"
+    },
+    {
+      "file": "day-page-usage-empty.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "04b9067a38596999a67eb2d34220f252c94234ac53c0023c9150c08df5b4cf3a"
+    },
+    {
+      "file": "day-permissions-background.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "4cac39cd5ebd2cbf28fde6e9a82117655dc723c0a6ed5ce7dda15f5bf260f688"
+    },
+    {
+      "file": "day-permissions-special.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "4a3ebaa52735ec2f3db28e82b6f6a6b81ad55256b39bca4cfa7d1cf3b60a165d"
+    },
+    {
+      "file": "day-permissions-system.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "21fb70266f5867ab786d54194d92a634a88b9545f30e03d49fc371a44e7029f7"
+    },
+    {
+      "file": "day-permissions-yolo-confirm.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "5867cdba5775435c995a17ab1abd34062df90b2301f33ce6b3201e0e580a5e5b"
+    },
+    {
+      "file": "day-permissions-yolo-enabled.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "7da5df7fcbe8932f0248fa8c4c50397bdf59d68dac5794d706a3f75493992aac"
+    },
+    {
+      "file": "day-permissions.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "abbc2afb15eb071b50752f9e5a07c3da29c38b39c1e099fb3c1eebabede0f70a"
+    },
+    {
+      "file": "day-proxy-security.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "58197204c7ca3ff6bf8342d2c0e3041e312c0b60abe22f48321447df406f0a86"
+    },
+    {
+      "file": "day-proxy-summary.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1ce0d1e5bb16b41590cdbcc71e9cada60179b6b8f7067629518462ccec1f90db"
+    },
+    {
+      "file": "day-screen-apk-approval.png",
+      "width": 1986618743,
+      "height": 796091250,
+      "sha256": "d888405bc89a21a10a6eb9c4072206723c37db601b0b8d0778f4190bc1ce0333"
+    },
+    {
+      "file": "day-screen-root-guidance.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "320f6fa8b00d9a41a54dcef4360e4193e3ec400916fb95f991084ac5dcad6b45"
+    },
+    {
+      "file": "day-screen-test.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "ab1349a83e03345f3c6dd1af2cdb870be33221ba79dd2d928002ccf17a0073d1"
+    },
+    {
+      "file": "day-settings.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "2be994c7f8e27dd2cdec8f3ca854bd0efba792e19f0ec2c0e591c93d81ad6224"
+    },
+    {
+      "file": "day-validation-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "bbbdc32f7fd07a20689cab7ac02902b76a4bdbdefc6fb6a97b848d20b81abf6b"
+    },
+    {
+      "file": "night-about-components.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "60497bc082d800b3edac1c7ef88c8c61e84b7437ed524c4af6526a21a859faa4"
+    },
+    {
+      "file": "night-about-version.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "e278248df128180f0e3ffce631ab1b2579aed3adc276576f51522079fd48c23a"
+    },
+    {
+      "file": "night-add-project.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "ef3d87868986bc6d3d39e69a8c184e4a24ec2697131860c1dfca3be27b4565b7"
+    },
+    {
+      "file": "night-capability-packages.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "329cd4c0008a9df8dc5c457696ec30c3eb904bea26c87ad775d5feb3c3a86b38"
+    },
+    {
+      "file": "night-composer-active-streaming.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "68355c0553b7de3e3f54d96a932eea1d4c4cb3b6a936fd48d54857ef83c48d10"
+    },
+    {
+      "file": "night-composer-completed-large-usage.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "e18eb91af64dda3bd0192a6b9fdcacf45571c2ff2b8c9dc47312c205b4d707e6"
+    },
+    {
+      "file": "night-editor-language-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "cce81cc34136059819c43fab16d76fb2296c9a15fd392132fb029c226fdd0b34"
+    },
+    {
+      "file": "night-environment-management.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "791515beb3cb80ac085ef3a82dc0f8ab2630d1aa4307c2bb1bc0992660c569c3"
+    },
+    {
+      "file": "night-git-commit-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1a2bb0581d62febe1b1b77bf9fba7d6a74c457fd6c38740c314bb7b06056254e"
+    },
+    {
+      "file": "night-help-collapsed.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "a0794e46fd2dcdaeb31c55576c05a303f7243c3a60b7f92fb6c0c983c2d681a9"
+    },
+    {
+      "file": "night-help-context-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "6ccf767ff70fbc1f40fc95fe42f6d85dbab4b6471a47231196d30ae03f307df4"
+    },
+    {
+      "file": "night-help-mcp-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "784c1c25ccfd8a9fd8737115ea0b807b452417cf3e7f2dbce8e0673b6827370e"
+    },
+    {
+      "file": "night-help-statistics-expanded.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "b48646a03b23ffd96d08e1aee24fcf1b26419f4171c9c1787ab5f1968303fc60"
+    },
+    {
+      "file": "night-license-fulltext.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "8304fc391e70032ac47f0323e1cac0110c73736763d63d0b33c40c98c139e9b0"
+    },
+    {
+      "file": "night-license-list.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "30e481a49aa44b0ff0b8c9a2758be7b13d0781e65b63a58a097b57366269b27c"
+    },
+    {
+      "file": "night-new-terminal.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "ea6215087f371caff36f881fc2118ed77b0300bb2d740b855f4ad3356ae56a17"
+    },
+    {
+      "file": "night-overlay-settings.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1efa77c00ba40e1bf0cd5d64be6f484253736614ac400ccde6cafe23c3233d42"
+    },
+    {
+      "file": "night-page-composer-model.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "19e9d7a77b9b0d4663769e770fed12daa55f887f26fc574996e5af9dbe284cc3"
+    },
+    {
+      "file": "night-page-context-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "64981c7ba4a7c8baff0438fc0346cb2a63b9ece08270092b408f2205b27a5fb6"
+    },
+    {
+      "file": "night-page-context-options.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "c0eb8f53ee65923404b573215e05fe9e87313599c5853c825837f5d8aae21ceb"
+    },
+    {
+      "file": "night-page-mcp-import.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "33c3238695621f26068c51a400910bb8bb079965b4c58083983114e1487d860f"
+    },
+    {
+      "file": "night-page-model-options.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1edf1b37a3f2d022886d84d93251ddb9b30a6395a80851647a7187fb6a2c667c"
+    },
+    {
+      "file": "night-page-update-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "6aa7e55e31f830a2b7686883f9596c098e657d239d7a7521af0964222f5b4ebf"
+    },
+    {
+      "file": "night-page-usage-details.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "042bfdf7b6cbd71b0c26af3bf990d9627a16afeac7e11b40688187c43673c75c"
+    },
+    {
+      "file": "night-page-usage-empty.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "e47e11c0e9456875d22ca63baee5b9e6550ed79c1231fe6bde0f0372e6d9b1ed"
+    },
+    {
+      "file": "night-permissions-background.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "0232a04609aa61d3f36fbd9c5271fc65878346a02a6c55cbb78ce269f4169e12"
+    },
+    {
+      "file": "night-permissions-special.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "f860c212ba5394e0d453db59fae584ada3637154a2977e032c8403559ceadfeb"
+    },
+    {
+      "file": "night-permissions-system.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "0ee46e53a8c7802c2fa430b260c5257c7e1a6bdc4860bbcfadbd2aa2381c14cc"
+    },
+    {
+      "file": "night-permissions-yolo-confirm.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "36cee7c6e2ff58a861add3cea6020bb4822f65c5d4aa51c6b54787b149f943da"
+    },
+    {
+      "file": "night-permissions-yolo-enabled.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "aaaa61ac858002cc9acda7f727dcbff10bdf1153aeb4617164d2464913241dcf"
+    },
+    {
+      "file": "night-permissions.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "1684d2919fa13ea746716906eee60e96ed12232804e9fc63df1de0f20b866a16"
+    },
+    {
+      "file": "night-proxy-security.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "35196041f25413d6799ca20368f3960f2187cb3f170edf31447a5b36689c8b12"
+    },
+    {
+      "file": "night-proxy-summary.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "7848f454b22c6c52fa59a95914ac640ea48ede4e02d1a38856313fcd0f8796d6"
+    },
+    {
+      "file": "night-screen-apk-approval.png",
+      "width": 1986618743,
+      "height": 796091250,
+      "sha256": "a615bbedceb35c5dcd060f5f766c6459b846de2ec8d3ed8fe6764f6ba42d9ec7"
+    },
+    {
+      "file": "night-screen-root-guidance.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "9f2ec0cfb376d6f794eeead2361de315b5868835bd0ba84c8eff82e0f0580807"
+    },
+    {
+      "file": "night-screen-test.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "3641e0f9efcd86cc78963ef78149defb319335aae52a364d5146688dfaa6d0db"
+    },
+    {
+      "file": "night-settings.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "4db514911f96b8074387f880f63b723868ab5ec50bbdd2b6c0e0e349c21308f9"
+    },
+    {
+      "file": "night-validation-help.png",
+      "width": 1080,
+      "height": 2400,
+      "sha256": "68e16d375f37d56097e308f6d0d1dd7c5c4cd4f7a74c7c647cb21e2891271e78"
+    }
+  ]
+}
