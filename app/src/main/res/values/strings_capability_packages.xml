@@ -9,13 +9,13 @@
     <string name="capability_packages_project_only">仅此项目</string>
     <string name="capability_screen_configure">配置屏幕操作</string>
     <string name="capability_ssh_configure">配置 SSH 连接</string>
-    <string name="capability_packages_loading_hint">默认关闭。关闭的能力包不会向模型加载专属工具和说明；开启能力包仍需审批实际操作。</string>
+    <string name="capability_packages_loading_hint">能力包默认关闭，仅对当前项目生效。开启后，操作按当前工具权限执行。</string>
     <string name="capability_screen_title">Android 屏幕识别与操作</string>
     <string name="capability_screen_description">读取界面节点，按需截图；点击、输入和检查应用界面。</string>
     <string name="capability_screen_hint">优先使用节点树。截图分享、无障碍和 Root 权限分别授权，仅操作你选择的项目应用。</string>
     <string name="capability_ssh_title">SSH 远程开发</string>
     <string name="capability_ssh_description">连接远程主机，执行命令和管理文件；可选 tmux 保留长任务。</string>
-    <string name="capability_ssh_hint">SSH 负责连接，tmux 管理远端会话。连接凭据保存在本机，不发送给模型。</string>
+    <string name="capability_ssh_hint">连接凭据保存在本机，不发送给模型。长任务可使用 tmux 保持运行。</string>
     <string name="ssh_package_subtitle">配置主机后，先确认指纹再建立连接</string>
     <string name="ssh_package_connection">连接信息</string>
     <string name="ssh_package_host">主机地址</string>

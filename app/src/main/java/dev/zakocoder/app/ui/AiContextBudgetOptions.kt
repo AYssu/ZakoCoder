@@ -77,10 +77,11 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         !ModelInputValidation.summary(draft.summaryChars), R.string.ai_reading_number_summary)
     Text(stringResource(R.string.ai_context_summary_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
-    if (presets) WorkbenchSheet(stringResource(R.string.ai_context_choose_model_window), { presets = false },
-        subtitle = stringResource(R.string.ai_context_presets_checked)) {
+    CopyHelp(stringResource(R.string.copy_ai_context_help_title), stringResource(R.string.copy_ai_context_help))
+    if (presets) WorkbenchSheet(stringResource(R.string.ai_context_choose_model_window), { presets = false }) {
         Text(stringResource(R.string.ai_context_presets_scope), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CopyHelp(stringResource(R.string.copy_ai_presets_help_title), stringResource(R.string.copy_ai_presets_help))
         contextWindowPresets.groupBy { it.provider }.forEach { (provider, entries) ->
             Text(stringResource(provider), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall)
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),

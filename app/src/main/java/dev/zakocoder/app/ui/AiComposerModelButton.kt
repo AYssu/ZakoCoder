@@ -20,7 +20,7 @@ internal fun AiComposerModelButton(profile: AiProfile?, onClick: () -> Unit, mod
     val description = stringResource(R.string.ai_switch_model)
     val thinking = when {
         profile?.parameters?.thinking == AiThinking.Disabled -> stringResource(R.string.ai_composer_thinking_disabled)
-        profile?.parameters?.reasoningEffort != null -> stringResource(R.string.ai_composer_thinking_effort, profile.parameters.reasoningEffort.wire)
+        profile?.parameters?.reasoningEffort != null -> stringResource(R.string.ai_composer_thinking_effort, stringResource(profile.parameters.reasoningEffort.labelResource()))
         profile?.parameters?.thinking == AiThinking.Enabled -> stringResource(R.string.ai_composer_thinking_enabled)
         else -> stringResource(R.string.ai_composer_thinking_default)
     }

@@ -1,0 +1,21 @@
+<resources>
+    <string name="copy_ai_thinking_help_title">思考与采样说明</string>
+    <string name="copy_ai_thinking_help">思考开关和推理强度是否可用取决于模型与服务，默认不发送额外设置。采样参数可能被思考模型忽略。频率惩罚用于降低重复词频，存在惩罚用于鼓励引入新内容。</string>
+    <string name="copy_ai_headers_help_title">请求头说明</string>
+    <string name="copy_ai_headers_help">请求头值加密保存在本机，不写入请求日志。Authorization 等认证与协议保留头由应用管理，不能覆盖。更换服务来源后需重新填写或清空。</string>
+    <string name="copy_ai_context_help_title">预算与压缩说明</string>
+    <string name="copy_ai_context_help">输入预算包含系统说明、历史与工具定义，并为输出预留空间。Token 为本地估算，不等于计费用量。默认在可用输入预算达到 90% 时压缩，可调整触发比例；不会按对话轮数提前压缩。摘要会损失部分细节，长度上限以字符计。</string>
+    <string name="copy_ai_presets_help_title">容量参考说明</string>
+    <string name="copy_ai_presets_help">容量仅供参考，不是完整型号列表，也不代表当前接口已支持相应协议。请以服务商实际限制为准。\n参考值核对日期：2026 年 10 月 31 日。</string>
+    <string name="copy_ai_protocol_help_title">协议切换说明</string>
+    <string name="copy_ai_protocol_help">无需额外安装。切换仅改变请求格式，保留模型与密钥；连接失败时不会自动换用其他协议。</string>
+    <string name="copy_ai_mcp_import_help_title">导入格式与权限</string>
+    <string name="copy_ai_mcp_import_help">支持单个服务对象（type、url 或 command 等字段），也支持 mcpServers 服务映射。网络服务可使用 HTTP / HTTPS 域名或 IP。导入服务全部停用，配置中的 autoApprove 不会自动授予权限；已有同名服务不会被覆盖。配置可能含密钥，默认隐藏内容。</string>
+    <string name="copy_ai_usage_help_title">统计口径</string>
+    <string name="copy_ai_usage_help">仅累计服务返回的用量，缺失值不按零计算；缓存已包含在输入用量中，不重复累加。上下文是估算和容量，不是计费量。请求次数包含重试与摘要请求；工具调用次数包含待审批和未执行的调用。缓存命中率仅计算同时报告输入与命中的请求。</string>
+    <string name="copy_ai_usage_retention_title">记录范围</string>
+    <string name="ai_effort_low">低</string>
+    <string name="ai_effort_medium">中</string>
+    <string name="ai_effort_high">高</string>
+    <string name="ai_effort_max">最高</string>
+</resources>

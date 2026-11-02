@@ -13,5 +13,5 @@
     <string name="ai_probe_first_event">首事件 %1$d ms</string>
     <string name="ai_probe_response">服务返回内容</string>
     <string name="ai_probe_truncated">仅显示前 4,000 字符</string>
-    <string name="ai_probe_no_execution">仅请求 connection_probe 回执；不会执行工具、读取项目或修改文件。</string>
+    <string name="ai_probe_no_execution">仅测试连接和工具调用格式，不执行工具、读取项目或修改文件。</string>
 </resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="git_commit_help_title">提交方式说明</string>
+    <string name="git_commit_help_details">选择文件并暂存后，提交会保存在本地仓库，需另行推送到远端。应用内提交不会运行 Git 钩子，也不生成提交签名；如需这些功能，请在终端中提交。</string>
+    <string name="project_validation_help_title">如何阅读验证记录</string>
+    <string name="project_validation_help_details">记录按任务轮次显示，包括 AI 执行和你的手动复核。构建、测试、运行按执行时的命令配置归类。退出码为 0 表示该命令执行成功，不保证项目所有功能均已验证；请结合源文件状态和命令配置判断。文件或命令配置发生变化后，应重新执行相关验证。</string>
+</resources>

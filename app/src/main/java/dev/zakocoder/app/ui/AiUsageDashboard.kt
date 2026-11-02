@@ -219,6 +219,7 @@ internal fun AiUsageSummaryCard(summary: AiUsageSummary) {
                 summary.maxContextWindowTokens?.toLong()?.let(::tokenWindowLabel) ?: unknown),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(R.string.ai_usage_values_hint), fontSize = 11.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            CopyHelp(stringResource(R.string.copy_ai_usage_help_title), stringResource(R.string.copy_ai_usage_help))
         }
     }
 }
@@ -244,8 +245,8 @@ private fun UsageScopeNote(state: AiUsageState) {
     val formatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ROOT).withZone(ZoneId.systemDefault()) }
     val start = if (state.startedAt > 0) formatter.format(Instant.ofEpochMilli(state.startedAt)) else stringResource(R.string.ai_usage_unknown)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(stringResource(R.string.ai_usage_ledger_scope, start), fontSize = 11.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(stringResource(R.string.ai_usage_retention_policy), fontSize = 11.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CopyHelp(stringResource(R.string.copy_ai_usage_retention_title),
+            stringResource(R.string.ai_usage_ledger_scope, start) + "\n" + stringResource(R.string.ai_usage_retention_policy))
     }
 }
 

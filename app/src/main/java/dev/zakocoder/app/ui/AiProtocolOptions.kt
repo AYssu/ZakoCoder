@@ -69,6 +69,7 @@ internal fun AiProtocolOptions(protocol: AiApiProtocol, editable: Boolean, updat
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.ai_protocol_support_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            CopyHelp(stringResource(R.string.copy_ai_protocol_help_title), stringResource(R.string.copy_ai_protocol_help))
             listOf(R.string.ai_protocol_group_openai to listOf(AiApiProtocol.ChatCompletions, AiApiProtocol.Responses),
                 R.string.ai_protocol_group_anthropic to listOf(AiApiProtocol.Anthropic),
                 R.string.ai_protocol_group_google to listOf(AiApiProtocol.Gemini)).forEach { (label, entries) ->

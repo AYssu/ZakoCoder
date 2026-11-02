@@ -350,6 +350,7 @@ internal fun McpImportDialog(controller: McpController, editable: Boolean, close
         Column(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.mcp_import_formats_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CopyHelp(stringResource(R.string.copy_ai_mcp_import_help_title), stringResource(R.string.copy_ai_mcp_import_help))
                 OutlinedTextField(singleName, { if (it.length <= 100) singleName = it },
                     label = { Text(stringResource(R.string.mcp_import_single_name)) },
                     supportingText = { Text(stringResource(R.string.mcp_import_single_name_hint)) },

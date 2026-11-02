@@ -54,7 +54,6 @@ internal fun AiPlanPanel(plan: List<AiPlanStep>, active: Boolean, panel: Int) {
                 Text(stringResource(R.string.ai_plan_progress, plan.count { it.status == "completed" }, plan.size), style = MaterialTheme.typography.labelSmall)
             }
             if (expanded) Column(Modifier.heightIn(max = 145.dp).verticalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(stringResource(R.string.ai_plan_reported), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 plan.forEachIndexed { index, step -> Row {
                     Text("${index + 1}.", Modifier.width(22.dp), fontSize = 12.sp)
                     Text(step.title, Modifier.weight(1f), fontSize = 12.sp)

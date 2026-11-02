@@ -1,0 +1,8 @@
+<resources>
+    <string name="screen_overlay_help_title">悬浮窗使用说明</string>
+    <string name="screen_overlay_help_body">读取界面、截图和触控时，悬浮窗会暂时隐藏，完成后恢复显示。不显示模型思考或原始工具输出。
+
+开启悬浮窗不会授予目标应用、Root 或无障碍权限，也不会改变 AI 工具权限。系统仍可能限制后台运行。</string>
+    <string name="update_security_details_title">更新安全说明</string>
+    <string name="update_security_details_body">仅支持官方 ARM64 安装包。下载后会核对文件大小、SHA-256、包名、版本和签名；只有签名一致且版本号更高的安装包才可安装。</string>
+</resources>
