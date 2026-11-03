@@ -50,4 +50,24 @@ class AiMarkdownTest {
         assertFalse(AiMarkdownDocument.children(pending).any { it is Link })
         assertTrue(AiMarkdownDocument.children(AiMarkdownDocument.parse("$source)").firstChild).any { it is Link })
     }
+    @Test fun renderCacheReusesUnchangedTextButDoesNotReuseChangedReplies() {
+        val first = "# Cache reentry fixture\n\nOriginal **reply**."
+        val parsed = dev.zakocoder.app.ui.AiMarkdownCache.parse(first)
+        assertSame(parsed, dev.zakocoder.app.ui.AiMarkdownCache.get(first))
+        assertSame(parsed, dev.zakocoder.app.ui.AiMarkdownCache.parse(first))
+        val changed = dev.zakocoder.app.ui.AiMarkdownCache.parse(first + " Updated.")
+        assertNotSame(parsed, changed)
+        assertEquals(" Updated.", (changed.lastChild.lastChild as Text).literal.takeLast(9))
+    }
+    @Test fun renderCacheEvictsOldDocumentsAndBoundsRetainedText() {
+        val prefix = "bounded cache fixture "
+        val first = prefix + "old"
+        dev.zakocoder.app.ui.AiMarkdownCache.parse(first)
+        repeat(13) { dev.zakocoder.app.ui.AiMarkdownCache.parse(prefix + it) }
+        assertNull(dev.zakocoder.app.ui.AiMarkdownCache.get(first))
+        val long = "a".repeat(63000)
+        repeat(4) { dev.zakocoder.app.ui.AiMarkdownCache.parse("$it$long") }
+        assertNull(dev.zakocoder.app.ui.AiMarkdownCache.get("0$long"))
+        assertNotNull(dev.zakocoder.app.ui.AiMarkdownCache.get("3$long"))
+    }
 }

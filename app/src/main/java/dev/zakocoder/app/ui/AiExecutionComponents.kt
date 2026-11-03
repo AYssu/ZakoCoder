@@ -1,5 +1,14 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,8 +37,10 @@ internal fun AiTaskPlanPanel(state: AiState, panel: Int, visible: Boolean) {
     key(state.projectId, state.conversationId, state.turn) {
         // Stay composed while IME hides the header. Only this task's five tab choices are retained.
         val holder = rememberSaveableStateHolder()
-        if (visible && state.plan.isNotEmpty()) holder.SaveableStateProvider("plan") {
-            AiPlanPanel(state.plan, state.active, panel)
+        AnimatedVisibility(visible && state.plan.isNotEmpty(),
+            enter = fadeIn(tween(140)) + expandVertically(tween(200)),
+            exit = fadeOut(tween(100)) + shrinkVertically(tween(180))) {
+            holder.SaveableStateProvider("plan") { AiPlanPanel(state.plan, state.active, panel) }
         }
     }
 }
@@ -53,14 +64,15 @@ internal fun AiPlanPanel(plan: List<AiPlanStep>, active: Boolean, panel: Int) {
                 Text(stringResource(R.string.ai_current_plan), Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.labelLarge)
                 Text(stringResource(R.string.ai_plan_progress, plan.count { it.status == "completed" }, plan.size), style = MaterialTheme.typography.labelSmall)
             }
-            if (expanded) Column(Modifier.heightIn(max = 145.dp).verticalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            AnimatedVisibility(visible = expanded, enter = fadeIn(tween(140)) + expandVertically(tween(200)),
+                exit = fadeOut(tween(100)) + shrinkVertically(tween(180))) { Column(Modifier.heightIn(max = 145.dp).verticalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 plan.forEachIndexed { index, step -> Row {
                     Text("${index + 1}.", Modifier.width(22.dp), fontSize = 12.sp)
                     Text(step.title, Modifier.weight(1f), fontSize = 12.sp)
                     Text(stringResource(when (step.status) { "completed" -> R.string.ai_plan_completed; "in_progress" -> R.string.ai_plan_active; else -> R.string.ai_plan_pending }), fontSize = 10.sp,
                         color = if (step.status == "in_progress") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 } }
-            }
+            } }
         }
     }
 }
@@ -70,13 +82,14 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
     var expanded by remember(event.id) { mutableStateOf(false) }
     val expandAction = stringResource(if (expanded) R.string.ai_tool_collapse else R.string.ai_tool_details)
     val expandState = stringResource(if (expanded) R.string.mobile_expanded else R.string.mobile_collapsed)
-    val color = when (event.status) {
+    val targetColor = when (event.status) {
         AiToolStatus.Failed -> MaterialTheme.colorScheme.error
         AiToolStatus.Waiting, AiToolStatus.Running -> MaterialTheme.colorScheme.primary
         AiToolStatus.Succeeded -> androidx.compose.ui.graphics.Color(if (LocalWorkbenchDark.current) 0xFF6EE7B7 else 0xFF087F5B)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    val color by animateColorAsState(targetColor, tween(180), label = "tool-status")
+    Surface(modifier = Modifier.animateContentSize(tween(200)), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(color))
             Column(Modifier.weight(1f).padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -84,7 +97,9 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
                     .clickable(role = Role.Button, onClickLabel = expandAction) { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {
                     WorkbenchIcon(when (event.tool) { AiTool.RunCommand, AiTool.ReadCommandLog, AiTool.ListTerminals, AiTool.ReadTerminal, AiTool.StartTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal -> Glyph.Terminal; AiTool.SearchFiles -> Glyph.Search; AiTool.UpdatePlan -> Glyph.Check; else -> Glyph.File }, Modifier.size(16.dp), tint = color)
                     Text(event.tool?.let { stringResource(it.label) } ?: event.name, Modifier.weight(1f).padding(start = 7.dp), style = MaterialTheme.typography.labelLarge)
-                    Text(stringResource(event.status.label), color = color, style = MaterialTheme.typography.labelSmall)
+                    Crossfade(event.status, animationSpec = tween(140), label = "tool-state") { status ->
+                        Text(stringResource(status.label), color = color, style = MaterialTheme.typography.labelSmall)
+                    }
                     WorkbenchIcon(if (expanded) Glyph.Up else Glyph.Down, Modifier.padding(start = 8.dp).size(14.dp))
                 }
                 if (event.target.isNotEmpty()) Text(event.target, maxLines = if (expanded) 8 else 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
