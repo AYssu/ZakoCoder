@@ -143,7 +143,7 @@ class KernelPluginManager(context: Context) {
         return try {
             withContext(Dispatchers.IO) {
                 installer.clearStaged()
-                val target = File(installer.stagingDirectory(), KernelPluginInstaller.DOWNLOAD_NAME)
+                val target = File(installer.stagingDirectory(), "download-${java.util.UUID.randomUUID()}.apk")
                 val request = Request.Builder()
                     .url(DOWNLOAD_URL)
                     .header("User-Agent", "ZakoCoder/${BuildConfig.VERSION_NAME}")
@@ -189,7 +189,7 @@ class KernelPluginManager(context: Context) {
         return try {
             withContext(Dispatchers.IO) {
                 installer.clearStaged()
-                val target = File(installer.stagingDirectory(), KernelPluginInstaller.IMPORT_NAME)
+                val target = File(installer.stagingDirectory(), "import-${java.util.UUID.randomUUID()}.apk")
                 val input = try {
                     appContext.contentResolver.openInputStream(uri)
                 } catch (_: Exception) {

@@ -62,7 +62,7 @@
             </intent-filter>
         </activity>
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".kernel.KernelPluginFileProvider"
             android:authorities="${applicationId}.kernel-plugin"
             android:exported="false"
             android:grantUriPermissions="true">

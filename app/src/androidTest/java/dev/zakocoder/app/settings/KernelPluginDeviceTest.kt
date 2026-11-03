@@ -1,6 +1,7 @@
 package dev.zakocoder.app.settings
 
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zakocoder.app.warmDeviceActivity
 import dev.zakocoder.app.kernel.KernelPluginManager
 import dev.zakocoder.app.kernel.KernelPluginStatus
 import java.net.InetSocketAddress
@@ -42,6 +43,7 @@ class KernelPluginDeviceTest {
     @Test
     fun installedPluginBindsAndReportsContractVersion() {
         assumeTrue("Opt-in kernel-plugin e2e", arguments().getString("kernelPluginE2E") == "true")
+        warmDeviceActivity()
         val manager = KernelPluginManager(InstrumentationRegistry.getInstrumentation().targetContext)
         manager.refresh()
         assumeTrue("Kernel plugin not installed; install a matching signed plugin APK first", manager.status.value is KernelPluginStatus.Installed)
@@ -64,6 +66,7 @@ class KernelPluginDeviceTest {
         val uuid = arguments().getString("kernelPluginUuid") ?: "11111111-2222-3333-4444-555555555555"
         assumeTrue("VMess fixture unreachable", reachable(host, vmessPort))
 
+        warmDeviceActivity()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val plugins = KernelPluginManager(context)
         plugins.refresh()
