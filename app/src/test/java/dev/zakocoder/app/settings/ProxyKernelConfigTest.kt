@@ -19,10 +19,11 @@ class ProxyKernelConfigTest {
         uuid: String = "11111111-1111-1111-1111-111111111111",
         alterId: Int = 0,
         security: String = "auto",
+        headerType: String? = null,
     ) = ProxyNode(
         id = "vm-node", name = "VM", protocol = ProxyProtocol.Vmess, host = "vm.example.com", port = 443,
         transport = NodeTransport(
-            vmess = VmessTransport(uuid, alterId, security, network, tls, sni, host, path, null),
+            vmess = VmessTransport(uuid, alterId, security, network, tls, sni, host, path, headerType),
         ),
     )
 
@@ -126,5 +127,31 @@ class ProxyKernelConfigTest {
         assertTrue(ProxyKernelConfig.build(vmessNode(), 12345)!!.contains("\"port\":12345"))
         assertTrue(ProxyKernelConfig.build(vmessNode(), 1)!!.contains("\"port\":1"))
         assertTrue(ProxyKernelConfig.build(vmessNode(), 65535)!!.contains("\"port\":65535"))
+    }
+
+    @Test fun passwordInboundUsesOnlyTheGivenAccount() {
+        val json = ProxyKernelConfig.build(vmessNode(), 10808, "socks-user", "socks-pass")
+        requireNotNull(json)
+        assertTrue(json.contains("\"auth\":\"password\""))
+        assertTrue(json.contains("\"user\":\"socks-user\""))
+        assertTrue(json.contains("\"pass\":\"socks-pass\""))
+        assertFalse(json.contains("noauth"))
+    }
+
+    @Test fun halfCredentialIsRejected() {
+        assertNull(ProxyKernelConfig.build(vmessNode(), 10808, "user-only", null))
+        assertNull(ProxyKernelConfig.build(vmessNode(), 10808, null, "pass-only"))
+    }
+
+    @Test fun unsupportedShadowsocksMethodFailsClosed() {
+        assertNull(ProxyKernelConfig.build(ssNode(method = "magic-cipher"), 10808))
+        assertFalse(ssNode(method = "magic-cipher").viaKernel)
+        assertTrue(ssNode(method = "chacha20-ietf-poly1305").viaKernel)
+    }
+
+    @Test fun vmessTcpHeaderObfuscationIsNotAdvertisedAsUsable() {
+        assertTrue(vmessNode(headerType = null).viaKernel)
+        assertTrue(vmessNode(headerType = "none").viaKernel)
+        assertFalse(vmessNode(headerType = "http").viaKernel)
     }
 }

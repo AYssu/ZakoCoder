@@ -94,14 +94,19 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
     private fun encode(subscription: ProxySubscription): JSONObject {
         val nodes = JSONArray()
         for (node in subscription.nodes) {
-            nodes.put(
-                JSONObject().put("id", node.id).put("name", node.name).put("protocol", node.protocol.name)
-                    .put("host", node.host).put("port", node.port)
-                    .apply {
-                        node.username?.let { put("username", it) }
-                        node.password?.let { put("password", it) }
-                    },
-            )
+            val encoded = JSONObject().put("id", node.id).put("name", node.name).put("protocol", node.protocol.name)
+                .put("host", node.host).put("port", node.port)
+                .apply {
+                    node.username?.let { put("username", it) }
+                    node.password?.let { put("password", it) }
+                }
+            val transport = ProxyTransportCodec.toFields(node)
+            if (transport.isNotEmpty()) {
+                val fields = JSONObject()
+                transport.forEach { (key, value) -> fields.put(key, value) }
+                encoded.put("transport", fields)
+            }
+            nodes.put(encoded)
         }
         return JSONObject().put(SCHEMA_KEY, SCHEMA_VERSION)
             .put("sourceUrl", subscription.sourceUrl)
@@ -146,10 +151,29 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
         val password = json.optString("password").takeIf { it.isNotEmpty() }
         if (username != null && (username.length > MAX_CREDENTIAL_CHARS || username.any(Char::isISOControl))) return null
         if (password != null && (password.length > MAX_CREDENTIAL_CHARS || password.any(Char::isISOControl))) return null
-        val node = ProxyNode(id, name, protocol, host, port, username, password)
+        // A damaged/incomplete transport must only downgrade this node to "unsupported" - the node
+        // itself and the rest of the cached subscription stay intact so the user can re-fetch.
+        val transport = decodeTransport(json.optJSONObject("transport"), protocol)
+        val node = ProxyNode(id, name, protocol, host, port, username, password, transport)
         // Reusable nodes must still point somewhere; unsupported metadata may keep placeholders.
         if (node.supported && (host.isEmpty() || port !in 1..65535)) return null
         return node
+    }
+
+    /** Flat fields are the only persisted transport shape; ignore non-string or unknown keys. */
+    private fun decodeTransport(encoded: JSONObject?, protocol: ProxyProtocol): NodeTransport? {
+        if (encoded == null) return null
+        return try {
+            val fields = LinkedHashMap<String, String>()
+            val keys = encoded.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                (encoded.opt(key) as? String)?.let { fields[key] = it }
+            }
+            ProxyTransportCodec.fromFields(protocol, fields)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private companion object {

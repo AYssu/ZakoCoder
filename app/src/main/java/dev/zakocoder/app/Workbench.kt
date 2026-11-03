@@ -1,6 +1,7 @@
 package dev.zakocoder.app
 
 import android.content.Context
+import androidx.core.content.edit
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
@@ -44,6 +45,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }, lsp = dev.zakocoder.app.editor.lsp.EditorLspController(context, runtime,
         { mutable.value.settings }, { mutable.value.installed && !mutable.value.busy }))
     private val settingsRepository = SettingsRepository(context)
+    private val kernelProxyPreferences = context.getSharedPreferences(KERNEL_PROXY_PREFERENCES, Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
     private val mutableAssistantNavigation = MutableStateFlow<AssistantNavigationRequest?>(null)
@@ -309,7 +311,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 // A kernel-backed proxy points at a loopback port owned by this process; after a
                 // restart that process is gone, so clear the dead endpoint instead of showing it as
                 // active. Direct/manual non-loopback settings are left untouched.
-                val staleKernelProxy = data.settings.proxy.startsWith("socks5://127.0.0.1:", ignoreCase = true)
+                val kernelPort = kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
+                val parsedProxy = runCatching { NetworkProxy.parse(data.settings.proxy) }.getOrNull()
+                // Only clear an endpoint this app's kernel owned (marker match); a user's manual
+                // 127.0.0.1 proxy must survive a restart.
+                val staleKernelProxy = kernelPort > 0 && parsedProxy?.host == "127.0.0.1" && parsedProxy.port == kernelPort
+                if (kernelPort > 0) kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
                 if (staleKernelProxy) withContext(Dispatchers.IO) { settingsRepository.save(data.settings.copy(proxy = "")) }
                 mutable.update { it.copy(loading = false, projects = data.projects,
                     settings = if (staleKernelProxy) data.settings.copy(proxy = "") else data.settings,
@@ -674,11 +681,29 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         if (node.viaKernel) {
             // One start at a time; a second tap while starting must not queue another process.
             if (proxyKernel.state.value is ProxyKernelState.Starting) return false
+            val previous = mutable.value.settings.proxy
             scope.launch {
                 val result = proxyKernel.start(node)
                 if (result is ProxyKernelState.Running) {
-                    saveSettings(mutable.value.settings.copy(proxy = "socks5://127.0.0.1:${result.port}"))
-                } else {
+                    // The inbound is credential-gated with a per-start SOCKS user/pass; only the
+                    // settings layer and the JVM proxy path ever see that URL.
+                    val proxyUrl = proxyKernel.localProxyUrl()
+                    if (proxyUrl == null) {
+                        proxyKernel.stop()
+                        mutable.update {
+                            it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
+                        }
+                        return@launch
+                    }
+                    kernelProxyPreferences.edit { putInt(KEY_KERNEL_PORT, result.port) }
+                    saveSettings(mutable.value.settings.copy(proxy = proxyUrl))
+                } else if (result is ProxyKernelState.Failed) {
+                    kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
+                    // The previous kernel (if any) was stopped before this attempt; never leave AI,
+                    // image downloads and guest ALL_PROXY pointing at a dead loopback endpoint.
+                    val restored = runCatching { NetworkProxy.parse(previous) }.getOrNull()
+                        ?.takeIf { it.host != "127.0.0.1" }?.proxyUrl.orEmpty()
+                    if (restored != previous) saveSettings(mutable.value.settings.copy(proxy = restored))
                     mutable.update {
                         it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
                     }
@@ -689,6 +714,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         if (node.proxyUrl.isEmpty()) return false
         // Switching from a kernel node back to a direct node must not leave the kernel process alive.
         proxyKernel.stop()
+        kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
         saveSettings(mutable.value.settings.copy(proxy = node.proxyUrl))
         return true
     }
@@ -699,9 +725,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
      */
     fun stopProxyKernel() {
         val running = proxyKernel.state.value as? ProxyKernelState.Running
+        val ownedPort = running?.port ?: kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
         proxyKernel.stop()
-        val current = mutable.value.settings.proxy
-        if (running != null && current == "socks5://127.0.0.1:${running.port}") {
+        kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
+        val current = runCatching { NetworkProxy.parse(mutable.value.settings.proxy) }.getOrNull()
+        if (ownedPort > 0 && current?.host == "127.0.0.1" && current.port == ownedPort) {
             saveSettings(mutable.value.settings.copy(proxy = ""))
         }
     }
@@ -740,4 +768,9 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         return accepted
     }
     fun dismissMessage() { mutable.update { it.copy(message = "", messageIsError = false) } }
+
+    private companion object {
+        const val KERNEL_PROXY_PREFERENCES = "proxy-kernel"
+        const val KEY_KERNEL_PORT = "port"
+    }
 }

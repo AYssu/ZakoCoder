@@ -343,4 +343,30 @@ class ProxyCatalogTest {
         catalog.select(first)
         assertEquals(first, catalog.state.value.selectedId)
     }
+
+    @Test fun importedKernelTransportStaysViaKernelAfterReloadFromCache() = runBlocking {
+        val vmessJson = """{"v":"2","ps":"Kernel","add":"vm.example.com","port":"443","id":"uuid-1","aid":"0",""" +
+            """"scy":"auto","net":"ws","tls":"tls","sni":"sni.example.com","path":"/ws"}"""
+        val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(vmessJson.toByteArray(Charsets.UTF_8))
+        val store = FakeProxySubscriptionStore()
+        val catalog = catalog(FakeProxySubscriptionFetcher(content = link), store)
+
+        catalog.updateLink("https://sub.example.com/api")
+        catalog.probe()
+        catalog.import()
+        val imported = requireNotNull(catalog.state.value.subscription).nodes.single()
+        assertTrue(imported.viaKernel)
+        assertTrue(imported.supported)
+
+        // Simulates the post-restart path: a fresh catalog reads the saved subscription (the fake
+        // store stands in for the encrypted store, whose JSON is covered by ProxyTransportCodecTest).
+        val reloadedCatalog = catalog(FakeProxySubscriptionFetcher(), store)
+        reloadedCatalog.loadCached()
+        val reloaded = requireNotNull(reloadedCatalog.state.value.subscription).nodes.single()
+        assertTrue("The cached transport must survive reload", reloaded.viaKernel)
+        assertTrue(reloaded.supported)
+        assertEquals(imported.transport, reloaded.transport)
+        assertEquals("ws", reloaded.transport!!.vmess!!.network)
+        assertEquals("sni.example.com", reloaded.transport!!.vmess!!.sni)
+    }
 }

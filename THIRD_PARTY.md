@@ -178,4 +178,4 @@ SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源
 
 - 来源：<https://github.com/XTLS/Xray-core>，Go 模块 `github.com/xtls/xray-core`，固定版本 `v1.260327.0`；许可证 MPL-2.0，完整文本随 APK 保存在 `assets/licenses/Xray-MPL-2.0.txt`。未修改上游源码，仅用于转发现有订阅节点。
 - 构建：本仓库以固定 Go 工具链（`native-kernel/go.version`）执行 `go build -trimpath -ldflags "-s -w"`，`GOOS=linux`、`CGO_ENABLED=0`，交叉编译 arm64 与 amd64，作为 jniLib 资产 `libzakocoder_xray.so` 打包（二进制不提交）；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 校验模块版本、工具链与 SHA-256，CI 自编译生成，不下载预编译制品。
-- 对应源码可从上述固定标签获取；本项目自有代码的 Apache-2.0 不适用于该内核。内核只接受应用生成的单节点配置（SOCKS inbound + 单 outbound），不读取订阅链接，日志不输出配置与凭据。
+- 对应源码可从上述固定标签获取；本项目自有代码的 Apache-2.0 不适用于该内核。内核只接受应用生成的单节点配置（SOCKS inbound + 单 outbound），不读取订阅链接，日志不输出配置与凭据。Xray-core 的 Go 传递依赖（MIT/BSD/Apache 等）尚未逐项列入本文件；发布材料需补齐依赖许可证清单或在源码包中提供，见 `docs/RELEASING.md` 的发行检查。

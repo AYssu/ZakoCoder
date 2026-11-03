@@ -128,6 +128,10 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 
 模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
 
+
+> 从源码构建还需要 **Go 1.26.4**（版本见 `native-kernel/go.version`）与可访问的 Go 模块代理：
+> `:app:prepareProxyKernel` 会自编译 Xray-core 并按 `native-kernel/artifacts.lock.json` 校验 SHA-256。
+> 离线环境可在已有校验产物时使用 `-x :app:prepareProxyKernel`，但发布构建必须真实执行该任务。
 ## 开发者区域
 
 面向源码构建、架构维护与贡献协作。欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。

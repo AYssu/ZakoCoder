@@ -127,7 +127,7 @@
 - 随 APK 提供自编译 Xray-core `v1.260327.0`（MPL-2.0），以 jniLib 形式打包（`libzakocoder_xray.so`），从 `nativeLibraryDir` 执行；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
 - 节点参数来自订阅解析（vmess base64 JSON / ss SIP002 / trojan URL / Clash YAML）；应用生成最小配置：`127.0.0.1` 空闲端口 SOCKS inbound（noauth、禁 UDP）+ 单节点 outbound（vmess tcp/ws/grpc + tls/sni/host/path；ss method/password；trojan password/sni）。
 - 生命周期：切换节点先停旧内核；启动最多等 10s 连通性；超时/进程退出→失败提示；配置写到 cacheDir 且 stop 时删除；日志不输出完整配置/凭据。
-- 限制：内核进程随应用进程存活，后台被系统回收后不保证接管；应用重启会清理指向已停止内核的 `socks5://127.0.0.1:<port>` 残留端点；内核启动只保证本地 SOCKS 端口就绪，节点连通性在首次请求时验证（不可达节点也会显示“运行中”）；订阅缓存升级为 schema v2，旧缓存需重新识别一次；VLESS、TUIC、Hysteria 等仍未支持；无延迟测速/自动切换；APK 体积增加（arm64 约 +29MB）。
+- 限制：内核进程随应用进程存活，后台被系统回收后不保证接管；应用重启只清理自己拥有（端口标记匹配）的 loopback 残留端点，用户手动配置的本地代理不受影响；启动/停止会清理残留配置与日志；内核启动只保证本地 SOCKS 端口就绪，节点连通性在首次请求时验证（不可达节点也会显示“运行中”）；SOCKS 入口使用每次启动随机生成的账号密码（RFC 1929），其它 App 不能直接借用本机代理；TLS 节点使用 Android 系统 CA（内核进程注入 `SSL_CERT_DIR`）；`headerType`（tcp http 伪装）、Clash 嵌套 `ws-opts/grpc-opts/reality-opts`、Trojan ws、SS plugin 等当前无法表达，相关节点直接标“暂不支持”而不是假装可用；订阅缓存 v2 会持久化内核 transport，旧 v1 缓存需重新识别一次；VLESS、TUIC、Hysteria 等仍未支持；无延迟测速/自动切换；APK 体积增加（arm64 xray 未压缩约 29MB，压缩后约 +12MB）。
 - 安全：配置只含当前节点，不写入订阅链接；错误提示只暴露分类；不新增联网时机（内核启动本身不访问网络，节点连接在代理请求时才发生）。
 
 ## 十、交付备注

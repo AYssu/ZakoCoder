@@ -15,9 +15,24 @@ package dev.zakocoder.app.settings
  */
 object ProxyKernelConfig {
     /** Returns the Xray config JSON, or null when [node] cannot be represented safely. */
-    fun build(node: ProxyNode, listenPort: Int): String? {
+    fun build(
+        node: ProxyNode,
+        listenPort: Int,
+        username: String? = null,
+        password: String? = null,
+    ): String? {
         if (listenPort !in 1..65535) return null
         if (!validHost(node.host) || node.port !in 1..65535) return null
+        val inboundSettings = when {
+            username != null && password != null -> {
+                val user = encode(username, 64) ?: return null
+                val pass = encode(password, 64) ?: return null
+                "{\"auth\":\"password\",\"accounts\":[{\"user\":$user,\"pass\":$pass}],\"udp\":false}"
+            }
+            username == null && password == null -> "{\"auth\":\"noauth\",\"udp\":false}"
+            // Half a credential would silently downgrade authentication.
+            else -> return null
+        }
         val outbound = when (node.protocol) {
             ProxyProtocol.Vmess -> vmessOutbound(node)
             ProxyProtocol.Ss -> shadowsocksOutbound(node)
@@ -27,7 +42,7 @@ object ProxyKernelConfig {
         return "{" +
             "\"log\":{\"loglevel\":\"warning\"}," +
             "\"inbounds\":[{\"listen\":\"127.0.0.1\",\"port\":$listenPort,\"protocol\":\"socks\"," +
-            "\"settings\":{\"auth\":\"noauth\",\"udp\":false},\"tag\":\"socks-in\"}]," +
+            "\"settings\":$inboundSettings,\"tag\":\"socks-in\"}]," +
             "\"outbounds\":[$outbound]" +
             "}"
     }
@@ -50,13 +65,17 @@ object ProxyKernelConfig {
 
     private fun shadowsocksOutbound(node: ProxyNode): String? {
         val shadowsocks = node.transport?.shadowsocks ?: return null
-        if (!SS_METHOD.matches(shadowsocks.method)) return null
+        // Unknown methods only fail after the kernel starts; fail closed at build time instead.
+        if (!isSupportedSsMethod(shadowsocks.method)) return null
         val address = encode(node.host, 255) ?: return null
         val method = encode(shadowsocks.method, 64) ?: return null
         val password = encode(shadowsocks.password, 256) ?: return null
         return "{\"protocol\":\"shadowsocks\",\"tag\":\"proxy\",\"settings\":{\"servers\":[{\"address\":$address," +
             "\"port\":${node.port},\"method\":$method,\"password\":$password}]}}"
     }
+
+    /** Methods Xray-core can consume; anything else is reported as an unsupported node. */
+    fun isSupportedSsMethod(method: String): Boolean = method.trim().lowercase() in SS_METHODS
 
     private fun trojanOutbound(node: ProxyNode): String? {
         val trojan = node.transport?.trojan ?: return null
@@ -125,5 +144,10 @@ object ProxyKernelConfig {
 
     private val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
     private val VMESS_SECURITY = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305")
-    private val SS_METHOD = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+    private val SS_METHODS = setOf(
+        "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305",
+        "xchacha20-poly1305", "xchacha20-ietf-poly1305",
+        "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305",
+        "none",
+    )
 }
