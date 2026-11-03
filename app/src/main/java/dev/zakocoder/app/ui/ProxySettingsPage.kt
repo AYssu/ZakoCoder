@@ -1010,7 +1010,19 @@ private fun KernelPluginCard(
                             Text(stringResource(R.string.proxy_plugin_install_local), maxLines = 1)
                         }
                     }
-                    is KernelPluginStatus.Installed -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    is KernelPluginStatus.Installed -> Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Updating must not require uninstalling first: a failed install keeps the old version.
+                        OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_update_online), maxLines = 1)
+                        }
+                        OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_update_local), maxLines = 1)
+                        }
                         TextButton(onClick = onUninstall, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_uninstall), color = MaterialTheme.colorScheme.error)
                         }

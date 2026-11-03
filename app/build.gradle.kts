@@ -12,11 +12,6 @@ val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCod
 } ?: 1
 
 // Distribution builds opt in with an explicit immutable version; legacy property names remain compatible.
-// Trust anchor for the optional kernel plugin APK. Override for release signing with
-// -PkernelPluginCertSha256=<release certificate digest>; the default is the CI/debug certificate.
-val kernelPluginCertSha256 = providers.gradleProperty("kernelPluginCertSha256")
-    .orElse("329ae2b1ccc445d35fd3f2ca1904f058b0af897273fd3ca68eb8c68320f8a58e").get()
-
 val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
 val betaVersion = providers.gradleProperty("betaVersion").orNull
 val betaVersionCode = providers.gradleProperty("betaVersionCode").orNull?.toIntOrNull()
@@ -43,12 +38,18 @@ android {
         versionCode = if (betaRelease) requireNotNull(betaVersionCode) else compatibilityVersionCode
         versionName = if (betaRelease) requireNotNull(betaVersion) else "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "KERNEL_PLUGIN_CERT_SHA256", "\"" + kernelPluginCertSha256 + "\"")
     }
     ndkVersion = "28.2.13676358"
     defaultConfig { ndk { abiFilters += compatibilityAbis } }
     sourceSets.getByName("main").jniLibs.directories.add(rootProject.file("runtime-artifacts/jniLibs").absolutePath)
-    packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libzakocoder_*.so" } }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libzakocoder_*.so"
+            // The optional kernel lives in the plugin APK; remove stale cache copies defensively.
+            excludes += "**/libzakocoder_xray.so"
+        }
+    }
     buildFeatures {
         compose = true
         aidl = true
@@ -79,7 +80,15 @@ compatibilityAbis.forEach { abi ->
     }
     prepareRuntime.configure { dependsOn(prepareAbi) }
 }
-tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
+tasks.named("preBuild").configure {
+    dependsOn(prepareRuntime)
+    doFirst {
+        // Old builds wrote the kernel into runtime-artifacts/jniLibs; delete any stale copy before merge.
+        rootProject.file("runtime-artifacts/jniLibs").walkTopDown()
+            .filter { it.isFile && it.name == "libzakocoder_xray.so" }
+            .forEach { it.delete() }
+    }
+}
 tasks.matching { it.name.contains("Release") }.configureEach {
     doFirst {
         check(betaRelease) {

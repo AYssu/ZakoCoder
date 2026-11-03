@@ -20,9 +20,10 @@ import java.security.MessageDigest
  * - nothing is installed silently: a verified APK is staged under `cacheDir/kernel-plugin/` and
  *   opened through the app's `FileProvider` with a one-shot read grant; the platform installer asks
  *   the user for confirmation;
- * - validation always runs on the real archive (package name, signer digest against the compiled-in
- *   BuildConfig value, versions, contract metadata), never on fields the plugin declares about
- *   itself;
+ * - validation always runs on the real archive (package name, signer digest against this app's own
+ *   signing certificate, versions, contract metadata), never on fields the plugin declares about
+ *   itself; using the running app's certificate keeps every local/release signing variant working
+ *   without hardcoding one developer's debug key;
  * - the staging directory matches the FileProvider path so no arbitrary file can be exposed.
  */
 internal class KernelPluginInstaller(private val context: Context) {
@@ -58,7 +59,7 @@ internal class KernelPluginInstaller(private val context: Context) {
             minMainVersion = minMain,
             mainVersionCode = BuildConfig.VERSION_CODE,
             contractVersion = contract,
-            expectedSignerSha256 = BuildConfig.KERNEL_PLUGIN_CERT_SHA256,
+            expectedSignerSha256 = appSignerSha256(appContext) ?: return KernelPluginFailure.WrongSigner,
         )
     }
 
@@ -92,6 +93,14 @@ internal class KernelPluginInstaller(private val context: Context) {
         const val MAX_APK_BYTES = KernelPluginTrust.MAX_APK_BYTES
 
         /** Flags that expose both the signer certificates and the plugin's compatibility metadata. */
+        /** Digest of this app's own signing certificate: the trust anchor for the plugin. */
+        fun appSignerSha256(context: Context): String? = try {
+            val info = context.packageManager.getPackageInfo(context.packageName, signingFlags())
+            signerSha256(info)
+        } catch (_: Exception) {
+            null
+        }
+
         fun signingFlags(): Int {
             val base = PackageManager.GET_META_DATA
             return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

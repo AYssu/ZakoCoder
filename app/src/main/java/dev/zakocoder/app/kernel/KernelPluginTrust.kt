@@ -35,8 +35,9 @@ sealed interface KernelPluginInstallResult {
  *
  * The verifier deliberately takes every input explicitly (package name, signer digest, versions,
  * manifest metadata) so no caller can accidentally trust the plugin's own self-declared hashes: the
- * expected signer digest comes from [dev.zakocoder.app.BuildConfig.KERNEL_PLUGIN_CERT_SHA256], which
- * is compiled into the main app. [verify] returns null only when every check passes.
+ * expected signer digest is the main app's own signing certificate digest, so every debug/release
+ * signing variant pairs with a plugin signed by the same key. [verify] returns null only when every
+ * check passes.
  */
 object KernelPluginTrust {
     const val PLUGIN_PACKAGE = "dev.zakocoder.app.kernel"

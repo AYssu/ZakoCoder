@@ -95,6 +95,8 @@
     <string name="proxy_plugin_cancel">取消安装</string>
     <string name="proxy_plugin_cancelled">已取消安装。</string>
     <string name="proxy_plugin_installer_opened">已打开系统安装器，完成后返回本页刷新。</string>
+    <string name="proxy_plugin_update_online">在线更新</string>
+    <string name="proxy_plugin_update_local">从本地更新</string>
     <string name="proxy_plugin_uninstall">移除插件</string>
     <string name="proxy_plugin_uninstalling">已打开系统卸载界面，完成后返回本页刷新。</string>
     <string name="proxy_node_needs_plugin">需安装内核插件</string>

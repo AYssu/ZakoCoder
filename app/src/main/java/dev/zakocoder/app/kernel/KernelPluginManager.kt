@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
  *
  * Contract:
  * - status is derived from PackageManager metadata and the compiled-in signer digest
- *   ([BuildConfig.KERNEL_PLUGIN_CERT_SHA256]); nothing is trusted from the plugin's own claims;
+ *   (this app's own signing certificate); nothing is trusted from the plugin's own claims;
  * - install never happens silently: a validated APK is staged and handed to the platform installer;
  * - download/import are explicit calls on IO, bounded to [KernelPluginTrust.MAX_APK_BYTES], and
  *   cancellable (the copy loop checks the coroutine state between chunks);
@@ -269,7 +269,7 @@ class KernelPluginManager(context: Context) {
             minMainVersion = minMain,
             mainVersionCode = BuildConfig.VERSION_CODE,
             contractVersion = contract,
-            expectedSignerSha256 = BuildConfig.KERNEL_PLUGIN_CERT_SHA256,
+            expectedSignerSha256 = KernelPluginInstaller.appSignerSha256(appContext) ?: return KernelPluginStatus.Incompatible,
         )
         return if (failure == null) {
             KernelPluginStatus.Installed(KernelPluginInfo(info.versionName.orEmpty(), KernelPluginInstaller.versionCode(info)))
