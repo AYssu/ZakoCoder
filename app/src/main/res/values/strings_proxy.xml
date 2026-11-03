@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_page_title">网络代理</string>
+    <string name="proxy_section_status">当前状态</string>
+    <string name="proxy_section_mode">连接方式</string>
+    <string name="proxy_section_manual">手动代理</string>
+    <string name="proxy_section_airport">机场订阅</string>
+    <string name="proxy_section_nodes">节点</string>
+
+    <string name="proxy_status_direct">直连</string>
+    <string name="proxy_status_manual">手动代理</string>
+    <string name="proxy_status_airport">机场节点</string>
+    <string name="proxy_status_effective">已生效</string>
+    <string name="proxy_status_not_configured">未配置代理</string>
+    <string name="proxy_status_credential_hint">含加密凭据</string>
+    <string name="proxy_status_source">来自机场 · %1$s</string>
+    <string name="proxy_status_masked_source">来源：%1$s</string>
+    <string name="proxy_status_copy_hint">点按复制打码端点</string>
+    <string name="proxy_status_copied">已复制打码端点</string>
+
+    <string name="proxy_mode_direct">直连</string>
+    <string name="proxy_mode_manual">手动代理</string>
+    <string name="proxy_mode_airport">机场订阅</string>
+    <string name="proxy_mode_direct_hint">不经过代理，直接连接网络。</string>
+    <string name="proxy_mode_manual_hint">支持 HTTP 与 SOCKS5；SOCKS5 可带凭据并加密保存。</string>
+    <string name="proxy_direct_save">使用直连</string>
+
+    <string name="proxy_manual_label">代理地址</string>
+    <string name="proxy_manual_placeholder">http://主机:端口 或 socks5://[用户:密码@]主机:端口</string>
+    <string name="proxy_manual_help">留空并保存即关闭代理。当前端点只显示不含密码的地址。</string>
+    <string name="proxy_manual_save">保存并启用</string>
+    <string name="proxy_manual_saving">正在保存…</string>
+
+    <string name="proxy_airport_link_label">订阅链接</string>
+    <string name="proxy_airport_link_placeholder">https://…</string>
+    <string name="proxy_airport_paste">粘贴</string>
+    <string name="proxy_airport_link_help">仅支持 HTTPS。链接可能含口令，只在点击识别或刷新时联网。</string>
+    <string name="proxy_airport_probe">识别链接</string>
+    <string name="proxy_airport_probing">正在识别</string>
+    <string name="proxy_airport_retry">重新识别</string>
+    <string name="proxy_airport_refresh">刷新订阅</string>
+    <string name="proxy_airport_remove">移除订阅</string>
+    <string name="proxy_airport_cached">上次导入：%1$s · %2$d 个节点</string>
+    <string name="proxy_airport_empty_title">还没有导入机场订阅</string>
+    <string name="proxy_airport_empty_hint">粘贴订阅链接后点“识别链接”。打开页面不会联网。</string>
+
+    <string name="proxy_badge_airport">机场订阅</string>
+    <string name="proxy_badge_single">单节点</string>
+    <string name="proxy_badge_unsupported">暂不支持</string>
+    <string name="proxy_badge_unknown">无法识别</string>
+    <string name="proxy_counts">%1$d 个节点 · %2$d 个可用</string>
+    <string name="proxy_result_unsupported_only">共 %1$d 个节点，当前版本仅支持 HTTP/SOCKS5 节点。</string>
+    <string name="proxy_result_not_subscription">该链接无法识别为机场订阅或单节点链接，请检查后重试。</string>
+    <string name="proxy_result_single_hint">识别到单个可用节点，可直接保存并启用。</string>
+    <string name="proxy_node_unsupported_hint">当前版本仅支持无凭据 HTTP 或 SOCKS5（可带账号密码）节点；其他协议或带凭据的 HTTP 节点不能启用。</string>
+    <string name="proxy_node_host">%1$s:%2$d</string>
+    <string name="proxy_selected_summary">将启用：%1$s</string>
+    <string name="proxy_action_apply">保存并启用</string>
+    <string name="proxy_action_cancel">取消</string>
+    <string name="proxy_feedback_saved">已提交保存</string>
+    <string name="proxy_feedback_failed">当前无法保存，请稍后重试</string>
+    <string name="proxy_feedback_unsupported">该节点协议暂不支持</string>
+    <string name="proxy_airport_retry_refresh">重试刷新</string>
+
+    <string name="proxy_remove_title">移除机场订阅？</string>
+    <string name="proxy_remove_message">将删除本机保存的机场订阅、节点与链接，当前已生效的代理不会被自动关闭。此操作无法撤销。</string>
+    <string name="proxy_remove_confirm">确认移除</string>
+
+    <string name="proxy_error_invalid_link">链接格式不正确，请检查后重试。</string>
+    <string name="proxy_error_insecure_scheme">仅支持 HTTPS 订阅链接，请改用 https://。</string>
+    <string name="proxy_error_unreachable">无法连接订阅服务器，请检查网络后重试。</string>
+    <string name="proxy_error_http_status">订阅服务器返回错误状态，请稍后重试。</string>
+    <string name="proxy_error_too_large">订阅内容超过大小上限，请更换更小的订阅。</string>
+    <string name="proxy_error_unsupported_content">订阅内容无法解析，请确认这是机场订阅链接。</string>
+    <string name="proxy_error_not_found">订阅地址不存在，请检查链接。</string>
+    <string name="proxy_error_empty">订阅内容为空，请检查链接或稍后刷新。</string>
+
+    <string name="proxy_protocol_short_http">HTTP</string>
+    <string name="proxy_protocol_short_socks5">SOCKS</string>
+    <string name="proxy_protocol_short_vmess">VM</string>
+    <string name="proxy_protocol_short_ss">SS</string>
+    <string name="proxy_protocol_short_trojan">TR</string>
+    <string name="proxy_protocol_short_vless">VL</string>
+    <string name="proxy_protocol_short_hysteria">HY</string>
+    <string name="proxy_protocol_short_tuic">TUIC</string>
+    <string name="proxy_protocol_short_other">OTH</string>
+    <string name="proxy_protocol_name_http">HTTP</string>
+    <string name="proxy_protocol_name_socks5">SOCKS5</string>
+    <string name="proxy_protocol_name_vmess">VMess</string>
+    <string name="proxy_protocol_name_ss">Shadowsocks</string>
+    <string name="proxy_protocol_name_trojan">Trojan</string>
+    <string name="proxy_protocol_name_vless">VLESS</string>
+    <string name="proxy_protocol_name_hysteria">Hysteria</string>
+    <string name="proxy_protocol_name_tuic">TUIC</string>
+    <string name="proxy_protocol_name_other">其他协议</string>
+</resources>

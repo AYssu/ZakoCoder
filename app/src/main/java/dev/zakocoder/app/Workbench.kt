@@ -114,6 +114,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         }
     }
     val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
+    /** Airport subscription state. All networking is triggered by the proxy page's explicit actions. */
+    val proxyCatalog = ProxyCatalog(HttpProxySubscriptionFetcher(), EncryptedProxySubscriptionStore(context))
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
@@ -650,6 +652,18 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 tools = if (runtimeChanged) emptyList() else it.tools,
                 bundleTools = if (runtimeChanged) emptyList() else it.bundleTools, message = context.getString(R.string.settings_saved)) }
         }
+    }
+
+    /**
+     * Writes one subscription node into the existing proxy setting. Returns whether the save was
+     * submitted; validation/storage failures keep surfacing through the regular settings state.
+     * Unsupported nodes (or a busy workbench) are rejected here so the UI never claims success.
+     */
+    fun applyProxyNode(node: ProxyNode): Boolean {
+        if (!node.supported || node.proxyUrl.isEmpty()) return false
+        if (mutable.value.busy || mutable.value.loading) return false
+        saveSettings(mutable.value.settings.copy(proxy = node.proxyUrl))
+        return true
     }
     private val editorLspSettingsMutex = kotlinx.coroutines.sync.Mutex()
     fun setEditorLspEnabled(enabled: Boolean) {
