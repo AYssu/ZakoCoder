@@ -118,8 +118,10 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
     /** Airport subscription state. All networking is triggered by the proxy page's explicit actions. */
     val proxyCatalog = ProxyCatalog(HttpProxySubscriptionFetcher(), EncryptedProxySubscriptionStore(context))
-    /** Xray child process for VMess/SS/Trojan nodes; it exposes a loopback SOCKS5 bridge. */
-    val proxyKernel = ProxyKernel(context)
+    /** Optional kernel plugin (separate APK); the main app never packages or executes Xray itself. */
+    val kernelPlugin = dev.zakocoder.app.kernel.KernelPluginManager(context)
+    /** Client for the plugin's kernel service; exposes a loopback SOCKS5 bridge while Running. */
+    val proxyKernel = ProxyKernel(context, kernelPlugin)
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },

@@ -3,6 +3,9 @@ package dev.zakocoder.app.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,10 +32,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
+import dev.zakocoder.app.kernel.KernelPluginFailure
+import dev.zakocoder.app.kernel.KernelPluginInstallResult
+import dev.zakocoder.app.kernel.KernelPluginStatus
 import dev.zakocoder.app.settings.KernelFailure
 import dev.zakocoder.app.settings.NetworkProxy
 import dev.zakocoder.app.settings.ProxyCatalogState
@@ -42,6 +51,7 @@ import dev.zakocoder.app.settings.ProxyProbe
 import dev.zakocoder.app.settings.ProxyProtocol
 import dev.zakocoder.app.settings.ProxySubscription
 import dev.zakocoder.app.settings.ProxySubscriptionError
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -59,6 +69,7 @@ private enum class ProxyMode { Direct, Manual, Airport }
 internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBack: () -> Unit) {
     val catalog by workbench.proxyCatalog.state.collectAsStateWithLifecycle()
     val kernel by workbench.proxyKernel.state.collectAsStateWithLifecycle()
+    val pluginStatus by workbench.kernelPlugin.status.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -89,6 +100,17 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     // kernel state machine to report Running/Failed before showing a final page-level result.
     var pendingKernelApply by remember { mutableStateOf<ProxyNode?>(null) }
     var lastKernelNode by remember { mutableStateOf<ProxyNode?>(null) }
+    var pluginBusy by remember { mutableStateOf(false) }
+    var pluginLocalInstall by remember { mutableStateOf(false) }
+    var pluginDownloaded by remember { mutableStateOf(0L) }
+    var pluginTotal by remember { mutableStateOf<Long?>(null) }
+    var pluginFailure by remember { mutableStateOf<KernelPluginFailure?>(null) }
+    var pluginInstallerOpened by remember { mutableStateOf(false) }
+    var pluginCancelled by remember { mutableStateOf(false) }
+    var pluginUninstallRequested by remember { mutableStateOf(false) }
+    var pluginInstallJob by remember { mutableStateOf<Job?>(null) }
+    var pluginHint by remember { mutableStateOf(false) }
+    val pluginReady = pluginStatus is KernelPluginStatus.Installed
 
     LaunchedEffect(Unit) { workbench.proxyCatalog.loadCached() }
     LaunchedEffect(kernel, pendingKernelApply) {
@@ -128,6 +150,90 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
             delay(2000)
             copied = false
         }
+    }
+
+    // The plugin is installed through the system installer, outside this activity. Refresh on
+    // resume so package changes made while the user was away show up without polling.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                workbench.kernelPlugin.refresh()
+                pluginInstallerOpened = false
+                pluginUninstallRequested = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) { workbench.kernelPlugin.refresh() }
+
+    fun handlePluginResult(result: KernelPluginInstallResult) {
+        when (result) {
+            KernelPluginInstallResult.InstallerOpened -> {
+                pluginInstallerOpened = true
+                pluginFailure = null
+            }
+            is KernelPluginInstallResult.Failed -> {
+                pluginFailure = result.reason
+                pluginInstallerOpened = false
+            }
+            KernelPluginInstallResult.Cancelled -> {
+                pluginCancelled = true
+                pluginFailure = null
+            }
+        }
+    }
+
+    fun launchPluginInstall(local: Boolean, block: suspend () -> KernelPluginInstallResult) {
+        pluginInstallJob?.cancel()
+        pluginInstallJob = scope.launch {
+            pluginBusy = true
+            pluginLocalInstall = local
+            pluginDownloaded = 0L
+            pluginTotal = null
+            pluginFailure = null
+            pluginInstallerOpened = false
+            pluginCancelled = false
+            try {
+                handlePluginResult(block())
+            } finally {
+                pluginBusy = false
+                pluginInstallJob = null
+            }
+        }
+    }
+
+    fun downloadPlugin() = launchPluginInstall(local = false) {
+        workbench.kernelPlugin.downloadAndInstall { done, total ->
+            pluginDownloaded = done
+            pluginTotal = total
+        }
+    }
+
+    fun installLocalPlugin(uri: Uri) = launchPluginInstall(local = true) {
+        workbench.kernelPlugin.installFromUri(uri)
+    }
+
+    fun cancelPluginInstall() {
+        pluginInstallJob?.cancel()
+        pluginInstallJob = null
+        pluginBusy = false
+        pluginCancelled = true
+    }
+
+    fun uninstallPlugin() {
+        // Never leave a kernel process bound to a plugin that is being uninstalled.
+        workbench.stopProxyKernel()
+        workbench.kernelPlugin.uninstall()
+        pluginUninstallRequested = true
+        pluginInstallerOpened = false
+        pluginFailure = null
+        pluginCancelled = false
+    }
+
+    val pluginPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) installLocalPlugin(uri)
     }
 
     fun saveProxy(value: String) {
@@ -172,6 +278,10 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     }
 
     fun applyNode(node: ProxyNode) {
+        if (node.viaKernel && !pluginReady) {
+            applyFeedback = R.string.proxy_bottom_needs_plugin
+            return
+        }
         if (node.viaKernel) {
             lastKernelNode = node
             pendingKernelApply = node
@@ -198,6 +308,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     val singleNode = (catalog.probe as? ProxyProbe.SingleNode)?.node
     val selectedNode = activeNodes.firstOrNull { it.id == catalog.selectedId && it.supported }
         ?: singleNode?.takeIf { it.supported }
+    val selectedNeedsPlugin = selectedNode?.viaKernel == true && !pluginReady
     val kernelRunning = kernel as? ProxyKernelState.Running
     val settingsEndpoint = runCatching { NetworkProxy.parse(state.settings.proxy)?.endpoint }.getOrNull()
     val kernelApplied = kernelRunning != null && settingsEndpoint == "socks5://127.0.0.1:${kernelRunning.port}"
@@ -246,6 +357,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                         modeTouched = true
                         modeName = next.name
                         unsupportedHint = false
+                        pluginHint = false
                         formError = null
                         applyFeedback = null
                     }
@@ -309,8 +421,28 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                             onSelect = { workbench.proxyCatalog.select(it) },
                             onUnsupported = { unsupportedHint = true },
                             onRemove = { removing = true },
+                            onPluginNeeded = { pluginHint = true },
                             savingBusy = state.busy,
                             unsupportedHint = unsupportedHint,
+                            pluginReady = pluginReady,
+                            pluginHint = pluginHint,
+                        )
+                        val progress = pluginTotal?.takeIf { it > 0 }?.let { total ->
+                            ((pluginDownloaded * 100) / total).toInt().coerceIn(0, 100)
+                        }
+                        KernelPluginCard(
+                            status = pluginStatus,
+                            busy = pluginBusy,
+                            localInstall = pluginLocalInstall,
+                            progressPercent = progress,
+                            failure = pluginFailure,
+                            installerOpened = pluginInstallerOpened,
+                            cancelled = pluginCancelled,
+                            uninstallRequested = pluginUninstallRequested,
+                            onDownload = ::downloadPlugin,
+                            onPickLocal = { pluginPicker.launch(arrayOf("application/vnd.android.package-archive")) },
+                            onCancel = ::cancelPluginInstall,
+                            onUninstall = ::uninstallPlugin,
                         )
                         KernelStatusCard(
                             kernel = kernel,
@@ -326,6 +458,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                     selectedNode = selectedNode,
                     busy = state.busy || catalog.busy,
                     feedback = applyFeedback,
+                    needsPlugin = selectedNeedsPlugin,
                     onApply = { selectedNode?.let { applyNode(it) } },
                     onCancel = onBack,
                 )
@@ -341,6 +474,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
             TextButton(onClick = {
                 removing = false
                 unsupportedHint = false
+                pluginHint = false
                 linkDraft = ""
                 applyFeedback = null
                 pendingKernelApply = null
@@ -448,8 +582,11 @@ private fun AirportSection(
     onSelect: (String) -> Unit,
     onUnsupported: () -> Unit,
     onRemove: () -> Unit,
+    onPluginNeeded: () -> Unit,
     savingBusy: Boolean,
     unsupportedHint: Boolean,
+    pluginReady: Boolean,
+    pluginHint: Boolean,
 ) {
     val busy = catalog.busy
     var linkFocused by remember { mutableStateOf(false) }
@@ -523,8 +660,8 @@ private fun AirportSection(
                     if (catalog.error == null) {
                         when {
                             airport != null -> ProxyAirportResult(airport.subscription, displayNodes, catalog, !busy && !savingBusy,
-                                onSelect, onUnsupported, unsupportedHint)
-                            single != null -> ProxySingleResult(single.node)
+                                onSelect, onUnsupported, unsupportedHint, pluginReady, pluginHint, onPluginNeeded)
+                            single != null -> ProxySingleResult(single.node, pluginReady)
                             probe is ProxyProbe.UnsupportedOnly -> ProxyUnsupportedResult(probe.nodes, !busy && !savingBusy,
                                 onUnsupported, unsupportedHint)
                             probe is ProxyProbe.NotSubscription -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -532,11 +669,15 @@ private fun AirportSection(
                                 Text(stringResource(R.string.proxy_result_not_subscription), style = MaterialTheme.typography.bodyMedium)
                             }
                             probe == null && catalog.subscription != null -> ProxyAirportResult(catalog.subscription, displayNodes, catalog,
-                                !busy && !savingBusy, onSelect, onUnsupported, unsupportedHint)
+                                !busy && !savingBusy, onSelect, onUnsupported, unsupportedHint, pluginReady, pluginHint, onPluginNeeded)
                         }
                     }
                 }
             }
+        }
+
+        if (pluginHint) {
+            Text(stringResource(R.string.proxy_node_needs_plugin_hint), style = MaterialTheme.typography.bodySmall, color = WaitingAmber)
         }
 
         if (catalog.subscription != null) {
@@ -556,6 +697,9 @@ private fun ProxyAirportResult(
     onSelect: (String) -> Unit,
     onUnsupported: () -> Unit,
     unsupportedHint: Boolean,
+    pluginReady: Boolean,
+    pluginHint: Boolean,
+    onPluginNeeded: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -574,6 +718,8 @@ private fun ProxyAirportResult(
                         enabled = enabled,
                         onSelect = { onSelect(node.id) },
                         onUnsupported = onUnsupported,
+                        pluginReady = pluginReady,
+                        onPluginNeeded = onPluginNeeded,
                     )
                     if (index != nodes.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
@@ -581,6 +727,9 @@ private fun ProxyAirportResult(
         }
         if (unsupportedHint) {
             Text(stringResource(R.string.proxy_node_unsupported_hint), style = MaterialTheme.typography.bodySmall, color = WaitingAmber)
+        }
+        if (pluginHint) {
+            Text(stringResource(R.string.proxy_node_needs_plugin_hint), style = MaterialTheme.typography.bodySmall, color = WaitingAmber)
         }
     }
 }
@@ -610,7 +759,8 @@ private fun ProxyUnsupportedResult(nodes: List<ProxyNode>, enabled: Boolean, onU
 }
 
 @Composable
-private fun ProxySingleResult(node: ProxyNode) {
+private fun ProxySingleResult(node: ProxyNode, pluginReady: Boolean) {
+    val needsPlugin = node.viaKernel && !pluginReady
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ProxyBadge(stringResource(R.string.proxy_badge_single), MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(
@@ -629,18 +779,32 @@ private fun ProxySingleResult(node: ProxyNode) {
                 }
                 Text(stringResource(R.string.proxy_node_host, node.host, node.port) + " · " + protocolName(node.protocol),
                     style = MaterialTheme.typography.bodySmall, color = TertiaryText)
-                Text(stringResource(R.string.proxy_result_single_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                if (needsPlugin) {
+                    Text(stringResource(R.string.proxy_node_needs_plugin), style = MaterialTheme.typography.bodySmall, color = WaitingAmber)
+                } else {
+                    Text(stringResource(R.string.proxy_result_single_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ProxyNodeRow(node: ProxyNode, selected: Boolean, enabled: Boolean, onSelect: () -> Unit, onUnsupported: () -> Unit) {
-    val interaction = if (node.supported) {
-        Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
-    } else {
-        Modifier.clickable(enabled = enabled, onClick = onUnsupported)
+private fun ProxyNodeRow(
+    node: ProxyNode,
+    selected: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit,
+    onUnsupported: () -> Unit,
+    pluginReady: Boolean = true,
+    onPluginNeeded: () -> Unit = {},
+) {
+    val needsPlugin = node.viaKernel && !pluginReady
+    val selectable = node.supported && !needsPlugin
+    val interaction = when {
+        selectable -> Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
+        needsPlugin -> Modifier.clickable(enabled = enabled, onClick = onPluginNeeded)
+        else -> Modifier.clickable(enabled = enabled, onClick = onUnsupported)
     }
     Row(
         interaction.fillMaxWidth().heightIn(min = 56.dp)
@@ -667,10 +831,11 @@ private fun ProxyNodeRow(node: ProxyNode, selected: Boolean, enabled: Boolean, o
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (node.supported) {
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
-        } else {
-            Text(stringResource(R.string.proxy_badge_unsupported), fontSize = 12.sp, lineHeight = 16.sp,
+        when {
+            selectable -> RadioButton(selected = selected, onClick = null, enabled = enabled)
+            needsPlugin -> Text(stringResource(R.string.proxy_node_needs_plugin), fontSize = 12.sp, lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium, color = WaitingAmber, maxLines = 2)
+            else -> Text(stringResource(R.string.proxy_badge_unsupported), fontSize = 12.sp, lineHeight = 16.sp,
                 fontWeight = FontWeight.Medium, color = WaitingAmber)
         }
     }
@@ -751,6 +916,111 @@ private fun KernelTag() {
     }
 }
 
+/** Optional kernel plugin: install (download or local APK), version state, uninstall. */
+@Composable
+private fun KernelPluginCard(
+    status: KernelPluginStatus,
+    busy: Boolean,
+    localInstall: Boolean,
+    progressPercent: Int?,
+    failure: KernelPluginFailure?,
+    installerOpened: Boolean,
+    cancelled: Boolean,
+    uninstallRequested: Boolean,
+    onDownload: () -> Unit,
+    onPickLocal: () -> Unit,
+    onCancel: () -> Unit,
+    onUninstall: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = cardBorder(),
+        shadowElevation = cardElevation(),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusDot(
+                    when (status) {
+                        KernelPluginStatus.NotInstalled -> TertiaryText
+                        is KernelPluginStatus.Installed -> ReadyGreen
+                        KernelPluginStatus.Incompatible -> WaitingAmber
+                    },
+                )
+                Text(stringResource(R.string.proxy_plugin_section), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            }
+            Text(
+                when (status) {
+                    KernelPluginStatus.NotInstalled -> stringResource(R.string.proxy_plugin_not_installed)
+                    is KernelPluginStatus.Installed -> stringResource(R.string.proxy_plugin_installed, status.info.versionName)
+                    KernelPluginStatus.Incompatible -> stringResource(R.string.proxy_plugin_incompatible)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (status is KernelPluginStatus.Incompatible) WaitingAmber else TertiaryText,
+            )
+            if (status !is KernelPluginStatus.Installed) {
+                Text(stringResource(R.string.proxy_plugin_required_hint),
+                    style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+            }
+            if (installerOpened) {
+                Text(stringResource(R.string.proxy_plugin_installer_opened),
+                    style = MaterialTheme.typography.bodySmall, color = ReadyGreen)
+            }
+            if (uninstallRequested) {
+                Text(stringResource(R.string.proxy_plugin_uninstalling),
+                    style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+            }
+            if (cancelled) {
+                Text(stringResource(R.string.proxy_plugin_cancelled),
+                    style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+            }
+            failure?.let {
+                Text(stringResource(it.messageRes()), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
+            }
+            if (busy) {
+                if (localInstall) {
+                    Text(stringResource(R.string.proxy_plugin_installing), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                } else {
+                    if (progressPercent != null) {
+                        LinearProgressIndicator(progress = { progressPercent / 100f }, modifier = Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.proxy_plugin_download_progress, progressPercent),
+                            style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                    } else {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text(stringResource(R.string.proxy_plugin_downloading), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                    }
+                }
+                TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.proxy_plugin_cancel), color = MaterialTheme.colorScheme.error)
+                }
+            } else {
+                when (status) {
+                    KernelPluginStatus.NotInstalled, KernelPluginStatus.Incompatible -> Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_install_online), maxLines = 1)
+                        }
+                        OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_install_local), maxLines = 1)
+                        }
+                    }
+                    is KernelPluginStatus.Installed -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onUninstall, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_uninstall), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** Local Xray kernel status for the current airport subscription (airport mode only). */
 @Composable
 private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRetry: (() -> Unit)?) {
@@ -787,6 +1057,8 @@ private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRet
             if (kernel is ProxyKernelState.Running) {
                 Text(stringResource(R.string.proxy_kernel_running_hint),
                     style = MaterialTheme.typography.labelSmall, color = TertiaryText)
+                Text(stringResource(R.string.proxy_kernel_plugin_running_detail),
+                    style = MaterialTheme.typography.labelSmall, color = TertiaryText)
             }
             if (kernel is ProxyKernelState.Running || failed != null) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
@@ -820,6 +1092,21 @@ private fun KernelFailure.messageRes(): Int = when (this) {
     KernelFailure.StartFailed -> R.string.proxy_kernel_failure_start_failed
     KernelFailure.Timeout -> R.string.proxy_kernel_failure_timeout
     KernelFailure.PortUnavailable -> R.string.proxy_kernel_failure_port_unavailable
+    KernelFailure.PluginNotInstalled -> R.string.proxy_kernel_failure_plugin_missing
+    KernelFailure.PluginIncompatible -> R.string.proxy_kernel_failure_plugin_incompatible
+    KernelFailure.ServiceUnavailable -> R.string.proxy_plugin_error_service_unavailable
+}
+
+private fun KernelPluginFailure.messageRes(): Int = when (this) {
+    KernelPluginFailure.Download -> R.string.proxy_plugin_error_download
+    KernelPluginFailure.InvalidPackage -> R.string.proxy_plugin_error_invalid_package
+    KernelPluginFailure.WrongSigner -> R.string.proxy_plugin_error_wrong_signer
+    KernelPluginFailure.WrongPackage -> R.string.proxy_plugin_error_wrong_package
+    KernelPluginFailure.VersionTooOld -> R.string.proxy_plugin_error_version_too_old
+    KernelPluginFailure.VersionDowngrade -> R.string.proxy_plugin_error_version_downgrade
+    KernelPluginFailure.Io -> R.string.proxy_plugin_error_io
+    KernelPluginFailure.NotInstalled -> R.string.proxy_plugin_error_not_installed
+    KernelPluginFailure.ServiceUnavailable -> R.string.proxy_plugin_error_service_unavailable
 }
 
 @Composable
@@ -827,6 +1114,7 @@ private fun AirportBottomBar(
     selectedNode: ProxyNode?,
     busy: Boolean,
     feedback: Int?,
+    needsPlugin: Boolean,
     onApply: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -838,6 +1126,10 @@ private fun AirportBottomBar(
                     Text(stringResource(R.string.proxy_selected_summary, it.name), style = MaterialTheme.typography.bodySmall,
                         color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                if (needsPlugin) {
+                    Text(stringResource(R.string.proxy_bottom_needs_plugin), style = MaterialTheme.typography.bodySmall,
+                        color = WaitingAmber)
+                }
                 feedback?.let {
                     Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = feedbackColor(it))
                 }
@@ -847,7 +1139,7 @@ private fun AirportBottomBar(
                     }
                     WorkbenchPrimaryButton(
                         onClick = onApply,
-                        enabled = selectedNode != null && !busy,
+                        enabled = selectedNode != null && !busy && !needsPlugin,
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                     ) { Text(stringResource(R.string.proxy_action_apply)) }
                 }

@@ -126,7 +126,7 @@
 
 > 本 PR 当前为「内核随主 APK」形态；维护者要求改为「轻量主 APK + 可选内核插件」。拆分方案、体积实测与实施顺序见 [代理内核插件方案](PROXY_KERNEL_PLUGIN.md)。
 
-- 随 APK 提供自编译 Xray-core `v1.260327.0`（MPL-2.0），以 jniLib 形式打包（`libzakocoder_xray.so`），从 `nativeLibraryDir` 执行；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
+- 内核改为**可选插件 APK**（`:kernel-plugin`，applicationId `dev.zakocoder.app.kernel`，与主包同证书）：自编译 Xray-core `v1.260327.0`（MPL-2.0），以 jniLib 形式打进插件包（`libzakocoder_xray.so`），从**插件自己的** `nativeLibraryDir` 执行；主 APK 不含内核、不需要 Go；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
 - 节点参数来自订阅解析（vmess base64 JSON / ss SIP002 / trojan URL / Clash YAML）；应用生成最小配置：`127.0.0.1` 空闲端口 SOCKS inbound（每次启动随机 user/pass 的 RFC 1929 认证、禁 UDP）+ 单节点 outbound（vmess tcp/ws/grpc + tls/sni/host/path；ss method/password；trojan password/sni）。
 - 生命周期：切换节点先停旧内核；启动最多等 10s 连通性；超时/进程退出→失败提示；配置写到 cacheDir 且 stop 时删除；日志不输出完整配置/凭据。
 - 限制：内核进程随应用进程存活，后台被系统回收后不保证接管；应用重启只清理自己拥有（端口标记匹配）的 loopback 残留端点，用户手动配置的本地代理不受影响；启动/停止会清理残留配置与日志；内核启动只保证本地 SOCKS 端口就绪，节点连通性在首次请求时验证（不可达节点也会显示“运行中”）；SOCKS 入口使用每次启动随机生成的账号密码（RFC 1929），其它 App 不能直接借用本机代理；TLS 节点使用 Android 系统 CA（内核进程注入 `SSL_CERT_DIR`）；`headerType`（tcp http 伪装）、Clash 嵌套 `ws-opts/grpc-opts/reality-opts`、Trojan ws、SS plugin 等当前无法表达，相关节点直接标“暂不支持”而不是假装可用；订阅缓存 v2 会持久化内核 transport，旧 v1 缓存需重新识别一次；VLESS、TUIC、Hysteria 等仍未支持；无延迟测速/自动切换；APK 体积增加（arm64 xray 未压缩约 29MB，压缩后约 +12MB）。

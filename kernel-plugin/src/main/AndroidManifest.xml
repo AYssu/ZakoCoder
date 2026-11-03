@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Only the main app, signed with the same certificate, may bind this service. -->
+    <permission
+        android:name="dev.zakocoder.app.permission.KERNEL"
+        android:protectionLevel="signature" />
+
+    <application
+        android:hasCode="true"
+        android:label="ZakoCoder 内核插件"
+        >
+
+        <service
+            android:name=".KernelService"
+            android:exported="true"
+            android:permission="dev.zakocoder.app.permission.KERNEL" />
+
+        <meta-data android:name="dev.zakocoder.app.kernel.MIN_MAIN_VERSION" android:value="${minMainVersion}" />
+        <meta-data android:name="dev.zakocoder.app.kernel.CONTRACT_VERSION" android:value="1" />
+    </application>
+</manifest>

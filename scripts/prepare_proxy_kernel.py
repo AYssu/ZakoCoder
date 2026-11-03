@@ -4,7 +4,7 @@
 The kernel is a Go executable packaged as a jniLib asset so Android can execute it from
 nativeLibraryDir (the app cannot execute arbitrary files from its data directory). This script
 builds it from the pinned module version with the pinned Go toolchain, verifies the source version,
-copies it to the ignored runtime-artifacts/jniLibs directory and verifies its SHA-256.
+copies it to the ignored runtime-artifacts/kernel-jniLibs directory used only by the kernel plugin module and verifies its SHA-256.
 
 Network note: module downloads go through a Gradle-independent Go proxy. Set
 PROXY_KERNEL_GOPROXY to override the default mirrors (used by this repository's CI because
@@ -22,7 +22,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "native-kernel/artifacts.lock.json"
-OUTPUT = ROOT / "runtime-artifacts/jniLibs"
+OUTPUT = ROOT / "runtime-artifacts/kernel-jniLibs"
 DEFAULT_GOPROXY = "https://mirrors.aliyun.com/goproxy/,https://goproxy.cn,direct"
 DEFAULT_GOSUMDB = "sum.golang.google.cn"
 
