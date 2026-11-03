@@ -94,6 +94,16 @@ interface IKernelService {
 - **体积实测（同提交/debug/arm64，clean）**：基础版主 APK **21,473,040 B**；当前含内核主 APK **35,214,535 B**；**独立插件 APK（arm64）12,922,037 B**（xray 原始 30,277,794 B / 压缩 11,883,858 B）。x86_64 原型插件 14,115,955 B。主 APK 可回到约 20.5 MiB，需要内核的用户额外安装约 12.3 MiB 插件。
 - **尚未验证**：PackageInstaller 在线/SAF 安装、取消/失败/更新/卸载、binder 死亡、生产证书 pinning、真实 arm64 设备与安装占用。原型用 Messenger；生产实现用 AIDL，边界相同。
 
+## 7.2 生产实现与端到端验证（已完成）
+
+在原型基础上已完成生产实现：`kernel-plugin` 模块（AIDL 服务、签名级权限、插件 `nativeLibraryDir` 执行 xray、`SSL_CERT_DIR`、随机 SOCKS 认证、启动/停止清理）与主程序 `KernelPluginManager`/`KernelPluginInstaller`/插件化 `ProxyKernel`、安装卡 UI、CI/手动构建拆分。
+
+- **关键修复**：插件 APK 最初漏了 `android.permission.INTERNET`，导致 xray 在插件进程内无法建立/接受网络连接，表现为启动 Timeout；补权限后通过。
+- **设备端到端**（x86_64/API 37，本地自建 VMess + HTTP fixture，debug 证书）：`KernelPluginDeviceTest` → **OK (2 tests)**：插件绑定/`contractVersion=1`；经插件启动 VMess 内核 → 随机 SOCKS 认证 → HTTP 200（`kernel-e2e-ok`）→ stop 后 Stopped。
+- **实测体积（debug/arm64/clean）**：基础主 APK **21,530,137 B ≈ 20.5 MiB**（无 xray）；插件 APK **12,772,910 B ≈ 12.2 MiB**（xray 压缩 11,883,858 B）。
+- **自动化**：JVM **114 tests / 0 failures**（settings 103 + kernel trust 11）；`assembleDebug`、`lintDebug`、`assembleDebugAndroidTest`、`check_repository` 通过；CI 拆成 base app job（不需要 Go）与独立 `kernel-plugin` job（setup-go + 自编译校验）。
+- **仍未完成**：真实 arm64 设备回归；GitHub Releases 正式插件资产与 release 签名 pin（当前在线下载 URL 为占位、debug 证书 pin）；系统安装器安装/更新/卸载全流程 UI 回归。
+
 ## 8. 构建与发布改造（方案确认后）
 
 - 主 APK：移除 `prepareProxyKernel` 与 xray jniLibs；基础构建不再需要 Go；CI 保持轻量。
