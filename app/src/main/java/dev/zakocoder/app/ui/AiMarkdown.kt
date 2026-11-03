@@ -24,6 +24,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.withContext
 import org.commonmark.ext.gfm.tables.*
@@ -64,13 +66,13 @@ internal fun AiMarkdown(
     onReadingInteraction: () -> Unit = {},
     onLink: (String) -> Unit,
 ) {
-    var document by remember { mutableStateOf<Node?>(null) }
+    var document by remember { mutableStateOf(AiMarkdownCache.get(text.take(AiTextPages.MARKDOWN_LIMIT))) }
     var fullTextLength by rememberSaveable { mutableStateOf<Int?>(null) }
     val current by rememberUpdatedState(text)
     LaunchedEffect(Unit) {
         // Parsing is decoupled from the 32 ms reveal clock and never runs on the UI thread.
-        snapshotFlow { current.take(AiTextPages.MARKDOWN_LIMIT) }.sample(64).conflate().collect { source ->
-            document = withContext(Dispatchers.Default) { AiMarkdownDocument.parse(source.take(AiTextPages.MARKDOWN_LIMIT)) }
+        snapshotFlow { current.take(AiTextPages.MARKDOWN_LIMIT) }.sample(64).onStart { emit(current.take(AiTextPages.MARKDOWN_LIMIT)) }.distinctUntilChanged().conflate().collect { source ->
+            document = withContext(Dispatchers.Default) { AiMarkdownCache.parse(source) }
         }
     }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -137,11 +139,13 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
 @Composable
 private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onOpenProjectPath: ((String) -> Unit)?): AnnotatedString {
     val colors = MaterialTheme.colorScheme
-    return buildAnnotatedString {
+    val linkAction = rememberUpdatedState(onLink)
+    val pathAction = rememberUpdatedState(onOpenProjectPath)
+    return remember(node, colors, projectId, onOpenProjectPath != null) { buildAnnotatedString {
         fun projectLink(label: String, relative: String) {
             withLink(LinkAnnotation.Clickable("project:$relative",
                 TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
-                onOpenProjectPath?.invoke(relative)
+                pathAction.value?.invoke(relative)
             }) { append(label) }
         }
         fun appendReferences(value: String, whole: Boolean = false) {
@@ -171,7 +175,7 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
                     val target = if (AiMarkdownDocument.externalLink(current.destination)) current.destination else null
                     if (relative != null || target != null) withLink(LinkAnnotation.Clickable(relative ?: target!!,
                         TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
-                        if (relative != null) onOpenProjectPath?.invoke(relative) else onLink(target!!)
+                        if (relative != null) pathAction.value?.invoke(relative) else linkAction.value(target!!)
                     }) {
                         AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
                     } else AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
@@ -181,7 +185,7 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
             }
         }
         AiMarkdownDocument.children(node).forEach { appendNode(it, 0) }
-    }
+    } }
 }
 
 @Suppress("DEPRECATION")

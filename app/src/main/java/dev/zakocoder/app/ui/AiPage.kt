@@ -171,6 +171,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             } }
             itemsIndexed(state.timeline, key = { _, entry -> entry.id }) { index, entry ->
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
+                Column(Modifier.fillMaxWidth().animateItem(fadeInSpec = androidx.compose.animation.core.tween(180),
+                    placementSpec = androidx.compose.animation.core.tween(220), fadeOutSpec = null)) {
                 if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
                     AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
                         onRetry = if (!state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
@@ -198,6 +200,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 }
                 if (entry.turn > 0 && state.timeline.getOrNull(index + 1)?.turn != entry.turn && !((state.active || state.questionContinuation != null) && entry.turn == state.turn))
                     AiTurnFooter(state, entry.turn)
+                }
             }
             items(state.drafts, key = { "draft-${it.index}" }) { draft -> Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 Text(stringResource(R.string.ai_receiving_arguments), style = MaterialTheme.typography.labelSmall)
