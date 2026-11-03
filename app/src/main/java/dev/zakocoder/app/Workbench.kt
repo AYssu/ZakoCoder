@@ -723,13 +723,13 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
      * Stops the kernel and clears the local bridge endpoint when the current setting points at it.
      * Called by the UI when the subscription is cleared or the source is switched.
      */
-    fun stopProxyKernel() {
+    fun stopProxyKernel(clearSetting: Boolean = true) {
         val running = proxyKernel.state.value as? ProxyKernelState.Running
         val ownedPort = running?.port ?: kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
         proxyKernel.stop()
         kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
         val current = runCatching { NetworkProxy.parse(mutable.value.settings.proxy) }.getOrNull()
-        if (ownedPort > 0 && current?.host == "127.0.0.1" && current.port == ownedPort) {
+        if (clearSetting && ownedPort > 0 && current?.host == "127.0.0.1" && current.port == ownedPort) {
             saveSettings(mutable.value.settings.copy(proxy = ""))
         }
     }

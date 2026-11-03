@@ -133,6 +133,9 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     fun saveProxy(value: String) {
         formError = null
         applyFeedback = null
+        // A manual/direct endpoint replaces whatever the kernel owned; never leave the child
+        // process and its loopback port alive behind the new setting.
+        if (kernel != ProxyKernelState.Stopped) workbench.stopProxyKernel(clearSetting = false)
         val candidate = state.settings.copy(proxy = value)
         try {
             workbench.validateSettings(candidate)

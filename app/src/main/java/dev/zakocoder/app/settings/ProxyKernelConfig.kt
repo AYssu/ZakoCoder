@@ -10,8 +10,9 @@ package dev.zakocoder.app.settings
  *   network/TLS/security values return null instead of producing a config that fails later;
  * - every embedded string is length-checked and control characters are rejected, then `"` and `\`
  *   are JSON-escaped. Credentials therefore stay syntactically confined to their string literal;
- * - the generated inbound listens on 127.0.0.1 only with auth=noauth and UDP disabled, so it is a
- *   local bridge for the app's own requests rather than a new LAN-facing proxy.
+ * - the generated inbound listens on 127.0.0.1 only with UDP disabled; ProxyKernel passes a
+ *   per-start random RFC 1929 user/pass so it is a local bridge for this app only, not a proxy
+ *   other apps on the device can borrow.
  */
 object ProxyKernelConfig {
     /** Returns the Xray config JSON, or null when [node] cannot be represented safely. */
