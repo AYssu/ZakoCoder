@@ -47,6 +47,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var page by rememberSaveable { mutableStateOf(Page.Project) }
     var updatesOpen by rememberSaveable { mutableStateOf(false) }
+    var proxyOpen by rememberSaveable { mutableStateOf(false) }
     var modelsOpen by rememberSaveable { mutableStateOf(false) }
     var modelsAdd by rememberSaveable { mutableStateOf(false) }
     var extensionsOpen by rememberSaveable { mutableStateOf(false) }
@@ -96,6 +97,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography, shapes = Shapes(extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), medium = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), large = androidx.compose.foundation.shape.RoundedCornerShape(18.dp))) {
         UpdateBindings(workbench.updates) { updatesOpen = true }
         if (updatesOpen) UpdatePage(workbench.updates) { updatesOpen = false }
+        if (proxyOpen) ProxySettingsPage(workbench, state) { proxyOpen = false }
         Scaffold(containerColor = if (inTerminal) TerminalBackground else MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.systemBars,
             bottomBar = {
@@ -169,7 +171,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                             workbench.select(projectId); referencedPath = path; openedProjectId = projectId
                             focus.clearFocus(); keyboard?.hide(); page = Page.Project
                         }) }
-                    Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }) }
+                    Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { focus.clearFocus(); keyboard?.hide(); proxyOpen = true }) }
                 }
             }
             if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(start = 20.dp, end = 20.dp, top = 12.dp),

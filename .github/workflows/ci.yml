@@ -63,3 +63,35 @@ jobs:
           python3 native-runtime/bundle_sources.py
       # Automatic CI does not upload APKs; build-apk.yml provides manual Debug test artifacts.
       # Beta publication is a separate manually dispatched, signed and validated workflow; stable release remains gated.
+
+  kernel-plugin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: native-kernel/go.version
+          cache: false
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@v5
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Build and verify the optional kernel plugin
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_proxy_kernel.py
+          ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug --stacktrace
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk
+          sha256sum kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk
+

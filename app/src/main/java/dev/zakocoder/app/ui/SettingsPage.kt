@@ -110,7 +110,7 @@ private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Setti
 private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant) }
 
 @Composable
-internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}) {
+internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}, onProxy: () -> Unit = {}) {
     val context = LocalContext.current
     val installedVersion = installedAppVersion()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
@@ -234,7 +234,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             SettingsDivider()
             SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, mono = true, glyph = Glyph.Globe, enabled = !state.busy, onClick = { editing = "dns" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.proxy_short), state.proxyDisplay.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = { editing = "proxy" })
+            SettingsRow(stringResource(R.string.proxy_short), state.proxyDisplay.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = onProxy)
         } }
         item { SettingsGroup(stringResource(R.string.storage_title)) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

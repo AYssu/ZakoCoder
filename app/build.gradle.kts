@@ -42,8 +42,19 @@ android {
     ndkVersion = "28.2.13676358"
     defaultConfig { ndk { abiFilters += compatibilityAbis } }
     sourceSets.getByName("main").jniLibs.directories.add(rootProject.file("runtime-artifacts/jniLibs").absolutePath)
-    packaging { jniLibs { useLegacyPackaging = true; keepDebugSymbols += "**/libzakocoder_*.so" } }
-    buildFeatures { compose = true }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libzakocoder_*.so"
+            // The optional kernel lives in the plugin APK; remove stale cache copies defensively.
+            excludes += "**/libzakocoder_xray.so"
+        }
+    }
+    buildFeatures {
+        compose = true
+        aidl = true
+        buildConfig = true
+    }
     testOptions { unitTests.isReturnDefaultValues = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -69,7 +80,15 @@ compatibilityAbis.forEach { abi ->
     }
     prepareRuntime.configure { dependsOn(prepareAbi) }
 }
-tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
+tasks.named("preBuild").configure {
+    dependsOn(prepareRuntime)
+    doFirst {
+        // Old builds wrote the kernel into runtime-artifacts/jniLibs; delete any stale copy before merge.
+        rootProject.file("runtime-artifacts/jniLibs").walkTopDown()
+            .filter { it.isFile && it.name == "libzakocoder_xray.so" }
+            .forEach { it.delete() }
+    }
+}
 tasks.matching { it.name.contains("Release") }.configureEach {
     doFirst {
         check(betaRelease) {

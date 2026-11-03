@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_page_title">网络代理</string>
+    <string name="proxy_section_status">当前状态</string>
+    <string name="proxy_section_mode">连接方式</string>
+    <string name="proxy_section_manual">手动代理</string>
+    <string name="proxy_section_airport">机场订阅</string>
+    <string name="proxy_section_nodes">节点</string>
+
+    <string name="proxy_status_direct">直连</string>
+    <string name="proxy_status_manual">手动代理</string>
+    <string name="proxy_status_airport">机场节点</string>
+    <string name="proxy_status_airport_kernel">机场节点（本地内核）</string>
+    <string name="proxy_status_effective">已生效</string>
+    <string name="proxy_status_not_configured">未配置代理</string>
+    <string name="proxy_status_credential_hint">含加密凭据</string>
+    <string name="proxy_status_source">来自机场 · %1$s</string>
+    <string name="proxy_status_masked_source">来源：%1$s</string>
+    <string name="proxy_status_copy_hint">点按复制打码端点</string>
+    <string name="proxy_status_copied">已复制打码端点</string>
+
+    <string name="proxy_mode_direct">直连</string>
+    <string name="proxy_mode_manual">手动代理</string>
+    <string name="proxy_mode_airport">机场订阅</string>
+    <string name="proxy_mode_direct_hint">不经过代理，直接连接网络。</string>
+    <string name="proxy_mode_manual_hint">支持 HTTP 与 SOCKS5；SOCKS5 可带凭据并加密保存。</string>
+    <string name="proxy_direct_save">使用直连</string>
+
+    <string name="proxy_manual_label">代理地址</string>
+    <string name="proxy_manual_placeholder">http://主机:端口 或 socks5://[用户:密码@]主机:端口</string>
+    <string name="proxy_manual_help">留空并保存即关闭代理。当前端点只显示不含密码的地址。</string>
+    <string name="proxy_manual_save">保存并启用</string>
+    <string name="proxy_manual_saving">正在保存…</string>
+
+    <string name="proxy_airport_link_label">订阅链接</string>
+    <string name="proxy_airport_link_placeholder">https://…</string>
+    <string name="proxy_airport_paste">粘贴</string>
+    <string name="proxy_airport_link_help">仅支持 HTTPS。链接可能含口令，只在点击识别或刷新时联网。</string>
+    <string name="proxy_airport_probe">识别链接</string>
+    <string name="proxy_airport_probing">正在识别</string>
+    <string name="proxy_airport_retry">重新识别</string>
+    <string name="proxy_airport_refresh">刷新订阅</string>
+    <string name="proxy_airport_remove">移除订阅</string>
+    <string name="proxy_airport_cached">上次导入：%1$s · %2$d 个节点</string>
+    <string name="proxy_airport_empty_title">还没有导入机场订阅</string>
+    <string name="proxy_airport_empty_hint">粘贴订阅链接后点“识别链接”。打开页面不会联网。</string>
+
+    <string name="proxy_badge_airport">机场订阅</string>
+    <string name="proxy_badge_single">单节点</string>
+    <string name="proxy_badge_unsupported">暂不支持</string>
+    <string name="proxy_badge_unknown">无法识别</string>
+    <string name="proxy_counts">%1$d 个节点 · %2$d 个可用</string>
+    <string name="proxy_result_unsupported_only">共 %1$d 个节点，但都缺少必要参数或协议暂不支持。</string>
+    <string name="proxy_result_not_subscription">该链接无法识别为机场订阅或单节点链接，请检查后重试。</string>
+    <string name="proxy_result_single_hint">识别到单个可用节点，可直接保存并启用。</string>
+    <string name="proxy_node_unsupported_hint">该节点缺少必要参数或协议暂不支持。</string>
+    <string name="proxy_node_host">%1$s:%2$d</string>
+    <string name="proxy_selected_summary">将启用：%1$s</string>
+    <string name="proxy_action_apply">保存并启用</string>
+    <string name="proxy_action_cancel">取消</string>
+    <string name="proxy_feedback_saved">已提交保存</string>
+    <string name="proxy_feedback_failed">当前无法保存，请稍后重试</string>
+    <string name="proxy_feedback_unsupported">该节点协议暂不支持</string>
+    <string name="proxy_airport_retry_refresh">重试刷新</string>
+
+    <string name="proxy_kernel_section">本地内核</string>
+    <string name="proxy_kernel_badge">本地内核</string>
+    <string name="proxy_kernel_stopped">未运行（启用 VMess/SS/Trojan 节点时自动启动）</string>
+    <string name="proxy_kernel_starting">正在启动…</string>
+    <string name="proxy_kernel_running">运行中 · %1$s · 127.0.0.1:%2$d</string>
+    <string name="proxy_kernel_running_hint">本地端口已就绪；节点连通性在首次请求时验证。</string>
+    <string name="proxy_kernel_stop">停止内核</string>
+    <string name="proxy_kernel_retry">重试启动</string>
+    <string name="proxy_kernel_failure_binary_missing">缺少本地内核文件，无法启动。</string>
+    <string name="proxy_kernel_failure_unsupported_node">该节点参数不完整或内核不支持。</string>
+    <string name="proxy_kernel_failure_start_failed">本地内核启动失败。</string>
+    <string name="proxy_kernel_failure_timeout">本地内核启动超时。</string>
+    <string name="proxy_kernel_failure_port_unavailable">本地端口不可用，请停止内核后重试。</string>
+    <string name="proxy_kernel_failure_plugin_missing">尚未安装内核插件，无法启动本地内核。</string>
+    <string name="proxy_kernel_failure_plugin_incompatible">内核插件与主程序不兼容，请更新插件。</string>
+    <string name="proxy_kernel_plugin_running_detail">本地内核由已安装的内核插件提供。</string>
+    <string name="proxy_feedback_kernel_starting">正在启动本地内核…</string>
+    <string name="proxy_feedback_kernel_running">内核已启动（连通性在首次请求时验证）</string>
+
+    <string name="proxy_plugin_section">内核插件</string>
+    <string name="proxy_plugin_not_installed">未安装内核插件</string>
+    <string name="proxy_plugin_required_hint">VMess/SS/Trojan 节点需要安装内核插件才能启用。</string>
+    <string name="proxy_plugin_install_online">在线安装</string>
+    <string name="proxy_plugin_install_local">从本地安装</string>
+    <string name="proxy_plugin_installed">已安装 v%1$s</string>
+    <string name="proxy_plugin_incompatible">插件与主程序不兼容，请更新插件或主程序。</string>
+    <string name="proxy_plugin_downloading">正在下载内核插件…</string>
+    <string name="proxy_plugin_download_progress">正在下载内核插件：%1$d%%</string>
+    <string name="proxy_plugin_installing">正在处理安装包…</string>
+    <string name="proxy_plugin_cancel">取消安装</string>
+    <string name="proxy_plugin_cancelled">已取消安装。</string>
+    <string name="proxy_plugin_installer_opened">已打开系统安装器，完成后返回本页刷新。</string>
+    <string name="proxy_plugin_update_online">在线更新</string>
+    <string name="proxy_plugin_update_local">从本地更新</string>
+    <string name="proxy_plugin_uninstall">移除插件</string>
+    <string name="proxy_plugin_uninstalling">已打开系统卸载界面，完成后返回本页刷新。</string>
+    <string name="proxy_node_needs_plugin">需安装内核插件</string>
+    <string name="proxy_node_needs_plugin_hint">该节点经本地内核运行，需先安装内核插件才能启用。</string>
+    <string name="proxy_bottom_needs_plugin">需先安装内核插件才能启用该节点</string>
+    <string name="proxy_plugin_error_download">下载内核插件失败，请检查网络后重试。</string>
+    <string name="proxy_plugin_error_invalid_package">安装包无效或已损坏，请重新下载。</string>
+    <string name="proxy_plugin_error_wrong_signer">插件签名校验失败，不是受信任的内核插件。</string>
+    <string name="proxy_plugin_error_wrong_package">安装包不是 ZakoCoder 内核插件。</string>
+    <string name="proxy_plugin_error_version_too_old">插件版本过旧，请安装较新版本。</string>
+    <string name="proxy_plugin_error_version_downgrade">不允许降级安装，请使用相同或更高版本。</string>
+    <string name="proxy_plugin_error_io">读写安装包失败，请检查存储后重试。</string>
+    <string name="proxy_plugin_error_not_installed">尚未安装内核插件。</string>
+    <string name="proxy_plugin_error_service_unavailable">内核插件服务不可用，请重试或重新安装插件。</string>
+
+    <string name="proxy_remove_title">移除机场订阅？</string>
+    <string name="proxy_remove_message">将删除本机保存的机场订阅、节点与链接，并停止本地内核；当前已生效的代理不会被自动关闭。此操作无法撤销。</string>
+    <string name="proxy_remove_confirm">确认移除</string>
+
+    <string name="proxy_error_invalid_link">链接格式不正确，请检查后重试。</string>
+    <string name="proxy_error_insecure_scheme">仅支持 HTTPS 订阅链接，请改用 https://。</string>
+    <string name="proxy_error_unreachable">无法连接订阅服务器，请检查网络后重试。</string>
+    <string name="proxy_error_http_status">订阅服务器返回错误状态，请稍后重试。</string>
+    <string name="proxy_error_too_large">订阅内容超过大小上限，请更换更小的订阅。</string>
+    <string name="proxy_error_unsupported_content">订阅内容无法解析，请确认这是机场订阅链接。</string>
+    <string name="proxy_error_not_found">订阅地址不存在，请检查链接。</string>
+    <string name="proxy_error_empty">订阅内容为空，请检查链接或稍后刷新。</string>
+
+    <string name="proxy_protocol_short_http">HTTP</string>
+    <string name="proxy_protocol_short_socks5">SOCKS</string>
+    <string name="proxy_protocol_short_vmess">VM</string>
+    <string name="proxy_protocol_short_ss">SS</string>
+    <string name="proxy_protocol_short_trojan">TR</string>
+    <string name="proxy_protocol_short_vless">VL</string>
+    <string name="proxy_protocol_short_hysteria">HY</string>
+    <string name="proxy_protocol_short_tuic">TUIC</string>
+    <string name="proxy_protocol_short_other">OTH</string>
+    <string name="proxy_protocol_name_http">HTTP</string>
+    <string name="proxy_protocol_name_socks5">SOCKS5</string>
+    <string name="proxy_protocol_name_vmess">VMess</string>
+    <string name="proxy_protocol_name_ss">Shadowsocks</string>
+    <string name="proxy_protocol_name_trojan">Trojan</string>
+    <string name="proxy_protocol_name_vless">VLESS</string>
+    <string name="proxy_protocol_name_hysteria">Hysteria</string>
+    <string name="proxy_protocol_name_tuic">TUIC</string>
+    <string name="proxy_protocol_name_other">其他协议</string>
+</resources>
