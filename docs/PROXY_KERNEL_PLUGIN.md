@@ -84,6 +84,16 @@ interface IKernelService {
 6. **回归**：直连/手动代理、订阅导入（无插件）、安装后 VMess/SS/Trojan 启动/停止/切换/重启、插件更新/卸载、失败恢复；在真实 arm64 设备上跑一次。
 7. **供应链**：插件 Release 工作流：Go 工具链 pin、Xray 版本/sha256、许可证与源码包、按 ABI 发布、校验元数据。
 
+## 7.1 原型验证结果（已完成，2026-11-03）
+
+在 x86_64 Android 17/API 37 模拟器上用同一提交、debug 签名、x86_64 ABI 完成最小双 APK 原型（`prototype/kernel-plugin` 分支，不合并）：
+
+- **执行边界**：主 APK 自己的 `nativeLibraryDir/libzakocoder_xray.so` 可执行（`Xray version` 正常）；同一 ELF 复制到 `filesDir`、chmod 后执行被系统拒绝（Android 10+ W^X）。→ 插件必须从插件自己的 `nativeLibraryDir` 执行，设计成立。
+- **跨包 Binder**：独立插件 APK 与主 APK 同一 debug 证书（SHA-256 `329ae2b1…`），签名级权限服务 `bindService` 成功；`ping/contractVersion` 正常，插件在**自己的** `nativeLibraryDir` 执行 xray 并返回版本串。设备测试 `KernelPluginProbeDeviceTest` → **OK (1 test)**。
+- **实现要点（原型踩坑）**：① Android 11+ 主程序必须声明 `<queries><package android:name="插件包名"/></queries>`，否则 logcat `AppsFilter … BLOCKED`、`bindService` 失败；② `Service.onBind` 的调用者身份是 system，不能在其中 `checkCallingPermission`（会拒绝），签名权限由 `<service android:permission>` 在 bind 前强制，真正的调用者校验放在 AIDL transact / Messenger `sendingUid`。
+- **体积实测（同提交/debug/arm64，clean）**：基础版主 APK **21,473,040 B**；当前含内核主 APK **35,214,535 B**；**独立插件 APK（arm64）12,922,037 B**（xray 原始 30,277,794 B / 压缩 11,883,858 B）。x86_64 原型插件 14,115,955 B。主 APK 可回到约 20.5 MiB，需要内核的用户额外安装约 12.3 MiB 插件。
+- **尚未验证**：PackageInstaller 在线/SAF 安装、取消/失败/更新/卸载、binder 死亡、生产证书 pinning、真实 arm64 设备与安装占用。原型用 Messenger；生产实现用 AIDL，边界相同。
+
 ## 8. 构建与发布改造（方案确认后）
 
 - 主 APK：移除 `prepareProxyKernel` 与 xray jniLibs；基础构建不再需要 Go；CI 保持轻量。
