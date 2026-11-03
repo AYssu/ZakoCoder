@@ -19,6 +19,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: native-kernel/go.version
+          cache: false
       - name: Restore CI debug signing key
         env:
           CI_DEBUG_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_DEBUG_KEYSTORE_BASE64 }}

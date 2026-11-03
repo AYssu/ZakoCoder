@@ -403,4 +403,47 @@ class ProxySubscriptionParserTest {
         assertFalse(trojan.toString().contains("tr-secret"))
         assertFalse(NodeTransport(vmess = vmess, shadowsocks = ss, trojan = trojan).toString().contains("secret"))
     }
+
+    @Test fun clashTlsHttpIsUnsupportedInsteadOfDowngradedToPlainHttp() {
+        val yaml = """
+            proxies:
+              - {name: "tls-http", type: http, server: 192.0.2.1, port: 443, tls: true}
+              - {name: "plain-http", type: http, server: 192.0.2.2, port: 8080}
+        """.trimIndent()
+        val subscription = parser.parse(yaml, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        assertEquals(ProxyProtocol.Other, subscription.nodes[0].protocol)
+        assertFalse(subscription.nodes[0].supported)
+        assertEquals("", subscription.nodes[0].proxyUrl)
+        assertEquals(ProxyProtocol.Http, subscription.nodes[1].protocol)
+        assertTrue(subscription.nodes[1].supported)
+        assertEquals("http://192.0.2.2:8080", subscription.nodes[1].proxyUrl)
+    }
+
+    @Test fun clashTcpVmessKeepsHeaderTypeOutOfTheProtocolType() {
+        val yaml = """
+            proxies:
+              - {name: "tcp-vmess", type: vmess, server: 198.51.100.1, port: 443, uuid: 11111111-1111-1111-1111-111111111111, alterId: 0, cipher: auto, network: tcp, tls: false}
+        """.trimIndent()
+        val subscription = parser.parse(yaml, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        val node = subscription.nodes.single()
+        assertTrue("plain TCP VMess must be usable", node.viaKernel)
+        assertEquals(null, node.transport?.vmess?.headerType)
+        assertEquals("", node.transport?.vmess?.tls)
+        requireNotNull(ProxyKernelConfig.build(node, 10808))
+    }
+
+    @Test fun clashBooleanTlsIsNormalizedForTheConfigGenerator() {
+        val yaml = """
+            proxies:
+              - {name: "tls-vmess", type: vmess, server: 198.51.100.1, port: 443, uuid: 11111111-1111-1111-1111-111111111111, alterId: 0, cipher: auto, network: tcp, tls: true, servername: edge.example.com}
+        """.trimIndent()
+        val subscription = parser.parse(yaml, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        val node = subscription.nodes.single()
+        assertTrue(node.viaKernel)
+        assertEquals("tls", node.transport?.vmess?.tls)
+        requireNotNull(ProxyKernelConfig.build(node, 10808))
+    }
 }

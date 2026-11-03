@@ -698,12 +698,14 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     kernelProxyPreferences.edit { putInt(KEY_KERNEL_PORT, result.port) }
                     saveSettings(mutable.value.settings.copy(proxy = proxyUrl))
                 } else if (result is ProxyKernelState.Failed) {
+                    val ownedPort = kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
                     kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
-                    // The previous kernel (if any) was stopped before this attempt; never leave AI,
-                    // image downloads and guest ALL_PROXY pointing at a dead loopback endpoint.
-                    val restored = runCatching { NetworkProxy.parse(previous) }.getOrNull()
-                        ?.takeIf { it.host != "127.0.0.1" }?.proxyUrl.orEmpty()
-                    if (restored != previous) saveSettings(mutable.value.settings.copy(proxy = restored))
+                    // The previous kernel (if any) was stopped before this attempt. Clear only an
+                    // endpoint this app's kernel owned; a user's manual local SOCKS proxy must stay.
+                    val previousEndpoint = runCatching { NetworkProxy.parse(previous) }.getOrNull()
+                    if (ownedPort > 0 && previousEndpoint?.host == "127.0.0.1" && previousEndpoint.port == ownedPort) {
+                        saveSettings(mutable.value.settings.copy(proxy = ""))
+                    }
                     mutable.update {
                         it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
                     }

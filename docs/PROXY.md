@@ -124,6 +124,8 @@
 
 ## 九、本地内核（VMess／SS／Trojan）
 
+> 本 PR 当前为「内核随主 APK」形态；维护者要求改为「轻量主 APK + 可选内核插件」。拆分方案、体积实测与实施顺序见 [代理内核插件方案](PROXY_KERNEL_PLUGIN.md)。
+
 - 随 APK 提供自编译 Xray-core `v1.260327.0`（MPL-2.0），以 jniLib 形式打包（`libzakocoder_xray.so`），从 `nativeLibraryDir` 执行；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
 - 节点参数来自订阅解析（vmess base64 JSON / ss SIP002 / trojan URL / Clash YAML）；应用生成最小配置：`127.0.0.1` 空闲端口 SOCKS inbound（每次启动随机 user/pass 的 RFC 1929 认证、禁 UDP）+ 单节点 outbound（vmess tcp/ws/grpc + tls/sni/host/path；ss method/password；trojan password/sni）。
 - 生命周期：切换节点先停旧内核；启动最多等 10s 连通性；超时/进程退出→失败提示；配置写到 cacheDir 且 stop 时删除；日志不输出完整配置/凭据。

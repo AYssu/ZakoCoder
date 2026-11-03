@@ -416,7 +416,13 @@ class ProxySubscriptionParser {
     }
 
     private fun clashNode(fields: Map<String, String>, index: Int): ProxyNode? {
-        val protocol = clashProtocol(fields["type"].orEmpty())
+        var protocol = clashProtocol(fields["type"].orEmpty())
+        // Clash can express TLS-to-proxy as `type: http, tls: true`; the app only speaks plaintext
+        // HTTP proxies, so it must be listed as unsupported instead of downgraded to http://.
+        val clashTls = fields["tls"]?.trim()?.lowercase().orEmpty()
+        if (protocol == ProxyProtocol.Http && (clashTls == "true" || clashTls == "tls")) {
+            protocol = ProxyProtocol.Other
+        }
         val server = stripHostBrackets(fields["server"].orEmpty().trim())
         if (!validHost(server)) return null
         val port = fields["port"]?.trim()?.toIntOrNull() ?: return null
@@ -441,7 +447,8 @@ class ProxySubscriptionParser {
         return clashTransportFlat(protocol, fields)
     }
 
-    private fun clashTransportFlat(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? = when (protocol) {
+    private fun clashTransportFlat(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? {
+        return when (protocol) {
         ProxyProtocol.Vmess -> {
             val uuid = fields["uuid"]?.trim().orEmpty()
             val network = fields["network"]?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
@@ -455,11 +462,14 @@ class ProxySubscriptionParser {
                         security = fields["cipher"]?.trim()?.lowercase().orEmpty()
                             .ifEmpty { fields["security"]?.trim()?.lowercase().orEmpty().ifEmpty { "auto" } },
                         network = network,
-                        tls = fields["tls"]?.trim()?.lowercase().orEmpty(),
+                        // Clash writes TLS as a boolean; ProxyKernelConfig only accepts ""/none/tls.
+                        tls = normClashTls(fields["tls"]) ?: return null,
                         sni = fields["servername"]?.trim()?.ifEmpty { null } ?: fields["sni"]?.trim()?.ifEmpty { null },
                         host = fields["host"]?.trim()?.ifEmpty { null },
                         path = fields["path"]?.trim()?.ifEmpty { null },
-                        headerType = fields["type"]?.trim()?.ifEmpty { null },
+                        // In Clash, the top-level `type` is the proxy type (vmess), not tcp header
+                        // obfuscation; leave headerType empty so normal TCP VMess stays usable.
+                        headerType = null,
                     ),
                 )
             }
@@ -483,6 +493,14 @@ class ProxySubscriptionParser {
                 )
             }
         }
+        else -> null
+        }
+    }
+
+    /** Clash TLS booleans to the config generator's vocabulary; null for unsupported modes. */
+    private fun normClashTls(raw: String?): String? = when (raw?.trim()?.lowercase().orEmpty()) {
+        "", "false", "none" -> ""
+        "true", "tls" -> "tls"
         else -> null
     }
 

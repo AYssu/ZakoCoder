@@ -133,12 +133,13 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     fun saveProxy(value: String) {
         formError = null
         applyFeedback = null
-        // A manual/direct endpoint replaces whatever the kernel owned; never leave the child
-        // process and its loopback port alive behind the new setting.
-        if (kernel != ProxyKernelState.Stopped) workbench.stopProxyKernel(clearSetting = false)
         val candidate = state.settings.copy(proxy = value)
         try {
+            // Validate before stopping anything: a typo must not kill a working kernel/proxy.
             workbench.validateSettings(candidate)
+            // A manual/direct endpoint replaces whatever the kernel owned; never leave the child
+            // process and its loopback port alive behind the new setting.
+            if (kernel != ProxyKernelState.Stopped) workbench.stopProxyKernel(clearSetting = false)
             workbench.saveSettings(candidate)
             // Never keep a typed password/token in the draft after a successful save call.
             manualDraft = ""
