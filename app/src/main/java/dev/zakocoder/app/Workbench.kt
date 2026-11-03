@@ -116,6 +116,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
     /** Airport subscription state. All networking is triggered by the proxy page's explicit actions. */
     val proxyCatalog = ProxyCatalog(HttpProxySubscriptionFetcher(), EncryptedProxySubscriptionStore(context))
+    /** Xray child process for VMess/SS/Trojan nodes; it exposes a loopback SOCKS5 bridge. */
+    val proxyKernel = ProxyKernel(context)
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
@@ -304,8 +306,14 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     runtime.workspaces.mkdirs(); terminal.prepareTypeface()
                     WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay()) }
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
-                mutable.update { it.copy(loading = false, projects = data.projects, settings = data.settings,
-                    proxyDisplay = data.proxyDisplay, installed = data.installed,
+                // A kernel-backed proxy points at a loopback port owned by this process; after a
+                // restart that process is gone, so clear the dead endpoint instead of showing it as
+                // active. Direct/manual non-loopback settings are left untouched.
+                val staleKernelProxy = data.settings.proxy.startsWith("socks5://127.0.0.1:", ignoreCase = true)
+                if (staleKernelProxy) withContext(Dispatchers.IO) { settingsRepository.save(data.settings.copy(proxy = "")) }
+                mutable.update { it.copy(loading = false, projects = data.projects,
+                    settings = if (staleKernelProxy) data.settings.copy(proxy = "") else data.settings,
+                    proxyDisplay = if (staleKernelProxy) "" else data.proxyDisplay, installed = data.installed,
                     selectedId = selected?.takeIf { id -> data.projects.any { it.id == id } } ?: data.projects.firstOrNull()?.id) }
                 refreshPlans()
                 doctor()
@@ -655,15 +663,47 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
 
     /**
-     * Writes one subscription node into the existing proxy setting. Returns whether the save was
-     * submitted; validation/storage failures keep surfacing through the regular settings state.
-     * Unsupported nodes (or a busy workbench) are rejected here so the UI never claims success.
+     * Applies a subscription node. Direct HTTP/SOCKS5 nodes keep the existing settings path; kernel
+     * nodes start Xray asynchronously and only then point the proxy setting at its loopback SOCKS5
+     * inbound. Returns whether the action was submitted (the kernel result arrives on its state
+     * flow); unsupported nodes and a busy workbench are rejected here.
      */
     fun applyProxyNode(node: ProxyNode): Boolean {
-        if (!node.supported || node.proxyUrl.isEmpty()) return false
+        if (!node.supported) return false
         if (mutable.value.busy || mutable.value.loading) return false
+        if (node.viaKernel) {
+            // One start at a time; a second tap while starting must not queue another process.
+            if (proxyKernel.state.value is ProxyKernelState.Starting) return false
+            scope.launch {
+                val result = proxyKernel.start(node)
+                if (result is ProxyKernelState.Running) {
+                    saveSettings(mutable.value.settings.copy(proxy = "socks5://127.0.0.1:${result.port}"))
+                } else {
+                    mutable.update {
+                        it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
+                    }
+                }
+            }
+            return true
+        }
+        if (node.proxyUrl.isEmpty()) return false
+        // Switching from a kernel node back to a direct node must not leave the kernel process alive.
+        proxyKernel.stop()
         saveSettings(mutable.value.settings.copy(proxy = node.proxyUrl))
         return true
+    }
+
+    /**
+     * Stops the kernel and clears the local bridge endpoint when the current setting points at it.
+     * Called by the UI when the subscription is cleared or the source is switched.
+     */
+    fun stopProxyKernel() {
+        val running = proxyKernel.state.value as? ProxyKernelState.Running
+        proxyKernel.stop()
+        val current = mutable.value.settings.proxy
+        if (running != null && current == "socks5://127.0.0.1:${running.port}") {
+            saveSettings(mutable.value.settings.copy(proxy = ""))
+        }
     }
     private val editorLspSettingsMutex = kotlinx.coroutines.sync.Mutex()
     fun setEditorLspEnabled(enabled: Boolean) {

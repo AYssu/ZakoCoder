@@ -3,8 +3,45 @@ package dev.zakocoder.app.settings
 import java.net.URI
 import java.security.MessageDigest
 
-/** Connection protocols a subscription can describe; only [Http] and [Socks5] are usable today. */
+/** Connection protocols a subscription can describe. HTTP/SOCKS5 are direct; VMess/SS/Trojan run via the kernel. */
 enum class ProxyProtocol { Http, Socks5, Vmess, Ss, Trojan, Vless, Hysteria, Tuic, Other }
+
+/**
+ * VMess wire/transport parameters required to build an Xray outbound. Strings are untrusted remote
+ * data: [toString] redacts the uuid, and [ProxyKernelConfig] rejects control characters before they
+ * reach the generated JSON.
+ */
+data class VmessTransport(
+    val uuid: String,
+    val alterId: Int,
+    val security: String,
+    val network: String,
+    val tls: String,
+    val sni: String?,
+    val host: String?,
+    val path: String?,
+    val headerType: String?,
+) {
+    override fun toString() =
+        "VmessTransport(uuid=<redacted>, alterId=$alterId, security=$security, network=$network, tls=$tls, sni=$sni, host=$host, path=$path, headerType=$headerType)"
+}
+
+data class ShadowsocksTransport(val method: String, val password: String) {
+    override fun toString() = "ShadowsocksTransport(method=$method, password=<redacted>)"
+}
+
+data class TrojanTransport(val password: String, val sni: String?) {
+    override fun toString() = "TrojanTransport(password=<redacted>, sni=$sni)"
+}
+
+/** Kernel transport for one protocol; only the matching field is set. */
+data class NodeTransport(
+    val vmess: VmessTransport? = null,
+    val shadowsocks: ShadowsocksTransport? = null,
+    val trojan: TrojanTransport? = null,
+) {
+    override fun toString() = "NodeTransport(vmess=$vmess, shadowsocks=$shadowsocks, trojan=$trojan)"
+}
 
 /**
  * One node decoded from a subscription.
@@ -14,10 +51,13 @@ enum class ProxyProtocol { Http, Socks5, Vmess, Ss, Trojan, Vless, Hysteria, Tui
  *   authentication support;
  * - SOCKS5 is supported with or without a full RFC 1929 username/password pair, but a lone
  *   username without a password is rejected rather than silently dropping half a credential;
- * - every other protocol is importable metadata only and never reported as usable.
+ * - VMess/SS/Trojan are usable only when [viaKernel] is true, i.e. [transport] carries every field
+ *   the Xray config generator needs. Missing key fields keep the node visible but unusable.
  *
- * [proxyUrl] is the canonical app-setting URL. It contains URL-encoded credentials for SOCKS5 and
- * therefore must never be logged or shown; [toString] is redacted for that reason.
+ * [proxyUrl] is the canonical direct app-setting URL. It contains URL-encoded credentials for
+ * SOCKS5 and therefore must never be logged or shown; [toString] is redacted for that reason.
+ * Kernel nodes have an empty [proxyUrl] because the app talks to them through the kernel's local
+ * SOCKS5 inbound instead.
  */
 data class ProxyNode(
     val id: String,
@@ -27,7 +67,16 @@ data class ProxyNode(
     val port: Int,
     val username: String? = null,
     val password: String? = null,
+    val transport: NodeTransport? = null,
 ) {
+    /** True only when the kernel transport for this protocol is complete enough to generate config. */
+    val viaKernel: Boolean = when (protocol) {
+        ProxyProtocol.Vmess -> transport?.vmess?.let { it.uuid.isNotEmpty() && it.network in VMESS_NETWORKS } == true
+        ProxyProtocol.Ss -> transport?.shadowsocks?.let { it.method.isNotEmpty() && it.password.isNotEmpty() } == true
+        ProxyProtocol.Trojan -> transport?.trojan?.let { it.password.isNotEmpty() } == true
+        else -> false
+    }
+
     /**
      * URL this node would write into settings. Built once so [supported] can validate it with the
      * same parser that consumes the setting: this rejects IDN/ASCII-unsafe hosts and any credential
@@ -49,16 +98,20 @@ data class ProxyNode(
         else -> null
     }
 
-    val supported: Boolean = candidateProxyUrl?.let { candidate ->
+    val supported: Boolean = viaKernel || candidateProxyUrl?.let { candidate ->
         runCatching { NetworkProxy.parse(candidate) }.getOrNull() != null
     } ?: false
 
-    /** URL accepted by [NetworkProxy.parse] when the node is supported; empty otherwise. */
+    /** URL accepted by [NetworkProxy.parse] for a direct node; empty for kernel-only nodes. */
     val proxyUrl: String = candidateProxyUrl?.takeIf { supported }.orEmpty()
 
     // A generated data-class toString would print the password; never allow that.
     override fun toString() =
-        "ProxyNode(id=$id, name=$name, protocol=$protocol, host=$host, port=$port, hasCredentials=${username != null})"
+        "ProxyNode(id=$id, name=$name, protocol=$protocol, host=$host, port=$port, hasCredentials=${username != null}, viaKernel=$viaKernel)"
+
+    private companion object {
+        val VMESS_NETWORKS = setOf("tcp", "ws", "grpc")
+    }
 }
 
 enum class SubscriptionFormat { PlainLinks, Base64Links, ClashYaml }

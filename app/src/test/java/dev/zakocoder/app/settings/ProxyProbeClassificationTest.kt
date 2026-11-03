@@ -34,7 +34,7 @@ class ProxyProbeClassificationTest {
     @Test fun allUnsupportedNodesAreReportedAsUnsupportedOnly() {
         val content = listOf(
             "vmess://eyJhZGQiOiIxOTIuMC4yLjUiLCJwb3J0IjoiNDQzIiwicHMiOiJWIn0=",
-            "trojan://pw@192.0.2.6:443#T",
+            "vless://uuid@192.0.2.6:443#VLESS",
         ).joinToString("\n")
         val probe = parser.probe("https://sub.example.com/api", content)
         assertTrue(probe is ProxyProbe.UnsupportedOnly)
@@ -42,16 +42,25 @@ class ProxyProbeClassificationTest {
     }
 
     @Test fun oneUnsupportedNodeIsStillUnsupportedOnly() {
-        val probe = parser.probe("https://sub.example.com/api", "trojan://pw@192.0.2.6:443#T")
+        val probe = parser.probe("https://sub.example.com/api", "vless://uuid@192.0.2.6:443#VLESS")
         assertTrue(probe is ProxyProbe.UnsupportedOnly)
         assertEquals(1, (probe as ProxyProbe.UnsupportedOnly).total)
     }
 
     @Test fun mixedProtocolsStayAnAirportWithUsableCount() {
-        val content = "http://192.0.2.5:8080#A\ntrojan://pw@192.0.2.6:443#T"
+        val content = "http://192.0.2.5:8080#A\nvless://uuid@192.0.2.6:443#VLESS"
         val probe = parser.probe("https://sub.example.com/api", content)
         assertTrue(probe is ProxyProbe.Airport)
         assertEquals(1, (probe as ProxyProbe.Airport).subscription.supportedCount)
+    }
+
+    @Test fun kernelProtocolWithCompleteTransportCountsAsUsable() {
+        val content = "trojan://pw@192.0.2.6:443#T\nvless://uuid@192.0.2.7:443#VLESS"
+        val probe = parser.probe("https://sub.example.com/api", content)
+        assertTrue(probe is ProxyProbe.Airport)
+        val airport = probe as ProxyProbe.Airport
+        assertEquals(1, airport.subscription.supportedCount)
+        assertTrue(airport.subscription.nodes[0].viaKernel)
     }
 
     @Test fun emptyJunkAndNoKnownNodesAreNotASubscription() {

@@ -102,7 +102,7 @@ class ProxyCatalogTest {
     }
 
     @Test fun importBeforeProbeOrAfterUnsupportedProbeDoesNothing() = runBlocking {
-        val fetcher = FakeProxySubscriptionFetcher(content = "trojan://pw@192.0.2.6:443#T")
+        val fetcher = FakeProxySubscriptionFetcher(content = "vless://uuid@192.0.2.6:443#V")
         val store = FakeProxySubscriptionStore()
         val catalog = catalog(fetcher, store)
 

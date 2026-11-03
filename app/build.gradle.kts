@@ -69,7 +69,14 @@ compatibilityAbis.forEach { abi ->
     }
     prepareRuntime.configure { dependsOn(prepareAbi) }
 }
-tasks.named("preBuild").configure { dependsOn(prepareRuntime) }
+val prepareProxyKernel = tasks.register<Exec>("prepareProxyKernel") {
+    workingDir(rootProject.projectDir)
+    commandLine("python3", "scripts/prepare_proxy_kernel.py")
+    inputs.file(rootProject.file("native-kernel/artifacts.lock.json"))
+    inputs.file(rootProject.file("scripts/prepare_proxy_kernel.py"))
+    // Verify cached kernel hashes on every invocation; rebuild only when missing/mismatched.
+}
+tasks.named("preBuild").configure { dependsOn(prepareRuntime, prepareProxyKernel) }
 tasks.matching { it.name.contains("Release") }.configureEach {
     doFirst {
         check(betaRelease) {

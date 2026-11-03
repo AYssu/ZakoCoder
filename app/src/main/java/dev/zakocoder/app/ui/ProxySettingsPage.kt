@@ -33,8 +33,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
+import dev.zakocoder.app.settings.KernelFailure
 import dev.zakocoder.app.settings.NetworkProxy
 import dev.zakocoder.app.settings.ProxyCatalogState
+import dev.zakocoder.app.settings.ProxyKernelState
 import dev.zakocoder.app.settings.ProxyNode
 import dev.zakocoder.app.settings.ProxyProbe
 import dev.zakocoder.app.settings.ProxyProtocol
@@ -56,6 +58,7 @@ private enum class ProxyMode { Direct, Manual, Airport }
 @Composable
 internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBack: () -> Unit) {
     val catalog by workbench.proxyCatalog.state.collectAsStateWithLifecycle()
+    val kernel by workbench.proxyKernel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -82,8 +85,37 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     var removing by remember { mutableStateOf(false) }
     var applyFeedback by remember { mutableStateOf<Int?>(null) }
     var lastActionWasRefresh by remember { mutableStateOf(false) }
+    // A kernel node starts asynchronously: remember the node we asked to enable and wait for the
+    // kernel state machine to report Running/Failed before showing a final page-level result.
+    var pendingKernelApply by remember { mutableStateOf<ProxyNode?>(null) }
+    var lastKernelNode by remember { mutableStateOf<ProxyNode?>(null) }
 
     LaunchedEffect(Unit) { workbench.proxyCatalog.loadCached() }
+    LaunchedEffect(kernel, pendingKernelApply) {
+        val pending = pendingKernelApply ?: return@LaunchedEffect
+        when (val current = kernel) {
+            is ProxyKernelState.Running -> if (current.nodeId == pending.id) {
+                applyFeedback = R.string.proxy_feedback_kernel_running
+                pendingKernelApply = null
+            }
+            is ProxyKernelState.Failed -> {
+                applyFeedback = current.reason.messageRes()
+                pendingKernelApply = null
+            }
+            is ProxyKernelState.Starting -> if (current.nodeId == pending.id) {
+                applyFeedback = R.string.proxy_feedback_kernel_starting
+            }
+            ProxyKernelState.Stopped -> {
+                // No start transition arrived: the request was rejected (busy/workbench or binary
+                // missing) or the core kept the old state. Report a recoverable failure.
+                delay(1500)
+                if (pendingKernelApply?.id == pending.id) {
+                    applyFeedback = R.string.proxy_feedback_failed
+                    pendingKernelApply = null
+                }
+            }
+        }
+    }
     LaunchedEffect(catalog.subscription, modeTouched, appliedNode) {
         if (!modeTouched && appliedNode != null) modeName = ProxyMode.Airport.name
     }
@@ -130,7 +162,30 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     fun refreshCache() {
         lastActionWasRefresh = true
         applyFeedback = null
+        // Refreshing replaces the subscription the kernel was started for; stop it first.
+        if (kernel != ProxyKernelState.Stopped) workbench.stopProxyKernel()
         scope.launch { workbench.proxyCatalog.refresh() }
+    }
+
+    fun applyNode(node: ProxyNode) {
+        if (node.viaKernel) {
+            lastKernelNode = node
+            pendingKernelApply = node
+            applyFeedback = R.string.proxy_feedback_kernel_starting
+            // Kernel start is asynchronous; the LaunchedEffect above reports the final result.
+            workbench.applyProxyNode(node)
+        } else {
+            val ok = workbench.applyProxyNode(node)
+            applyFeedback = when {
+                ok -> R.string.proxy_feedback_saved
+                !node.supported -> R.string.proxy_feedback_unsupported
+                else -> R.string.proxy_feedback_failed
+            }
+        }
+    }
+
+    fun retryKernel() {
+        lastKernelNode?.let { applyNode(it) }
     }
 
     val activeNodes: List<ProxyNode> = (catalog.probe as? ProxyProbe.Airport)?.subscription?.nodes
@@ -139,12 +194,21 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     val singleNode = (catalog.probe as? ProxyProbe.SingleNode)?.node
     val selectedNode = activeNodes.firstOrNull { it.id == catalog.selectedId && it.supported }
         ?: singleNode?.takeIf { it.supported }
-    val selectedSourceName = appliedNode?.name
+    val kernelRunning = kernel as? ProxyKernelState.Running
+    val settingsEndpoint = runCatching { NetworkProxy.parse(state.settings.proxy)?.endpoint }.getOrNull()
+    val kernelApplied = kernelRunning != null && settingsEndpoint == "socks5://127.0.0.1:${kernelRunning.port}"
+    val selectedSourceName = if (kernelApplied) kernelRunning?.nodeName else appliedNode?.name
     val maskedSource = catalog.subscription?.maskedSource.orEmpty()
     val currentModeRes = when {
         state.proxyDisplay.isEmpty() -> R.string.proxy_status_direct
+        kernelApplied -> R.string.proxy_status_airport_kernel
         appliedNode != null -> R.string.proxy_status_airport
         else -> R.string.proxy_status_manual
+    }
+    // Reopening the page while the local kernel is already serving the active proxy: land on the
+    // airport tab instead of the manual form, unless the user already switched tabs in this session.
+    LaunchedEffect(kernelApplied, modeTouched) {
+        if (!modeTouched && kernelApplied) modeName = ProxyMode.Airport.name
     }
 
     AiFullScreen(stringResource(R.string.proxy_page_title), onBack) {
@@ -188,7 +252,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                         formError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                         applyFeedback?.let {
                             Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
-                                color = if (it == R.string.proxy_feedback_saved) ReadyGreen else MaterialTheme.colorScheme.error)
+                                color = feedbackColor(it))
                         }
                         WorkbenchPrimaryButton(onClick = { saveProxy("") }, enabled = !state.busy,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -210,7 +274,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                         formError?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
                         applyFeedback?.let {
                             Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
-                                color = if (it == R.string.proxy_feedback_saved) ReadyGreen else MaterialTheme.colorScheme.error)
+                                color = feedbackColor(it))
                         }
                         Text(stringResource(R.string.proxy_manual_help), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
                         Text(stringResource(R.string.proxy_mode_manual_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
@@ -244,6 +308,11 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                             savingBusy = state.busy,
                             unsupportedHint = unsupportedHint,
                         )
+                        KernelStatusCard(
+                            kernel = kernel,
+                            onStop = { workbench.stopProxyKernel(); applyFeedback = null },
+                            onRetry = if (lastKernelNode != null) ::retryKernel else null,
+                        )
                         Spacer(Modifier.height(72.dp))
                     }
                 }
@@ -253,15 +322,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                     selectedNode = selectedNode,
                     busy = state.busy || catalog.busy,
                     feedback = applyFeedback,
-                    onApply = {
-                        val ok = selectedNode?.let { workbench.applyProxyNode(it) } ?: false
-                        applyFeedback = when {
-                            selectedNode == null -> R.string.proxy_feedback_failed
-                            ok -> R.string.proxy_feedback_saved
-                            !selectedNode.supported -> R.string.proxy_feedback_unsupported
-                            else -> R.string.proxy_feedback_failed
-                        }
-                    },
+                    onApply = { selectedNode?.let { applyNode(it) } },
                     onCancel = onBack,
                 )
             }
@@ -277,6 +338,10 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                 removing = false
                 unsupportedHint = false
                 linkDraft = ""
+                applyFeedback = null
+                pendingKernelApply = null
+                // The subscription the kernel was started for is going away: stop the process too.
+                if (kernel != ProxyKernelState.Stopped) workbench.stopProxyKernel()
                 scope.launch { workbench.proxyCatalog.clear() }
             }) { Text(stringResource(R.string.proxy_remove_confirm), color = MaterialTheme.colorScheme.error) }
         },
@@ -554,6 +619,7 @@ private fun ProxySingleResult(node: ProxyNode) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ProtocolBadge(node.protocol)
+                    if (node.viaKernel) KernelTag()
                     Text(node.name.ifBlank { node.host }, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall,
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -582,7 +648,10 @@ private fun ProxyNodeRow(node: ProxyNode, selected: Boolean, enabled: Boolean, o
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        ProtocolBadge(node.protocol)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ProtocolBadge(node.protocol)
+            if (node.viaKernel) KernelTag()
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(node.name.ifBlank { node.host }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -664,6 +733,92 @@ private fun ProxyErrorBlock(error: ProxySubscriptionError, retryLabelRes: Int, e
 }
 
 @Composable
+private fun KernelTag() {
+    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+        Text(
+            stringResource(R.string.proxy_kernel_badge),
+            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Local Xray kernel status for the current airport subscription (airport mode only). */
+@Composable
+private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRetry: (() -> Unit)?) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = cardBorder(),
+        shadowElevation = cardElevation(),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusDot(
+                    when (kernel) {
+                        ProxyKernelState.Stopped -> TertiaryText
+                        is ProxyKernelState.Starting -> WaitingAmber
+                        is ProxyKernelState.Running -> ReadyGreen
+                        is ProxyKernelState.Failed -> MaterialTheme.colorScheme.error
+                    },
+                )
+                Text(stringResource(R.string.proxy_kernel_section), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            }
+            val failed = kernel as? ProxyKernelState.Failed
+            Text(
+                when (kernel) {
+                    ProxyKernelState.Stopped -> stringResource(R.string.proxy_kernel_stopped)
+                    is ProxyKernelState.Starting -> stringResource(R.string.proxy_kernel_starting)
+                    is ProxyKernelState.Running -> stringResource(R.string.proxy_kernel_running, kernel.nodeName, kernel.port)
+                    is ProxyKernelState.Failed -> stringResource(kernel.reason.messageRes())
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (failed != null) MaterialTheme.colorScheme.error else TertiaryText,
+            )
+            if (kernel is ProxyKernelState.Running) {
+                Text(stringResource(R.string.proxy_kernel_running_hint),
+                    style = MaterialTheme.typography.labelSmall, color = TertiaryText)
+            }
+            if (kernel is ProxyKernelState.Running || failed != null) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                    if (failed != null) {
+                        onRetry?.let {
+                            OutlinedButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) {
+                                Text(stringResource(R.string.proxy_kernel_retry))
+                            }
+                        }
+                    }
+                    TextButton(onClick = onStop, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.proxy_kernel_stop), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun feedbackColor(res: Int): Color = when {
+    res == R.string.proxy_feedback_saved || res == R.string.proxy_feedback_kernel_running -> ReadyGreen
+    res == R.string.proxy_feedback_kernel_starting -> TertiaryText
+    else -> MaterialTheme.colorScheme.error
+}
+
+private fun KernelFailure.messageRes(): Int = when (this) {
+    KernelFailure.BinaryMissing -> R.string.proxy_kernel_failure_binary_missing
+    KernelFailure.UnsupportedNode -> R.string.proxy_kernel_failure_unsupported_node
+    KernelFailure.StartFailed -> R.string.proxy_kernel_failure_start_failed
+    KernelFailure.Timeout -> R.string.proxy_kernel_failure_timeout
+    KernelFailure.PortUnavailable -> R.string.proxy_kernel_failure_port_unavailable
+}
+
+@Composable
 private fun AirportBottomBar(
     selectedNode: ProxyNode?,
     busy: Boolean,
@@ -680,8 +835,7 @@ private fun AirportBottomBar(
                         color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 feedback?.let {
-                    Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
-                        color = if (it == R.string.proxy_feedback_saved) ReadyGreen else MaterialTheme.colorScheme.error)
+                    Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = feedbackColor(it))
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) {

@@ -35,6 +35,10 @@ interface ProxySubscriptionStore {
  *
  * Only one subscription is kept; saving replaces the previous entry. A corrupt entry that can no
  * longer be decrypted is removed by [clear] (which also fixes the "stuck" case).
+ *
+ * Schema v2 added kernel transports (VMess/SS/Trojan). v1 entries intentionally fail the AAD check
+ * and read as null: their nodes lack transports and would all appear as "unsupported", so the user
+ * re-identifies the subscription once instead of seeing a dead list.
  */
 class EncryptedProxySubscriptionStore(context: Context, private val alias: String = DEFAULT_ALIAS) : ProxySubscriptionStore {
     private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -153,7 +157,7 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
         const val KEY_IV = "iv"
         const val KEY_PAYLOAD = "payload"
         const val SCHEMA_KEY = "schemaVersion"
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val DEFAULT_ALIAS = "zakocoder-proxy-subscription"
         const val MAX_NODES = 512
@@ -162,6 +166,6 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
         const val MAX_CREDENTIAL_CHARS = 255
         const val MAX_URL_CHARS = 2048
         const val MAX_ID_CHARS = 64
-        val AAD = "zakocoder-proxy-subscription-v1".toByteArray(Charsets.UTF_8)
+        val AAD = "zakocoder-proxy-subscription-v2".toByteArray(Charsets.UTF_8)
     }
 }

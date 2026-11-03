@@ -29,8 +29,8 @@ class ProxySubscriptionParserTest {
         requireNotNull(subscription)
         assertEquals(SubscriptionFormat.PlainLinks, subscription.format)
         assertEquals(6, subscription.nodes.size)
-        // https:// proxy links are listed but unsupported (this app speaks plaintext HTTP only).
-        assertEquals(3, subscription.supportedCount)
+        // https:// proxy links are listed but unsupported; Trojan/VMess are now usable via the kernel.
+        assertEquals(5, subscription.supportedCount)
 
         val socks = subscription.nodes[0]
         assertEquals(ProxyProtocol.Socks5, socks.protocol)
@@ -60,17 +60,26 @@ class ProxySubscriptionParserTest {
 
         val trojan = subscription.nodes[4]
         assertEquals(ProxyProtocol.Trojan, trojan.protocol)
-        assertFalse(trojan.supported)
+        assertTrue("Trojan is supported through the Xray kernel", trojan.supported)
+        assertTrue(trojan.viaKernel)
         assertEquals("", trojan.proxyUrl)
         assertEquals("203.0.113.20", trojan.host)
         assertEquals(443, trojan.port)
+        assertEquals("pw", trojan.transport!!.trojan!!.password)
 
         val vmess = subscription.nodes[5]
         assertEquals(ProxyProtocol.Vmess, vmess.protocol)
-        assertFalse(vmess.supported)
+        assertTrue("VMess is supported through the Xray kernel", vmess.supported)
+        assertTrue(vmess.viaKernel)
+        assertEquals("", vmess.proxyUrl)
         assertEquals("VM 节点", vmess.name)
         assertEquals("198.51.100.30", vmess.host)
         assertEquals(443, vmess.port)
+        val vmessTransport = vmess.transport!!.vmess!!
+        assertEquals("test-uuid", vmessTransport.uuid)
+        assertEquals(0, vmessTransport.alterId)
+        assertEquals("auto", vmessTransport.security)
+        assertEquals("tcp", vmessTransport.network)
     }
 
     @Test fun parsesStandardAndUrlSafeBase64ListsWithWhitespaceAndNoPadding() {
@@ -118,7 +127,7 @@ class ProxySubscriptionParserTest {
         requireNotNull(subscription)
         assertEquals(SubscriptionFormat.ClashYaml, subscription.format)
         assertEquals(3, subscription.nodes.size)
-        assertEquals(1, subscription.supportedCount)
+        assertEquals(2, subscription.supportedCount)
 
         val hk = subscription.nodes[0]
         assertEquals("HK, 01", hk.name)
@@ -127,9 +136,12 @@ class ProxySubscriptionParserTest {
         assertEquals("socks5://alice:pw@203.0.113.1:1080", hk.proxyUrl)
 
         assertEquals(ProxyProtocol.Ss, subscription.nodes[1].protocol)
-        assertFalse(subscription.nodes[1].supported)
+        assertTrue(subscription.nodes[1].supported)
+        assertEquals("aes-128-gcm", subscription.nodes[1].transport!!.shadowsocks!!.method)
+        assertEquals("ss-pw", subscription.nodes[1].transport!!.shadowsocks!!.password)
         assertEquals(ProxyProtocol.Vmess, subscription.nodes[2].protocol)
-        assertFalse(subscription.nodes[2].supported)
+        assertFalse("VMess without a uuid stays unusable", subscription.nodes[2].supported)
+        assertNull(subscription.nodes[2].transport)
     }
 
     @Test fun clashSkipsEntriesWithInvalidServerOrPort() {
@@ -284,9 +296,9 @@ class ProxySubscriptionParserTest {
     }
 
     @Test fun unsupportedLinkWithPathKeepsAuthorityForDisplay() {
-        val node = parser.parseLink("trojan://pw@203.0.113.20:443/ws?path=%2F#Trojan")
+        val node = parser.parseLink("vless://uuid@203.0.113.20:443/ws?path=%2F#VLESS")
         requireNotNull(node)
-        assertEquals(ProxyProtocol.Trojan, node.protocol)
+        assertEquals(ProxyProtocol.Vless, node.protocol)
         assertEquals("203.0.113.20", node.host)
         assertEquals(443, node.port)
         assertFalse(node.supported)
@@ -305,5 +317,90 @@ class ProxySubscriptionParserTest {
         val node = ProxyNode("id", "IDN", ProxyProtocol.Socks5, "\u4F8B\u5B50.\u4E2D\u56FD", 1080)
         assertFalse(node.supported)
         assertEquals("", node.proxyUrl)
+    }
+
+    @Test fun parsesKernelTransportsFromLinksAndMarksViaKernel() {
+        val fullVmessJson = """{"v":"2","ps":"VM WS","add":"198.51.100.30","port":"443","id":"uuid-1","aid":"2",""" +
+            """"scy":"aes-128-gcm","net":"ws","tls":"tls","sni":"sni.example.com","host":"cdn.example.com","path":"/ws","type":"none"}"""
+        val vmess = parser.parseLink("vmess://${base64(fullVmessJson)}")
+        requireNotNull(vmess)
+        assertEquals(ProxyProtocol.Vmess, vmess.protocol)
+        assertTrue(vmess.viaKernel)
+        assertTrue(vmess.supported)
+        assertEquals("A kernel node has no direct proxy URL", "", vmess.proxyUrl)
+        val vm = requireNotNull(vmess.transport?.vmess)
+        assertEquals("uuid-1", vm.uuid)
+        assertEquals(2, vm.alterId)
+        assertEquals("aes-128-gcm", vm.security)
+        assertEquals("ws", vm.network)
+        assertEquals("tls", vm.tls)
+        assertEquals("sni.example.com", vm.sni)
+        assertEquals("cdn.example.com", vm.host)
+        assertEquals("/ws", vm.path)
+        assertEquals("none", vm.headerType)
+
+        val ss = parser.parseLink("ss://${base64("aes-256-gcm:pa:ss")}@198.51.100.40:8388#SS")
+        requireNotNull(ss)
+        assertEquals(ProxyProtocol.Ss, ss.protocol)
+        assertTrue(ss.viaKernel)
+        assertEquals("aes-256-gcm", ss.transport!!.shadowsocks!!.method)
+        assertEquals("pa:ss", ss.transport!!.shadowsocks!!.password)
+
+        val trojan = parser.parseLink("trojan://p%40ss@198.51.100.50:443?sni=edge.example.com#T")
+        requireNotNull(trojan)
+        assertEquals(ProxyProtocol.Trojan, trojan.protocol)
+        assertTrue(trojan.viaKernel)
+        assertEquals("p@ss", trojan.transport!!.trojan!!.password)
+        assertEquals("edge.example.com", trojan.transport!!.trojan!!.sni)
+
+        // Missing key material keeps the protocol but makes the kernel node unusable.
+        val incompleteVmess = parser.parseLink("vmess://${base64("""{"add":"198.51.100.31","port":"443","ps":"no-id"}""")}")
+        requireNotNull(incompleteVmess)
+        assertEquals(ProxyProtocol.Vmess, incompleteVmess.protocol)
+        assertFalse(incompleteVmess.viaKernel)
+        assertFalse(incompleteVmess.supported)
+        val incompleteSs = parser.parseLink("ss://onlymethod@198.51.100.41:8388#no-pw")
+        requireNotNull(incompleteSs)
+        assertEquals(ProxyProtocol.Ss, incompleteSs.protocol)
+        assertFalse(incompleteSs.viaKernel)
+    }
+
+    @Test fun parsesClashKernelTransports() {
+        val content = """
+            proxies:
+              - {name: vm, type: vmess, server: 198.51.100.60, port: 443, uuid: uuid-9, alterId: 0, cipher: auto, network: ws, tls: tls, servername: a.example, path: /ws, host: c.example}
+              - {name: ss, type: ss, server: 198.51.100.61, port: 8388, cipher: chacha20-ietf-poly1305, password: ss-pw}
+              - name: tr
+                type: trojan
+                server: 198.51.100.62
+                port: 443
+                password: tr-pw
+                sni: tr.example
+        """.trimIndent()
+        val subscription = parser.parse(content, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        assertEquals(3, subscription.nodes.size)
+        assertEquals(3, subscription.supportedCount)
+        val vm = requireNotNull(subscription.nodes[0].transport?.vmess)
+        assertEquals("uuid-9", vm.uuid)
+        assertEquals("ws", vm.network)
+        assertEquals("tls", vm.tls)
+        assertEquals("a.example", vm.sni)
+        assertEquals("/ws", vm.path)
+        assertEquals("c.example", vm.host)
+        assertEquals("chacha20-ietf-poly1305", subscription.nodes[1].transport!!.shadowsocks!!.method)
+        assertEquals("ss-pw", subscription.nodes[1].transport!!.shadowsocks!!.password)
+        assertEquals("tr-pw", subscription.nodes[2].transport!!.trojan!!.password)
+        assertEquals("tr.example", subscription.nodes[2].transport!!.trojan!!.sni)
+    }
+
+    @Test fun transportToStringRedactsSecrets() {
+        val vmess = VmessTransport("uuid-secret", 0, "auto", "tcp", "", null, null, null, null)
+        val ss = ShadowsocksTransport("aes-256-gcm", "ss-secret")
+        val trojan = TrojanTransport("tr-secret", null)
+        assertFalse(vmess.toString().contains("uuid-secret"))
+        assertFalse(ss.toString().contains("ss-secret"))
+        assertFalse(trojan.toString().contains("tr-secret"))
+        assertFalse(NodeTransport(vmess = vmess, shadowsocks = ss, trojan = trojan).toString().contains("secret"))
     }
 }

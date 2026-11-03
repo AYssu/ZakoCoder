@@ -171,3 +171,11 @@ APK `assets/skills/` 的 13 个中文指令文件是 ZakoCoder 自有实现，�
 ## SSH 客户端
 
 SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源 https://github.com/mwiede/jsch ，固定标签 `jsch-2.28.8`。原始 BSD 许可证保存在 APK `assets/licenses/JSch-BSD.txt`；未修改或复制上游实现。通过原生 Java SSH 协议连接，不依赖 Operit、QuickJS、宿主 Shell 或 Ubuntu SSH 客户端。主机指纹与认证凭据由原生配置界面管理，库的原始异常不会进入模型工具结果。
+
+## 本地代理内核 Xray-core
+
+机场订阅中的 VMess／SS／Trojan 节点由随 APK 打包的 Xray-core 本地内核转发：
+
+- 来源：<https://github.com/XTLS/Xray-core>，Go 模块 `github.com/xtls/xray-core`，固定版本 `v1.260327.0`；许可证 MPL-2.0，完整文本随 APK 保存在 `assets/licenses/Xray-MPL-2.0.txt`。未修改上游源码，仅用于转发现有订阅节点。
+- 构建：本仓库以固定 Go 工具链（`native-kernel/go.version`）执行 `go build -trimpath -ldflags "-s -w"`，`GOOS=linux`、`CGO_ENABLED=0`，交叉编译 arm64 与 amd64，作为 jniLib 资产 `libzakocoder_xray.so` 打包（二进制不提交）；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 校验模块版本、工具链与 SHA-256，CI 自编译生成，不下载预编译制品。
+- 对应源码可从上述固定标签获取；本项目自有代码的 Apache-2.0 不适用于该内核。内核只接受应用生成的单节点配置（SOCKS inbound + 单 outbound），不读取订阅链接，日志不输出配置与凭据。

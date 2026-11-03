@@ -45,10 +45,10 @@ class ProxySubscriptionParser {
             // silently downgraded to http:// when written back to settings, so list it as unsupported.
             "https" -> authorityUnsupported(body, rawName)
             "socks", "socks5" -> authorityNode(body, rawName, ProxyProtocol.Socks5)
-            "vmess" -> unsupportedNode(body, rawName, ProxyProtocol.Vmess)
+            "vmess" -> vmessNode(body, rawName)
             "vless" -> unsupportedNode(body, rawName, ProxyProtocol.Vless)
-            "trojan" -> unsupportedNode(body, rawName, ProxyProtocol.Trojan)
-            "ss" -> unsupportedNode(body, rawName, ProxyProtocol.Ss)
+            "trojan" -> trojanNode(body, rawName)
+            "ss" -> ssNode(body, rawName)
             // There is no SSR enum member; SSR is a different wire protocol from SS, so label it Other.
             "ssr" -> unsupportedNode(body, rawName, ProxyProtocol.Other)
             "socks4", "socks4a" -> authorityUnsupported(body, rawName)
@@ -161,12 +161,7 @@ class ProxySubscriptionParser {
     }
 
     private fun unsupportedNode(body: String, rawName: String, hint: ProxyProtocol): ProxyNode {
-        val extracted = when (hint) {
-            ProxyProtocol.Vmess -> extractVmess(body)
-            ProxyProtocol.Ss -> extractSs(body)
-            ProxyProtocol.Other -> extractSsr(body)
-            else -> extractAuthorityServer(body)
-        }
+        val extracted = if (hint == ProxyProtocol.Other) extractSsr(body) else extractAuthorityServer(body)
         // "解析失败也计为 Other 不支持节点": keep the entry visible, but do not pretend a protocol.
         val protocol = if (extracted == null) ProxyProtocol.Other else hint
         val host = extracted?.host.orEmpty()
@@ -182,6 +177,133 @@ class ProxySubscriptionParser {
         )
     }
 
+    /** Fallback for a kernel protocol whose endpoint/credentials cannot be decoded at all. */
+    private fun kernelFallback(rawName: String, hint: ProxyProtocol): ProxyNode {
+        val name = cleanName(rawName).ifEmpty { "未命名节点" }
+        // The entry stays visible as unsupported metadata; never invent a host/port for the kernel.
+        return ProxyNode(
+            id = subscriptionNodeId(ProxyProtocol.Other, "", 0, null, name, 0),
+            name = name, protocol = ProxyProtocol.Other, host = "", port = 0,
+        )
+    }
+
+    // ---- kernel protocols (VMess / Shadowsocks / Trojan) -----------------------------------
+
+    private data class VmessFields(
+        val server: String?, val port: Int?, val uuid: String, val alterId: Int, val security: String,
+        val network: String, val tls: String, val sni: String?, val host: String?, val path: String?,
+        val headerType: String?, val name: String?,
+    )
+
+    private fun vmessNode(body: String, rawName: String): ProxyNode {
+        val decoded = decodeBase64Text(body)
+        val fields = decoded?.let(::vmessFields)
+        val server = fields?.server?.takeIf(::validHost)
+        val port = fields?.port?.takeIf { it in 1..65535 }
+        if (fields == null || server == null || port == null) return kernelFallback(rawName, ProxyProtocol.Vmess)
+        val name = cleanName(rawName).ifEmpty { cleanName(fields.name.orEmpty()) }.ifEmpty { "${formatHost(server)}:$port" }
+        val transport = if (fields.uuid.isNotEmpty() && fields.network in KERNEL_NETWORKS) {
+            NodeTransport(
+                vmess = VmessTransport(
+                    uuid = fields.uuid, alterId = fields.alterId, security = fields.security,
+                    network = fields.network, tls = fields.tls, sni = fields.sni, host = fields.host,
+                    path = fields.path, headerType = fields.headerType,
+                ),
+            )
+        } else null
+        return ProxyNode(
+            id = subscriptionNodeId(ProxyProtocol.Vmess, server, port, null, name, 0),
+            name = name, protocol = ProxyProtocol.Vmess, host = server, port = port, transport = transport,
+        )
+    }
+
+    private fun vmessFields(json: String): VmessFields {
+        fun field(pattern: Regex): String? = pattern.find(json)?.groupValues?.get(1)?.let(::unescapeJson)
+        val alterId = field(vmessAlterId)?.toIntOrNull() ?: 0
+        val network = field(vmessNetwork)?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
+        val tls = field(vmessTls)?.trim()?.lowercase().orEmpty()
+        val security = field(vmessSecurity)?.trim()?.lowercase().orEmpty().ifEmpty { "auto" }
+        return VmessFields(
+            server = field(vmessServer),
+            port = field(vmessPort)?.toIntOrNull(),
+            uuid = field(vmessId).orEmpty(),
+            alterId = alterId.coerceIn(0, 65535),
+            security = security,
+            network = network,
+            tls = tls,
+            sni = field(vmessSni)?.ifEmpty { null },
+            host = field(vmessHost)?.ifEmpty { null },
+            path = field(vmessPath)?.ifEmpty { null },
+            headerType = field(vmessType)?.ifEmpty { null },
+            name = field(vmessName),
+        )
+    }
+
+    private fun ssNode(body: String, rawName: String): ProxyNode {
+        val at = body.lastIndexOf('@')
+        var hostPort: Pair<String, Int>? = null
+        var credentialText: String? = null
+        if (at >= 0) {
+            hostPort = parseHostPort(body.substring(at + 1).substringBefore('/').substringBefore('?'))
+            credentialText = body.substring(0, at)
+        } else {
+            val decoded = decodeBase64Text(body)
+            if (decoded != null) {
+                val decodedAt = decoded.lastIndexOf('@')
+                if (decodedAt >= 0) {
+                    hostPort = parseHostPort(decoded.substring(decodedAt + 1).substringBefore('/').substringBefore('?'))
+                    credentialText = decoded.substring(0, decodedAt)
+                } else {
+                    hostPort = parseHostPort(decoded.substringBefore('/').substringBefore('?'))
+                }
+            }
+        }
+        val (host, port) = hostPort ?: return kernelFallback(rawName, ProxyProtocol.Ss)
+        // SIP002 user info is normally Base64(method:password); percent-encoded plain text is also seen.
+        val credentials = credentialText?.let { decodeBase64Text(it) ?: decodeUserInfo(it) }
+        val colon = credentials?.indexOf(':') ?: -1
+        val method = if (colon > 0) credentials!!.substring(0, colon).trim() else ""
+        val password = if (colon >= 0) credentials!!.substring(colon + 1) else ""
+        val transport = if (method.isNotEmpty() && password.isNotEmpty()) {
+            NodeTransport(shadowsocks = ShadowsocksTransport(method, password))
+        } else null
+        val name = cleanName(rawName).ifEmpty { "${formatHost(host)}:$port" }
+        return ProxyNode(
+            id = subscriptionNodeId(ProxyProtocol.Ss, host, port, null, name, 0),
+            name = name, protocol = ProxyProtocol.Ss, host = host, port = port, transport = transport,
+        )
+    }
+
+    private fun trojanNode(body: String, rawName: String): ProxyNode {
+        val queryIndex = body.indexOf('?')
+        val authority = if (queryIndex >= 0) body.substring(0, queryIndex) else body
+        val query = if (queryIndex >= 0) body.substring(queryIndex + 1) else ""
+        val at = authority.lastIndexOf('@')
+        val passwordText = if (at >= 0) authority.substring(0, at) else null
+        val hostPortText = if (at >= 0) authority.substring(at + 1) else authority
+        val (host, port) = parseHostPort(hostPortText.substringBefore('/')) ?: return kernelFallback(rawName, ProxyProtocol.Trojan)
+        val password = passwordText?.let(::decodeUserInfo)?.takeIf { it.isNotEmpty() }
+        val sni = queryParameter(query, "sni") ?: queryParameter(query, "peer")
+        val transport = password?.let { NodeTransport(trojan = TrojanTransport(it, sni)) }
+        val name = cleanName(rawName).ifEmpty { "${formatHost(host)}:$port" }
+        return ProxyNode(
+            id = subscriptionNodeId(ProxyProtocol.Trojan, host, port, null, name, 0),
+            name = name, protocol = ProxyProtocol.Trojan, host = host, port = port, transport = transport,
+        )
+    }
+
+    private fun queryParameter(query: String, key: String): String? {
+        for (pair in query.split('&')) {
+            if (pair.isEmpty()) continue
+            val separator = pair.indexOf('=')
+            val name = if (separator >= 0) pair.substring(0, separator) else pair
+            if (!name.equals(key, ignoreCase = true)) continue
+            val value = if (separator >= 0) decodeUserInfo(pair.substring(separator + 1)) else ""
+            return value?.takeIf { it.isNotEmpty() }
+        }
+        return null
+    }
+
     private data class Extracted(val host: String, val port: Int, val name: String = "")
 
     private fun extractAuthorityServer(body: String): Extracted? {
@@ -191,25 +313,6 @@ class ProxySubscriptionParser {
         val at = withoutSuffix.lastIndexOf('@')
         val authority = if (at >= 0) withoutSuffix.substring(at + 1) else withoutSuffix
         val (host, port) = parseHostPort(authority) ?: return null
-        return Extracted(host, port)
-    }
-
-    private fun extractVmess(body: String): Extracted? {
-        val decoded = decodeBase64Text(body) ?: return null
-        val server = vmessServer.find(decoded)?.groupValues?.get(1)?.trim()?.ifEmpty { null } ?: return null
-        val port = vmessPort.find(decoded)?.groupValues?.get(1)?.toIntOrNull() ?: return null
-        if (port !in 1..65535 || !validHost(server)) return null
-        val name = vmessName.find(decoded)?.groupValues?.get(1)?.let(::unescapeJson).orEmpty()
-        return Extracted(server, port, name)
-    }
-
-    private fun extractSs(body: String): Extracted? {
-        val at = body.lastIndexOf('@')
-        if (at >= 0) parseHostPort(body.substring(at + 1).substringBefore('/').substringBefore('?'))?.let { return Extracted(it.first, it.second) }
-        val decoded = decodeBase64Text(body) ?: return null
-        val decodedAt = decoded.lastIndexOf('@')
-        val target = if (decodedAt >= 0) decoded.substring(decodedAt + 1) else decoded
-        val (host, port) = parseHostPort(target.substringBefore('/').substringBefore('?')) ?: return null
         return Extracted(host, port)
     }
 
@@ -321,7 +424,53 @@ class ProxySubscriptionParser {
         return ProxyNode(
             id = subscriptionNodeId(protocol, server, port, username, name, index),
             name = name, protocol = protocol, host = server, port = port, username = username, password = password,
+            transport = clashTransport(protocol, fields),
         )
+    }
+
+    /** Extracts the same kernel transport parameters the plain-link parsers recover. */
+    private fun clashTransport(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? = when (protocol) {
+        ProxyProtocol.Vmess -> {
+            val uuid = fields["uuid"]?.trim().orEmpty()
+            val network = fields["network"]?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
+            if (uuid.isEmpty() || network !in KERNEL_NETWORKS) {
+                null
+            } else {
+                NodeTransport(
+                    vmess = VmessTransport(
+                        uuid = uuid,
+                        alterId = (fields["alterid"]?.trim()?.toIntOrNull() ?: 0).coerceIn(0, 65535),
+                        security = fields["cipher"]?.trim()?.lowercase().orEmpty()
+                            .ifEmpty { fields["security"]?.trim()?.lowercase().orEmpty().ifEmpty { "auto" } },
+                        network = network,
+                        tls = fields["tls"]?.trim()?.lowercase().orEmpty(),
+                        sni = fields["servername"]?.trim()?.ifEmpty { null } ?: fields["sni"]?.trim()?.ifEmpty { null },
+                        host = fields["host"]?.trim()?.ifEmpty { null },
+                        path = fields["path"]?.trim()?.ifEmpty { null },
+                        headerType = fields["type"]?.trim()?.ifEmpty { null },
+                    ),
+                )
+            }
+        }
+        ProxyProtocol.Ss -> {
+            val method = fields["cipher"]?.trim().orEmpty().ifEmpty { fields["method"]?.trim().orEmpty() }
+            val password = fields["password"]?.trim().orEmpty()
+            if (method.isEmpty() || password.isEmpty()) null else NodeTransport(shadowsocks = ShadowsocksTransport(method, password))
+        }
+        ProxyProtocol.Trojan -> {
+            val password = fields["password"]?.trim().orEmpty()
+            if (password.isEmpty()) {
+                null
+            } else {
+                NodeTransport(
+                    trojan = TrojanTransport(
+                        password = password,
+                        sni = fields["sni"]?.trim()?.ifEmpty { null } ?: fields["servername"]?.trim()?.ifEmpty { null },
+                    ),
+                )
+            }
+        }
+        else -> null
     }
 
     private fun clashProtocol(type: String): ProxyProtocol = when (type.trim().lowercase()) {
@@ -533,9 +682,19 @@ class ProxySubscriptionParser {
         const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_="
         val WHITESPACE = Regex("\\s+")
         val CLASH_PROXIES_KEY = Regex("(?i)^proxies\\s*:\\s*(#.*)?$")
+        val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
 
         val vmessServer = Regex("\"add\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
         val vmessPort = Regex("\"port\"\\s*:\\s*\"?(\\d{1,5})\"?")
         val vmessName = Regex("\"ps\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val vmessId = Regex("\"id\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val vmessAlterId = Regex("\"aid\"\\s*:\\s*\"?(\\d{1,6})\"?")
+        val vmessSecurity = Regex("\"scy\"\\s*:\\s*\"([^\"]*)\"")
+        val vmessNetwork = Regex("\"net\"\\s*:\\s*\"([^\"]*)\"")
+        val vmessTls = Regex("\"tls\"\\s*:\\s*\"([^\"]*)\"")
+        val vmessSni = Regex("\"sni\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val vmessHost = Regex("\"host\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val vmessPath = Regex("\"path\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
+        val vmessType = Regex("\"type\"\\s*:\\s*\"([^\"]*)\"")
     }
 }
