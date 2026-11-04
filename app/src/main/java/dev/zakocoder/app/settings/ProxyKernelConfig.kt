@@ -1,7 +1,7 @@
 package dev.zakocoder.app.settings
 
 /**
- * Generates an Xray-core JSON config for a VMess/Shadowsocks/Trojan node behind a loopback SOCKS5
+ * Generates an Xray-core JSON config for a VMess/VLESS/Shadowsocks/Trojan node behind a loopback SOCKS5
  * inbound. Plain JVM (no Android import) so the exact JSON can be unit-tested; [ProxyKernel] only
  * writes it to a private file and never logs it.
  *
@@ -38,6 +38,7 @@ object ProxyKernelConfig {
             ProxyProtocol.Vmess -> vmessOutbound(node)
             ProxyProtocol.Ss -> shadowsocksOutbound(node)
             ProxyProtocol.Trojan -> trojanOutbound(node)
+            ProxyProtocol.Vless -> vlessOutbound(node)
             else -> null
         } ?: return null
         return "{" +
@@ -88,6 +89,23 @@ object ProxyKernelConfig {
             "\"streamSettings\":{\"network\":\"tcp\",\"security\":\"tls\",\"tlsSettings\":{\"serverName\":$serverName}}}"
     }
 
+    private fun vlessOutbound(node: ProxyNode): String? {
+        val vless = node.transport?.vless ?: return null
+        if (vless.network !in KERNEL_NETWORKS) return null
+        if (vless.encryption !in setOf("", "none")) return null
+        if (vless.flow !in setOf("", "xtls-rprx-vision")) return null
+        val security = vless.security.ifEmpty { "none" }
+        if (security !in VLESS_SECURITY) return null
+        val normalized = vless.copy(security = security)
+        val uuid = encode(vless.uuid, 128) ?: return null
+        val address = encode(node.host, 255) ?: return null
+        val stream = vlessStream(normalized, node.host) ?: return null
+        val flow = if (vless.flow.isEmpty()) "" else ",\"flow\":${encode(vless.flow, 64) ?: return null}"
+        return "{\"protocol\":\"vless\",\"tag\":\"proxy\",\"settings\":{\"vnext\":[{\"address\":$address," +
+            "\"port\":${node.port},\"users\":[{\"id\":$uuid,\"encryption\":\"none\"$flow}]}]}," +
+            "\"streamSettings\":$stream}"
+    }
+
     private fun vmessStream(vmess: VmessTransport, address: String, tls: String): String? {
         val base = StringBuilder("{\"network\":\"${vmess.network}\",\"security\":\"$tls\"")
         if (tls == "tls") {
@@ -109,6 +127,48 @@ object ProxyKernelConfig {
                 vmess.path?.takeIf { it.isNotEmpty() }?.let { serviceName ->
                     val encoded = encode(serviceName, 1024) ?: return null
                     base.append(",\"grpcSettings\":{\"serviceName\":$encoded}")
+                }
+            }
+        }
+        base.append("}")
+        return base.toString()
+    }
+
+    private fun vlessStream(vless: VlessTransport, address: String): String? {
+        val base = StringBuilder("{\"network\":\"${vless.network}\",\"security\":\"${vless.security}\"")
+        when (vless.security) {
+            "tls" -> {
+                val serverName = encode(vless.sni?.takeIf { it.isNotEmpty() } ?: address, 255) ?: return null
+                base.append(",\"tlsSettings\":{\"serverName\":$serverName}")
+            }
+            "reality" -> {
+                val serverName = encode(vless.sni ?: return null, 255) ?: return null
+                val fingerprint = encode(vless.fingerprint ?: return null, 64) ?: return null
+                val publicKey = encode(vless.publicKey ?: return null, 255) ?: return null
+                base.append(",\"realitySettings\":{\"serverName\":$serverName,\"fingerprint\":$fingerprint,")
+                    .append("\"publicKey\":$publicKey")
+                vless.shortId?.takeIf { it.isNotEmpty() }?.let { shortId ->
+                    base.append(",\"shortId\":${encode(shortId, 64) ?: return null}")
+                }
+                vless.spiderX?.takeIf { it.isNotEmpty() }?.let { spiderX ->
+                    base.append(",\"spiderX\":${encode(spiderX, 1024) ?: return null}")
+                }
+                base.append("}")
+            }
+        }
+        when (vless.network) {
+            "ws" -> {
+                val path = encode(vless.path ?: "/", 1024) ?: return null
+                base.append(",\"wsSettings\":{\"path\":$path")
+                vless.host?.takeIf { it.isNotEmpty() }?.let { host ->
+                    base.append(",\"headers\":{\"Host\":${encode(host, 255) ?: return null}}")
+                }
+                base.append("}")
+            }
+            "grpc" -> {
+                val serviceName = vless.serviceName ?: vless.path
+                if (!serviceName.isNullOrEmpty()) {
+                    base.append(",\"grpcSettings\":{\"serviceName\":${encode(serviceName, 1024) ?: return null}}")
                 }
             }
         }
@@ -144,6 +204,7 @@ object ProxyKernelConfig {
     }
 
     private val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
+    private val VLESS_SECURITY = setOf("none", "tls", "reality")
     private val VMESS_SECURITY = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305")
     private val SS_METHODS = setOf(
         "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305",

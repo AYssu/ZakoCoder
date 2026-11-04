@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
   "tool": "Xray-core",
-  "version": "v1.260327.0",
+  "version": "v0.0.0-20261031132019-a4a3dff5b20c",
+  "release": "v26.10.31",
   "repository": "https://github.com/XTLS/Xray-core",
   "license": "MPL-2.0",
-  "goVersion": "go1.26.4",
+  "goVersion": "go1.27.1",
   "sources": {
     "module": "github.com/xtls/xray-core",
     "mainPackage": "github.com/xtls/xray-core/main",
@@ -14,12 +15,12 @@
     "arm64-v8a": {
       "goarch": "arm64",
       "asset": "libzakocoder_xray.so",
-      "sha256": "9c08f7d44969528140190e73cf1dd06933fb8bbea41378e46092276638a54fa2"
+      "sha256": "2fd8c9460db787e810474b4385bfcfd9e536284e1fd0aee9229a3e65d816df7a"
     },
     "x86_64": {
       "goarch": "amd64",
       "asset": "libzakocoder_xray.so",
-      "sha256": "0fba8303a4c9e85c2b5d076c7efe9b6d876333216e186e7af13e927f7fcedfbf"
+      "sha256": "1e69f2c4645a65943569f8f8c56e8aef443f9ad1868a7fb4b3fa3269e5c1d7f5"
     }
   },
   "notes": [

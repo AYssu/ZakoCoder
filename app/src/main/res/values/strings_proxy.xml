@@ -49,10 +49,11 @@
     <string name="proxy_badge_single">单节点</string>
     <string name="proxy_badge_unsupported">暂不支持</string>
     <string name="proxy_badge_unknown">无法识别</string>
-    <string name="proxy_counts">%1$d 个节点 · %2$d 个可用</string>
+    <string name="proxy_counts">%1$d 个节点 · %2$d 个参数完整</string>
+    <string name="proxy_counts_hint">这里只检查协议与必要参数，不代表节点在线；启用后请用实际请求验证出口与网络。</string>
     <string name="proxy_result_unsupported_only">共 %1$d 个节点，但都缺少必要参数或协议暂不支持。</string>
     <string name="proxy_result_not_subscription">该链接无法识别为机场订阅或单节点链接，请检查后重试。</string>
-    <string name="proxy_result_single_hint">识别到单个可用节点，可直接保存并启用。</string>
+    <string name="proxy_result_single_hint">识别到单个参数完整的节点，可保存并启用后实测连通性。</string>
     <string name="proxy_node_unsupported_hint">该节点缺少必要参数或协议暂不支持。</string>
     <string name="proxy_node_host">%1$s:%2$d</string>
     <string name="proxy_selected_summary">将启用：%1$s</string>
@@ -65,7 +66,7 @@
 
     <string name="proxy_kernel_section">本地内核</string>
     <string name="proxy_kernel_badge">本地内核</string>
-    <string name="proxy_kernel_stopped">未运行（启用 VMess/SS/Trojan 节点时自动启动）</string>
+    <string name="proxy_kernel_stopped">未运行（启用 VMess/VLESS/SS/Trojan 节点时自动启动）</string>
     <string name="proxy_kernel_starting">正在启动…</string>
     <string name="proxy_kernel_running">运行中 · %1$s · 127.0.0.1:%2$d</string>
     <string name="proxy_kernel_running_hint">本地端口已就绪；节点连通性在首次请求时验证。</string>
@@ -84,7 +85,7 @@
 
     <string name="proxy_plugin_section">内核插件</string>
     <string name="proxy_plugin_not_installed">未安装内核插件</string>
-    <string name="proxy_plugin_required_hint">VMess/SS/Trojan 节点需要安装内核插件才能启用。</string>
+    <string name="proxy_plugin_required_hint">VMess/VLESS/SS/Trojan 节点需要安装内核插件才能启用。</string>
     <string name="proxy_plugin_install_online">在线安装</string>
     <string name="proxy_plugin_install_local">从本地安装</string>
     <string name="proxy_plugin_installed">已安装 v%1$s</string>

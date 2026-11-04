@@ -3,7 +3,7 @@ package dev.zakocoder.app.settings
 import java.net.URI
 import java.security.MessageDigest
 
-/** Connection protocols a subscription can describe. HTTP/SOCKS5 are direct; VMess/SS/Trojan run via the kernel. */
+/** Connection protocols a subscription can describe. HTTP/SOCKS5 are direct; kernel protocols run via the plugin. */
 enum class ProxyProtocol { Http, Socks5, Vmess, Ss, Trojan, Vless, Hysteria, Tuic, Other }
 
 /**
@@ -34,13 +34,40 @@ data class TrojanTransport(val password: String, val sni: String?) {
     override fun toString() = "TrojanTransport(password=<redacted>, sni=$sni)"
 }
 
+/**
+ * VLESS client parameters. REALITY is configured separately from ordinary TLS because it needs
+ * the server public key and short id. The uuid and public key are redacted from diagnostics.
+ */
+data class VlessTransport(
+    val uuid: String,
+    val encryption: String,
+    val flow: String,
+    val network: String,
+    val security: String,
+    val sni: String?,
+    val fingerprint: String?,
+    val publicKey: String?,
+    val shortId: String?,
+    val spiderX: String?,
+    val host: String?,
+    val path: String?,
+    val serviceName: String?,
+) {
+    override fun toString() =
+        "VlessTransport(uuid=<redacted>, encryption=$encryption, flow=$flow, network=$network, " +
+            "security=$security, sni=$sni, fingerprint=$fingerprint, publicKey=<redacted>, " +
+            "shortId=$shortId, host=$host, path=$path, serviceName=$serviceName)"
+}
+
 /** Kernel transport for one protocol; only the matching field is set. */
 data class NodeTransport(
     val vmess: VmessTransport? = null,
     val shadowsocks: ShadowsocksTransport? = null,
     val trojan: TrojanTransport? = null,
+    val vless: VlessTransport? = null,
 ) {
-    override fun toString() = "NodeTransport(vmess=$vmess, shadowsocks=$shadowsocks, trojan=$trojan)"
+    override fun toString() =
+        "NodeTransport(vmess=$vmess, shadowsocks=$shadowsocks, trojan=$trojan, vless=$vless)"
 }
 
 /**
@@ -51,7 +78,7 @@ data class NodeTransport(
  *   authentication support;
  * - SOCKS5 is supported with or without a full RFC 1929 username/password pair, but a lone
  *   username without a password is rejected rather than silently dropping half a credential;
- * - VMess/SS/Trojan are usable only when [viaKernel] is true, i.e. [transport] carries every field
+ * - VMess/VLESS/SS/Trojan are usable only when [viaKernel] is true, i.e. [transport] carries every field
  *   the Xray config generator needs. Missing key fields keep the node visible but unusable.
  *
  * [proxyUrl] is the canonical direct app-setting URL. It contains URL-encoded credentials for
@@ -84,6 +111,18 @@ data class ProxyNode(
             it.password.isNotEmpty() && ProxyKernelConfig.isSupportedSsMethod(it.method)
         } == true
         ProxyProtocol.Trojan -> transport?.trojan?.let { it.password.isNotEmpty() } == true
+        ProxyProtocol.Vless -> transport?.vless?.let {
+            it.uuid.isNotEmpty() &&
+                it.encryption in setOf("", "none") &&
+                it.flow in setOf("", "xtls-rprx-vision") &&
+                it.network in VMESS_NETWORKS &&
+                it.security in setOf("", "none", "tls", "reality") &&
+                (it.security != "reality" || (
+                    !it.sni.isNullOrEmpty() &&
+                        !it.fingerprint.isNullOrEmpty() &&
+                        !it.publicKey.isNullOrEmpty()
+                    ))
+        } == true
         else -> false
     }
 

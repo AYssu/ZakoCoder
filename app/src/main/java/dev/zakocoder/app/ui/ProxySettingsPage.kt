@@ -709,6 +709,7 @@ private fun ProxyAirportResult(
             Text(stringResource(R.string.proxy_counts, nodes.size, subscription.supportedCount),
                 style = MaterialTheme.typography.bodySmall, color = TertiaryText)
         }
+        Text(stringResource(R.string.proxy_counts_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
         if (nodes.isNotEmpty()) {
             Text(stringResource(R.string.proxy_section_nodes), style = MaterialTheme.typography.titleSmall)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {

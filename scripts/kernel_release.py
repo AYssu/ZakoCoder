@@ -121,13 +121,13 @@ def main():
     }, indent=2) + '\n')
     (args.output / 'RELEASE.md').write_text(
         '# ZakoCoder 代理内核插件\n\n'
-        '仅 VMess／SS／Trojan 节点需要，直连和手动 HTTP／SOCKS5 无需安装。\n\n'
+        '仅 VMess／VLESS／SS／Trojan 节点需要，直连和手动 HTTP／SOCKS5 无需安装。\n\n'
         '下载 `kernel-plugin-arm64-v8a.apk`，在应用设置中选择本地安装；'
         '也可直接使用设置页的在线安装。系统安装器需要用户确认。'
         'MIUI 等系统可能需要为插件允许自启动／关联启动。\n\n'
         f'ARM64 · Android 8+ · 接口 v1 · versionCode {version} · 与 {args.main_tag} 主程序同证书。\n\n'
         f'[完整构建源码](https://github.com/AYssu/ZakoCoder/archive/{args.commit}.tar.gz)。'
-        f'源码提交：`{args.commit}`。Xray {lock["version"]}（MPL-2.0），未修改上游源码。'
+        f'源码提交：`{args.commit}`。Xray {lock.get("release", lock["version"])}（MPL-2.0），未修改上游源码。'
         '对应源码包含链接的 Go 模块完整源码、原始许可证、依赖清单及构建锁。\n\n'
         '本发布页是接口 v1 的当前下载通道，后续同接口版本更新资产；'
         '不替代主程序 Latest 发布页。校验值见 `SHA256SUMS.txt`。\n'

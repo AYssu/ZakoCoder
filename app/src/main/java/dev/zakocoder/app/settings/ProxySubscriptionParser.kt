@@ -13,10 +13,10 @@ import java.util.Base64
  * - input is rejected (returns null) above 2 MiB, when no node can be decoded, or for arbitrary
  *   HTML/junk. `max 512 nodes` is enforced by truncating the decoded list in input order, which
  *   keeps ids stable and avoids pathological UI lists;
- * - only `http`/`socks`/`socks5` produce usable nodes (the settings layer speaks plaintext HTTP and
- *   SOCKS5 only). Other known client protocols, including `https` (TLS-to-proxy) and `socks4`, are
- *   still listed as unsupported so the UI can say "暂不支持" instead of silently dropping them or
- *   downgrading their scheme; unknown schemes are ignored;
+ * - `http`/`socks`/`socks5` are direct; VMess/VLESS/SS/Trojan become usable only when their kernel
+ *   transport is complete. Other known client protocols, including `https` (TLS-to-proxy) and
+ *   `socks4`, are listed as unsupported so the UI can say "暂不支持" instead of silently dropping
+ *   them or downgrading their scheme; unknown schemes are ignored;
  * - node ids are a SHA-256 of the decoded identity plus its position, so re-fetching the same
  *   subscription reproduces ids across restarts while duplicate entries stay distinguishable;
  * - credentials are only retained for HTTP/SOCKS5 (the protocols that might consume them), are
@@ -46,7 +46,7 @@ class ProxySubscriptionParser {
             "https" -> authorityUnsupported(body, rawName)
             "socks", "socks5" -> authorityNode(body, rawName, ProxyProtocol.Socks5)
             "vmess" -> vmessNode(body, rawName)
-            "vless" -> unsupportedNode(body, rawName, ProxyProtocol.Vless)
+            "vless" -> vlessNode(body, rawName)
             "trojan" -> trojanNode(body, rawName)
             "ss" -> ssNode(body, rawName)
             // There is no SSR enum member; SSR is a different wire protocol from SS, so label it Other.
@@ -297,6 +297,41 @@ class ProxySubscriptionParser {
         )
     }
 
+    private fun vlessNode(body: String, rawName: String): ProxyNode {
+        val queryIndex = body.indexOf('?')
+        val authority = if (queryIndex >= 0) body.substring(0, queryIndex) else body
+        val query = if (queryIndex >= 0) body.substring(queryIndex + 1) else ""
+        val at = authority.lastIndexOf('@')
+        val uuidText = if (at >= 0) authority.substring(0, at) else null
+        val hostPortText = if (at >= 0) authority.substring(at + 1) else authority
+        val (host, port) = parseHostPort(hostPortText.substringBefore('/')) ?: return kernelFallback(rawName, ProxyProtocol.Vless)
+        val uuid = uuidText?.let(::decodeUserInfo)?.takeIf { it.isNotEmpty() }.orEmpty()
+        val name = cleanName(rawName).ifEmpty { "${formatHost(host)}:$port" }
+        val security = queryParameter(query, "security")?.trim()?.lowercase().orEmpty().ifEmpty { "none" }
+        val network = queryParameter(query, "type")?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
+        val transport = NodeTransport(
+            vless = VlessTransport(
+                uuid = uuid,
+                encryption = queryParameter(query, "encryption")?.trim()?.lowercase().orEmpty().ifEmpty { "none" },
+                flow = queryParameter(query, "flow")?.trim()?.lowercase().orEmpty(),
+                network = network,
+                security = security,
+                sni = queryParameter(query, "sni") ?: queryParameter(query, "peer"),
+                fingerprint = queryParameter(query, "fp"),
+                publicKey = queryParameter(query, "pbk"),
+                shortId = queryParameter(query, "sid"),
+                spiderX = queryParameter(query, "spx"),
+                host = queryParameter(query, "host"),
+                path = queryParameter(query, "path"),
+                serviceName = queryParameter(query, "serviceName") ?: queryParameter(query, "service"),
+            ),
+        )
+        return ProxyNode(
+            id = subscriptionNodeId(ProxyProtocol.Vless, host, port, null, name, 0),
+            name = name, protocol = ProxyProtocol.Vless, host = host, port = port, transport = transport,
+        )
+    }
+
     private fun queryParameter(query: String, key: String): String? {
         for (pair in query.split('&')) {
             if (pair.isEmpty()) continue
@@ -489,6 +524,34 @@ class ProxySubscriptionParser {
                     trojan = TrojanTransport(
                         password = password,
                         sni = fields["sni"]?.trim()?.ifEmpty { null } ?: fields["servername"]?.trim()?.ifEmpty { null },
+                    ),
+                )
+            }
+        }
+        ProxyProtocol.Vless -> {
+            val uuid = fields["uuid"]?.trim().orEmpty()
+            val network = fields["network"]?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
+            val security = fields["security"]?.trim()?.lowercase().orEmpty().ifEmpty {
+                normClashTls(fields["tls"]) ?: return null
+            }.ifEmpty { "none" }
+            if (uuid.isEmpty() || network !in KERNEL_NETWORKS) {
+                null
+            } else {
+                NodeTransport(
+                    vless = VlessTransport(
+                        uuid = uuid,
+                        encryption = fields["encryption"]?.trim()?.lowercase().orEmpty().ifEmpty { "none" },
+                        flow = fields["flow"]?.trim()?.lowercase().orEmpty(),
+                        network = network,
+                        security = security,
+                        sni = fields["servername"]?.trim()?.ifEmpty { null } ?: fields["sni"]?.trim()?.ifEmpty { null },
+                        fingerprint = fields["client-fingerprint"]?.trim()?.ifEmpty { null } ?: fields["fp"]?.trim()?.ifEmpty { null },
+                        publicKey = fields["public-key"]?.trim()?.ifEmpty { null } ?: fields["pbk"]?.trim()?.ifEmpty { null },
+                        shortId = fields["short-id"]?.trim()?.ifEmpty { null } ?: fields["sid"]?.trim()?.ifEmpty { null },
+                        spiderX = fields["spider-x"]?.trim()?.ifEmpty { null } ?: fields["spx"]?.trim()?.ifEmpty { null },
+                        host = fields["host"]?.trim()?.ifEmpty { null },
+                        path = fields["path"]?.trim()?.ifEmpty { null },
+                        serviceName = fields["service-name"]?.trim()?.ifEmpty { null } ?: fields["serviceName"]?.trim()?.ifEmpty { null },
                     ),
                 )
             }

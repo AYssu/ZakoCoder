@@ -1,8 +1,8 @@
-# 代理内核插件方案（设计稿，待维护者确认后实施）
+# 代理内核插件实现与验证
 
-> 目标：**轻量主 APK + 独立可选内核插件**。主 APK 不内置 Xray；需要 VMess／SS／Trojan 的用户在应用内主动安装内核插件后，才能启用这些节点。直连、手动 HTTP／SOCKS5 不依赖插件。
+> 目标：**轻量主 APK + 独立可选内核插件**。主 APK 不内置 Xray；需要 VMess／VLESS／SS／Trojan 的用户在应用内主动安装内核插件后，才能启用这些节点。直连、手动 HTTP／SOCKS5 不依赖插件。
 >
-> 本文件是设计提案，不是已交付实现。PR #48 当前先修复维护者列出的 6 个代码问题；插件改造在本方案确认后作为后续提交/PR 实施。
+> 插件化、签名校验、AIDL 服务、安装入口和 Release 工作流已实施；下文保留原型阶段实测数据，当前版本与哈希以 `native-kernel/artifacts.lock.json` 为准。
 
 ## 1. 为什么不是“把 xray 打进主 APK”
 
@@ -15,7 +15,7 @@
 | `lib/arm64-v8a/libzakocoder_xray.so` | 原始 **30,277,794 B**，APK 内压缩 **11,883,858 B** |
 | 主 APK 因内核增加 | **+13,741,495 B ≈ +13.1 MiB** |
 
-对不使用 VMess/SS/Trojan 的用户，默认包接近翻倍，不符合维护者要求，因此内核必须移出主包。
+对不使用内核协议的用户，主包接近翻倍，因此内核独立为可选插件。
 
 ## 2. 可行性边界（决定插件形态）
 
@@ -38,7 +38,7 @@ Android 10（API 29）起禁止应用执行可写私有目录中的文件（W^X�
 - ABI：`arm64-v8a` 为正式发布；调试/模拟器可选 `x86_64`（同一插件包内多 ABI，或按 ABI 分资产，发布时二选一并在 Release 注明）。
 - 内容：Xray 可执行文件（`libzakocoder_xray.so` 打包，插件自己的 `nativeLibraryDir` 执行）、插件 manifest（内核版本、ABI、xray 版本、许可证）、AIDL 服务实现、MPL-2.0 许可证与来源说明。
 - 版本与兼容：`versionCode` 单调递增；插件声明 `minMainVersion`/内核接口版本（`kernelContractVersion`），主程序拒绝不兼容版本；主程序也声明可接受的最低插件版本。
-- 来源材料：GitHub Releases 每个资产附 SHA-256、版本说明、Xray 源码固定 tag、MPL-2.0 许可证；主程序 THIRD_PARTY 记录来源与构建方式。
+- 来源材料：GitHub Releases 每个资产附 SHA-256、版本说明、Xray 源码固定提交、MPL-2.0 许可证；主程序 THIRD_PARTY 记录来源与构建方式。
 
 ## 4. 主程序 ↔ 插件接口（AIDL，v1）
 
@@ -71,7 +71,7 @@ interface IKernelService {
 ## 6. 未安装插件时的产品行为
 
 - 直连、手动 HTTP／SOCKS5 完全正常。
-- 机场订阅仍可识别/导入/展示节点；VMess／SS／Trojan 节点显示「需安装内核插件」，不静默回退直连，不写本地代理。
+- 机场订阅仍可识别/导入/展示节点；VMess／VLESS／SS／Trojan 节点显示「需安装内核插件」，不静默回退直连，不写本地代理。
 - 设置页“本地内核”卡显示：未安装 / 已安装 vX（在线更新、从本地安装、移除）/ 运行中（停止）。安装入口仅在此页，用户主动触发。
 
 ## 7. 实施前的可行性验证（必须先做）
@@ -81,7 +81,7 @@ interface IKernelService {
 3. **安装流程**：`PackageInstaller` 在线下载包与 SAF 本地包两条路径，验证取消、失败、签名错误、降级拒绝、覆盖安装、卸载。
 4. **内核迁移**：把当前 `ProxyKernel` 的 config/生命周期/随机 SOCKS 认证/SSL_CERT_DIR/清理逻辑迁移到插件进程；主程序只保留插件管理 + 状态 UI。
 5. **体积与占用**：给出基础版 APK、插件 APK（arm64）、插件安装占用、内核文件原始/压缩大小；确认基础包无内核与重复 ABI。
-6. **回归**：直连/手动代理、订阅导入（无插件）、安装后 VMess/SS/Trojan 启动/停止/切换/重启、插件更新/卸载、失败恢复；在真实 arm64 设备上跑一次。
+6. **回归**：直连/手动代理、订阅导入（无插件）、安装后 VMess/VLESS/SS/Trojan 启动/停止/切换/重启、插件更新/卸载、失败恢复；在真实 arm64 设备上跑一次。
 7. **供应链**：插件 Release 工作流：Go 工具链 pin、Xray 版本/sha256、许可证与源码包、按 ABI 发布、校验元数据。
 
 ## 7.1 原型验证结果（已完成，2026-11-03）
@@ -96,7 +96,7 @@ interface IKernelService {
 
 ## 7.2 生产实现与端到端验证（已完成）
 
-在原型基础上已完成生产实现：`kernel-plugin` 模块（AIDL 服务、签名级权限、插件 `nativeLibraryDir` 执行 xray、`SSL_CERT_DIR`、随机 SOCKS 认证、启动/停止清理）与主程序 `KernelPluginManager`/`KernelPluginInstaller`/插件化 `ProxyKernel`、安装卡 UI、CI/手动构建拆分。
+在原型基础上已完成生产实现：`kernel-plugin` 模块（AIDL 服务、签名级权限、插件 `nativeLibraryDir` 执行 xray、`SSL_CERT_DIR`、随机 SOCKS 认证、启动/停止清理）与主程序 `KernelPluginManager`/`KernelPluginInstaller`/插件化 `ProxyKernel`、安装卡 UI、CI/手动构建拆分。当前内核固定为 Xray-core `v26.10.31`/Go 1.27.1，主程序配置生成器已支持 VLESS REALITY/TLS 与 XTLS Vision。
 
 - **关键修复**：插件 APK 最初漏了 `android.permission.INTERNET`，导致 xray 在插件进程内无法建立/接受网络连接，表现为启动 Timeout；补权限后通过。
 - **设备端到端**（x86_64/API 37，本地自建 VMess + HTTP fixture，debug 证书）：`KernelPluginDeviceTest` → **OK (2 tests)**：插件绑定/`contractVersion=1`；经插件启动 VMess 内核 → 随机 SOCKS 认证 → HTTP 200（`kernel-e2e-ok`）→ stop 后 Stopped。
@@ -107,7 +107,7 @@ interface IKernelService {
 ## 8. 构建与发布改造（方案确认后）
 
 - 主 APK：移除 `prepareProxyKernel` 与 xray jniLibs；基础构建不再需要 Go；CI 保持轻量。
-- 新 Gradle 模块 `:kernel-plugin`（applicationId `dev.zakocoder.app.kernel`）：打包 xray 与 AIDL 服务；独立 CI job（setup-go 1.26.4）构建 debug/release 包。
+- 新 Gradle 模块 `:kernel-plugin`（applicationId `dev.zakocoder.app.kernel`）：打包 xray 与 AIDL 服务；独立 CI job 按 `native-kernel/go.version`（当前 Go 1.27.1）构建 debug/release 包。
 - 发布：`.github/workflows/release-kernel-plugin.yml`（手动 dispatch）构建插件 APK、生成 SHA-256/来源/许可证材料并上传 GitHub Releases；Release 说明含版本、ABI、接口版本、校验值。
 - 主程序 release 构建只包含插件管理器代码，不包含内核二进制。
 

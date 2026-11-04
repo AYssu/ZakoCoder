@@ -78,8 +78,9 @@ def build(go: str, goarch: str, version: str) -> bytes:
         )
         run(go, ["mod", "init", "kernelbuild"], work, env)
         run(go, ["get", f"github.com/xtls/xray-core@{version}"], work, env)
-        # Lazy module graph: `go get` does not add every sum needed by the full build.
-        run(go, ["mod", "tidy"], work, env)
+        # Keep the explicit requirement: this build-only module has no source imports yet, so
+        # `go mod tidy` would remove Xray and make `go build <package>` resolve the proxy's stale
+        # "latest" version instead of the locked commit.
         output = work / "kernel"
         run(
             go,
@@ -119,7 +120,8 @@ def main() -> int:
         if destination.is_file() and not args.force and sha256(destination) == expected:
             print(f"Verified {abi}/{target['asset']}")
             continue
-        print(f"Building Xray-core {version} for {abi} ({target['goarch']})...")
+        release = lock.get("release", version)
+        print(f"Building Xray-core {release} for {abi} ({target['goarch']})...")
         destination_dir.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(".download")
         temporary.write_bytes(build(go, target["goarch"], version))

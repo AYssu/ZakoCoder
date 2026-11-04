@@ -17,6 +17,10 @@ import org.junit.Test
  * stable error mapping.
  */
 class ProxyCatalogTest {
+    @Test fun defaultSubscriptionUserAgentIncludesVersion() {
+        assertTrue(proxySubscriptionUserAgent().matches(Regex("ZakoCoder/.+")))
+    }
+
     private val link = "https://sub.example.com/api/v1/client/token-value?token=redacted"
     private val httpA = testNode("node-a", name = "A")
     private val socksB = testNode("node-b", name = "B", protocol = ProxyProtocol.Socks5, host = "198.51.100.2", port = 1080)
@@ -102,7 +106,7 @@ class ProxyCatalogTest {
     }
 
     @Test fun importBeforeProbeOrAfterUnsupportedProbeDoesNothing() = runBlocking {
-        val fetcher = FakeProxySubscriptionFetcher(content = "vless://uuid@192.0.2.6:443#V")
+        val fetcher = FakeProxySubscriptionFetcher(content = "hysteria2://pw@192.0.2.6:443#HY")
         val store = FakeProxySubscriptionStore()
         val catalog = catalog(fetcher, store)
 
