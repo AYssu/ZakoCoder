@@ -318,3 +318,13 @@ jobs:
           python3 scripts/beta_release.py publish --repository "$GITHUB_REPOSITORY" \
             --directory out/candidate --qa-apk out/qa/ZakoCoder-release-qa-multiabi.apk \
             --report out/device-validation/report.json
+
+  kernel-plugin:
+    needs: [resolve, publish]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-kernel-plugin.yml
+    with:
+      main_release_tag: v${{ needs.resolve.outputs.version }}
+      source_commit: ${{ needs.resolve.outputs.commit }}
+    secrets: inherit

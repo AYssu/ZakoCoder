@@ -1,0 +1,168 @@
+name: Publish Kernel Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      main_release_tag:
+        description: Published main app tag whose certificate and versionCode must match
+        required: true
+        default: v0.1.1
+        type: string
+  workflow_call:
+    inputs:
+      main_release_tag:
+        required: true
+        type: string
+      source_commit:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kernel-plugin-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.repository == 'AYssu/ZakoCoder'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MAIN_RELEASE_TAG: ${{ inputs.main_release_tag }}
+      SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve trusted source and published main app
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$MAIN_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+|-rc\.[0-9]+)?$ ]]
+          git merge-base --is-ancestor "$SOURCE_COMMIT" HEAD
+          git checkout --detach "$SOURCE_COMMIT"
+          mkdir -p out/main
+          gh release download "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'ZakoCoder-*-arm64.apk' --pattern SHA256SUMS.txt --dir out/main
+          (cd out/main && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: native-kernel/go.version
+          cache: false
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+      - name: Build the independent ARM64 Release plugin
+        run: |
+          set -euo pipefail
+          main_apks=(out/main/*.apk)
+          [[ "${#main_apks[@]}" == 1 ]]
+          version_code=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${main_apks[0]}" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p")
+          [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
+          echo "PLUGIN_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          python3 scripts/check_repository.py
+          python3 -m unittest discover -s scripts -p 'test_kernel_release.py' -v
+          python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a --strict-hash
+          ./gradlew :kernel-plugin:assembleRelease :kernel-plugin:lintRelease \
+            -PcompatibilityAbis=arm64-v8a -PkernelPluginVersionCode="$version_code" \
+            -PkernelPluginVersionName="${MAIN_RELEASE_TAG#v}" -x :kernel-plugin:prepareProxyKernel --stacktrace
+      - name: Sign with the main app signing configuration
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.ZAKOCODER_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ZAKOCODER_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ZAKOCODER_RELEASE_KEY_PASSWORD }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$RELEASE_KEYSTORE_BASE64$RELEASE_STORE_PASSWORD$RELEASE_KEY_ALIAS$RELEASE_KEY_PASSWORD" ]]; then
+            for name in RELEASE_KEYSTORE_BASE64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+              if [[ -z "${!name}" ]]; then
+                echo "::error::Incomplete release signing configuration: $name is missing; refusing Debug fallback."
+                exit 1
+              fi
+            done
+            key_base64="$RELEASE_KEYSTORE_BASE64"
+            export ACTIVE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" ACTIVE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+            key_alias="$RELEASE_KEY_ALIAS"
+            signing_kind=release
+          else
+            if [[ -z "$DEBUG_KEYSTORE_BASE64" ]]; then
+              echo '::error::Missing ZAKOCODER_DEBUG_KEYSTORE_BASE64; no signing key will be generated.'
+              exit 1
+            fi
+            key_base64="$DEBUG_KEYSTORE_BASE64"
+            export ACTIVE_STORE_PASSWORD=android ACTIVE_KEY_PASSWORD=android
+            key_alias=androiddebugkey
+            signing_kind=debug-reused-for-beta
+          fi
+          key_dir=$(mktemp -d "$RUNNER_TEMP/zako-kernel-signing.XXXXXX")
+          trap 'rm -rf "$key_dir"' EXIT
+          umask 077
+          printf '%s' "$key_base64" | base64 --decode > "$key_dir/signing.keystore"
+          mkdir -p out/plugin
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$tools/zipalign" -f -P 16 4 kernel-plugin/build/outputs/apk/release/kernel-plugin-release-unsigned.apk "$key_dir/aligned.apk"
+          "$tools/apksigner" sign --ks "$key_dir/signing.keystore" --ks-key-alias "$key_alias" \
+            --ks-pass env:ACTIVE_STORE_PASSWORD --key-pass env:ACTIVE_KEY_PASSWORD \
+            --out out/plugin/kernel-plugin-arm64-v8a.apk "$key_dir/aligned.apk"
+          rm -f out/plugin/*.idsig
+          "$tools/zipalign" -c -P 16 4 out/plugin/kernel-plugin-arm64-v8a.apk
+      - name: Verify certificate, package and kernel; bundle corresponding sources
+        run: |
+          set -euo pipefail
+          main_apks=(out/main/*.apk)
+          python3 scripts/kernel_release.py --apk out/plugin/kernel-plugin-arm64-v8a.apk \
+            --main-apk "${main_apks[0]}" --tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --output out/plugin --commit "$SOURCE_COMMIT" --main-tag "$MAIN_RELEASE_TAG"
+      - name: Publish fixed download address and verify public assets
+        run: |
+          set -euo pipefail
+          tag=kernel-plugin-v1
+          # Keep the existing Android client URL. This tag is the current contract-v1 channel.
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            mkdir -p out/previous
+            is_draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+            if [[ "$is_draft" != true ]]; then
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern BUILD.json --dir out/previous
+              python3 -c 'import json, os; old=json.load(open("out/previous/BUILD.json")); assert old["versionCode"] < int(os.environ["PLUGIN_VERSION_CODE"]), "Plugin versionCode must increase; existing assets were not changed"'
+            fi
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_COMMIT" \
+              --title '代理内核插件（ARM64 / 接口 v1）' --notes-file out/plugin/RELEASE.md --draft --latest=false
+          fi
+          gh release upload "$tag" out/plugin/* --repo "$GITHUB_REPOSITORY" --clobber
+          mkdir -p out/readback
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir out/readback
+          (cd out/readback && sha256sum -c SHA256SUMS.txt)
+          cmp out/plugin/SHA256SUMS.txt out/readback/SHA256SUMS.txt
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false --notes-file out/plugin/RELEASE.md
+      - name: Link the optional plugin from the main release
+        run: |
+          set -euo pipefail
+          gh release view "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > out/main-notes.md
+          python3 - <<'PYNOTES'
+          from pathlib import Path
+          path = Path('out/main-notes.md')
+          notes = path.read_text()
+          if '<!-- kernel-plugin-download -->' not in notes:
+              notes += '\n\n<!-- kernel-plugin-download -->\n### 可选代理内核\n\nVMess／SS／Trojan 节点需额外安装[ARM64 内核插件](https://github.com/AYssu/ZakoCoder/releases/tag/kernel-plugin-v1)。可在应用设置中在线安装，或下载插件 APK 后选择本地安装。直连和手动 HTTP／SOCKS5 无需安装。\n'
+          path.write_text(notes)
+          PYNOTES
+          gh release edit "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file out/main-notes.md

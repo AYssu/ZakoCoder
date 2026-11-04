@@ -28,6 +28,16 @@ RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留
 
 本流程默认仅打包 **ARM64**。不附带实验性 x86_64 工具链。构建参数为 `-PbetaRelease=true -PbetaVersion=0.1.0 -PbetaVersionCode=1005`，未签名输出为后续签名的输入；不在 Gradle 中保存密钥。完整步骤以 [publish-beta.yml](../.github/workflows/publish-beta.yml) 和 `app/build.gradle.kts` 为准。
 
+### 可选代理内核插件
+
+主 APK 保持不包含 Xray。**Publish Release** 成功后自动调用 [Publish Kernel Plugin](../.github/workflows/release-kernel-plugin.yml)，构建 ARM64 插件 Release，并沿用主程序签名配置。工作流下载刚发布的主 APK，校验摘要、签名与版本；只有插件与它同证书、插件 versionCode 与该主 APK 一致、内核 SHA-256 与构建锁一致时才允许发布。
+
+现有版本缺少插件时，可在 `main` 的 **Actions → Publish Kernel Plugin → Run workflow** 单独补发，`main_release_tag` 填已有主程序标签（例如 `v0.1.1`），无需重新发布主 APK。插件源码取该次可信 main 工作流提交，记录在插件 `BUILD.json` 和正文；不会改写主程序版本标签。
+
+应用当前下载地址固定为 `kernel-plugin-v1` 发布页下的 `kernel-plugin-arm64-v8a.apk`。该页是接口 v1 的更新通道，只有更高 versionCode 才更新附件；重复或降级发布会在上传前被拒绝。它不标为 Latest，不改变主程序 Latest。除 APK 和摘要外，保留构建身份及包含原始许可证的 Go 对应源码包，上传后回读校验；主程序发布正文会加入插件下载入口。
+
+用户可在代理设置中选择在线安装，或手动下载这个 APK 后选择本地安装；两种方式复用包名、签名、版本与兼容校验，最后由系统安装器确认。直连及手动 HTTP／SOCKS5 不依赖插件。MIUI 等系统可能还需允许插件自启动／关联启动。Debug 测试插件与正式主程序的证书可能不同，不能混用。
+
 ### 发布签名
 
 默认只需要已有的 `ZAKOCODER_DEBUG_KEYSTORE_BASE64`，内容为 CI 专用 Debug keystore 的 Base64；使用 `androiddebugkey` 别名和 Android 默认 Debug 口令。发布包的构建类型仍是 **Release + R8，`debuggable=false`**。默认复用 Debug 证书时，公开构建记录必须明确说明，不将其描述为正式长期签名。
