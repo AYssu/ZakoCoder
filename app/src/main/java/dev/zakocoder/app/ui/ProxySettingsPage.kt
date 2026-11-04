@@ -443,6 +443,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                             onPickLocal = { pluginPicker.launch(arrayOf("application/vnd.android.package-archive")) },
                             onCancel = ::cancelPluginInstall,
                             onUninstall = ::uninstallPlugin,
+                            onActivate = { workbench.kernelPlugin.openActivator() },
                         )
                         KernelStatusCard(
                             kernel = kernel,
@@ -931,6 +932,7 @@ private fun KernelPluginCard(
     onPickLocal: () -> Unit,
     onCancel: () -> Unit,
     onUninstall: () -> Unit,
+    onActivate: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -978,6 +980,13 @@ private fun KernelPluginCard(
             failure?.let {
                 Text(stringResource(it.messageRes()), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error)
+                if (it == KernelPluginFailure.ServiceUnavailable) {
+                    Text(stringResource(R.string.proxy_plugin_service_blocked_hint),
+                        style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                    OutlinedButton(onClick = onActivate, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.proxy_plugin_activate))
+                    }
+                }
             }
             if (busy) {
                 if (localInstall) {
@@ -1022,6 +1031,9 @@ private fun KernelPluginCard(
                         OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_update_local), maxLines = 1)
+                        }
+                        TextButton(onClick = onActivate, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.proxy_plugin_activate), maxLines = 1)
                         }
                         TextButton(onClick = onUninstall, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_uninstall), color = MaterialTheme.colorScheme.error)

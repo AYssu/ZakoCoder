@@ -225,6 +225,21 @@ class KernelPluginManager(context: Context) {
     }
 
     /** Opens the platform uninstall confirmation for the plugin; UI refreshes on resume. */
+    /**
+     * Opens the plugin's activation screen, clearing Android's "stopped" package state and giving
+     * OEM startup managers (e.g. OnePlus/ColorOS) an explicit user-visible entry. Returns false when
+     * the plugin is not installed or the launcher activity cannot be started.
+     */
+    fun openActivator(): Boolean = try {
+        val intent = Intent()
+            .setComponent(ComponentName(KernelPluginTrust.PLUGIN_PACKAGE, KernelPluginTrust.ACTIVATOR_CLASS))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        appContext.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
     fun uninstall() {
         unbind()
         runCatching {

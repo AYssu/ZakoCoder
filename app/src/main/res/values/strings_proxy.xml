@@ -95,6 +95,8 @@
     <string name="proxy_plugin_cancel">取消安装</string>
     <string name="proxy_plugin_cancelled">已取消安装。</string>
     <string name="proxy_plugin_installer_opened">已打开系统安装器，完成后返回本页刷新。</string>
+    <string name="proxy_plugin_activate">激活/打开插件</string>
+    <string name="proxy_plugin_service_blocked_hint">系统可能限制了应用关联启动。请点「激活/打开插件」后再试；一加/OPPO 等系统还需在设置中允许 ZakoCoder 与内核插件相互启动。</string>
     <string name="proxy_plugin_update_online">在线更新</string>
     <string name="proxy_plugin_update_local">从本地更新</string>
     <string name="proxy_plugin_uninstall">移除插件</string>
