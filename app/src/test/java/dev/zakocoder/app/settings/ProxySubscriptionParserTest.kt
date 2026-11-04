@@ -446,4 +446,25 @@ class ProxySubscriptionParserTest {
         assertEquals("tls", node.transport?.vmess?.tls)
         requireNotNull(ProxyKernelConfig.build(node, 10808))
     }
+
+    @Test fun loopbackVmessPlaceholderIsNotCountedAsUsable() {
+        val json = """{"v":"2","ps":"说明占位","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","type":"none","host":"","path":"","tls":""}"""
+        val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+        val node = parser.parseLink(link)
+        requireNotNull(node)
+        assertEquals(ProxyProtocol.Vmess, node.protocol)
+        assertFalse("loopback placeholder must not be usable", node.viaKernel)
+        assertFalse(node.supported)
+        assertEquals("", node.proxyUrl)
+    }
+
+    @Test fun allUnsupportedPlaceholdersProduceUnsupportedOnly() {
+        val json = """{"v":"2","ps":"说明","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","tls":""}"""
+        val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+        val content = "$link\nvless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@198.51.100.1:443?security=reality#remote"
+        val subscription = parser.parse(content, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        assertEquals(0, subscription.supportedCount)
+        assertTrue(parser.classify(subscription) is dev.zakocoder.app.settings.ProxyProbe.UnsupportedOnly)
+    }
 }
