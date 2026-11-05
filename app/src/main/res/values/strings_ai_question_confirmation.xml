@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_question_confirmation_title">需要你确认</string>
+    <string name="ai_question_receipt_expanded">已展开回答详情</string>
+    <string name="ai_question_receipt_collapsed">已收起回答详情，点击展开</string>
+    <string name="ai_question_confirmation_pending">待确认</string>
+    <string name="ai_question_custom_entry">有其他想法？自定义回答</string>
+    <string name="ai_question_custom_clear">清除并收起</string>
+</resources>

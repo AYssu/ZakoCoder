@@ -67,6 +67,7 @@ class AiLiveReasoningUiDeviceTest {
         listOf(false, true).forEach { dark ->
             val entry = mutableStateOf(AiEntry("live-$dark", role = AiRole.Assistant, reasoning = "first public fragment"))
             val streaming = mutableStateOf(true)
+            warmDeviceActivity()
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity -> activity.setContent {
                     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
@@ -88,7 +89,7 @@ class AiLiveReasoningUiDeviceTest {
                 instrumentation.runOnMainSync { entry.value = AiEntry("next-$dark", role = AiRole.Assistant, reasoning = "next round"); streaming.value = true }
                 await("Next round opens independently in dark=$dark") { has("next round") }
                 instrumentation.runOnMainSync { streaming.value = false }
-                await("Reasoning-only finish collapses in dark=$dark") { !has("next round") }
+                await("Reasoning-only finish collapses in dark=$dark") { !has(context.getString(R.string.ai_reasoning_copy)) }
             }
         }
     }

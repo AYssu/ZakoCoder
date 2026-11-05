@@ -1,0 +1,14 @@
+<resources>
+    <string name="ai_reasoning_in_progress">正在思考</string>
+    <string name="ai_activity_preparation">任务准备</string>
+    <string name="ai_activity_read_files">读取 %1$d 个文件</string>
+    <string name="ai_activity_searches">检索 %1$d 次</string>
+    <string name="ai_activity_directories">浏览 %1$d 个目录</string>
+    <string name="ai_permission_short_ask">确认</string>
+    <string name="ai_permission_short_allow">允许</string>
+    <string name="ai_permission_short_deny">拒绝</string>
+    <string name="ai_permission_short_yolo">YOLO</string>
+    <string name="ai_tool_generating">生成中</string>
+    <string name="ai_table_scroll_hint">左右滑动查看完整表格</string>
+    <string name="ai_tool_preview_tail">内容较长，以下显示最新参数片段</string>
+</resources>

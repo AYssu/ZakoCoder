@@ -1,13 +1,8 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.*
@@ -18,18 +13,13 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.projects.*
-
-private enum class Page(val label: Int, val glyph: Glyph) {
-    Project(R.string.nav_workspace, Glyph.Projects), Environment(R.string.nav_environment, Glyph.Environment),
-    Terminal(R.string.nav_terminal, Glyph.Terminal), Ai(R.string.nav_ai, Glyph.Ai), Settings(R.string.nav_settings, Glyph.Settings),
-}
+import kotlinx.coroutines.launch
 
 @Composable
 fun ZakoCoderApp(workbench: Workbench) {
@@ -45,7 +35,17 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
-    var page by rememberSaveable { mutableStateOf(Page.Project) }
+    var page by rememberSaveable { mutableStateOf(AppDestination.Project) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val navigationScope = rememberCoroutineScope()
+    val openNavigation: () -> Unit = {
+        focus.clearFocus()
+        keyboard?.hide()
+        navigationScope.launch { drawerState.open() }
+    }
+    androidx.activity.compose.BackHandler(enabled = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open || drawerState.isAnimationRunning) {
+        navigationScope.launch { drawerState.close() }
+    }
     var updatesOpen by rememberSaveable { mutableStateOf(false) }
     var proxyOpen by rememberSaveable { mutableStateOf(false) }
     var modelsOpen by rememberSaveable { mutableStateOf(false) }
@@ -64,12 +64,13 @@ fun ZakoCoderApp(workbench: Workbench) {
             modelsOpen = false
             modelsAdd = false
             extensionsOpen = false
-            page = Page.Ai
+            page = AppDestination.Ai
+            drawerState.close()
         }
         workbench.ackAssistantNavigation(request.requestId)
     }
-    val inFiles = page == Page.Project && state.projects.any { it.id == openedProjectId }
-    val inTerminal = page == Page.Terminal && terminalOpen && state.sessions.isNotEmpty()
+    val inFiles = page == AppDestination.Project && state.projects.any { it.id == openedProjectId }
+    val inTerminal = page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()
     var knownIds by remember { mutableStateOf(state.sessions.map { it.id }.toSet()) }
     LaunchedEffect(state.sessions.map { it.id }) {
         val newest = state.sessions.lastOrNull { it.id !in knownIds }
@@ -79,10 +80,9 @@ fun ZakoCoderApp(workbench: Workbench) {
         knownIds = state.sessions.map { it.id }.toSet()
     }
     LaunchedEffect(page, state.busy) {
-        if (!state.busy && (page == Page.Environment || page == Page.Settings)) workbench.refreshStorage()
+        if (!state.busy && (page == AppDestination.Environment || page == AppDestination.Settings)) workbench.refreshStorage()
     }
     val aiPageState = rememberSaveableStateHolder()
-    val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     val dark = isSystemInDarkTheme()
     val activity = androidx.activity.compose.LocalActivity.current
     SideEffect {
@@ -98,41 +98,27 @@ fun ZakoCoderApp(workbench: Workbench) {
         UpdateBindings(workbench.updates) { updatesOpen = true }
         if (updatesOpen) UpdatePage(workbench.updates) { updatesOpen = false }
         if (proxyOpen) ProxySettingsPage(workbench, state) { proxyOpen = false }
+        AppNavigation(drawerState = drawerState, selected = page, version = updateInfo.currentVersion,
+            gesturesEnabled = !inTerminal && !inFiles && !modelsOpen && !extensionsOpen && !updatesOpen && !proxyOpen,
+            onClose = { navigationScope.launch { drawerState.close() } },
+            onSelect = { destination ->
+                focus.clearFocus()
+                keyboard?.hide()
+                terminalOpen = false
+                if (destination == AppDestination.Project) { openedProjectId = null; referencedPath = null }
+                page = destination
+                navigationScope.launch { drawerState.close() }
+            }) {
         Scaffold(containerColor = if (inTerminal) TerminalBackground else MaterialTheme.colorScheme.background,
-            contentWindowInsets = WindowInsets.systemBars,
-            bottomBar = {
-                if (!inTerminal && !inFiles && !modelsOpen && !extensionsOpen && !keyboardOpen) Surface(color = PanelBackground) {
-                    Column {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp).height(60.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Page.entries.forEach { item ->
-                                val active = page == item
-                                val tint = if (active) MaterialTheme.colorScheme.primary else TertiaryText
-                                Column(Modifier.weight(1f).fillMaxHeight().semantics { selected = active }.clickable(role = Role.Tab) {
-                                    focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = item
-                                }, verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Box(Modifier.background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, RoundedCornerShape(50)).padding(horizontal = 13.dp, vertical = 4.dp)) {
-                                        WorkbenchIcon(item.glyph, tint = tint)
-                                    }
-                                    Spacer(Modifier.height(3.dp))
-                                    Text(stringResource(item.label), color = tint, fontSize = 10.5.sp, lineHeight = 14.sp,
-                                        fontWeight = if (active) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium)
-                                }
-                            }
-                        }
-                    }
-                }
-            }) { padding ->
+            contentWindowInsets = WindowInsets.systemBars) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             Column(Modifier.fillMaxSize()) {
-                if (!inTerminal && !inFiles && !modelsOpen && !extensionsOpen && page != Page.Ai) Row(Modifier.fillMaxWidth().height(44.dp).padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp),
+                if (!inTerminal && !inFiles && !modelsOpen && !extensionsOpen && page != AppDestination.Ai) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Surface(color = BrandFill, shape = androidx.compose.foundation.shape.RoundedCornerShape(9.dp)) {
-                        Box(Modifier.size(29.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                            WorkbenchBrandMark(Modifier.size(24.dp))
-                        }
+                    IconButton(onClick = openNavigation, modifier = Modifier.size(48.dp)) {
+                        WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open))
                     }
-                    Spacer(Modifier.width(9.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
                     Spacer(Modifier.weight(1f))
@@ -153,25 +139,25 @@ fun ZakoCoderApp(workbench: Workbench) {
                 }
                 if (extensionsOpen) AiExtensionsPage(workbench, state) { extensionsOpen = false }
                 else if (modelsOpen) AiModelsPage(workbench.ai, startAdding = modelsAdd, onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false } else when (page) {
-                    Page.Project -> ProjectLibraryPage(workbench, state, openedProjectId, { openedProjectId = it; referencedPath = null },
-                        onEnvironment = { page = Page.Environment }, onAi = { id -> workbench.ai.select(id); page = Page.Ai },
-                        referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = Page.Terminal })
-                    Page.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { terminalOpen = false; page = Page.Terminal }, onProjects = { openedProjectId = null; page = Page.Project }, onAi = { page = Page.Ai }) }
-                    Page.Terminal -> if (inTerminal) TerminalPage(workbench, state, terminalId, { terminalId = it }, { terminalOpen = false })
+                    AppDestination.Project -> ProjectLibraryPage(workbench, state, openedProjectId, { openedProjectId = it; referencedPath = null },
+                        onEnvironment = { page = AppDestination.Environment }, onAi = { id -> workbench.ai.select(id); page = AppDestination.Ai },
+                        referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = AppDestination.Terminal })
+                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { terminalOpen = false; page = AppDestination.Terminal }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
+                    AppDestination.Terminal -> if (inTerminal) TerminalPage(workbench, state, terminalId, { terminalId = it }, { terminalOpen = false })
                         else TerminalLibraryPage(workbench, state,
                             onOpen = { terminalId = it; terminalOpen = true },
-                            onEnvironment = { page = Page.Environment }, onProjects = { page = Page.Project })
-                    Page.Ai -> aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = Page.Project }, onTerminal = { id ->
+                            onEnvironment = { page = AppDestination.Environment }, onProjects = { page = AppDestination.Project })
+                    AppDestination.Ai -> aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onTerminal = { id ->
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
-                            focus.clearFocus(); keyboard?.hide(); terminalId = id; terminalOpen = true; page = Page.Terminal
+                            focus.clearFocus(); keyboard?.hide(); terminalId = id; terminalOpen = true; page = AppDestination.Terminal
                         }
                     }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
                         onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true },
                         onProjectPath = { projectId, path ->
                             workbench.select(projectId); referencedPath = path; openedProjectId = projectId
-                            focus.clearFocus(); keyboard?.hide(); page = Page.Project
+                            focus.clearFocus(); keyboard?.hide(); page = AppDestination.Project
                         }) }
-                    Page.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { focus.clearFocus(); keyboard?.hide(); proxyOpen = true }) }
+                    AppDestination.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { focus.clearFocus(); keyboard?.hide(); proxyOpen = true }) }
                 }
             }
             if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(start = 20.dp, end = 20.dp, top = 12.dp),
@@ -182,6 +168,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     }
                 }
             }
+        }
         }
     }
     }

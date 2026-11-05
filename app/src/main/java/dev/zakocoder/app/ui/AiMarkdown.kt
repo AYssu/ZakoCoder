@@ -103,8 +103,8 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
     val children = AiMarkdownDocument.children(node)
     when (node) {
         is Heading -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
-            fontSize = when (node.level) { 1 -> 21.sp; 2 -> 18.sp; else -> 15.sp }, lineHeight = 27.sp)
-        is org.commonmark.node.Paragraph -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 13.sp, lineHeight = 22.sp)
+            fontSize = when (node.level) { 1 -> 18.sp; 2 -> 15.sp; else -> 13.sp }, lineHeight = 22.sp)
+        is org.commonmark.node.Paragraph -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 12.sp, lineHeight = 18.sp)
         is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40), streaming, sourceLimited, onReadingInteraction)
         is IndentedCodeBlock -> CodeBlock(node.literal, "", streaming, sourceLimited, onReadingInteraction)
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
@@ -115,21 +115,45 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
         }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             children.forEachIndexed { index, item -> Row {
-                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = 13.sp)
+                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = 12.sp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
                 }
             } }
         }
         is ThematicBreak -> HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        is TableBlock -> Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            children.flatMap { AiMarkdownDocument.children(it) }.forEach { row -> Row(Modifier.height(IntrinsicSize.Min)) {
-                AiMarkdownDocument.children(row).forEach { cell -> Surface(modifier = Modifier.width(160.dp).fillMaxHeight(), border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                    color = if (cell is TableCell && cell.isHeader) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
-                    Text(inline(cell, onLink, projectId, onOpenProjectPath), Modifier.fillMaxWidth().padding(12.dp), fontSize = 12.sp, lineHeight = 19.sp,
-                        fontWeight = if (cell is TableCell && cell.isHeader) FontWeight.SemiBold else null)
-                } }
-            } }
+        is TableBlock -> {
+            val rows = children.flatMap { AiMarkdownDocument.children(it) }.map { row ->
+                AiMarkdownDocument.children(row).map { cell ->
+                    inline(cell, onLink, projectId, onOpenProjectPath) to (cell is TableCell && cell.isHeader)
+                }
+            }
+            val scroll = rememberScrollState()
+            val widths = (0 until (rows.maxOfOrNull { it.size } ?: 0)).map { column ->
+                val units = rows.mapNotNull { it.getOrNull(column)?.first?.text }.maxOfOrNull { value ->
+                    value.lineSequence().maxOfOrNull { line -> line.take(256).sumOf { if (it.code > 255) 2 else 1 } } ?: 0
+                } ?: 0
+                (units * 7 + 20).coerceIn(64, 200).dp
+            }
+            Column(Modifier.fillMaxWidth()) {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val extra = if (widths.isNotEmpty()) ((maxWidth - widths.fold(0.dp) { a, b -> a + b }) / widths.size).coerceAtLeast(0.dp) else 0.dp
+                    Column(Modifier.horizontalScroll(scroll)) {
+                        rows.forEach { row -> Row(Modifier.height(IntrinsicSize.Min)) {
+                            row.forEachIndexed { index, (text, header) ->
+                                Surface(modifier = Modifier.width(widths[index] + extra).fillMaxHeight(),
+                                    border = BorderStroke(.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    color = if (header) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
+                                    Text(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = 12.sp, lineHeight = 19.sp,
+                                        fontWeight = if (header) FontWeight.SemiBold else null)
+                                }
+                            }
+                        } }
+                    }
+                }
+                if (scroll.maxValue > 0) Text(stringResource(R.string.ai_table_scroll_hint),
+                    Modifier.padding(top = 4.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         is HtmlBlock -> Text(node.literal, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
         else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
@@ -198,6 +222,19 @@ private fun CodeBlock(code: String, language: String, streaming: Boolean, source
     val preview = remember(code, expanded) { AiCodePreview.of(code, expanded) }
     val collapsed = remember(code) { AiCodePreview.of(code, false) }
     Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        if (!collapsed.limited && preview.totalLines <= 2 && !sourceLimited) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    if (language.isNotBlank()) Text(language, fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(preview.text.trimEnd('\n'), Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 20.sp, softWrap = false)
+                }
+                IconButton(onClick = { clipboard.setText(AnnotatedString(code)) }, modifier = Modifier.size(48.dp)) {
+                    WorkbenchIcon(Glyph.Copy, Modifier.size(18.dp), description = stringResource(R.string.ai_copy_code))
+                }
+            }
+        } else {
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -229,6 +266,7 @@ private fun CodeBlock(code: String, language: String, streaming: Boolean, source
                 }
             }
         }
+    }
     }
     fullText?.let { snapshot -> AiFullText(snapshot) { fullText = null } }
 }

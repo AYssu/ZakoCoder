@@ -152,8 +152,6 @@
     <string name="environment_maintenance">环境维护</string>
     <string name="tools_install_hint">安装运行环境后，即可检测开发工具。</string>
     <string name="execution_log">运行日志</string>
-    <string name="show_log">查看日志</string>
-    <string name="hide_log">收起日志</string>
     <string name="terminal_font">字体大小</string>
     <string name="extra_path">附加 PATH</string>
     <string name="not_configured">未设置</string>
@@ -369,7 +367,7 @@
     <string name="ai_status_cancelled">已取消</string>
     <string name="ai_status_incomplete">未完成</string>
     <string name="ai_phase_idle">等待新任务</string>
-    <string name="ai_phase_requesting">正在请求模型</string>
+    <string name="ai_phase_requesting">Thinking</string>
     <string name="ai_phase_receiving">正在接收回复</string>
     <string name="ai_phase_executing">正在执行工具</string>
     <string name="ai_phase_stopping">正在停止</string>

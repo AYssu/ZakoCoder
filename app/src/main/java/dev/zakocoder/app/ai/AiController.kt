@@ -14,7 +14,7 @@ import java.io.File
 
 data class AiReview(val path: String, val before: String?, val after: String?, val directory: Boolean = false, val beforeMode: String? = null, val afterMode: String? = null)
 data class AiApproval(val title: String, val detail: String, val eventId: String? = null, val review: AiReview? = null)
-data class AiChange(val path: String, val before: FileBaseline?, val after: FileBaseline)
+data class AiChange(val path: String, val before: FileBaseline?, val after: FileBaseline, val turn: Int = 0)
 data class AiState(val projectId: String? = null, val checkpointId: String? = null, val references: List<AiReference> = emptyList(), val pendingImages: List<AiImageAttachment> = emptyList(), val imagesLoading: Boolean = false, val ruleSources: List<String> = emptyList(), val rulesLimited: Boolean = false, val restoring: Boolean = false, val workspaceRevision: Int = 0, val active: Boolean = false, val messages: List<String> = emptyList(),
     val conversationId: String = java.util.UUID.randomUUID().toString(), val turn: Int = 0,
     val turnTimings: List<AiTurnTiming> = emptyList(),
@@ -1547,7 +1547,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 val before = baselines[path]
                 val after = withContext(Dispatchers.IO) { files.write(id, path, before, args.getString("content")) }
                 baselines[path] = after
-                mutable.update { it.copy(changes = (it.changes + AiChange(path, before, after)).takeLast(32)) }; filesChanged()
+                mutable.update { it.copy(changes = (it.changes + AiChange(path, before, after, it.turn)).takeLast(32)) }; filesChanged()
                 context.getString(R.string.ai_file_written, path)
             }
             AiTool.MakeDirectory -> {

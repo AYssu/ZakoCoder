@@ -288,7 +288,7 @@ internal class AiGeminiStream(private val delta: (String) -> Unit = {}, private 
                     }
                     appendPart(part)
                 }
-                toolDelta(calls.mapIndexed { index, call -> AiCallDraft(index, call.name, call.arguments.take(64000)) })
+                toolDelta(calls.mapIndexed { index, call -> liveCallDraft(index, call.name, call.arguments) })
             }
         }
         candidate.optString("finishReason").takeIf(String::isNotEmpty)?.let { reason ->
