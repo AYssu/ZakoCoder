@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-05",
+  "device": "Android 13 ARM64",
+  "source": "AiTaskQueuePageDeviceTest: real full application navigation, native input, queued messages, actual controller and local TLS fixture; synthetic project only",
+  "baseCommit": "70843e5ebd4ba8e377e6dc0778cf9e255cb2e207",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-explicitly-continued.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "614d452215c842c3b0e82c3d659d65aa52c7f3b9e43ced4bfb484d68e9d3d923",
+      "captureSha256": "799f8a128790f2d95373a0716ac49db2e46c4b84fff6c6d04eeb6434f51a31a1"
+    },
+    {
+      "file": "day-followup-pending.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "cdaac020fcf2c54b1e99f631d87c30d4683751f706be8861c80bd62b289d2580",
+      "captureSha256": "eb6d5c585bd77794051800dbd33ea2751962ac55602270581ac1e61c7e7a2145"
+    },
+    {
+      "file": "day-running-supplement.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f16b67110484d4e8e02e6caf463694ee4fe34bd85a554b93af59f2dab8a3be28",
+      "captureSha256": "ff88dc1bd1e8f995c439a14db16c81dedf9adc6887983279c03b0726292fc780"
+    },
+    {
+      "file": "day-stopped-continue.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "99104ea839e9def4587c7670fe2f29deade61eed3d22d3c7d1580898ea3270b8",
+      "captureSha256": "12f5b6a29270d250005fff6809117862291d40b7be7fc36b370055eccd6d3667"
+    },
+    {
+      "file": "day-supplement-applied.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "24bf72f369be21080e9f45d4c48796ce1d7a3da6c766dfbc1b37844c6e693f53",
+      "captureSha256": "d8710828182d3feeddfb9c5d477618a12224552995d75f7f367077dea795c743"
+    },
+    {
+      "file": "day-supplement-pending.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b1eb40f5a410bbad528a4a49efdf5236edbd8504e668da0734d6e4efca70997a",
+      "captureSha256": "bfbae0d19c95743fd2891a82f579d5bc9c43613794fdecafe350e8b8dbae7958"
+    },
+    {
+      "file": "night-explicitly-continued.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "8bc35b0fc2da965b7678a4b10702047b710d48583e8bd3b32b98625537f889b7",
+      "captureSha256": "c3dade944b9562721e36f646c0113837f088dee688b17ae72e6254418bf5e572"
+    },
+    {
+      "file": "night-followup-pending.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "7f402916a7506d2edeb4eca49a99af24006ce724a6ae80036aedb21ee6921910",
+      "captureSha256": "4444c7b3e8e9093cdf048271f4553b1f3280fa6d67bfa80fcf38281f169472e4"
+    },
+    {
+      "file": "night-running-supplement.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "216371c5a83c8345c46a908541196078f28a7b6fc7c9ac600beda2e3bfebf23d",
+      "captureSha256": "8bb98c65501f3a9c3c6a5efe2044b6919c7d8b6fa52e4c81d846d348c5438d0d"
+    },
+    {
+      "file": "night-stopped-continue.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "324bb53249a0eae5ec6c6c973f8065f8bfe8ca380c205a51f29f41afd338b582",
+      "captureSha256": "703a016ab8c19b54e75ac2b7a63f50eeda7914457ba249bd9433144fd207ae44"
+    },
+    {
+      "file": "night-supplement-applied.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f4a1edd68784e11d467bc4a8120d9f7ea19a930056979a1ca523b9915b5ab1fe",
+      "captureSha256": "311a848b663689551194f71977c9e283a9aff9a6ba053d01699bb298b5a94e13"
+    },
+    {
+      "file": "night-supplement-pending.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d2f115513e55792d6c8736a3aab2cd0ad38f4c11288826379b142f51d826d613",
+      "captureSha256": "4a64e01f73b7aa5bef2865cab0cc1f59b24d9512860bbe3b23d3a32d6c6e32fd"
+    }
+  ]
+}
