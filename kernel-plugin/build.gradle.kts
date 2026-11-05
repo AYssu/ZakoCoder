@@ -14,6 +14,10 @@ val compatibilityAbis = providers.gradleProperty("compatibilityAbis").orElse("ar
     }
 val pluginVersionCode = providers.gradleProperty("kernelPluginVersionCode").orElse("1").get().toInt()
 val pluginVersionName = providers.gradleProperty("kernelPluginVersionName").orElse("1.0.0").get()
+val runtimeVerification = providers.gradleProperty("runtimeVerification").orNull == "true"
+val mainApplicationId = if (runtimeVerification) "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
+val pluginPackage = "$mainApplicationId.kernel"
+val kernelPermission = "$mainApplicationId.permission.KERNEL"
 
 android {
     namespace = "dev.zakocoder.app.kernel"
@@ -21,19 +25,24 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "dev.zakocoder.app.kernel"
+        applicationId = pluginPackage
         minSdk = 26
         targetSdk = 36
         versionCode = pluginVersionCode
         versionName = pluginVersionName
         ndk { abiFilters += compatibilityAbis }
         manifestPlaceholders["minMainVersion"] = "1"
+        manifestPlaceholders["kernelPermission"] = kernelPermission
+        buildConfigField("String", "KERNEL_PERMISSION", "\"$kernelPermission\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { aidl = true }
+    buildFeatures {
+        aidl = true
+        buildConfig = true
+    }
     sourceSets.getByName("main").jniLibs.directories.add(
         rootProject.file("runtime-artifacts/kernel-jniLibs").absolutePath,
     )

@@ -1,5 +1,7 @@
 package dev.zakocoder.app.kernel
 
+import dev.zakocoder.app.BuildConfig
+
 /** UI-facing metadata for an installed, trusted kernel plugin. */
 data class KernelPluginInfo(val versionName: String, val versionCode: Int)
 
@@ -40,9 +42,9 @@ sealed interface KernelPluginInstallResult {
  * check passes.
  */
 object KernelPluginTrust {
-    const val PLUGIN_PACKAGE = "dev.zakocoder.app.kernel"
+    val PLUGIN_PACKAGE = BuildConfig.KERNEL_PLUGIN_PACKAGE
     const val SERVICE_CLASS = "dev.zakocoder.app.kernel.KernelService"
-    const val PERMISSION = "dev.zakocoder.app.permission.KERNEL"
+    val PERMISSION = BuildConfig.KERNEL_PERMISSION
     const val CONTRACT_VERSION = 1
     const val MIN_MAIN_VERSION_METADATA = "dev.zakocoder.app.kernel.MIN_MAIN_VERSION"
     const val CONTRACT_VERSION_METADATA = "dev.zakocoder.app.kernel.CONTRACT_VERSION"

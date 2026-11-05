@@ -58,6 +58,16 @@ VLESS 的支持范围限定在本表所列组合，不表示已覆盖 Xray 的�
 ./gradlew :kernel-plugin:assembleDebug
 ```
 
+真机隔离验收需在构建主应用和插件时同时传入 `-PruntimeVerification=true` 及相同版本号。这会生成独立的主应用包 `dev.zakocoder.app.runtimecheck` 与插件包 `dev.zakocoder.app.runtimecheck.kernel`，并使用独立的签名级权限，不会覆盖、绑定或卸载正式应用和正式插件。
+
+```sh
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :kernel-plugin:assembleDebug \
+  -PruntimeVerification=true -PcompatibilityVersionCode=1006 \
+  -PkernelPluginVersionCode=1006 -PkernelPluginVersionName=1.0.2-dev
+```
+
+安装时必须同时安装本次生成的主应用、匹配签名的插件和按需使用的测试 APK；不能把正式插件与隔离主应用混用。真机验收仍以实际联网转发为准，本地 SOCKS 就绪或配置加载成功不能代替远端连通。
+
 插件默认构建 ARM64，实验性 x86_64 通过兼容性构建属性启用。插件发布工作流为 `.github/workflows/release-kernel-plugin.yml`，校验所关联主应用的版本、签名和发布材料。插件与主应用可独立构建，但签名及接口必须兼容。
 
 Xray 及传递依赖的准确来源、版本、许可证与分发材料见 [THIRD_PARTY.md](../THIRD_PARTY.md) 和 [native-kernel](../native-kernel/)。发布验证应分别记录本地内核就绪、真实代理转发、安装／更新及受影响厂商设备的结果；未执行项目不得记为通过。
