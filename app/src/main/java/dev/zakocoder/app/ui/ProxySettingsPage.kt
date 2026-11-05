@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
+import dev.zakocoder.app.kernel.KernelPluginActivationResult
 import dev.zakocoder.app.kernel.KernelPluginFailure
 import dev.zakocoder.app.kernel.KernelPluginInstallResult
 import dev.zakocoder.app.kernel.KernelPluginStatus
@@ -51,6 +52,9 @@ import dev.zakocoder.app.settings.ProxyProbe
 import dev.zakocoder.app.settings.ProxyProtocol
 import dev.zakocoder.app.settings.ProxySubscription
 import dev.zakocoder.app.settings.ProxySubscriptionError
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -70,6 +74,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     val catalog by workbench.proxyCatalog.state.collectAsStateWithLifecycle()
     val kernel by workbench.proxyKernel.state.collectAsStateWithLifecycle()
     val pluginStatus by workbench.kernelPlugin.status.collectAsStateWithLifecycle()
+    val bindingFailure by workbench.kernelPlugin.bindFailure.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -110,6 +115,9 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
     var pluginUninstallRequested by remember { mutableStateOf(false) }
     var pluginInstallJob by remember { mutableStateOf<Job?>(null) }
     var pluginHint by remember { mutableStateOf(false) }
+    var activationFeedback by remember { mutableStateOf<Int?>(null) }
+    var diagnostic by remember { mutableStateOf<String?>(null) }
+    var diagnosticsBusy by remember { mutableStateOf(false) }
     val pluginReady = pluginStatus is KernelPluginStatus.Installed
 
     LaunchedEffect(Unit) { workbench.proxyCatalog.loadCached() }
@@ -443,6 +451,27 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                             onPickLocal = { pluginPicker.launch(arrayOf("application/vnd.android.package-archive")) },
                             onCancel = ::cancelPluginInstall,
                             onUninstall = ::uninstallPlugin,
+                            bindingFailure = bindingFailure,
+                            activationFeedback = activationFeedback,
+                            diagnosticsBusy = diagnosticsBusy,
+                            onActivate = {
+                                val result = context.activityOrNull()?.let(workbench.kernelPlugin::openActivation)
+                                activationFeedback = when (result) {
+                                    KernelPluginActivationResult.Opened -> R.string.proxy_plugin_activation_opened
+                                    KernelPluginActivationResult.SettingsOpened -> R.string.proxy_plugin_activation_legacy
+                                    KernelPluginActivationResult.NotInstalled -> R.string.proxy_plugin_error_not_installed
+                                    KernelPluginActivationResult.Incompatible -> R.string.proxy_plugin_error_wrong_signer
+                                    else -> R.string.proxy_plugin_activation_unavailable
+                                }
+                            },
+                            onDiagnostics = {
+                                diagnosticsBusy = true
+                                scope.launch {
+                                    try { diagnostic = withContext(Dispatchers.IO) { workbench.kernelPlugin.diagnostics() } }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    finally { diagnosticsBusy = false }
+                                }
+                            },
                         )
                         KernelStatusCard(
                             kernel = kernel,
@@ -465,6 +494,8 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
             }
         }
     }
+
+    diagnostic?.let { KernelDiagnosticsSheet(it) { diagnostic = null } }
 
     if (removing) AlertDialog(
         onDismissRequest = { removing = false },
@@ -708,6 +739,7 @@ private fun ProxyAirportResult(
             Text(stringResource(R.string.proxy_counts, nodes.size, subscription.supportedCount),
                 style = MaterialTheme.typography.bodySmall, color = TertiaryText)
         }
+        Text(stringResource(R.string.proxy_counts_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
         if (nodes.isNotEmpty()) {
             Text(stringResource(R.string.proxy_section_nodes), style = MaterialTheme.typography.titleSmall)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
@@ -760,7 +792,7 @@ private fun ProxyUnsupportedResult(nodes: List<ProxyNode>, enabled: Boolean, onU
 
 @Composable
 private fun ProxySingleResult(node: ProxyNode, pluginReady: Boolean) {
-    val needsPlugin = node.viaKernel && !pluginReady
+    val needsPlugin = node.supported && node.viaKernel && !pluginReady
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ProxyBadge(stringResource(R.string.proxy_badge_single), MaterialTheme.colorScheme.onSurfaceVariant)
         Surface(
@@ -790,7 +822,7 @@ private fun ProxySingleResult(node: ProxyNode, pluginReady: Boolean) {
 }
 
 @Composable
-private fun ProxyNodeRow(
+internal fun ProxyNodeRow(
     node: ProxyNode,
     selected: Boolean,
     enabled: Boolean,
@@ -799,11 +831,12 @@ private fun ProxyNodeRow(
     pluginReady: Boolean = true,
     onPluginNeeded: () -> Unit = {},
 ) {
-    val needsPlugin = node.viaKernel && !pluginReady
+    val needsPlugin = node.supported && node.viaKernel && !pluginReady
     val selectable = node.supported && !needsPlugin
     val interaction = when {
         selectable -> Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
         needsPlugin -> Modifier.clickable(enabled = enabled, onClick = onPluginNeeded)
+        node.subscriptionPlaceholder -> Modifier
         else -> Modifier.clickable(enabled = enabled, onClick = onUnsupported)
     }
     Row(
@@ -824,7 +857,8 @@ private fun ProxyNodeRow(
             Text(node.name.ifBlank { node.host }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                stringResource(R.string.proxy_node_host, node.host, node.port) + " · " + protocolName(node.protocol),
+                if (node.subscriptionPlaceholder) stringResource(R.string.proxy_subscription_notice_hint)
+                else stringResource(R.string.proxy_node_host, node.host, node.port) + " · " + protocolName(node.protocol),
                 style = MaterialTheme.typography.bodySmall,
                 color = TertiaryText,
                 maxLines = 1,
@@ -832,6 +866,8 @@ private fun ProxyNodeRow(
             )
         }
         when {
+            node.subscriptionPlaceholder -> Text(stringResource(R.string.proxy_subscription_notice),
+                style = MaterialTheme.typography.labelSmall, color = TertiaryText)
             selectable -> RadioButton(selected = selected, onClick = null, enabled = enabled)
             needsPlugin -> Text(stringResource(R.string.proxy_node_needs_plugin), fontSize = 12.sp, lineHeight = 16.sp,
                 fontWeight = FontWeight.Medium, color = WaitingAmber, maxLines = 2)
@@ -918,7 +954,7 @@ private fun KernelTag() {
 
 /** Optional kernel plugin: install (download or local APK), version state, uninstall. */
 @Composable
-private fun KernelPluginCard(
+internal fun KernelPluginCard(
     status: KernelPluginStatus,
     busy: Boolean,
     localInstall: Boolean,
@@ -931,6 +967,11 @@ private fun KernelPluginCard(
     onPickLocal: () -> Unit,
     onCancel: () -> Unit,
     onUninstall: () -> Unit,
+    bindingFailure: dev.zakocoder.app.kernel.KernelBindingFailure? = null,
+    activationFeedback: Int? = null,
+    diagnosticsBusy: Boolean = false,
+    onActivate: () -> Unit = {},
+    onDiagnostics: () -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -959,6 +1000,8 @@ private fun KernelPluginCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (status is KernelPluginStatus.Incompatible) WaitingAmber else TertiaryText,
             )
+            KernelRecoveryActions(status, bindingFailure, activationFeedback,
+                enabled = !busy, diagnosticsBusy = diagnosticsBusy, onActivate = onActivate, onDiagnostics = onDiagnostics)
             if (status !is KernelPluginStatus.Installed) {
                 Text(stringResource(R.string.proxy_plugin_required_hint),
                     style = MaterialTheme.typography.bodySmall, color = TertiaryText)
@@ -1003,11 +1046,11 @@ private fun KernelPluginCard(
                     ) {
                         OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_install_online), maxLines = 1)
+                            Text(stringResource(R.string.proxy_plugin_install_online))
                         }
                         OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_install_local), maxLines = 1)
+                            Text(stringResource(R.string.proxy_plugin_install_local))
                         }
                     }
                     is KernelPluginStatus.Installed -> Row(
@@ -1017,11 +1060,11 @@ private fun KernelPluginCard(
                         // Updating must not require uninstalling first: a failed install keeps the old version.
                         OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_update_online), maxLines = 1)
+                            Text(stringResource(R.string.proxy_plugin_update_online))
                         }
                         OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_update_local), maxLines = 1)
+                            Text(stringResource(R.string.proxy_plugin_update_local))
                         }
                         TextButton(onClick = onUninstall, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_uninstall), color = MaterialTheme.colorScheme.error)
@@ -1107,6 +1150,8 @@ private fun KernelFailure.messageRes(): Int = when (this) {
     KernelFailure.PluginNotInstalled -> R.string.proxy_kernel_failure_plugin_missing
     KernelFailure.PluginIncompatible -> R.string.proxy_kernel_failure_plugin_incompatible
     KernelFailure.ServiceUnavailable -> R.string.proxy_plugin_error_service_unavailable
+    KernelFailure.DnsResolutionFailed -> R.string.proxy_kernel_dns_resolution_failed
+    KernelFailure.EndpointUnavailable -> R.string.proxy_kernel_endpoint_unavailable
 }
 
 private fun KernelPluginFailure.messageRes(): Int = when (this) {

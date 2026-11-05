@@ -27,6 +27,7 @@ public final class KernelService extends android.app.Service {
     private java.io.File configFile;
     private int runningPort;
     private boolean failed;
+    private long processGeneration;
 
     private final IKernelService.Stub binder = new IKernelService.Stub() {
         @Override
@@ -48,11 +49,31 @@ public final class KernelService extends android.app.Service {
             if (checkCallingPermission(PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 return "{\"state\":\"failed\",\"port\":0,\"contractVersion\":1}";
             }
+            final Process snapshot;
+            final int port;
+            final boolean wasFailed;
+            final long generation;
             synchronized (guard) {
-                String state = process != null && process.isAlive() ? "running" : failed ? "failed" : "stopped";
-                return "{\"state\":\"" + state + "\",\"port\":" + (process != null ? runningPort : 0)
-                        + ",\"contractVersion\":1}";
+                snapshot = process;
+                port = runningPort;
+                wasFailed = failed;
+                generation = processGeneration;
             }
+            boolean alive = snapshot != null && snapshot.isAlive();
+            String state = alive ? "running" : snapshot != null || wasFailed ? "failed" : "stopped";
+            Integer exitCode = null;
+            if (snapshot != null && !alive) {
+                try { exitCode = snapshot.exitValue(); } catch (IllegalThreadStateException ignored) { }
+            }
+            String summary = KernelLogSummary.read(new java.io.File(getCacheDir(), "kernel/kernel.log"));
+            synchronized (guard) {
+                // A log can be replaced by a concurrent start. Never attribute it to the old process.
+                if (generation != processGeneration) summary = "snapshot_changed";
+            }
+            return "{\"state\":\"" + state + "\",\"port\":" + (alive ? port : 0)
+                    + ",\"contractVersion\":1,\"diagnosticVersion\":2,\"processAlive\":" + alive
+                    + ",\"exitCode\":" + (exitCode == null ? "null" : exitCode)
+                    + ",\"errorCategories\":\"" + summary + "\"}";
         }
 
         @Override
@@ -133,6 +154,7 @@ public final class KernelService extends android.app.Service {
 
     private void stopLocked() {
         synchronized (guard) {
+            processGeneration++;
             Process current = process;
             process = null;
             runningPort = 0;
@@ -164,12 +186,26 @@ public final class KernelService extends android.app.Service {
         }
     }
 
-    /** Readiness is a TCP connect; authentication is still enforced by the inbound and verified
-     * end-to-end by the caller's first requests. */
-    private boolean socksReady(int port, String user, String pass) {
+    /** Only the expected authenticated SOCKS listener counts as locally ready. */
+    static boolean socksReady(int port, String user, String pass) {
+        byte[] username = user.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] password = pass.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (username.length == 0 || username.length > 255 || password.length == 0 || password.length > 255) return false;
         try (java.net.Socket socket = new java.net.Socket()) {
             socket.connect(new java.net.InetSocketAddress("127.0.0.1", port), CONNECT_TIMEOUT_MS);
-            return true;
+            socket.setSoTimeout(HANDSHAKE_TIMEOUT_MS);
+            java.io.DataInputStream input = new java.io.DataInputStream(socket.getInputStream());
+            java.io.OutputStream output = socket.getOutputStream();
+            output.write(new byte[] {5, 1, 2});
+            output.flush();
+            if (input.readUnsignedByte() != 5 || input.readUnsignedByte() != 2) return false;
+            output.write(1);
+            output.write(username.length);
+            output.write(username);
+            output.write(password.length);
+            output.write(password);
+            output.flush();
+            return input.readUnsignedByte() == 1 && input.readUnsignedByte() == 0;
         } catch (Exception error) {
             return false;
         }

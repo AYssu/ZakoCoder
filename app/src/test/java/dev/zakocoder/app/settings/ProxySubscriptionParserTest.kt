@@ -295,10 +295,10 @@ class ProxySubscriptionParserTest {
         assertEquals(6, subscription.nodes.size)
     }
 
-    @Test fun unsupportedLinkWithPathKeepsAuthorityForDisplay() {
-        val node = parser.parseLink("vless://uuid@203.0.113.20:443/ws?path=%2F#VLESS")
+    @Test fun unsupportedHysteriaLinkWithPathKeepsAuthorityForDisplay() {
+        val node = parser.parseLink("hysteria2://pw@203.0.113.20:443/ws?path=%2F#HY")
         requireNotNull(node)
-        assertEquals(ProxyProtocol.Vless, node.protocol)
+        assertEquals(ProxyProtocol.Hysteria, node.protocol)
         assertEquals("203.0.113.20", node.host)
         assertEquals(443, node.port)
         assertFalse(node.supported)
@@ -398,10 +398,17 @@ class ProxySubscriptionParserTest {
         val vmess = VmessTransport("uuid-secret", 0, "auto", "tcp", "", null, null, null, null)
         val ss = ShadowsocksTransport("aes-256-gcm", "ss-secret")
         val trojan = TrojanTransport("tr-secret", null)
+        val vless = VlessTransport(
+            uuid = "vless-secret", security = "reality", flow = "xtls-rprx-vision",
+            serverName = "www.example.com", fingerprint = "chrome", publicKey = "public-key-secret",
+            shortId = "sid", spiderX = "/",
+        )
         assertFalse(vmess.toString().contains("uuid-secret"))
         assertFalse(ss.toString().contains("ss-secret"))
         assertFalse(trojan.toString().contains("tr-secret"))
-        assertFalse(NodeTransport(vmess = vmess, shadowsocks = ss, trojan = trojan).toString().contains("secret"))
+        assertFalse(vless.toString().contains("vless-secret"))
+        assertFalse(vless.toString().contains("public-key-secret"))
+        assertFalse(NodeTransport(vmess = vmess, shadowsocks = ss, trojan = trojan, vless = vless).toString().contains("secret"))
     }
 
     @Test fun clashTlsHttpIsUnsupportedInsteadOfDowngradedToPlainHttp() {
@@ -445,5 +452,73 @@ class ProxySubscriptionParserTest {
         assertTrue(node.viaKernel)
         assertEquals("tls", node.transport?.vmess?.tls)
         requireNotNull(ProxyKernelConfig.build(node, 10808))
+    }
+
+    @Test fun loopbackVmessPlaceholderIsNotCountedAsUsable() {
+        val json = """{"v":"2","ps":"说明占位","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","type":"none","host":"","path":"","tls":""}"""
+        val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+        val node = parser.parse(link, "https://sub.example.com/api")?.nodes?.single()
+        requireNotNull(node)
+        assertEquals(ProxyProtocol.Vmess, node.protocol)
+        assertFalse("loopback placeholder must not be usable", node.viaKernel)
+        assertFalse(node.supported)
+        assertEquals("", node.proxyUrl)
+    }
+
+    @Test fun allUnsupportedPlaceholdersProduceUnsupportedOnly() {
+        val json = """{"v":"2","ps":"订阅说明","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","tls":""}"""
+        val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+        val content = "$link\nvless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@198.51.100.1:443?security=reality#remote"
+        val subscription = parser.parse(content, "https://sub.example.com/api")
+        requireNotNull(subscription)
+        assertEquals(0, subscription.supportedCount)
+        assertTrue(parser.classify(subscription) is dev.zakocoder.app.settings.ProxyProbe.UnsupportedOnly)
+    }
+
+    @Test fun vlessRealityVisionParsesAsUsableKernelNode() {
+        val link = "vless://11111111-2222-3333-4444-555555555555@198.51.100.40:443" +
+            "?encryption=none&security=reality&sni=www.example.com&fp=chrome" +
+            "&pbk=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" +
+            "&sid=0123456789abcdef&spx=%2F&type=tcp&flow=xtls-rprx-vision#Reality"
+
+        val node = requireNotNull(parser.parseLink(link))
+        val vless = requireNotNull(node.transport?.vless)
+
+        assertEquals(ProxyProtocol.Vless, node.protocol)
+        assertTrue(node.supported)
+        assertTrue(node.viaKernel)
+        assertEquals("198.51.100.40", node.host)
+        assertEquals(443, node.port)
+        assertEquals("reality", vless.security)
+        assertEquals("tcp", vless.network)
+        assertEquals("xtls-rprx-vision", vless.flow)
+        assertEquals("www.example.com", vless.serverName)
+        assertEquals("chrome", vless.fingerprint)
+        assertEquals("/", vless.spiderX)
+        requireNotNull(ProxyKernelConfig.build(node, 10808))
+    }
+
+    @Test fun vlessRealityWithoutPublicKeyStaysVisibleButUnsupported() {
+        val link = "vless://11111111-2222-3333-4444-555555555555@198.51.100.41:443" +
+            "?encryption=none&security=reality&sni=www.example.com&fp=chrome" +
+            "&type=tcp&flow=xtls-rprx-vision#Missing key"
+
+        val node = requireNotNull(parser.parseLink(link))
+
+        assertEquals(ProxyProtocol.Vless, node.protocol)
+        assertFalse(node.supported)
+        assertNull(ProxyKernelConfig.build(node, 10808))
+    }
+
+    @Test fun vlessLoopbackInstructionIsNotCountedAsUsable() {
+        val link = "vless://11111111-2222-3333-4444-555555555555@127.0.0.1:443" +
+            "?encryption=none&security=reality&sni=www.example.com&fp=chrome" +
+            "&pbk=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" +
+            "&sid=0123456789abcdef&type=tcp&flow=xtls-rprx-vision#Placeholder"
+
+        val node = requireNotNull(parser.parse(link, "https://sub.example.com/api")).nodes.single()
+
+        assertFalse(node.viaKernel)
+        assertFalse(node.supported)
     }
 }

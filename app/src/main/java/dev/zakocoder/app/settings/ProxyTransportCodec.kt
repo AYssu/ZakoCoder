@@ -31,6 +31,7 @@ object ProxyTransportCodec {
     fun toFields(node: ProxyNode): Map<String, String> {
         val fields = when (node.protocol) {
             ProxyProtocol.Vmess -> node.transport?.vmess?.let(::vmessFields)
+            ProxyProtocol.Vless -> node.transport?.vless?.let(::vlessFields)
             ProxyProtocol.Ss -> node.transport?.shadowsocks?.let(::shadowsocksFields)
             ProxyProtocol.Trojan -> node.transport?.trojan?.let(::trojanFields)
             else -> null
@@ -64,6 +65,30 @@ object ProxyTransportCodec {
                     ),
                 )
             }
+            ProxyProtocol.Vless -> {
+                val uuid = required(fields, "vless.uuid", 128) ?: return null
+                fun field(key: String, max: Int = 255) = optionalField(fields, "vless.$key", max)
+                val vless = VlessTransport(
+                    uuid = uuid,
+                    encryption = field("encryption", 64) ?: return null,
+                    network = field("network", 16) ?: return null,
+                    security = field("security", 16) ?: return null,
+                    flow = field("flow", 64) ?: return null,
+                    serverName = field("serverName")?.ifEmpty { null },
+                    publicKey = field("publicKey", 256)?.ifEmpty { null },
+                    shortId = field("shortId", 16)?.ifEmpty { null },
+                    fingerprint = field("fingerprint", 64)?.ifEmpty { null },
+                    spiderX = field("spiderX", 1024)?.ifEmpty { null },
+                    host = field("host")?.ifEmpty { null },
+                    path = field("path", 1024)?.ifEmpty { null },
+                    serviceName = field("serviceName", 1024)?.ifEmpty { null },
+                )
+                // Optional malformed values must not disappear when loading a damaged cache.
+                if (listOf("serverName" to 255, "publicKey" to 256, "shortId" to 16, "fingerprint" to 64,
+                        "spiderX" to 1024, "host" to 255, "path" to 1024, "serviceName" to 1024)
+                        .any { (key, max) -> field(key, max) == null } || !ProxyKernelConfig.isSupportedVless(vless)) return null
+                NodeTransport(vless = vless)
+            }
             ProxyProtocol.Ss -> {
                 val method = required(fields, SS_METHOD, MAX_METHOD_CHARS) ?: return null
                 val password = required(fields, SS_PASSWORD, MAX_CREDENTIAL_CHARS) ?: return null
@@ -88,6 +113,22 @@ object ProxyTransportCodec {
         putIfNotEmpty(VMESS_HOST, vmess.host)
         putIfNotEmpty(VMESS_PATH, vmess.path)
         putIfNotEmpty(VMESS_HEADER_TYPE, vmess.headerType)
+    }
+
+    private fun vlessFields(value: VlessTransport): Map<String, String> = linkedMapOf<String, String>().apply {
+        put("vless.uuid", value.uuid)
+        put("vless.encryption", value.encryption)
+        put("vless.network", value.network)
+        put("vless.security", value.security)
+        put("vless.flow", value.flow)
+        putIfNotEmpty("vless.serverName", value.serverName)
+        putIfNotEmpty("vless.publicKey", value.publicKey)
+        putIfNotEmpty("vless.shortId", value.shortId)
+        putIfNotEmpty("vless.fingerprint", value.fingerprint)
+        putIfNotEmpty("vless.spiderX", value.spiderX)
+        putIfNotEmpty("vless.host", value.host)
+        putIfNotEmpty("vless.path", value.path)
+        putIfNotEmpty("vless.serviceName", value.serviceName)
     }
 
     private fun shadowsocksFields(shadowsocks: ShadowsocksTransport): Map<String, String> = linkedMapOf(
