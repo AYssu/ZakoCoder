@@ -24,6 +24,7 @@ class AiTaskQueueUiDeviceTest {
     private suspend fun render(dark: Boolean) {
         val context = instrumentation.targetContext
         check(context.packageName.endsWith(".runtimecheck"))
+        withContext(Dispatchers.IO) { warmDeviceActivity() }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity -> activity.setContent {
                 CompositionLocalProvider(LocalWorkbenchDark provides dark) {
