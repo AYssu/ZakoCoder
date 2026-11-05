@@ -466,6 +466,7 @@
     <string name="ai_models_not_found">地址或模型接口不存在（404）。请核对基础地址和模型标识；也可以手动填写模型。</string>
     <string name="ai_models_rate_limit">服务请求受限（429）。请稍后重试，并检查账户额度。</string>
     <string name="ai_models_request_rejected">服务不接受此请求（400/422）。请检查模型是否支持流式工具调用，或关闭不兼容的生成参数。</string>
+    <string name="ai_models_protocol_error">响应格式不兼容（%1$s）。请确认服务支持所选协议。</string>
     <string name="ai_models_network_error">未收到完整的兼容响应。请检查网络、证书、服务地址及流式工具调用支持。</string>
     <string name="ai_models_service_error">服务暂时无法完成请求，请稍后重试。</string>
     <string name="ai_models_invalid">请检查配置名称、服务地址、模型标识和参数范围。支持 HTTP / HTTPS 域名或 IP，可指定端口。HTTP 连接不加密。</string>

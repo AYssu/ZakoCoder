@@ -11,14 +11,14 @@ internal object AiProviderRouting {
         if (it.isBlank() || it.length > 200 || !it.all { char -> char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char in "-_." })
             throw AiTransportException(kind = AiFailure.RequestConfiguration, diagnostic = "gemini_invalid_model_id")
     }
-    fun requestAddress(base: String, protocol: AiApiProtocol, model: String): String {
+    fun requestAddress(base: String, protocol: AiApiProtocol, model: String, streaming: Boolean = true): String {
         val url = AiConfigStore.endpoint(base).toHttpUrl().newBuilder()
         return if (protocol == AiApiProtocol.Gemini) {
-            url.addPathSegment("models").addPathSegment("${modelId(model)}:streamGenerateContent")
-                .addQueryParameter("alt", "sse").build().toString()
+            url.addPathSegment("models").addPathSegment("${modelId(model)}:${if (streaming) "streamGenerateContent" else "generateContent"}")
+                .apply { if (streaming) addQueryParameter("alt", "sse") }.build().toString()
         } else AiConfigStore.endpoint(base) + protocol.requestPath
     }
-    fun requestUrl(config: AiConfig): String = requestAddress(config.endpoint, config.protocol, config.model)
+    fun requestUrl(config: AiConfig): String = requestAddress(config.endpoint, config.protocol, config.model, config.parameters.service.streaming)
     fun modelsUrl(config: AiConfig): HttpUrl = (AiConfigStore.endpoint(config.endpoint) + "/models").toHttpUrl()
     fun headers(builder: Request.Builder, config: AiConfig): Request.Builder = builder.apply {
         AiRequestHeaders.validate(config.requestHeaders)

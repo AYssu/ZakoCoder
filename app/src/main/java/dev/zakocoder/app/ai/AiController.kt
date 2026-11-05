@@ -1005,7 +1005,8 @@ class AiController(private val context: Context, root: (String) -> File, private
             // Once answer/tool output begins, later provider reasoning fragments remain retained
             // but must not reopen this round's reasoning panel.
             var responseStarted = false
-            val reply = transport.request(settings, messages, activeSchemas, proxy = proxy(), imageData = { image ->
+            val reply = transport.request(settings, messages, activeSchemas, proxy = proxy(),
+                cacheKey = AiServiceRequestPolicy.sessionCacheKey(id, usageConversation), imageData = { image ->
                 if (image.id in screenImageIds && !screenSharingAllowed())
                     throw AiImageException(AiImageException.Reason.Invalid)
                 imageStore.dataUrl(image).also {
@@ -1260,7 +1261,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (epoch != requestEpoch || !mutable.value.active || mutable.value.phase == AiPhase.Stopping)
                 throw CancellationException("Stale summary request")
             return transport.request(summarySettings, input, JSONArray(),
-            proxy = proxy(), onRetry = { retry ->
+            proxy = proxy(), cacheKey = AiServiceRequestPolicy.sessionCacheKey(usageProject, usageConversation) + "-summary", onRetry = { retry ->
                 mutable.update { state ->
                     if (epoch != requestEpoch || !state.active || state.phase == AiPhase.Stopping) state
                     else state.copy(retryNotice = context.getString(R.string.ai_retry_wait, retry.attempt, retry.maxAttempts, retry.delayMillis))

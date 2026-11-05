@@ -17,6 +17,7 @@ import dev.zakocoder.app.ai.*
 internal class ModelOptionsDraft(profile: AiProfile?) {
     var systemPrompt by mutableStateOf(profile?.systemPrompt.orEmpty())
     private var selectedModel = profile?.model.orEmpty().trim().lowercase(java.util.Locale.ROOT)
+    var service by mutableStateOf(profile?.parameters?.service ?: AiServiceOptions())
     var thinking by mutableStateOf(profile?.parameters?.thinking ?: AiThinking.Default)
     var effort by mutableStateOf(profile?.parameters?.reasoningEffort)
     var frequency by mutableStateOf(profile?.parameters?.frequencyPenalty?.toString().orEmpty())
@@ -37,7 +38,7 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
         windowTokens = AiModelContextWindows.defaultTokens(model).toString()
     }
     fun parameters(base: AiParameters) = base.copy(thinking = thinking, reasoningEffort = effort,
-        frequencyPenalty = frequency.takeIf(String::isNotBlank)?.toDouble(), presencePenalty = presence.takeIf(String::isNotBlank)?.toDouble(), seed = seed.takeIf(String::isNotBlank)?.toInt())
+        frequencyPenalty = frequency.takeIf(String::isNotBlank)?.toDouble(), presencePenalty = presence.takeIf(String::isNotBlank)?.toDouble(), seed = seed.takeIf(String::isNotBlank)?.toInt(), service = service)
     fun context() = AiContextOptions(legacyContextChars, automatic, threshold.toInt(), summaryChars.toInt(), windowTokens.toInt()).also { it.validate() }
     fun headers(): Map<String, String>? = if (!replaceHeaders) null else {
         val pairs = headersText.lineSequence().filter(String::isNotBlank).map { line ->
@@ -57,13 +58,14 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editable: Boolean, changed: () -> Unit) {
+internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editable: Boolean, protocol: AiApiProtocol = profile?.protocol ?: AiApiProtocol.ChatCompletions, changed: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     TextButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.ai_options_title), Modifier.weight(1f)); WorkbenchIcon(if (open) Glyph.Down else Glyph.Next)
     }
     if (!open) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AiServiceOptionsSection(protocol, draft.service, editable) { draft.service = it; changed() }
         Text(stringResource(R.string.ai_options_thinking), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.ai_options_thinking_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

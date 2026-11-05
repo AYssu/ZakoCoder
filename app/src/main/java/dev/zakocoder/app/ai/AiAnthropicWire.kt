@@ -182,7 +182,7 @@ internal class AiAnthropicStream(private val delta: (String) -> Unit = {}, priva
         liveCallDraft(index, block.value.getString("name"), value)
     }
     private fun invalid(code: String): Nothing = AiAnthropicWire.invalid(code)
-    private fun usage(value: JSONObject?) {
+    internal fun usage(value: JSONObject?) {
         if (value == null) return
         fun number(name: String): Long? = if (value.isNull(name)) null else value.getLong(name).also { if (it < 0) invalid("anthropic_invalid_usage") }
         number("input_tokens")?.let { rawInputTokens = it }

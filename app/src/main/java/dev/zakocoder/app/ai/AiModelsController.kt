@@ -93,7 +93,12 @@ class AiModelsController(private val context: Context, private val store: AiConf
             catch (error: Exception) { if (owner == generation) mutable.update { it.copy(probe = AiProbe.Failed, probeMessage = message(error)) } }
         }
     }
-    private fun message(error: Exception): String = context.getString(when {
+    private fun message(error: Exception): String {
+        if (error is AiTransportException && error.kind == AiFailure.Protocol) {
+            val code = error.diagnostic.takeIf { it.matches(Regex("[a-z0-9_]{1,100}")) } ?: "invalid_response"
+            return context.getString(R.string.ai_models_protocol_error, code)
+        }
+        return context.getString(when {
         error is AiProbeUnsupported -> R.string.ai_models_no_tools
         error is AiOriginChanged -> R.string.ai_models_origin_changed
         error is AiTransportException && error.kind == AiFailure.RequestConfiguration -> R.string.ai_protocol_parameters_invalid
@@ -107,5 +112,6 @@ class AiModelsController(private val context: Context, private val store: AiConf
         }
         error is IllegalArgumentException -> R.string.ai_models_invalid
         else -> R.string.ai_models_save_error
-    })
+        })
+    }
 }

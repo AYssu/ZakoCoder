@@ -103,6 +103,22 @@ class AiResponsesWireDeviceTest {
         assertTrue(reply.responsesOutput!!.contains("OPAQUE_FIXTURE_NOT_A_CREDENTIAL"))
     }
 
+    @Test fun gatewayMetadataDoesNotCompleteOrDiscardOutputAndTools() {
+        val decoder = AiResponsesStream()
+        decoder.accept(added(0, callItem(arguments = "").put("status", "in_progress")))
+        decoder.accept(fragment("response.function_call_arguments.delta", 0, "fc_1", "{\"path\":\"a.kt\"}"))
+        decoder.accept(JSONObject().put("type", "response.metadata").put("metadata", JSONObject().put("gateway", "fixture")))
+        assertFalse(decoder.done)
+        assertEquals("missing_done", failure { decoder.reply() }.diagnostic)
+        decoder.accept(completed(callItem()))
+        assertEquals("call_1", decoder.reply().calls.single().id)
+        assertEquals("{\"path\":\"a.kt\"}", decoder.reply().calls.single().arguments)
+        val unknown = AiResponsesStream()
+        assertEquals("responses_unsupported_event", failure {
+            unknown.accept(JSONObject().put("type", "response.execute_unknown"))
+        }.diagnostic)
+    }
+
     @Test fun completedSnapshotOnlyPublishesTextAndDoneSnapshotsDoNotDuplicateDeltas() {
         val visible = StringBuilder(); val decoder = AiResponsesStream({ visible.append(it) })
         decoder.accept(completed(messageItem("snapshot-only")))
@@ -153,4 +169,168 @@ class AiResponsesWireDeviceTest {
         repeat(8) { decoder.accept(added(it, callItem("fc_$it", "call_$it", "").put("status", "in_progress"))) }
         assertEquals(AiFailure.ToolLimit, failure { decoder.accept(added(8, callItem("fc_8", "call_8", ""))) }.kind)
     }
+    @Test fun publicReasoningContentStreamsReconcilesReplaysAndRedactsSeparatelyFromSummary() {
+        val shown = StringBuilder()
+        val decoder = AiResponsesStream(reasoningDelta = { shown.append(it) })
+        val item = reasoningItem().put("content", JSONArray().put(JSONObject()
+            .put("type", "reasoning_text").put("text", "Public reasoning")))
+        decoder.accept(added(0, JSONObject().put("type", "reasoning").put("id", "rs_1").put("summary", JSONArray())))
+        decoder.accept(fragment("response.reasoning_text.delta", 0, "rs_1", "Public ").put("content_index", 0))
+        decoder.accept(JSONObject().put("type", "response.reasoning_text.done").put("output_index", 0)
+            .put("item_id", "rs_1").put("content_index", 0).put("text", "Public reasoning"))
+        decoder.accept(fragment("response.reasoning_summary_text.delta", 0, "rs_1", "Public summary").put("summary_index", 0))
+        decoder.accept(completed(item))
+        assertEquals("Public reasoning", shown.toString())
+        assertEquals("Public reasoning", decoder.reply().reasoningContent)
+        val history = JSONArray().put(JSONObject().put("role", "assistant")
+            .put(RESPONSES_OUTPUT_KEY, JSONArray(decoder.reply().responsesOutput)))
+        val request = AiResponsesWire.request(AiConfig(), history, JSONArray())
+        assertEquals("Public reasoning", request.getJSONArray("input").getJSONObject(0)
+            .getJSONArray("content").getJSONObject(0).getString("text"))
+        val diagnostic = AiResponsesWire.diagnostic(request).toString()
+        assertFalse(diagnostic.contains("Public reasoning"))
+        assertFalse(diagnostic.contains("OPAQUE_FIXTURE_NOT_A_CREDENTIAL"))
+        assertTrue(diagnostic.contains("Public summary"))
+        assertEquals("responses_output_snapshot_mismatch", failure {
+            val broken = AiResponsesStream()
+            broken.accept(added(0, item))
+            broken.accept(fragment("response.reasoning_text.delta", 0, "rs_1", "wrong").put("content_index", 0))
+            broken.accept(completed(item))
+        }.diagnostic)
+    }
+
+    @Test fun summaryAndReasoningContentDoNotDoubleEmitRegardlessOfArrivalOrder() {
+        val shown = StringBuilder()
+        val decoder = AiResponsesStream(reasoningDelta = { shown.append(it) })
+        decoder.accept(added(0, reasoningItem()))
+        decoder.accept(fragment("response.reasoning_summary_text.delta", 0, "rs_1", "Public summary").put("summary_index", 0))
+        decoder.accept(fragment("response.reasoning_text.delta", 0, "rs_1", "Detailed content").put("content_index", 0))
+        decoder.accept(completed(reasoningItem().put("content", JSONArray().put(JSONObject()
+            .put("type", "reasoning_text").put("text", "Detailed content")))))
+        assertEquals("Public summary", shown.toString())
+        assertEquals("Public summary", decoder.reply().reasoningContent)
+        assertEquals("Public summary".length + "Detailed content".length, decoder.reasoningChars)
+    }
+
+    @Test fun toolDeltasCanUseUniqueCallIdentityOrIndexWithoutRelaxingExplicitConflicts() {
+        val decoder = AiResponsesStream()
+        decoder.accept(added(0, callItem(arguments = "")))
+        decoder.accept(JSONObject().put("type", "response.function_call_arguments.delta")
+            .put("call_id", "call_1").put("delta", "{\"path\":"))
+        decoder.accept(JSONObject().put("type", "response.function_call_arguments.delta")
+            .put("output_index", 0).put("delta", "\"a.kt\"}"))
+        decoder.accept(completed(callItem()))
+        assertEquals("{\"path\":\"a.kt\"}", decoder.reply().calls.single().arguments)
+        val conflict = AiResponsesStream()
+        conflict.accept(added(0, callItem(arguments = "")))
+        conflict.accept(added(1, callItem("fc_2", "call_2", "")))
+        assertEquals("responses_item_identity_mismatch", failure {
+            conflict.accept(JSONObject().put("type", "response.function_call_arguments.delta")
+                .put("output_index", 0).put("call_id", "call_2").put("delta", "{}"))
+        }.diagnostic)
+        assertEquals("responses_item_identity_mismatch", failure {
+            conflict.accept(fragment("response.function_call_arguments.delta", 0, "", "{}"))
+        }.diagnostic)
+    }
+
+    @Test fun explicitCompleteAdapterRetainsUsageAndRejectsIncompleteErrorsAndUnsupportedOutput() {
+        val decoder = AiResponsesWire.completed(completed(messageItem(), callItem()).getJSONObject("response"))
+        assertEquals("Hello", decoder.reply().text)
+        assertEquals(100L, decoder.inputTokens)
+        assertEquals(25L, decoder.outputTokens)
+        assertEquals(40L, decoder.cachedTokens)
+        assertEquals(1, decoder.reply().calls.size)
+        assertEquals("responses_rate_limit", failure {
+            AiResponsesStream().accept(JSONObject().put("type", "response.error")
+                .put("error", JSONObject().put("code", "rate_limit_exceeded").put("message", "PRIVATE")))
+        }.diagnostic)
+        assertEquals("responses_server_error", failure {
+            AiResponsesWire.completed(JSONObject().put("status", "failed")
+                .put("error", JSONObject().put("code", "server_error")))
+        }.diagnostic)
+        assertEquals(AiFailure.OutputLimit, failure {
+            AiResponsesWire.completed(JSONObject().put("status", "incomplete")
+                .put("incomplete_details", JSONObject().put("reason", "max_output_tokens")))
+        }.kind)
+        assertEquals("responses_unsupported_output_item", failure {
+            AiResponsesWire.completed(completed(JSONObject().put("id", "search_1")
+                .put("type", "web_search_call")).getJSONObject("response"))
+        }.diagnostic)
+    }
+
+    @Test fun reasoningContentCountsTowardSharedLimitAndNotificationsNeverComplete() {
+        val decoder = AiResponsesStream()
+        decoder.accept(added(0, reasoningItem()))
+        assertEquals(AiFailure.OutputLimit, failure {
+            decoder.accept(fragment("response.reasoning_text.delta", 0, "rs_1", "x".repeat(256001)).put("content_index", 0))
+        }.kind)
+        listOf("response.created", "response.in_progress", "response.queued", "response.metadata",
+            "response.content_part.added", "response.reasoning_summary_part.done", "response.output_text.annotation.added").forEach { type ->
+            val notification = AiResponsesStream()
+            notification.accept(JSONObject().put("type", type))
+            assertEquals("missing_done", failure { notification.reply() }.diagnostic)
+        }
+    }
+
+    @Test fun callsWithoutOutputItemIdsStreamCompleteAndReplayTheirOriginalShape() {
+        val noId = callItem().apply { remove("id") }
+        val stream = AiResponsesStream()
+        stream.accept(added(0, callItem(arguments = "").apply { remove("id") }))
+        stream.accept(JSONObject().put("type", "response.function_call_arguments.delta")
+            .put("call_id", "call_1").put("delta", "{\"path\":\"a.kt\"}"))
+        stream.accept(completed(noId))
+        assertEquals("call_1", stream.reply().calls.single().id)
+        val complete = AiResponsesWire.completed(completed(noId).getJSONObject("response"))
+        assertEquals("call_1", complete.reply().calls.single().id)
+        val original = JSONArray(complete.reply().responsesOutput).getJSONObject(0)
+        assertFalse(original.has("id"))
+        val request = AiResponsesWire.request(AiConfig(), JSONArray().put(JSONObject().put("role", "assistant")
+            .put(RESPONSES_OUTPUT_KEY, JSONArray().put(original))), JSONArray())
+        assertEquals(noId.toString(), request.getJSONArray("input").getJSONObject(0).toString())
+        assertFalse(request.getJSONArray("input").getJSONObject(0).has("id"))
+    }
+
+    @Test fun lateExplicitOutputItemIdentityBindsOnceToTheSameCall() {
+        val stream = AiResponsesStream()
+        stream.accept(added(0, callItem(arguments = "").apply { remove("id") }))
+        stream.accept(fragment("response.function_call_arguments.delta", 0, "fc_1", "{\"path\":\"a.kt\"}"))
+        stream.accept(completed(callItem()))
+        assertEquals("call_1", stream.reply().calls.single().id)
+        val snapshotBound = AiResponsesStream()
+        snapshotBound.accept(added(0, callItem(arguments = "").apply { remove("id") }))
+        snapshotBound.accept(completed(callItem()))
+        assertEquals("call_1", snapshotBound.reply().calls.single().id)
+        val conflict = AiResponsesStream()
+        conflict.accept(added(0, callItem(arguments = "").apply { remove("id") }))
+        conflict.accept(fragment("response.function_call_arguments.delta", 0, "fc_1", "{}"))
+        assertEquals("responses_item_identity_mismatch", failure {
+            conflict.accept(fragment("response.function_call_arguments.delta", 0, "different", ""))
+        }.diagnostic)
+        assertEquals("responses_item_identity_mismatch", failure {
+            conflict.accept(completed(callItem(callId = "different_call", arguments = "{}")))
+        }.diagnostic)
+    }
+
+    @Test fun missingItemIdsNeverRelaxUniqueCallIdentityOrCrossItemConflicts() {
+        val stream = AiResponsesStream()
+        stream.accept(added(0, callItem(arguments = "").apply { remove("id") }))
+        stream.accept(added(1, callItem("fc_2", "call_2", "")))
+        assertEquals("responses_duplicate_item_id", failure {
+            stream.accept(fragment("response.function_call_arguments.delta", 0, "fc_2", "{}"))
+        }.diagnostic)
+        assertEquals("responses_item_identity_mismatch", failure {
+            stream.accept(JSONObject().put("type", "response.function_call_arguments.delta")
+                .put("output_index", 0).put("call_id", "call_2").put("delta", "{}"))
+        }.diagnostic)
+        assertEquals("duplicate_tool_id", failure {
+            AiResponsesWire.completed(completed(callItem().apply { remove("id") },
+                callItem("fc_2", "call_1")).getJSONObject("response"))
+        }.diagnostic)
+        assertEquals("responses_item_identity_mismatch", failure {
+            AiResponsesWire.request(AiConfig(), JSONArray().put(JSONObject().put("role", "assistant")
+                .put(RESPONSES_OUTPUT_KEY, JSONArray().put(callItem().apply { remove("id") })
+                    .put(callItem().apply { remove("id") }))), JSONArray())
+        }.diagnostic)
+    }
+
 }

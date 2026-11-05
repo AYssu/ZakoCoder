@@ -28,15 +28,16 @@ internal fun protocolLabel(protocol: AiApiProtocol): Int = when (protocol) {
 }
 
 internal fun protocolParametersSupported(protocol: AiApiProtocol, parameters: AiParameters): Boolean {
-    val conflictingThinking = parameters.thinking == AiThinking.Disabled && parameters.reasoningEffort != null
-    val penalties = parameters.seed != null || parameters.frequencyPenalty != null || parameters.presencePenalty != null
+    val effective = AiServiceRequestPolicy.effectiveConfig(AiConfig(parameters = parameters)).parameters
+    val conflictingThinking = effective.thinking == AiThinking.Disabled && effective.reasoningEffort != null
+    val penalties = effective.seed != null || effective.frequencyPenalty != null || effective.presencePenalty != null
     return when (protocol) {
         AiApiProtocol.ChatCompletions -> true
         AiApiProtocol.Responses -> !penalties && !conflictingThinking
-        AiApiProtocol.Anthropic -> !penalties && !conflictingThinking && (parameters.temperature == null || parameters.temperature <= 1.0) &&
-            (parameters.thinking != AiThinking.Enabled || (parameters.temperature == null && parameters.topP == null &&
-                (parameters.maxTokens == null || parameters.maxTokens > 1024)))
-        AiApiProtocol.Gemini -> parameters.reasoningEffort != AiReasoningEffort.Max && !conflictingThinking
+        AiApiProtocol.Anthropic -> !penalties && !conflictingThinking && (effective.temperature == null || effective.temperature <= 1.0) &&
+            (effective.thinking != AiThinking.Enabled || (effective.temperature == null && effective.topP == null &&
+                (effective.maxTokens == null || effective.maxTokens > 1024)))
+        AiApiProtocol.Gemini -> effective.reasoningEffort != AiReasoningEffort.Max && !conflictingThinking
     }
 }
 
@@ -98,8 +99,8 @@ internal fun AiProtocolOptions(protocol: AiApiProtocol, editable: Boolean, updat
 }
 
 @Composable
-internal fun AiProtocolRequestAddress(base: String, protocol: AiApiProtocol, model: String = "") {
-    val address = runCatching { AiProviderRouting.requestAddress(base, protocol, model) }.getOrNull()
+internal fun AiProtocolRequestAddress(base: String, protocol: AiApiProtocol, model: String = "", streaming: Boolean = true) {
+    val address = runCatching { AiProviderRouting.requestAddress(base, protocol, model, streaming) }.getOrNull()
     Text(if (address == null) stringResource(R.string.ai_protocol_address_needs_model)
         else stringResource(R.string.ai_models_request_url, address), style = MaterialTheme.typography.bodySmall,
         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
