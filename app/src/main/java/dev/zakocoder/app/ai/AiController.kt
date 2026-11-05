@@ -29,7 +29,7 @@ data class AiState(val projectId: String? = null, val checkpointId: String? = nu
     val commandChanges: List<AiCommandChange> = emptyList(), val commandReviewLimited: Boolean = false,
     val requests: List<AiRequestLog> = emptyList(), val recoveryNotes: List<String> = emptyList(), val taskRecovery: String = "", val taskPrompt: String = "",
     val enabledSkills: List<String> = emptyList(), val skillsInitialized: Boolean = false, val skills: List<AiSkill> = emptyList(), val skillsLoading: Boolean = false, val skillError: Boolean = false,
-    val taskDiagnostic: String = "", val failureKind: AiFailure? = null, val historyError: Boolean = false, val historyTrimmed: Boolean = false,
+    val taskDiagnostic: String = "", val failureKind: AiFailure? = null, val historyError: Boolean = false, val historyProblem: AiHistoryProblem? = null, val historyTrimmed: Boolean = false,
     val policy: AiPolicy = AiPolicy(), val permissionsLoading: Boolean = false, val permissionsSaving: Boolean = false,
     val timeline: List<AiEntry> = emptyList(), val events: List<AiToolEvent> = emptyList(), val drafts: List<AiCallDraft> = emptyList(),
     val plan: List<AiPlanStep> = emptyList(), val phase: AiPhase = AiPhase.Idle, val round: Int = 0, val toolCount: Int = 0,
@@ -240,10 +240,65 @@ class AiController(private val context: Context, root: (String) -> File, private
                 val loaded = historyMutex.withLock { withContext(Dispatchers.IO) { permissionStore.load(id) to history.load(id) } }
                 if (mutable.value.projectId == id) restore(loaded.second, loaded.first, previous, projectSelection = true)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { if (mutable.value.projectId == id) mutable.update { it.copy(policy = AiPolicy(AiPermission.Deny, emptyMap()), permissionsLoading = false,
-                historyError = true, error = context.getString(R.string.ai_history_load_error)) } }
+            catch (error: Exception) { if (mutable.value.projectId == id) reportHistoryLoadFailure(error, denyPolicy = true) }
         }
     }
+    private fun reportHistoryLoadFailure(error: Exception, denyPolicy: Boolean = false) {
+        val problem = (error as? AiHistoryReadFailure)?.problem
+        val message = if (problem?.conversationId == null) R.string.ai_history_read_unavailable else when (problem.reason) {
+            AiHistoryProblem.Reason.Unsupported -> R.string.ai_history_read_unsupported
+            AiHistoryProblem.Reason.Corrupt -> R.string.ai_history_read_corrupt
+        }
+        mutable.update { it.copy(permissionsLoading = false, historyError = true, historyProblem = problem,
+            policy = if (denyPolicy) AiPolicy(AiPermission.Deny, emptyMap()) else it.policy, error = context.getString(message)) }
+    }
+
+    /** No automatic deletion: callers must confirm the exact unreadable record currently displayed. */
+    fun recoverUnreadableConversation(problem: AiHistoryProblem): Boolean {
+        val current = mutable.value
+        val project = current.projectId ?: return false
+        if (problem.conversationId == null || current.historyProblem != problem || !current.historyError || current.active ||
+            current.restoring || current.permissionsLoading || current.permissionsSaving) return false
+        reloadHistory(project, problem)
+        return true
+    }
+    fun retryHistoryLoad() {
+        val current = mutable.value
+        val project = current.projectId ?: return
+        if (!current.historyError || canRetryHistorySave || current.active || current.restoring || current.permissionsLoading || current.permissionsSaving) return
+        reloadHistory(project)
+    }
+    private fun reloadHistory(project: String, remove: AiHistoryProblem? = null) {
+        val generation = ++sessionGeneration
+        mutable.update { it.copy(permissionsLoading = true) }
+        scope.launch {
+            try {
+                val loaded = historyMutex.withLock { withContext(Dispatchers.IO) {
+                    val policy = permissionStore.load(project)
+                    if (remove != null) history.deleteUnreadable(project, remove)
+                    val restored = history.load(project)
+                    val state = restored.state
+                    val next = if (state == null) {
+                        val fresh = AiState(enabledSkills = AiBuiltinSkills.defaults, skillsInitialized = true)
+                        AiHistoryStore.Loaded(fresh, history.save(project, fresh))
+                    } else {
+                        history.select(project, state.conversationId)
+                        restored
+                    }
+                    policy to next
+                } }
+                if (sessionGeneration == generation && mutable.value.projectId == project) {
+                    remove?.conversationId?.let { draftImages.remove(project to it); draftReferences.remove(project to it) }
+                    threads.remove(project)
+                    restore(loaded.second, loaded.first)
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
+                if (sessionGeneration == generation && mutable.value.projectId == project) reportHistoryLoadFailure(error)
+            }
+        }
+    }
+
     private fun restore(loaded: AiHistoryStore.Loaded, policy: AiPolicy, cached: AiState? = null, projectSelection: Boolean = false) {
         val current = mutable.value
         historySaveFailure = null
@@ -292,7 +347,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 } }
                 if (sessionGeneration == generation && mutable.value.projectId == project) restore(loaded, current.policy)
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { if (sessionGeneration == generation && mutable.value.projectId == project) mutable.update { it.copy(permissionsLoading = false, historyError = true, error = context.getString(R.string.ai_history_load_error)) } }
+            catch (error: Exception) { if (sessionGeneration == generation && mutable.value.projectId == project) reportHistoryLoadFailure(error) }
         }
     }
     /** Branch stored conversation context without changing files or deleting the original. */
