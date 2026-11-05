@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_tool_edit">编辑文件</string>
+    <string name="ai_tool_edit_desc">按已读基线精确替换，一次审阅并保存多处修改</string>
+    <string name="ai_edit_inherited_permission">沿用写入文件规则</string>
+    <string name="ai_edit_invalid">替换参数无效。请提供 1–64 组非空 old_text 和对应 new_text，每组必须实际改变内容。</string>
+    <string name="ai_edit_not_found">未找到待替换原文，未修改文件。请重新读取文件并核对原文，不要猜测或覆盖。</string>
+    <string name="ai_edit_ambiguous">待替换原文出现多次，未修改文件。请增加上下文，使每组原文恰好匹配一次。</string>
+    <string name="ai_edit_overlap">多组替换范围重叠，未修改文件。请合并重叠修改，所有替换均以原始文件为准。</string>
+</resources>

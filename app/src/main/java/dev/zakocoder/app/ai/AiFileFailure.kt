@@ -18,6 +18,10 @@ internal class AiFileFailure(val reason: Reason) : IllegalArgumentException(reas
         PARENT_MISSING(R.string.ai_file_parent_missing),
         TARGET_EXISTS(R.string.ai_file_target_exists),
         INVALID_RANGE(R.string.ai_file_invalid_range),
+        INVALID_EDITS(R.string.ai_edit_invalid),
+        EDIT_NOT_FOUND(R.string.ai_edit_not_found),
+        EDIT_AMBIGUOUS(R.string.ai_edit_ambiguous),
+        EDIT_OVERLAP(R.string.ai_edit_overlap),
     }
 }
 

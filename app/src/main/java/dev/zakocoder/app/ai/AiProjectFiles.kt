@@ -67,6 +67,9 @@ class AiProjectFiles(private val root: (String) -> File) {
         }
     }
 
+    internal fun prepareEdit(before: FileBaseline, edits: List<AiTextEdit>): String =
+        AiTextEdits.apply(before.text, edits).also(::validateContent)
+
     internal fun validateContent(content: String) {
         if ('\u0000' in content) throw AiFileFailure(AiFileFailure.Reason.FILE_UNSUPPORTED)
         if (content.length > EditorFileStore.MAX_BYTES || content.toByteArray(Charsets.UTF_8).size > EditorFileStore.MAX_BYTES ||
