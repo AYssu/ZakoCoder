@@ -79,9 +79,13 @@ object ProxyTransportCodec {
                     shortId = field("shortId", 16)?.ifEmpty { null },
                     fingerprint = field("fingerprint", 64)?.ifEmpty { null },
                     spiderX = field("spiderX", 1024)?.ifEmpty { null },
+                    host = field("host")?.ifEmpty { null },
+                    path = field("path", 1024)?.ifEmpty { null },
+                    serviceName = field("serviceName", 1024)?.ifEmpty { null },
                 )
                 // Optional malformed values must not disappear when loading a damaged cache.
-                if (listOf("serverName" to 255, "publicKey" to 256, "shortId" to 16, "fingerprint" to 64, "spiderX" to 1024)
+                if (listOf("serverName" to 255, "publicKey" to 256, "shortId" to 16, "fingerprint" to 64,
+                        "spiderX" to 1024, "host" to 255, "path" to 1024, "serviceName" to 1024)
                         .any { (key, max) -> field(key, max) == null } || !ProxyKernelConfig.isSupportedVless(vless)) return null
                 NodeTransport(vless = vless)
             }
@@ -122,6 +126,9 @@ object ProxyTransportCodec {
         putIfNotEmpty("vless.shortId", value.shortId)
         putIfNotEmpty("vless.fingerprint", value.fingerprint)
         putIfNotEmpty("vless.spiderX", value.spiderX)
+        putIfNotEmpty("vless.host", value.host)
+        putIfNotEmpty("vless.path", value.path)
+        putIfNotEmpty("vless.serviceName", value.serviceName)
     }
 
     private fun shadowsocksFields(shadowsocks: ShadowsocksTransport): Map<String, String> = linkedMapOf(

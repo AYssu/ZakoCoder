@@ -23,14 +23,75 @@ class VlessSubscriptionTest {
             ProxyProtocol.Trojan to NodeTransport(trojan = TrojanTransport("fixture", null)),
             ProxyProtocol.Vmess to NodeTransport(vmess = VmessTransport(uuid, 0, "auto", "ws", "tls", null, "ws.example", "/socket", null)),
             ProxyProtocol.Vless to NodeTransport(vless = VlessTransport(uuid, security = "tls")),
+            ProxyProtocol.Vless to NodeTransport(vless = VlessTransport(uuid, network = "ws", security = "tls", host = "ws.example", path = "/socket")),
         )
         for ((protocol, transport) in transports) {
             val node = ProxyNode("fixture", "Fixture", protocol, "edge.example", 443, transport = transport)
             val json = requireNotNull(ProxyKernelConfig.build(node, 10808, resolvedAddress = "192.0.2.20"))
             assertTrue(json.contains("\"address\":\"192.0.2.20\""))
             assertTrue(json.contains("\"serverName\":\"edge.example\""))
-            if (protocol == ProxyProtocol.Vmess) assertTrue(json.contains("ws.example"))
+            if (json.contains("\"network\":\"ws\"")) assertTrue(json.contains("ws.example"))
         }
+    }
+
+    @Test fun webSocketAndGrpcLinksKeepTransportSettings() {
+        val wsLink = link.replace("type=tcp", "type=ws")
+            .replace("&flow=xtls-rprx-vision", "")
+            .replace("#Test", "&host=cdn.example.com&path=%2Fsocket#WS")
+        val wsNode = requireNotNull(parser.parseLink(wsLink))
+        assertTrue(wsNode.supported)
+        assertEquals("ws", wsNode.transport?.vless?.network)
+        assertEquals("cdn.example.com", wsNode.transport?.vless?.host)
+        assertEquals("/socket", wsNode.transport?.vless?.path)
+        val wsJson = requireNotNull(ProxyKernelConfig.build(wsNode, 10808))
+        assertTrue(wsJson.contains("\"network\":\"ws\""))
+        assertTrue(wsJson.contains("\"wsSettings\":{\"path\":\"/socket\",\"headers\":{\"Host\":\"cdn.example.com\"}}"))
+        val wsFields = ProxyTransportCodec.toFields(wsNode)
+        assertEquals(wsNode.transport, ProxyTransportCodec.fromFields(ProxyProtocol.Vless, wsFields))
+
+        val grpcLink = link.replace("type=tcp", "type=grpc")
+            .replace("&flow=xtls-rprx-vision", "&mode=gun&serviceName=grpc-service")
+            .replace("#Test", "#gRPC")
+        val grpcNode = requireNotNull(parser.parseLink(grpcLink))
+        assertTrue(grpcNode.supported)
+        assertEquals("grpc", grpcNode.transport?.vless?.network)
+        assertEquals("grpc-service", grpcNode.transport?.vless?.serviceName)
+        val grpcJson = requireNotNull(ProxyKernelConfig.build(grpcNode, 10808))
+        assertTrue(grpcJson.contains("\"network\":\"grpc\""))
+        assertTrue(grpcJson.contains("\"grpcSettings\":{\"serviceName\":\"grpc-service\"}"))
+        val grpcFields = ProxyTransportCodec.toFields(grpcNode)
+        assertEquals(grpcNode.transport, ProxyTransportCodec.fromFields(ProxyProtocol.Vless, grpcFields))
+    }
+
+    @Test fun clashWebSocketAndGrpcOptionsArePreserved() {
+        val ws = "proxies:\n  - {name: WS, type: vless, server: edge.example, port: 443, uuid: $uuid, network: ws, tls: true, servername: www.example.com, ws-opts: {path: /socket, headers: {Host: cdn.example.com}}}"
+        val wsNode = requireNotNull(parser.parse(ws)).nodes.single()
+        assertTrue(wsNode.supported)
+        assertEquals(VlessTransport(uuid, network = "ws", security = "tls", serverName = "www.example.com",
+            host = "cdn.example.com", path = "/socket"), wsNode.transport?.vless)
+
+        val grpc = "proxies:\n  - {name: gRPC, type: vless, server: edge.example, port: 443, uuid: $uuid, network: grpc, tls: true, servername: www.example.com, grpc-opts: {grpc-service-name: grpc-service}}"
+        val grpcNode = requireNotNull(parser.parse(grpc)).nodes.single()
+        assertTrue(grpcNode.supported)
+        assertEquals("grpc-service", grpcNode.transport?.vless?.serviceName)
+        assertTrue(requireNotNull(ProxyKernelConfig.build(grpcNode, 10808)).contains("grpcSettings"))
+
+        val block = """
+            proxies:
+              - name: WS block
+                type: vless
+                server: edge.example
+                port: 443
+                uuid: $uuid
+                network: ws
+                tls: true
+                servername: www.example.com
+                ws-opts:
+                  path: /socket
+                  headers:
+                    Host: cdn.example.com
+        """.trimIndent()
+        assertEquals(wsNode.transport, requireNotNull(parser.parse(block)).nodes.single().transport)
     }
 
     @Test fun urlRealityVisionRetainsAllHandshakeFieldsAndGeneratesConfig() {

@@ -42,6 +42,9 @@ class ProxyKernelConfigTest {
         network: String = "tcp",
         flow: String = "xtls-rprx-vision",
         publicKey: String? = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+        host: String? = null,
+        path: String? = null,
+        serviceName: String? = null,
     ) = ProxyNode(
         id = "vl-node", name = "VL", protocol = ProxyProtocol.Vless, host = "vl.example.com", port = 443,
         transport = NodeTransport(
@@ -56,6 +59,9 @@ class ProxyKernelConfigTest {
                 publicKey = publicKey.takeIf { security == "reality" },
                 shortId = "0123456789abcdef".takeIf { security == "reality" },
                 spiderX = "/".takeIf { security == "reality" },
+                host = host,
+                path = path,
+                serviceName = serviceName,
             ),
         ),
     )
@@ -135,9 +141,23 @@ class ProxyKernelConfigTest {
         assertTrue(json.contains("\"auth\":\"password\""))
     }
 
-    @Test fun unimplementedVlessTransportsFailClosed() {
-        assertNull(ProxyKernelConfig.build(vlessNode(security = "tls", network = "ws", flow = ""), 10808))
-        assertNull(ProxyKernelConfig.build(vlessNode(security = "tls", network = "grpc", flow = ""), 10808))
+    @Test fun vlessWebSocketAndGrpcTransportSettingsAreGenerated() {
+        val ws = ProxyKernelConfig.build(
+            vlessNode(security = "tls", network = "ws", flow = "", host = "cdn.example.com", path = "/ws"),
+            10808,
+        )
+        requireNotNull(ws)
+        assertTrue(ws.contains("\"network\":\"ws\""))
+        assertTrue(ws.contains("\"wsSettings\":{\"path\":\"/ws\",\"headers\":{\"Host\":\"cdn.example.com\"}}"))
+        assertTrue(ws.contains("\"tlsSettings\":{\"serverName\":\"www.example.com\",\"fingerprint\":\"chrome\"}"))
+
+        val grpc = ProxyKernelConfig.build(
+            vlessNode(security = "tls", network = "grpc", flow = "", serviceName = "grpc-service"),
+            10808,
+        )
+        requireNotNull(grpc)
+        assertTrue(grpc.contains("\"network\":\"grpc\""))
+        assertTrue(grpc.contains("\"grpcSettings\":{\"serviceName\":\"grpc-service\"}"))
     }
 
     @Test fun quotesAndBackslashesAreJsonEscapedAndNewlinesAreRejected() {
@@ -157,6 +177,10 @@ class ProxyKernelConfigTest {
         assertNull(ProxyKernelConfig.build(vlessNode(publicKey = null), 10808))
         assertNull(ProxyKernelConfig.build(vlessNode(network = "quic"), 10808))
         assertNull(ProxyKernelConfig.build(vlessNode(flow = "unsupported-flow"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "ws", security = "tls", flow = "", path = "relative"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "ws", security = "tls", flow = "xtls-rprx-vision"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "tcp", host = "cdn.example.com"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "grpc", security = "tls", flow = "", host = "cdn.example.com", serviceName = "svc"), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode().copy(transport = null), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode(uuid = ""), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode(network = "quic"), 10808))

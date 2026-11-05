@@ -72,15 +72,28 @@ object ProxyKernelConfig {
     fun isSupportedVless(value: VlessTransport?): Boolean {
         val v = value ?: return false
         if (runCatching { java.util.UUID.fromString(v.uuid).toString().equals(v.uuid, ignoreCase = true) }.getOrDefault(false).not()) return false
-        if (v.encryption != "none" || v.network !in setOf("tcp", "raw")) return false
+        if (v.encryption != "none" || v.network !in VLESS_NETWORKS) return false
         if (v.security !in setOf("none", "tls", "reality")) return false
         if (v.flow !in setOf("", "xtls-rprx-vision")) return false
-        if (v.flow.isNotEmpty() && v.security == "none") return false
-        val bounded = listOf(v.serverName to 255, v.publicKey to 256, v.shortId to 16, v.fingerprint to 64, v.spiderX to 1024)
+        if (v.flow.isNotEmpty() && (v.network !in setOf("tcp", "raw") || v.security == "none")) return false
+        val bounded = listOf(
+            v.serverName to 255, v.publicKey to 256, v.shortId to 16, v.fingerprint to 64,
+            v.spiderX to 1024, v.host to 255, v.path to 1024, v.serviceName to 1024,
+        )
         if (bounded.any { (text, limit) -> text != null && (text.length > limit || text.any(Char::isISOControl)) }) return false
         if (v.security != "reality" && listOf(v.publicKey, v.shortId, v.spiderX).any { !it.isNullOrEmpty() }) return false
         if (!v.fingerprint.isNullOrEmpty() && v.fingerprint.lowercase() !in VLESS_FINGERPRINTS) return false
         if (v.security == "none" && (!v.serverName.isNullOrEmpty() || !v.fingerprint.isNullOrEmpty())) return false
+        when (v.network) {
+            "tcp", "raw" -> if (listOf(v.host, v.path, v.serviceName).any { !it.isNullOrEmpty() }) return false
+            "ws" -> {
+                if (!v.serviceName.isNullOrEmpty()) return false
+                if (!v.path.isNullOrEmpty()) {
+                    if (!v.path.startsWith('/') || runCatching { java.net.URI(v.path) }.isFailure) return false
+                }
+            }
+            "grpc" -> if (!v.host.isNullOrEmpty() || !v.path.isNullOrEmpty()) return false
+        }
         if (v.security == "reality") {
             if (v.serverName.isNullOrBlank() || v.publicKey.isNullOrBlank()) return false
             if (!v.spiderX.isNullOrEmpty()) {
@@ -155,7 +168,8 @@ object ProxyKernelConfig {
         if (!isSupportedVlessEndpoint(v, node.host)) return null
         val address = encode(destination, 255) ?: return null
         val uuid = encode(v.uuid, 128) ?: return null
-        val stream = StringBuilder("{\"network\":\"tcp\",\"security\":\"${v.security}\"")
+        val network = if (v.network == "raw") "tcp" else v.network
+        val stream = StringBuilder("{\"network\":\"$network\",\"security\":\"${v.security}\"")
         if (v.security == "reality" || v.security == "tls") {
             val options = mutableListOf<String>()
             val sni = encode(v.serverName?.takeIf { it.isNotEmpty() } ?: node.host, 255) ?: return null
@@ -168,6 +182,21 @@ object ProxyKernelConfig {
                 v.spiderX?.takeIf { it.isNotEmpty() }?.let { options += "\"spiderX\":${encode(it, 1024) ?: return null}" }
             }
             stream.append(",\"${v.security}Settings\":{${options.joinToString(",")}}")
+        }
+        when (network) {
+            "ws" -> {
+                val path = encode(v.path ?: "/", 1024) ?: return null
+                stream.append(",\"wsSettings\":{\"path\":$path")
+                v.host?.takeIf { it.isNotEmpty() }?.let { host ->
+                    stream.append(",\"headers\":{\"Host\":${encode(host, 255) ?: return null}}")
+                }
+                stream.append("}")
+            }
+            "grpc" -> {
+                v.serviceName?.takeIf { it.isNotEmpty() }?.let { serviceName ->
+                    stream.append(",\"grpcSettings\":{\"serviceName\":${encode(serviceName, 1024) ?: return null}}")
+                }
+            }
         }
         stream.append("}")
         return "{\"protocol\":\"vless\",\"tag\":\"proxy\",\"settings\":{\"vnext\":[{\"address\":$address," +
@@ -271,6 +300,7 @@ object ProxyKernelConfig {
         "hellofirefox_148", "hellochrome_133", "hellosafari_26_3",
     )
     private val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
+    private val VLESS_NETWORKS = setOf("tcp", "raw", "ws", "grpc")
     private val VMESS_SECURITY = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305")
     private val SS_METHODS = setOf(
         "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305",

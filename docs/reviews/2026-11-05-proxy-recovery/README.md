@@ -5,9 +5,9 @@
 ## 范围
 
 - 保留 PR 的 VLESS 功能入口、版本化订阅 User-Agent、Xray 升级和“参数完整不代表联网成功”说明。
-- 整合订阅占位分类、Clash 嵌套 REALITY、参数校验和缓存恢复；仅支持已实现的 VLESS TCP/raw、TLS/REALITY/Vision 组合，未实现的传输或参数明确拒绝。
+- 整合订阅占位分类、Clash 嵌套 REALITY、参数校验和缓存恢复；支持 VLESS TCP/RAW、WebSocket、gRPC、TLS/REALITY，Vision 仅用于 TCP/RAW，未实现的传输或参数明确拒绝。
 - 插件激活使用前台 Activity，失败时显示具名反馈并回退系统应用详情；实际绑定失败进入恢复卡片。绑定死亡、迟到回调和停止/启动使用所属代际处理。
-- Android 宿主解析节点端点，保留 TLS/REALITY 服务名；诊断只暴露有界白名单类别。
+- Android 宿主解析节点端点，对去重地址执行有界 TCP 可达性探测并回退，保留 TLS/REALITY 服务名；诊断只暴露有界白名单类别。
 - 回环占位判定覆盖压缩 IPv6、完整 IPv6、IPv4-mapped 形式，不进行 DNS 查询；手动单节点链接保留用户意图。
 - 不包含工作区的 AI、导航、通用视觉组件、其他 UI 或依赖升级。
 
@@ -41,6 +41,15 @@ AOSP Android 13 / API 33，x86_64 只读模拟器；主测试包 `dev.zakocoder.
 
 本地转发 fixture 的目标是 `127.0.0.1:18888`，返回 `kernel-e2e-ok`。新版 Xray 的测试服务端 Freedom 默认拦截私网目标，因此测试服务端明确添加只允许该 loopback IP、TCP 端口的 `finalRules`；该设置不写入产品配置。读取响应按有界 Content-Length 校验完整内容，不能用 TCP EOF 替代 HTTP 完成。
 
+## 追加真实 REALITY 检查
+
+在 Linux x86_64 测试宿主上，使用当前分支生成的 VLESS REALITY/Vision 配置访问用户提供的真实订阅候选节点，并执行终端 `ALL_PROXY=socks5://... curl cip.cc`。只将 HTTP 200、完整 IP/地址/运营商正文且出口 IP 与直连基线不同判定为成功。
+
+- 三个可导出的候选节点均至少成功一次；其中第 14 个参数完整 VLESS 候选连续 2/2 成功，另外两个候选存在空响应或超时。
+- 真实远端握手与出口切换已得到验证；这不等于 ARM64 真机验证。
+- 新增 WebSocket/gRPC 的参数解析、缓存和配置生成单元测试；尚未用公网订阅节点验证这两类传输。
+- 订阅、节点凭据、原始响应与出口 IP 均未写入仓库。
+
 启动测试服务端和 HTTP fixture 后，设置模拟器反向端口：
 
 ```sh
@@ -58,7 +67,7 @@ fixture 使用代码中的公开测试 UUID；VMess 服务端监听 18086，VLES
 
 ## 仍需跟进
 
-- 本轮没有真实 REALITY/Vision 远端握手、出口或 Android ARM64 真机转发验证；相关解析、配置及保存恢复由单测/缓存测试覆盖。不能把本地 VLESS 明文 fixture 成功当作真实 REALITY 成功。
+- 真实 REALITY/Vision 远端握手与出口切换已在 x86_64 测试宿主验证；Android ARM64 真机转发仍未验证。
 - 一加/OPPO 的关联启动限制需受影响设备复验，打开激活页不保证解除系统限制。
 - 本轮直接在模拟器安装本地 Debug APK，未复验系统安装器、生产签名覆盖升级或新 Release 下载资产；发布前需要对应验收。
-- DNS 当前优先首个 IPv4，没有自动尝试所有解析地址；节点离线或运营商限制不会因此消失。
+- DNS 已对解析地址逐个进行有界 TCP 探测并回退；节点连接抖动、远端封锁或运营商限制不会因此消失。

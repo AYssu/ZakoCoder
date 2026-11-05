@@ -300,9 +300,14 @@ class ProxySubscriptionParser {
         val uuid = decodeUserInfo(authority.substringBefore('@')).orEmpty()
         val network = fields["type"].orEmpty().lowercase().ifEmpty { "tcp" }
         if (fields["headertype"].orEmpty().lowercase() !in setOf("", "none")) valid = false
-        // Some exporters emit defaults for every possible transport. Accept only values that
-        // have no effect on raw TCP; never discard a real path/host or disable TLS verification.
-        if (listOf("host", "path", "servicename").any { !fields[it].isNullOrEmpty() }) valid = false
+        // Exporters commonly serialize empty defaults for every transport. Apply transport-specific
+        // fields instead of silently dropping active options when a node switches to WS/gRPC.
+        when (network) {
+            "tcp", "raw" -> if (listOf("host", "path", "servicename").any { !fields[it].isNullOrEmpty() }) valid = false
+            "ws" -> if (!fields["servicename"].isNullOrEmpty()) valid = false
+            "grpc" -> if (!fields["host"].isNullOrEmpty() || !fields["path"].isNullOrEmpty()) valid = false
+        }
+        if (fields["mode"].orEmpty().lowercase() !in setOf("", "gun")) valid = false
         if (fields["quicsecurity"].orEmpty().lowercase() !in setOf("", "none")) valid = false
         if (fields["insecure"].orEmpty().lowercase() !in setOf("", "0", "false")) valid = false
         val transport = if (valid) NodeTransport(vless = VlessTransport(
@@ -314,6 +319,7 @@ class ProxySubscriptionParser {
             serverName = fields["sni"] ?: fields["servername"],
             publicKey = fields["pbk"], shortId = fields["sid"],
             fingerprint = fields["fp"], spiderX = fields["spx"],
+            host = fields["host"], path = fields["path"], serviceName = fields["servicename"],
         )) else null
         return ProxyNode(subscriptionNodeId(ProxyProtocol.Vless, host, port, null, name, 0), name,
             ProxyProtocol.Vless, host, port, transport = transport)
@@ -505,30 +511,51 @@ class ProxySubscriptionParser {
     }
 
     private fun clashVlessTransport(fields: Map<String, String>): NodeTransport? {
-        // Only raw TCP is represented here; nested options for other transports stay unsupported.
-        if (fields.keys.any { it.substringBefore('.') in CLASH_UNSUPPORTED_OPTIONS - "reality-opts" }) return null
+        if (fields.keys.any { it.substringBefore('.') in CLASH_UNSUPPORTED_OPTIONS - setOf("reality-opts", "ws-opts", "grpc-opts") }) return null
         if (fields["skip-cert-verify"].equals("true", ignoreCase = true) || fields.containsKey("alpn") || fields.containsKey("packet-encoding")) return null
-        val reality = linkedMapOf<String, String>()
-        fields["reality-opts"]?.takeIf { it.isNotEmpty() }?.let {
-            if (!it.startsWith('{') || !it.endsWith('}')) return null
-            reality.putAll(parseFieldLine(it.substring(1, it.length - 1)))
-        }
-        fields.filterKeys { it.startsWith("reality-opts.") }.forEach { (key, value) -> reality[key.substringAfter('.')] = value }
+        val reality = clashNestedFields(fields, "reality-opts") ?: return null
         if (reality.keys.any { it !in setOf("public-key", "short-id", "spider-x") }) return null
         val tls = normClashTls(fields["tls"]) ?: return null
         val security = if (fields.containsKey("reality-opts")) {
             if (tls != "tls") return null
             "reality"
         } else if (tls == "tls") "tls" else "none"
+        val network = fields["network"].orEmpty().lowercase().ifEmpty { "tcp" }
+        val ws = clashNestedFields(fields, "ws-opts") ?: return null
+        val grpc = clashNestedFields(fields, "grpc-opts") ?: return null
+        if (ws.keys.any { it !in setOf("path", "host", "headers", "headers.host") }) return null
+        if (grpc.keys.any { it !in setOf("grpc-service-name", "service-name", "servicename") }) return null
+        val wsHeaders = ws["headers"]?.takeIf { it.startsWith('{') && it.endsWith('}') }?.let {
+            parseFieldLine(it.substring(1, it.length - 1))
+        }.orEmpty()
+        if (wsHeaders.keys.any { it != "host" }) return null
+        if (network in setOf("tcp", "raw") && (ws.isNotEmpty() || grpc.isNotEmpty())) return null
+        if (network == "ws" && grpc.isNotEmpty()) return null
+        if (network == "grpc" && ws.isNotEmpty()) return null
         return NodeTransport(vless = VlessTransport(
             uuid = fields["uuid"].orEmpty(),
             encryption = fields["encryption"].orEmpty().ifEmpty { "none" },
-            network = fields["network"].orEmpty().lowercase().ifEmpty { "tcp" },
+            network = network,
             security = security, flow = fields["flow"].orEmpty(),
             serverName = fields["servername"] ?: fields["sni"],
             publicKey = reality["public-key"], shortId = reality["short-id"],
             fingerprint = fields["client-fingerprint"], spiderX = reality["spider-x"],
+            host = wsHeaders["host"] ?: ws["host"] ?: fields["host"],
+            path = ws["path"] ?: fields["path"],
+            serviceName = grpc["grpc-service-name"] ?: grpc["service-name"] ?: grpc["servicename"] ?: fields["servicename"],
         ))
+    }
+
+    private fun clashNestedFields(fields: Map<String, String>, prefix: String): Map<String, String>? {
+        val result = linkedMapOf<String, String>()
+        fields[prefix]?.takeIf { it.isNotEmpty() }?.let { inline ->
+            if (!inline.startsWith('{') || !inline.endsWith('}')) return null
+            result.putAll(parseFieldLine(inline.substring(1, inline.length - 1)))
+        }
+        fields.filterKeys { it.startsWith("$prefix.") }.forEach { (key, value) ->
+            result[key.substringAfter('.')] = value
+        }
+        return result
     }
 
     private fun clashTransportFlat(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? {
@@ -849,7 +876,7 @@ class ProxySubscriptionParser {
         const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_="
         val WHITESPACE = Regex("\\s+")
         val CLASH_PROXIES_KEY = Regex("(?i)^proxies\\s*:\\s*(#.*)?$")
-        val VLESS_LINK_KEYS = setOf("encryption", "type", "security", "flow", "sni", "servername", "pbk", "sid", "fp", "spx", "headertype", "host", "path", "servicename", "quicsecurity", "insecure")
+        val VLESS_LINK_KEYS = setOf("encryption", "type", "security", "flow", "sni", "servername", "pbk", "sid", "fp", "spx", "headertype", "host", "path", "servicename", "mode", "quicsecurity", "insecure")
         val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
 
         val vmessServer = Regex("\"add\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")

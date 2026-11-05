@@ -44,6 +44,7 @@ enum class KernelFailure {
     PluginIncompatible,
     ServiceUnavailable,
     DnsResolutionFailed,
+    EndpointUnavailable,
 }
 
 /**
@@ -139,15 +140,17 @@ class ProxyKernel(
         val password = randomCredential()
         // The static Go kernel cannot use Android's resolver and otherwise queries [::1]:53.
         // Resolve only the node endpoint here; keep the original host for TLS SNI and WS headers.
-        val destination = try {
+        val addresses = try {
             val addresses = InetAddress.getAllByName(node.host)
-            (addresses.firstOrNull { it is java.net.Inet4Address } ?: addresses.firstOrNull())?.hostAddress
-                ?: return fail(KernelFailure.DnsResolutionFailed, token)
+            if (addresses.isEmpty()) return fail(KernelFailure.DnsResolutionFailed, token)
+            addresses
         } catch (_: java.net.UnknownHostException) {
             return fail(KernelFailure.DnsResolutionFailed, token)
         } catch (_: SecurityException) {
             return fail(KernelFailure.DnsResolutionFailed, token)
         }
+        val destination = ProxyEndpointAddresses.selectReachable(addresses.toList(), node.port)
+            ?: return fail(KernelFailure.EndpointUnavailable, token)
         if (!isCurrent(token)) return supersededState()
         val config = ProxyKernelConfig.build(node, port, user, password, resolvedAddress = destination)
             ?: return fail(KernelFailure.UnsupportedNode, token)

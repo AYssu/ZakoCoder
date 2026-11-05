@@ -34,7 +34,7 @@ data class TrojanTransport(val password: String, val sni: String?) {
     override fun toString() = "TrojanTransport(password=<redacted>, sni=$sni)"
 }
 
-/** VLESS TCP transport. Identity and REALITY handshake values must never appear in diagnostics. */
+/** VLESS transport. Identity and handshake values must never appear in diagnostics. */
 data class VlessTransport(
     val uuid: String,
     val encryption: String = "none",
@@ -46,6 +46,9 @@ data class VlessTransport(
     val shortId: String? = null,
     val fingerprint: String? = null,
     val spiderX: String? = null,
+    val host: String? = null,
+    val path: String? = null,
+    val serviceName: String? = null,
 ) {
     override fun toString() = "VlessTransport(network=$network, security=$security, credentials=<redacted>)"
 }

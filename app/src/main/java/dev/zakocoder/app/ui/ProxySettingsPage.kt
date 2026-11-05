@@ -1151,6 +1151,7 @@ private fun KernelFailure.messageRes(): Int = when (this) {
     KernelFailure.PluginIncompatible -> R.string.proxy_kernel_failure_plugin_incompatible
     KernelFailure.ServiceUnavailable -> R.string.proxy_plugin_error_service_unavailable
     KernelFailure.DnsResolutionFailed -> R.string.proxy_kernel_dns_resolution_failed
+    KernelFailure.EndpointUnavailable -> R.string.proxy_kernel_endpoint_unavailable
 }
 
 private fun KernelPluginFailure.messageRes(): Int = when (this) {
