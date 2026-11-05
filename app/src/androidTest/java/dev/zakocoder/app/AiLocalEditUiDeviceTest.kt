@@ -13,13 +13,13 @@ import kotlinx.coroutines.*
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.QueueDispatcher
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.LinkedBlockingQueue
 
 /** Local TLS model + private workbench only. Actual approval UI never edits user projects. */
 class AiLocalEditUiDeviceTest {
@@ -83,11 +83,11 @@ class AiLocalEditUiDeviceTest {
         // MockWebServer also uses peek().throttleBody while reading REQUEST bytes.
         // Keep uploads unthrottled; dispatch() still returns queued responses with
         // their real output pacing, preserving a screenshotable streaming draft.
-        val responses = QueueDispatcher()
+        val responses = LinkedBlockingQueue<MockResponse>()
         fixture.server.dispatcher = object : Dispatcher() {
             override fun peek() = MockResponse()
-            override fun dispatch(request: RecordedRequest) = responses.dispatch(request)
-            override fun shutdown() = responses.shutdown()
+            override fun dispatch(request: RecordedRequest) =
+                responses.poll(10, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(503)
         }
         fun enqueue(text: String = "", calls: List<AiCall> = emptyList(), delayMillis: Long = 1) {
             val deltas = mutableListOf<JSONObject>()
@@ -104,7 +104,7 @@ class AiLocalEditUiDeviceTest {
                 append("data: ").append(JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject())
                     .put("finish_reason", if (calls.isEmpty()) "stop" else "tool_calls")))).append("\n\ndata: [DONE]\n\n")
             }
-            responses.enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream")
+            responses.put(MockResponse().setHeader("Content-Type", "text/event-stream")
                 .setBody(body).throttleBody(37, delayMillis, TimeUnit.MILLISECONDS))
         }
         val preferences = mutableSetOf<String>()
