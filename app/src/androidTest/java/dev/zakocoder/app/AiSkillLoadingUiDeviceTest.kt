@@ -38,9 +38,22 @@ class AiSkillLoadingUiDeviceTest {
         (it.text?.toString()?.lines()?.contains(label) == true || it.contentDescription?.toString()?.lines()?.contains(label) == true) }
     private suspend fun click(label: String) {
         fun target(): AccessibilityNodeInfo? {
-            var node = find(label) ?: return null
-            while (!node.isClickable && node.parent != null) node = node.parent
-            return node.takeIf { it.isClickable && it.isEnabled }
+            val matches = nodes().filter { it.isVisibleToUser &&
+                (it.text?.toString()?.lines()?.contains(label) == true ||
+                    it.contentDescription?.toString()?.lines()?.contains(label) == true) }
+            fun enabledClick(node: AccessibilityNodeInfo) = node.isVisibleToUser && node.isClickable && node.isEnabled &&
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+            // Text and Switch may share a label while remaining siblings. Prefer the
+            // actionable match before climbing ancestors of any descriptive text.
+            matches.firstOrNull(::enabledClick)?.let { return it }
+            return matches.firstNotNullOfOrNull { match ->
+                var candidate = match.parent
+                while (candidate != null) {
+                    if (enabledClick(candidate)) break
+                    candidate = candidate.parent
+                }
+                candidate
+            }
         }
         await("Enabled target: $label") { target() != null }
         assertTrue("Click $label", requireNotNull(target()).performAction(AccessibilityNodeInfo.ACTION_CLICK))
