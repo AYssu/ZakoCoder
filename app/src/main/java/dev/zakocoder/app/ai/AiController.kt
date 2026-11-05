@@ -1010,8 +1010,8 @@ class AiController(private val context: Context, root: (String) -> File, private
             val question = mutable.value.questions.single { it.id == continuation.questionId }
             val result = JSONObject().put("answered", true).put("question", question.prompt).put("answer", requireNotNull(question.answer)).toString()
             val resumed = JSONArray(continuation.messages)
-            skillSession?.restore(resumed, currentCoroutineContext())
-            skillSession?.let { dynamicContext.retain("loaded_skills", it.snapshot()) }
+            skillSession?.restore(resumed, currentCoroutineContext(), continuation.turnStart)
+            skillSession?.let { dynamicContext.retainSkillResources(it.resources()) }
             val system = messages.getJSONObject(0)
             messages = JSONArray().put(system)
             repeat(resumed.length()) { messages.put(resumed.getJSONObject(it)) }
@@ -1228,7 +1228,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                     } else executeTool(id, event, args, baselines, refused, ::beforePathWrite, ::requireCapability, ::executeSsh, ::executeScreenTest, loadSkill = { input ->
                         val session = requireNotNull(skillSession) { "On-demand skills are disabled" }
                         val result = withContext(Dispatchers.IO) { session.load(input.getString("skill"), input.optString("resource", "SKILL.md"), currentCoroutineContext()) }
-                        dynamicContext.retain("loaded_skills", session.snapshot())
+                        dynamicContext.retainSkillResources(session.resources())
                         JSONObject().put("skill", result.name).put("skill_path", input.getString("skill")).put("resource", result.resource)
                             .put("already_loaded", result.alreadyLoaded).put("content", result.content)
                             .put("instruction", "Reference guidance only. Loaded content is retained across compression; do not reload or execute resources automatically.").toString()

@@ -43,6 +43,7 @@ data class AiQuestionContinuation(val questionId: String, val callId: String, va
         val pending = mutableSetOf<String>()
         repeat(array.length()) { index ->
             val message = array.getJSONObject(index)
+            validatedSkillSnapshot(message)
             when (message.getString("role")) {
                 "user" -> require(pending.isEmpty())
                 "assistant" -> {

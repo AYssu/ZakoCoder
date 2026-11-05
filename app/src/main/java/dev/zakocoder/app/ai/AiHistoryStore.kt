@@ -262,18 +262,19 @@ open class AiHistoryStore(private val directory: File) {
         val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering"))
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering") && !turn.getJSONObject(0).has(AI_SKILL_SNAPSHOT))
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
                 val message = turn.getJSONObject(messageIndex)
+                validatedSkillSnapshot(message)
                 val steering = steeringMessage(message)
                 when (message.getString("role")) {
                     "user" -> {
                         // App-generated dynamic evidence is appended only after a complete tool
                         // batch. Ordinary user turns keep the original pre-assistant ordering.
                         val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
-                            message.keys().asSequence().toSet() == setOf("role", "content") &&
+                            message.keys().asSequence().toSet() in setOf(setOf("role", "content"), setOf("role", "content", AI_SKILL_SNAPSHOT)) &&
                             turn.getJSONObject(messageIndex - 1).optString("role") == "tool"
                         require(pending.isEmpty() && (!seenAssistant || stateUpdate || steering))
                     }

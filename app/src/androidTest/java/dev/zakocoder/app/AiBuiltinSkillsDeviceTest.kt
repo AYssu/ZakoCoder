@@ -183,4 +183,39 @@ class AiBuiltinSkillsDeviceTest {
         }
     }
 
+    @Test(timeout = 120000) fun previousTaskSkillDoesNotSkipNewReadAfterQuestionRestart() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val file = File(f.root, "project/.zakocoder/skills/selected/SKILL.md").apply { parentFile!!.mkdirs() }
+            fun document(body: String) = "---\nname: selected\ndescription: Use for this fixture\n---\n$body"
+            file.writeText(document("OLD_TASK_BODY"))
+            val path = ".zakocoder/skills/selected/SKILL.md"
+            f.history.save("task-boundary", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("task-boundary") }; ready(ai)
+            val loadArgs = JSONObject().put("skill", path).put("reason", "读取选中指令").toString()
+            f.enqueue(calls = listOf(AiCall("old-load", "load_skill", loadArgs)))
+            f.enqueue("首个任务完成。")
+            main { assertTrue(ai.send("第一个任务，读取指令")) }; await { !ai.state.value.active }
+            repeat(2) { assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS)) }
+            file.writeText(document("NEW_TASK_BODY"))
+            f.enqueue(calls = listOf(AiCall("question", "ask_user", JSONObject().put("question", "继续检查吗？").toString())))
+            main { assertTrue(ai.send("第二个任务，先询问再读取指令")) }
+            await { !ai.state.value.active && ai.state.value.questionContinuation != null }
+            assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS))
+            lateinit var reopened: AiController
+            main { reopened = controller(f); reopened.select("task-boundary") }; ready(reopened)
+            val question = reopened.state.value.questions.last()
+            f.enqueue(calls = listOf(AiCall("new-load", "load_skill", loadArgs)))
+            f.enqueue("第二个任务完成。")
+            main { assertTrue(reopened.answerQuestion("task-boundary", reopened.state.value.conversationId, question.id, "继续")) }
+            await { !reopened.state.value.active && reopened.state.value.questionContinuation == null }
+            val loaded = reopened.state.value.events.single { it.callId == "new-load" }
+            assertEquals(AiToolStatus.Succeeded, loaded.status)
+            val result = JSONObject(loaded.output)
+            assertFalse(result.getBoolean("already_loaded"))
+            assertTrue(result.getString("content").contains("NEW_TASK_BODY"))
+            assertFalse(result.getString("content").contains("OLD_TASK_BODY"))
+        }
+    }
+
 }

@@ -29,7 +29,11 @@ internal data class AiTokenBudget(val inputTokens: Long, val windowTokens: Int, 
 
 internal fun tokenBudget(config: AiConfig, messages: JSONArray, tools: JSONArray): AiTokenBudget {
     config.context.validate()
-    val serialized = JSONObject().put("messages", messages).put("tools", tools).toString()
+    val budgetMessages = JSONArray().apply { repeat(messages.length()) { index ->
+        val message = messages.getJSONObject(index)
+        put(if (message.has(AI_SKILL_SNAPSHOT)) JSONObject(message.toString()).apply { remove(AI_SKILL_SNAPSHOT) } else message)
+    } }
+    val serialized = JSONObject().put("messages", budgetMessages).put("tools", tools).toString()
     if (serialized.toByteArray(Charsets.UTF_8).size > AI_REQUEST_MAX_BYTES)
         throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit")
     // Explicit output limits are honored, even when they make a small window invalid.
