@@ -10,11 +10,16 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
 import dev.zakocoder.app.ui.ZakoCoderApp
 import kotlinx.coroutines.*
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.QueueDispatcher
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /** Local TLS model + private workbench only. Actual approval UI never edits user projects. */
 class AiLocalEditUiDeviceTest {
@@ -75,6 +80,33 @@ class AiLocalEditUiDeviceTest {
         val previousNight = withContext(Dispatchers.IO) { shell("cmd uimode night").substringAfter(":").trim() }
         check(previousNight in setOf("yes", "no", "auto", "custom_schedule", "custom_bedtime"))
         val fixture = withContext(Dispatchers.IO) { AiDeviceTest.Fixture(context, timeoutSeconds = 30) }
+        // MockWebServer also uses peek().throttleBody while reading REQUEST bytes.
+        // Keep uploads unthrottled; dispatch() still returns queued responses with
+        // their real output pacing, preserving a screenshotable streaming draft.
+        val responses = QueueDispatcher()
+        fixture.server.dispatcher = object : Dispatcher() {
+            override fun peek() = MockResponse()
+            override fun dispatch(request: RecordedRequest) = responses.dispatch(request)
+            override fun shutdown() = responses.shutdown()
+        }
+        fun enqueue(text: String = "", calls: List<AiCall> = emptyList(), delayMillis: Long = 1) {
+            val deltas = mutableListOf<JSONObject>()
+            if (text.isNotEmpty()) deltas += JSONObject().put("content", text)
+            calls.forEachIndexed { index, call ->
+                val split = call.arguments.length / 2
+                deltas += JSONObject().put("tool_calls", JSONArray().put(JSONObject().put("index", index)
+                    .put("id", call.id).put("function", JSONObject().put("name", call.name).put("arguments", call.arguments.take(split)))))
+                deltas += JSONObject().put("tool_calls", JSONArray().put(JSONObject().put("index", index)
+                    .put("function", JSONObject().put("arguments", call.arguments.drop(split)))))
+            }
+            val body = buildString {
+                deltas.forEach { append("data: ").append(JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", it)))).append("\n\n") }
+                append("data: ").append(JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject())
+                    .put("finish_reason", if (calls.isEmpty()) "stop" else "tool_calls")))).append("\n\ndata: [DONE]\n\n")
+            }
+            responses.enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody(body).throttleBody(37, delayMillis, TimeUnit.MILLISECONDS))
+        }
         val preferences = mutableSetOf<String>()
         val isolated = object : ContextWrapper(context) {
             override fun getFilesDir() = File(fixture.root, "files").apply { mkdirs() }
@@ -101,11 +133,11 @@ class AiLocalEditUiDeviceTest {
             withContext(Dispatchers.IO) { source.writeText(SOURCE) }
             main { workbench.ai.select(project.id) }
             await("AI ready") { !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading && workbench.ai.state.value.configured }
-            fixture.enqueue(calls = listOf(AiCall("read-source", "read_file", JSONObject().put("path", "sample.py").toString())))
-            fixture.enqueue(calls = listOf(AiCall("rename-function", "edit_file", JSONObject().put("path", "sample.py")
+            enqueue(calls = listOf(AiCall("read-source", "read_file", JSONObject().put("path", "sample.py").toString())))
+            enqueue(calls = listOf(AiCall("rename-function", "edit_file", JSONObject().put("path", "sample.py")
                 .put("reason", "仅重命名函数，保留参数与函数体")
                 .put("edits", JSONArray().put(JSONObject().put("old_text", "def greet(name):").put("new_text", "def greet_user(name):"))).toString())), delayMillis = 180)
-            fixture.enqueue("已尊重拒绝，未修改源码。")
+            enqueue("已尊重拒绝，未修改源码。")
             withContext(Dispatchers.IO) { warmDeviceActivity() }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity -> activity.setContent { ZakoCoderApp(workbench) } }

@@ -43,7 +43,7 @@ class AiDeviceTest {
                 .callTimeout(timeoutSeconds, TimeUnit.SECONDS).build(), maxAttempts = maxAttempts)
             config.save(server.url("/v1").toString(), "fixture-model", "test-only-placeholder")
         }
-        fun enqueue(text: String = "", calls: List<AiCall> = emptyList(), finish: String = if (calls.isEmpty()) "stop" else "tool_calls", done: Boolean = true, delayMillis: Long = 1) {
+        fun enqueue(text: String = "", calls: List<AiCall> = emptyList(), finish: String = if (calls.isEmpty()) "stop" else "tool_calls", done: Boolean = true, delayMillis: Long = 1, responseDelayMillis: Long = 0) {
             val parts = mutableListOf<JSONObject>()
             if (text.isNotEmpty()) parts += JSONObject().put("content", text)
             calls.forEachIndexed { index, call ->
@@ -56,7 +56,10 @@ class AiDeviceTest {
                 append("data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", finish)))}\n\n")
                 if (done) append("data: [DONE]\n\n")
             }
-            enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body).throttleBody(37, delayMillis, TimeUnit.MILLISECONDS))
+            // throttleBody also throttles request reads in MockWebServer. Use body delay to
+            // hold a response after the entire model request has arrived, without slowing upload.
+            enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body)
+                .throttleBody(37, delayMillis, TimeUnit.MILLISECONDS).setBodyDelay(responseDelayMillis, TimeUnit.MILLISECONDS))
         }
         fun enqueueResponse(response: MockResponse) {
             val dispatcher = server.dispatcher

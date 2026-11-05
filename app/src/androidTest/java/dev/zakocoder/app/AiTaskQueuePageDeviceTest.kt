@@ -51,7 +51,9 @@ class AiTaskQueuePageDeviceTest {
     }
     private suspend fun click(label: String) {
         fun target(): AccessibilityNodeInfo? {
-            fun clickable(node: AccessibilityNodeInfo) = node.isVisibleToUser && node.isEnabled && node.isClickable &&
+            // parent may be an older accessibility cache entry even when the matched icon
+            // was refreshed during tree traversal; refresh each candidate before reading actions.
+            fun clickable(node: AccessibilityNodeInfo) = node.refresh() && node.isVisibleToUser && node.isEnabled && node.isClickable &&
                 node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
             val matches = candidates(label)
             matches.firstOrNull(::clickable)?.let { return it }

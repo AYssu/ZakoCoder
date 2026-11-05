@@ -64,7 +64,7 @@ class AiTaskQueueDeviceTest {
         AiDeviceTest.Fixture(context).use { f ->
             val ai = start(f)
             try {
-                f.enqueue("第一轮完成", delayMillis = 25); f.enqueue("第二轮完成")
+                f.enqueue("第一轮完成", responseDelayMillis = 500); f.enqueue("第二轮完成")
                 main { assertTrue(ai.send("第一项")); assertTrue(ai.enqueue("第二项", AiQueuedKind.FollowUp)) }
                 await { !ai.state.value.active && (ai.state.value.turn == 2 || ai.state.value.phase == AiPhase.Failed) }
                 assertEquals(diagnostic(ai), AiPhase.Completed, ai.state.value.phase)
@@ -81,7 +81,7 @@ class AiTaskQueueDeviceTest {
             val ai = start(f)
             var restored: AiController? = null
             try {
-                f.enqueue("未结束", done = false, delayMillis = 20)
+                f.enqueue("未结束", done = false, responseDelayMillis = 500)
                 main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("后续任务", AiQueuedKind.FollowUp)) }
                 await { !ai.state.value.active }
                 assertEquals(diagnostic(ai), AiPhase.Failed, ai.state.value.phase)
@@ -105,7 +105,7 @@ class AiTaskQueueDeviceTest {
         AiDeviceTest.Fixture(context).use { f ->
             val ai = start(f)
             try {
-                f.enqueue("原任务输出", delayMillis = 60)
+                f.enqueue("原任务输出", responseDelayMillis = 500)
                 main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("旧补充", AiQueuedKind.Steer));
                     assertTrue(ai.enqueue("旧后续", AiQueuedKind.FollowUp)) }
                 await { f.server.requestCount == 1 || (!ai.state.value.active && ai.state.value.phase == AiPhase.Failed) }

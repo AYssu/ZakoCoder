@@ -81,7 +81,7 @@ class AiSteeringHistoryDeviceTest {
         AiDeviceTest.Fixture(context).use { f ->
             val ai = open(f)
             try {
-                f.enqueue("第一份回答", delayMillis = 80)
+                f.enqueue("第一份回答", responseDelayMillis = 500)
                 f.enqueue("收到补充，修订回答。")
                 main { assertTrue(ai.send("给出检查结果")) }
                 // Ensure the first request has left the next-loop steering boundary already.
