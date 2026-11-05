@@ -97,7 +97,7 @@ internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry
         val directories = events.count { it.tool == AiTool.ListFiles }
         val otherTools = events.filter { it.tool !in setOf(AiTool.ReadFile, AiTool.SearchFiles, AiTool.ListFiles) }
         val grouped = otherTools.groupBy { requireNotNull(it.tool) }
-        val primary = setOf(AiTool.WriteFile, AiTool.MakeDirectory, AiTool.RunCommand, AiTool.SendTerminalInput)
+        val primary = setOf(AiTool.WriteFile, AiTool.EditFile, AiTool.MakeDirectory, AiTool.RunCommand, AiTool.SendTerminalInput)
         grouped.filterKeys { it in primary }.forEach { (tool, calls) ->
             add(stringResource(tool.label) + " " + calls.size)
         }

@@ -1,7 +1,7 @@
 package dev.zakocoder.app.ai
 
 /** UI-only partial JSON reader. Scans without copying the complete argument buffer. */
-internal fun toolArgumentLine(source: CharSequence): String {
+internal fun toolArgumentLine(source: CharSequence, localEdit: Boolean = false): String {
     var position = 0
     fun string(keep: Boolean): String {
         val line = StringBuilder()
@@ -47,16 +47,23 @@ internal fun toolArgumentLine(source: CharSequence): String {
             '{', '[' -> depth++
             '}', ']' -> depth--
             '"' -> {
-                val key = string(keep = depth == 1)
+                val key = string(keep = depth == 1 || (localEdit && depth == 3))
                 while (position < source.length && source[position].isWhitespace()) position++
-                if (depth != 1 || position >= source.length || source[position] != ':') continue
+                if ((depth != 1 && !(localEdit && depth == 3)) || position >= source.length || source[position] != ':') continue
                 position++
                 while (position < source.length && source[position].isWhitespace()) position++
                 if (position >= source.length || source[position] != '"') continue
                 position++
-                val rank = when (key) { "command" -> 3; "content" -> 2; "path" -> 1; else -> 0 }
+                val rank = when {
+                    localEdit && depth == 3 && key == "new_text" -> 4
+                    localEdit && depth == 3 && key == "old_text" -> 2
+                    depth == 1 && key == "command" -> 3
+                    depth == 1 && key == "content" -> 2
+                    depth == 1 && key == "path" -> 1
+                    else -> 0
+                }
                 val value = string(keep = rank > 0)
-                if (rank > priority && value.isNotEmpty()) { priority = rank; best = value }
+                if ((rank > priority || (localEdit && rank == 4 && priority == 4)) && value.isNotEmpty()) { priority = rank; best = value }
             }
         }
     }
@@ -67,5 +74,5 @@ internal fun toolArgumentLine(source: CharSequence): String {
 internal fun liveCallDraft(index: Int, name: String, arguments: CharSequence): AiCallDraft = AiCallDraft(
     index, name, arguments.subSequence(0, minOf(arguments.length, 64000)).toString(),
     if (arguments.length > 64000) arguments.subSequence(arguments.length - 1024, arguments.length).toString() else "",
-    toolArgumentLine(arguments),
+    toolArgumentLine(arguments, localEdit = name == "edit_file"),
 )

@@ -153,7 +153,7 @@ open class AiHistoryStore(private val directory: File) {
     }
     private val sources = listOf(R.string.ai_permission_default_rule, R.string.ai_permission_tool_rule,
         R.string.ai_permission_task_rule, R.string.ai_permission_rejected_rule, R.string.ai_permission_once_rule,
-        R.string.ai_permission_yolo_rule)
+        R.string.ai_permission_yolo_rule, R.string.ai_edit_inherited_permission)
     private fun encode(state: AiState): JSONObject = JSONObject().put("schemaVersion", 1).put("id", state.conversationId)
         .put("title", (state.conversations.firstOrNull { it.id == state.conversationId }?.title?.takeIf { it.isNotBlank() } ?: state.timeline.firstOrNull { it.role == AiRole.User }?.text)?.replace('\n', ' ')?.take(80).orEmpty())
         .put("checkpointId", state.checkpointId).put("updated", System.currentTimeMillis()).put("turn", state.turn).put("active", state.active)
