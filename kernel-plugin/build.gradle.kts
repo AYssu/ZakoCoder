@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+dependencies { testImplementation(libs.junit) }
+
 // Standalone, optional kernel plugin APK. It is the only module that packages Xray; the main app
 // builds without Go and without the kernel.
 val compatibilityAbis = providers.gradleProperty("compatibilityAbis").orElse("arm64-v8a").get()

@@ -83,8 +83,8 @@ jobs:
             "Commit: $GITHUB_SHA" \
             "Ref: $GITHUB_REF" \
             "Run: $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
-            'Signed with the repository CI debug key; local debug signatures may differ.'
-            'The kernel plugin APK is optional; install it only for VMess/SS/Trojan nodes.' \
+            'Signed with the repository CI debug key; local debug signatures may differ.' \
+            'The kernel plugin APK is optional; install it only for VMess/VLESS/SS/Trojan nodes.' \
             'Upgrading does not automatically replace the installed Ubuntu environment.' \
             > apk-output/BUILD.txt
       - name: Upload test APK

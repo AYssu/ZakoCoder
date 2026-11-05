@@ -162,7 +162,7 @@ jobs:
           path = Path('out/main-notes.md')
           notes = path.read_text()
           if '<!-- kernel-plugin-download -->' not in notes:
-              notes += '\n\n<!-- kernel-plugin-download -->\n### 可选代理内核\n\nVMess／SS／Trojan 节点需额外安装[ARM64 内核插件](https://github.com/AYssu/ZakoCoder/releases/tag/kernel-plugin-v1)。可在应用设置中在线安装，或下载插件 APK 后选择本地安装。直连和手动 HTTP／SOCKS5 无需安装。\n'
+              notes += '\n\n<!-- kernel-plugin-download -->\n### 可选代理内核\n\nVMess／VLESS／SS／Trojan 节点需额外安装[ARM64 内核插件](https://github.com/AYssu/ZakoCoder/releases/tag/kernel-plugin-v1)。可在应用设置中在线安装，或下载插件 APK 后选择本地安装。直连和手动 HTTP／SOCKS5 无需安装。\n'
           path.write_text(notes)
           PYNOTES
           gh release edit "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file out/main-notes.md

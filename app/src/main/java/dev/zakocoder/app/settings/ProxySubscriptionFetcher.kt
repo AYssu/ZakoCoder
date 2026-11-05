@@ -1,5 +1,6 @@
 package dev.zakocoder.app.settings
 
+import dev.zakocoder.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -20,6 +21,9 @@ interface ProxySubscriptionFetcher {
     suspend fun fetch(url: String): String
 }
 
+/** Versioned identifier used by default; some providers reject a bare client name. */
+internal fun proxySubscriptionUserAgent(): String = "ZakoCoder/${BuildConfig.VERSION_NAME}"
+
 /**
  * HTTPS-only subscription download with bounded cost.
  *
@@ -35,12 +39,12 @@ interface ProxySubscriptionFetcher {
  * - cancellation cancels the in-flight OkHttp call. The exception carries at most the category,
  *   never the URL or provider body.
  *
- * The default User-Agent is a stable application identifier; a distribution build can pass a
- * versioned value through the constructor without changing behaviour.
+ * The default User-Agent includes the app version. Some subscription providers reject or stall a
+ * bare client name; a stable caller may still pass an explicit value through the constructor.
  */
 class HttpProxySubscriptionFetcher(
     private val client: OkHttpClient = defaultClient(),
-    private val userAgent: String = DEFAULT_USER_AGENT,
+    private val userAgent: String = defaultUserAgent(),
 ) : ProxySubscriptionFetcher {
     override suspend fun fetch(url: String): String = withContext(Dispatchers.IO) {
         fetchFollowing(parseUrl(url), MAX_REDIRECTS)
@@ -104,7 +108,7 @@ class HttpProxySubscriptionFetcher(
     }
 
     private companion object {
-        const val DEFAULT_USER_AGENT = "ZakoCoder"
+        fun defaultUserAgent(): String = proxySubscriptionUserAgent()
         const val MAX_BODY_BYTES = 2 * 1024 * 1024L
         const val MAX_URL_CHARS = 2048
         const val MAX_REDIRECTS = 3

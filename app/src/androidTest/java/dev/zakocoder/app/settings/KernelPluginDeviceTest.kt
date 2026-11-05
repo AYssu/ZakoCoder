@@ -56,10 +56,15 @@ class KernelPluginDeviceTest {
     }
 
     @Test
-    fun vmessKernelThroughPluginProxiesHttpTraffic() = runBlocking {
+    fun vmessKernelThroughPluginProxiesHttpTraffic() = kernelProxiesHttpTraffic(vless = false)
+
+    @Test
+    fun vlessKernelThroughPluginProxiesHttpTraffic() = kernelProxiesHttpTraffic(vless = true)
+
+    private fun kernelProxiesHttpTraffic(vless: Boolean) = runBlocking {
         assumeTrue("Opt-in kernel-plugin e2e", arguments().getString("kernelPluginE2E") == "true")
         val host = arguments().getString("kernelPluginHost") ?: "10.0.2.2"
-        val vmessPort = (arguments().getString("kernelPluginPort") ?: "10086").toInt()
+        val vmessPort = (arguments().getString(if (vless) "kernelPluginVlessPort" else "kernelPluginPort") ?: if (vless) "10087" else "10086").toInt()
         val httpPort = (arguments().getString("kernelPluginHttpPort") ?: "8888").toInt()
         // Resolved by the VMess server, not the device: the fixture HTTP server runs on the host.
         val httpHost = arguments().getString("kernelPluginHttpHost") ?: "127.0.0.1"
@@ -75,10 +80,10 @@ class KernelPluginDeviceTest {
         val node = ProxyNode(
             id = "device-vmess",
             name = "device vmess",
-            protocol = ProxyProtocol.Vmess,
+            protocol = if (vless) ProxyProtocol.Vless else ProxyProtocol.Vmess,
             host = host,
             port = vmessPort,
-            transport = NodeTransport(
+            transport = if (vless) NodeTransport(vless = VlessTransport(uuid)) else NodeTransport(
                 vmess = VmessTransport(
                     uuid = uuid,
                     alterId = 0,
@@ -120,22 +125,37 @@ class KernelPluginDeviceTest {
             val out = socket.getOutputStream()
             val input = socket.getInputStream()
             out.write(byteArrayOf(5, 1, 2)); out.flush()
-            val greeting = ByteArray(2); input.read(greeting)
+            val greeting = ByteArray(2); java.io.DataInputStream(input).readFully(greeting)
             check(greeting[0].toInt() == 5 && greeting[1].toInt() == 2) { "kernel did not select password auth" }
             val user = spec.username!!.toByteArray(Charsets.UTF_8)
             val pass = spec.password!!.toByteArray(Charsets.UTF_8)
             out.write(byteArrayOf(1, user.size.toByte()) + user + byteArrayOf(pass.size.toByte()) + pass); out.flush()
-            val auth = ByteArray(2); input.read(auth)
+            val auth = ByteArray(2); java.io.DataInputStream(input).readFully(auth)
             check(auth[0].toInt() == 1 && auth[1].toInt() == 0) { "kernel rejected the SOCKS credential" }
             val address = targetHost.toByteArray(Charsets.UTF_8)
             out.write(byteArrayOf(5, 1, 0, 3, address.size.toByte()) + address + byteArrayOf((targetPort shr 8).toByte(), targetPort.toByte()))
             out.flush()
             val reply = ByteArray(10)
-            input.read(reply)
+            java.io.DataInputStream(input).readFully(reply)
             check(reply[0].toInt() == 5 && reply[1].toInt() == 0) { "SOCKS CONNECT failed" }
             out.write("GET / HTTP/1.1\r\nHost: $targetHost:$targetPort\r\nConnection: close\r\n\r\n".toByteArray(Charsets.UTF_8))
             out.flush()
-            return input.readBytes().toString(Charsets.UTF_8)
+            // Assert the complete HTTP response, not transport EOF: a proxy may keep its tunnel
+            // alive after the upstream has supplied a complete Content-Length framed response.
+            val header = java.io.ByteArrayOutputStream()
+            while (!header.toString(Charsets.US_ASCII.name()).endsWith("\r\n\r\n")) {
+                check(header.size() < 16 * 1024) { "fixture HTTP headers exceed limit" }
+                val next = input.read()
+                check(next >= 0) { "fixture HTTP headers truncated" }
+                header.write(next)
+            }
+            val headers = header.toString(Charsets.US_ASCII.name())
+            val length = headers.lineSequence().firstOrNull { it.startsWith("Content-Length:", ignoreCase = true) }
+                ?.substringAfter(':')?.trim()?.toIntOrNull()
+            check(length != null && length in 0..64 * 1024) { "fixture requires bounded Content-Length" }
+            val body = ByteArray(length)
+            java.io.DataInputStream(input).readFully(body)
+            return headers + body.toString(Charsets.UTF_8)
         }
     }
 }
