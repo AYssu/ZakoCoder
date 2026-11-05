@@ -18,6 +18,18 @@ class ProxyTransportCodecTest {
         path = "/ws",
         headerType = "none",
     )
+    private val vless = VlessTransport(
+        uuid = "11111111-2222-3333-4444-555555555555",
+        encryption = "none",
+        flow = "xtls-rprx-vision",
+        network = "tcp",
+        security = "reality",
+        serverName = "www.example.com",
+        fingerprint = "chrome",
+        publicKey = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+        shortId = "0123456789abcdef",
+        spiderX = "/",
+    )
 
     private fun node(protocol: ProxyProtocol, transport: NodeTransport?, host: String = "vm.example.com", port: Int = 443) =
         ProxyNode("node-id", "node", protocol, host, port, transport = transport)
@@ -60,10 +72,19 @@ class ProxyTransportCodecTest {
         assertEquals(NodeTransport(trojan = trojanWithoutSni), ProxyTransportCodec.fromFields(ProxyProtocol.Trojan, minimalFields))
     }
 
+    @Test fun vlessRealityRoundTripsAllKernelFields() {
+        val fields = ProxyTransportCodec.toFields(node(ProxyProtocol.Vless, NodeTransport(vless = vless)))
+        assertEquals(vless.uuid, fields["vless.uuid"])
+        assertEquals("reality", fields["vless.security"])
+        assertEquals(vless.publicKey, fields["vless.publicKey"])
+        assertEquals(NodeTransport(vless = vless), ProxyTransportCodec.fromFields(ProxyProtocol.Vless, fields))
+    }
+
     @Test fun emptyOrNullTransportProducesNoFields() {
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Vmess, null)).isEmpty())
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Ss, null)).isEmpty())
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Trojan, null)).isEmpty())
+        assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Vless, null)).isEmpty())
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Http, null, host = "192.0.2.1", port = 8080)).isEmpty())
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Socks5, null, host = "192.0.2.1", port = 1080)).isEmpty())
     }
@@ -117,6 +138,10 @@ class ProxyTransportCodecTest {
         )))
         // A node whose parsed transport contains an unsafe value must not be persisted at all.
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Vmess, NodeTransport(vmess = vmess.copy(path = "/bad\npath")))).isEmpty())
+        val vlessFields = ProxyTransportCodec.toFields(node(ProxyProtocol.Vless, NodeTransport(vless = vless)))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.publicKey" to "bad\nkey")))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.network" to "quic")))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.uuid" to "")))
     }
 
     @Test fun unknownKeysAreIgnored() {

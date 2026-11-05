@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZakoCoder 内核插件</string>
+    <string name="activation_title">内核插件已打开</string>
+    <string name="activation_body">请返回 ZakoCoder，再次启用代理。本页面不启动代理，也不读取订阅或节点配置。</string>
+    <string name="activation_limits">如果仍然提示服务不可用，请检查系统是否允许 ZakoCoder 关联启动此插件。打开本页面不能保证解除手机系统的启动限制。</string>
+    <string name="activation_done">完成</string>
+    <string name="activation_settings">查看插件应用设置</string>
+</resources>
