@@ -13,14 +13,13 @@ import java.util.Base64
  * - input is rejected (returns null) above 2 MiB, when no node can be decoded, or for arbitrary
  *   HTML/junk. `max 512 nodes` is enforced by truncating the decoded list in input order, which
  *   keeps ids stable and avoids pathological UI lists;
- * - only `http`/`socks`/`socks5` produce usable nodes (the settings layer speaks plaintext HTTP and
- *   SOCKS5 only). Other known client protocols, including `https` (TLS-to-proxy) and `socks4`, are
- *   still listed as unsupported so the UI can say "暂不支持" instead of silently dropping them or
- *   downgrading their scheme; unknown schemes are ignored;
+ * - HTTP/SOCKS5 produce direct proxy settings; VMess/Shadowsocks/Trojan and VLESS TCP with
+ *   supported security settings run through the optional kernel. Unsupported combinations stay
+ *   visible without being silently downgraded; unknown schemes are ignored;
  * - node ids are a SHA-256 of the decoded identity plus its position, so re-fetching the same
  *   subscription reproduces ids across restarts while duplicate entries stay distinguishable;
- * - credentials are only retained for HTTP/SOCKS5 (the protocols that might consume them), are
- *   redacted from [ProxyNode.toString], and are never emitted in errors.
+ * - direct credentials and kernel handshake parameters are retained only for their matching
+ *   protocol, redacted from diagnostic string representations, and never emitted in errors.
  *
  * This class is intentionally plain JVM (no Android imports, no org.json) so parsing is fully
  * unit-testable.
@@ -46,7 +45,7 @@ class ProxySubscriptionParser {
             "https" -> authorityUnsupported(body, rawName)
             "socks", "socks5" -> authorityNode(body, rawName, ProxyProtocol.Socks5)
             "vmess" -> vmessNode(body, rawName)
-            "vless" -> unsupportedNode(body, rawName, ProxyProtocol.Vless)
+            "vless" -> vlessNode(body, rawName)
             "trojan" -> trojanNode(body, rawName)
             "ss" -> ssNode(body, rawName)
             // There is no SSR enum member; SSR is a different wire protocol from SS, so label it Other.
@@ -64,13 +63,17 @@ class ProxySubscriptionParser {
         if (content.toByteArray(StandardCharsets.UTF_8).size > MAX_CONTENT_BYTES) return null
         val text = content.trim().trimStart('\uFEFF').trim()
         if (text.isEmpty()) return null
-        if (looksLikeClash(text)) return parseClash(text, sourceUrl)
-        if (text.contains("://")) return parsePlainLinks(text, sourceUrl, SubscriptionFormat.PlainLinks)
+        if (looksLikeClash(text)) return markNotices(parseClash(text, sourceUrl))
+        if (text.contains("://")) return markNotices(parsePlainLinks(text, sourceUrl, SubscriptionFormat.PlainLinks))
         val decoded = decodeBase64Text(text) ?: return null
-        if (looksLikeClash(decoded)) return parseClash(decoded, sourceUrl)
+        if (looksLikeClash(decoded)) return markNotices(parseClash(decoded, sourceUrl))
         if (!decoded.contains("://")) return null
-        return parsePlainLinks(decoded, sourceUrl, SubscriptionFormat.Base64Links)
+        return markNotices(parsePlainLinks(decoded, sourceUrl, SubscriptionFormat.Base64Links))
     }
+
+    private fun markNotices(subscription: ProxySubscription?): ProxySubscription? = subscription?.copy(
+        nodes = subscription.nodes.map { it.copy(subscriptionPlaceholder = isSubscriptionPlaceholder(it)) },
+    )
 
     /** Classification entry point used by [ProxyCatalog]: it takes already-fetched content. */
     fun probe(link: String, content: String): ProxyProbe = classify(parse(content, link))
@@ -101,7 +104,8 @@ class ProxySubscriptionParser {
             for (token in tokens) {
                 if (nodes.size >= MAX_NODES) break
                 val node = parseLink(token, sourceUrl) ?: continue
-                nodes += node.copy(id = subscriptionNodeId(node.protocol, node.host, node.port, node.username, node.name, nodes.size))
+                nodes += node.copy(id = subscriptionNodeId(node.protocol, node.host, node.port, node.username, node.name, nodes.size),
+                    subscriptionPlaceholder = isSubscriptionPlaceholder(node))
             }
         }
         if (nodes.isEmpty()) return null
@@ -201,7 +205,7 @@ class ProxySubscriptionParser {
         val server = fields?.server?.takeIf(::validHost)
         val port = fields?.port?.takeIf { it in 1..65535 }
         if (fields == null || server == null || port == null) return kernelFallback(rawName, ProxyProtocol.Vmess)
-        val name = cleanName(rawName).ifEmpty { cleanName(fields.name.orEmpty()) }.ifEmpty { "${formatHost(server)}:$port" }
+        val name = cleanName(rawName).ifEmpty { cleanDisplayName(fields.name.orEmpty()) }.ifEmpty { "${formatHost(server)}:$port" }
         val transport = if (fields.uuid.isNotEmpty() && fields.network in KERNEL_NETWORKS) {
             NodeTransport(
                 vmess = VmessTransport(
@@ -217,8 +221,11 @@ class ProxySubscriptionParser {
         )
     }
 
-    private fun vmessFields(json: String): VmessFields {
-        fun field(pattern: Regex): String? = pattern.find(json)?.groupValues?.get(1)?.let(::unescapeJson)
+    private fun vmessFields(json: String): VmessFields? {
+        var validEscapes = true
+        fun field(pattern: Regex): String? = pattern.find(json)?.groupValues?.get(1)?.let { raw ->
+            unescapeJson(raw).also { if (it == null) validEscapes = false }
+        }
         val alterId = field(vmessAlterId)?.toIntOrNull() ?: 0
         val network = field(vmessNetwork)?.trim()?.lowercase().orEmpty().ifEmpty { "tcp" }
         val tls = field(vmessTls)?.trim()?.lowercase().orEmpty()
@@ -236,7 +243,7 @@ class ProxySubscriptionParser {
             path = field(vmessPath)?.ifEmpty { null },
             headerType = field(vmessType)?.ifEmpty { null },
             name = field(vmessName),
-        )
+        ).takeIf { validEscapes }
     }
 
     private fun ssNode(body: String, rawName: String): ProxyNode {
@@ -274,6 +281,48 @@ class ProxySubscriptionParser {
             id = subscriptionNodeId(ProxyProtocol.Ss, host, port, null, name, 0),
             name = name, protocol = ProxyProtocol.Ss, host = host, port = port, transport = transport,
         )
+    }
+
+    private fun vlessNode(body: String, rawName: String): ProxyNode {
+        val authority = body.substringBefore('?').substringBefore('/')
+        val at = authority.lastIndexOf('@')
+        val (host, port) = parseHostPort(authority.substring(at + 1)) ?: return kernelFallback(rawName, ProxyProtocol.Vless)
+        val name = cleanName(rawName).ifEmpty { "${formatHost(host)}:$port" }
+        val query = body.substringAfter('?', "")
+        val fields = LinkedHashMap<String, String>()
+        var valid = at > 0 && body.substringBefore('?').substringAfter('/', "").isEmpty()
+        for (pair in query.split('&').filter { it.isNotEmpty() }) {
+            val key = decodeUserInfo(pair.substringBefore('='))?.lowercase()
+            val value = decodeUserInfo(pair.substringAfter('=', ""))
+            if (key == null || value == null || fields.put(key, value) != null || key !in VLESS_LINK_KEYS) valid = false
+        }
+        if (fields.containsKey("sni") && fields.containsKey("servername") && fields["sni"] != fields["servername"]) valid = false
+        val uuid = decodeUserInfo(authority.substringBefore('@')).orEmpty()
+        val network = fields["type"].orEmpty().lowercase().ifEmpty { "tcp" }
+        if (fields["headertype"].orEmpty().lowercase() !in setOf("", "none")) valid = false
+        // Exporters commonly serialize empty defaults for every transport. Apply transport-specific
+        // fields instead of silently dropping active options when a node switches to WS/gRPC.
+        when (network) {
+            "tcp", "raw" -> if (listOf("host", "path", "servicename").any { !fields[it].isNullOrEmpty() }) valid = false
+            "ws" -> if (!fields["servicename"].isNullOrEmpty()) valid = false
+            "grpc" -> if (!fields["host"].isNullOrEmpty() || !fields["path"].isNullOrEmpty()) valid = false
+        }
+        if (fields["mode"].orEmpty().lowercase() !in setOf("", "gun")) valid = false
+        if (fields["quicsecurity"].orEmpty().lowercase() !in setOf("", "none")) valid = false
+        if (fields["insecure"].orEmpty().lowercase() !in setOf("", "0", "false")) valid = false
+        val transport = if (valid) NodeTransport(vless = VlessTransport(
+            uuid = uuid,
+            encryption = fields["encryption"].orEmpty().ifEmpty { "none" },
+            network = network,
+            security = fields["security"].orEmpty().lowercase().ifEmpty { "none" },
+            flow = fields["flow"].orEmpty(),
+            serverName = fields["sni"] ?: fields["servername"],
+            publicKey = fields["pbk"], shortId = fields["sid"],
+            fingerprint = fields["fp"], spiderX = fields["spx"],
+            host = fields["host"], path = fields["path"], serviceName = fields["servicename"],
+        )) else null
+        return ProxyNode(subscriptionNodeId(ProxyProtocol.Vless, host, port, null, name, 0), name,
+            ProxyProtocol.Vless, host, port, transport = transport)
     }
 
     private fun trojanNode(body: String, rawName: String): ProxyNode {
@@ -371,9 +420,12 @@ class ProxySubscriptionParser {
         val keyIndent = indentOf(lines[start])
         val entries = ArrayList<Map<String, String>>()
         var current: MutableMap<String, String>? = null
+        var nestedKey: String? = null
+        var nestedIndent = -1
         fun flush() {
             current?.let { entries += it }
             current = null
+            nestedKey = null
         }
         var index = start + 1
         while (index < lines.size) {
@@ -400,7 +452,17 @@ class ProxySubscriptionParser {
                     current!!.putAll(parseFieldLine(content))
                 }
             } else {
-                current?.putAll(parseFieldLine(stripYamlComment(trimmed)))
+                val parsed = parseFieldLine(stripYamlComment(trimmed))
+                if (nestedKey != null && indent > nestedIndent) {
+                    parsed.forEach { (key, value) -> current?.put("$nestedKey.$key", value) }
+                } else {
+                    nestedKey = null
+                    current?.putAll(parsed)
+                    if (parsed.size == 1 && parsed.values.first().isEmpty()) {
+                        nestedKey = parsed.keys.first()
+                        nestedIndent = indent
+                    }
+                }
             }
             index++
         }
@@ -427,7 +489,7 @@ class ProxySubscriptionParser {
         if (!validHost(server)) return null
         val port = fields["port"]?.trim()?.toIntOrNull() ?: return null
         if (port !in 1..65535) return null
-        val name = fields["name"].orEmpty().filter { !it.isISOControl() }.trim().take(MAX_NAME_CHARS)
+        val name = cleanDisplayName(fields["name"].orEmpty())
             .ifEmpty { "${formatHost(server)}:$port" }
         val carriesCredentials = protocol == ProxyProtocol.Http || protocol == ProxyProtocol.Socks5
         val username = if (carriesCredentials) fields["username"]?.trim()?.take(MAX_CREDENTIAL_CHARS)?.ifEmpty { null } else null
@@ -443,8 +505,57 @@ class ProxySubscriptionParser {
     private fun clashTransport(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? {
         // Clash nests ws/grpc/h2/reality/plugin options; the flat parser above cannot represent
         // them, so fail closed instead of marking such nodes usable when their config would fail.
+        if (protocol == ProxyProtocol.Vless) return clashVlessTransport(fields)
         if (fields.keys.any { it.lowercase() in CLASH_UNSUPPORTED_OPTIONS }) return null
         return clashTransportFlat(protocol, fields)
+    }
+
+    private fun clashVlessTransport(fields: Map<String, String>): NodeTransport? {
+        if (fields.keys.any { it.substringBefore('.') in CLASH_UNSUPPORTED_OPTIONS - setOf("reality-opts", "ws-opts", "grpc-opts") }) return null
+        if (fields["skip-cert-verify"].equals("true", ignoreCase = true) || fields.containsKey("alpn") || fields.containsKey("packet-encoding")) return null
+        val reality = clashNestedFields(fields, "reality-opts") ?: return null
+        if (reality.keys.any { it !in setOf("public-key", "short-id", "spider-x") }) return null
+        val tls = normClashTls(fields["tls"]) ?: return null
+        val security = if (fields.containsKey("reality-opts")) {
+            if (tls != "tls") return null
+            "reality"
+        } else if (tls == "tls") "tls" else "none"
+        val network = fields["network"].orEmpty().lowercase().ifEmpty { "tcp" }
+        val ws = clashNestedFields(fields, "ws-opts") ?: return null
+        val grpc = clashNestedFields(fields, "grpc-opts") ?: return null
+        if (ws.keys.any { it !in setOf("path", "host", "headers", "headers.host") }) return null
+        if (grpc.keys.any { it !in setOf("grpc-service-name", "service-name", "servicename") }) return null
+        val wsHeaders = ws["headers"]?.takeIf { it.startsWith('{') && it.endsWith('}') }?.let {
+            parseFieldLine(it.substring(1, it.length - 1))
+        }.orEmpty()
+        if (wsHeaders.keys.any { it != "host" }) return null
+        if (network in setOf("tcp", "raw") && (ws.isNotEmpty() || grpc.isNotEmpty())) return null
+        if (network == "ws" && grpc.isNotEmpty()) return null
+        if (network == "grpc" && ws.isNotEmpty()) return null
+        return NodeTransport(vless = VlessTransport(
+            uuid = fields["uuid"].orEmpty(),
+            encryption = fields["encryption"].orEmpty().ifEmpty { "none" },
+            network = network,
+            security = security, flow = fields["flow"].orEmpty(),
+            serverName = fields["servername"] ?: fields["sni"],
+            publicKey = reality["public-key"], shortId = reality["short-id"],
+            fingerprint = fields["client-fingerprint"], spiderX = reality["spider-x"],
+            host = wsHeaders["host"] ?: ws["host"] ?: fields["host"],
+            path = ws["path"] ?: fields["path"],
+            serviceName = grpc["grpc-service-name"] ?: grpc["service-name"] ?: grpc["servicename"] ?: fields["servicename"],
+        ))
+    }
+
+    private fun clashNestedFields(fields: Map<String, String>, prefix: String): Map<String, String>? {
+        val result = linkedMapOf<String, String>()
+        fields[prefix]?.takeIf { it.isNotEmpty() }?.let { inline ->
+            if (!inline.startsWith('{') || !inline.endsWith('}')) return null
+            result.putAll(parseFieldLine(inline.substring(1, inline.length - 1)))
+        }
+        fields.filterKeys { it.startsWith("$prefix.") }.forEach { (key, value) ->
+            result[key.substringAfter('.')] = value
+        }
+        return result
     }
 
     private fun clashTransportFlat(protocol: ProxyProtocol, fields: Map<String, String>): NodeTransport? {
@@ -671,10 +782,58 @@ class ProxySubscriptionParser {
 
     private fun cleanName(raw: String): String {
         val decoded = decodeUserInfo(raw) ?: raw
-        return decoded.filter { !it.isISOControl() }.trim().take(MAX_NAME_CHARS)
+        return cleanDisplayName(decoded)
     }
 
-    private fun unescapeJson(value: String): String = value.replace("\\\"", "\"").replace("\\\\", "\\")
+    // JSON strings are already decoded; a literal percent sequence in ps is not URL encoding.
+    private fun cleanDisplayName(value: String): String {
+        val cleaned = value.filter { !it.isISOControl() }.trim()
+        var end = minOf(cleaned.length, MAX_NAME_CHARS)
+        if (end > 0 && end < cleaned.length && cleaned[end - 1].isHighSurrogate() && cleaned[end].isLowSurrogate()) end--
+        return cleaned.substring(0, end)
+    }
+
+    /** Decode one JSON string payload once; malformed escapes must not become usable transport. */
+    private fun unescapeJson(value: String): String? {
+        val result = StringBuilder(value.length)
+        var index = 0
+        while (index < value.length) {
+            val character = value[index++]
+            if (character.code < 0x20) return null
+            if (character != '\\') {
+                result.append(character)
+                continue
+            }
+            if (index >= value.length) return null
+            when (value[index++]) {
+                '"' -> result.append('"')
+                '\\' -> result.append('\\')
+                '/' -> result.append('/')
+                'b' -> result.append('\b')
+                'f' -> result.append('\u000c')
+                'n' -> result.append('\n')
+                'r' -> result.append('\r')
+                't' -> result.append('\t')
+                'u' -> {
+                    if (index + 4 > value.length) return null
+                    val hex = value.substring(index, index + 4)
+                    if (hex.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }) return null
+                    result.append(hex.toInt(16).toChar())
+                    index += 4
+                }
+                else -> return null
+            }
+        }
+        // JSON unicode pairs represent one supplementary code point; reject isolated surrogates.
+        index = 0
+        while (index < result.length) {
+            val character = result[index++]
+            if (character.isHighSurrogate()) {
+                if (index >= result.length || !result[index++].isLowSurrogate()) return null
+            } else if (character.isLowSurrogate()) return null
+        }
+        return result.toString()
+    }
 
     private fun decodeBase64Text(value: String): String? {
         val compact = value.filterNot { it.isWhitespace() }
@@ -717,6 +876,7 @@ class ProxySubscriptionParser {
         const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/-_="
         val WHITESPACE = Regex("\\s+")
         val CLASH_PROXIES_KEY = Regex("(?i)^proxies\\s*:\\s*(#.*)?$")
+        val VLESS_LINK_KEYS = setOf("encryption", "type", "security", "flow", "sni", "servername", "pbk", "sid", "fp", "spx", "headertype", "host", "path", "servicename", "mode", "quicsecurity", "insecure")
         val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
 
         val vmessServer = Regex("\"add\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")

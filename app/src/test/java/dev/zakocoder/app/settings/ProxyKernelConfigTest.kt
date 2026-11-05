@@ -37,6 +37,35 @@ class ProxyKernelConfigTest {
         transport = NodeTransport(trojan = TrojanTransport(pw, sni)),
     )
 
+    private fun vlessNode(
+        security: String = "reality",
+        network: String = "tcp",
+        flow: String = "xtls-rprx-vision",
+        publicKey: String? = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
+        host: String? = null,
+        path: String? = null,
+        serviceName: String? = null,
+    ) = ProxyNode(
+        id = "vl-node", name = "VL", protocol = ProxyProtocol.Vless, host = "vl.example.com", port = 443,
+        transport = NodeTransport(
+            vless = VlessTransport(
+                uuid = "11111111-2222-3333-4444-555555555555",
+                encryption = "none",
+                flow = flow,
+                network = network,
+                security = security,
+                serverName = "www.example.com",
+                fingerprint = "chrome",
+                publicKey = publicKey.takeIf { security == "reality" },
+                shortId = "0123456789abcdef".takeIf { security == "reality" },
+                spiderX = "/".takeIf { security == "reality" },
+                host = host,
+                path = path,
+                serviceName = serviceName,
+            ),
+        ),
+    )
+
     @Test fun vmessTcpProducesSocksInboundAndVmessOutbound() {
         val json = ProxyKernelConfig.build(vmessNode(), 10808)
         requireNotNull(json)
@@ -95,6 +124,54 @@ class ProxyKernelConfigTest {
         assertTrue(withSni.contains("\"serverName\":\"edge.example.com\""))
     }
 
+    @Test fun vlessRealityVisionProducesAnAuthenticatedVlessOutbound() {
+        val json = ProxyKernelConfig.build(vlessNode(), 10808, "socks-user", "socks-pass")
+        requireNotNull(json)
+        assertTrue(json.contains("\"protocol\":\"vless\""))
+        assertTrue(json.contains("\"id\":\"11111111-2222-3333-4444-555555555555\""))
+        assertTrue(json.contains("\"encryption\":\"none\""))
+        assertTrue(json.contains("\"flow\":\"xtls-rprx-vision\""))
+        assertTrue(json.contains("\"network\":\"tcp\""))
+        assertTrue(json.contains("\"security\":\"reality\""))
+        assertTrue(json.contains("\"serverName\":\"www.example.com\""))
+        assertTrue(json.contains("\"fingerprint\":\"chrome\""))
+        assertTrue(json.contains("\"publicKey\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA\""))
+        assertTrue(json.contains("\"shortId\":\"0123456789abcdef\""))
+        assertTrue(json.contains("\"spiderX\":\"/\""))
+        assertTrue(json.contains("\"auth\":\"password\""))
+    }
+
+    @Test fun vlessWebSocketAndGrpcTransportSettingsAreGenerated() {
+        val ws = ProxyKernelConfig.build(
+            vlessNode(security = "tls", network = "ws", flow = "", host = "cdn.example.com", path = "/ws"),
+            10808,
+        )
+        requireNotNull(ws)
+        assertTrue(ws.contains("\"network\":\"ws\""))
+        assertTrue(ws.contains("\"wsSettings\":{\"path\":\"/ws\",\"headers\":{\"Host\":\"cdn.example.com\"}}"))
+        assertTrue(ws.contains("\"tlsSettings\":{\"serverName\":\"www.example.com\",\"fingerprint\":\"chrome\"}"))
+
+        val grpc = ProxyKernelConfig.build(
+            vlessNode(security = "tls", network = "grpc", flow = "", serviceName = "grpc-service"),
+            10808,
+        )
+        requireNotNull(grpc)
+        assertTrue(grpc.contains("\"network\":\"grpc\""))
+        assertTrue(grpc.contains("\"grpcSettings\":{\"serviceName\":\"grpc-service\"}"))
+    }
+
+    @Test fun vlessWebSocketRealityIsRejectedByThePinnedKernel() {
+        val node = vlessNode(
+            security = "reality",
+            network = "ws",
+            flow = "",
+            host = "cdn.example.com",
+            path = "/ws",
+        )
+        assertFalse(ProxyKernelConfig.isSupportedVless(requireNotNull(node.transport?.vless)))
+        assertNull(ProxyKernelConfig.build(node, 10808))
+    }
+
     @Test fun quotesAndBackslashesAreJsonEscapedAndNewlinesAreRejected() {
         val escaped = ProxyKernelConfig.build(ssNode(pw = "pa\"ss\\word"), 10808)
         requireNotNull(escaped)
@@ -109,6 +186,13 @@ class ProxyKernelConfigTest {
         assertNull(ProxyKernelConfig.build(ProxyNode("id", "socks", ProxyProtocol.Socks5, "192.0.2.1", 1080), 10808))
         assertNull(ProxyKernelConfig.build(ProxyNode("id", "http", ProxyProtocol.Http, "192.0.2.1", 8080), 10808))
         assertNull(ProxyKernelConfig.build(ProxyNode("id", "vless", ProxyProtocol.Vless, "192.0.2.1", 443), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(publicKey = null), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "quic"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(flow = "unsupported-flow"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "ws", security = "tls", flow = "", path = "relative"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "ws", security = "tls", flow = "xtls-rprx-vision"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "tcp", host = "cdn.example.com"), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(network = "grpc", security = "tls", flow = "", host = "cdn.example.com", serviceName = "svc"), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode().copy(transport = null), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode(uuid = ""), 10808))
         assertNull(ProxyKernelConfig.build(vmessNode(network = "quic"), 10808))

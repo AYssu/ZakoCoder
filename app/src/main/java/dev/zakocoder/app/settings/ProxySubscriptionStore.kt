@@ -96,6 +96,7 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
         for (node in subscription.nodes) {
             val encoded = JSONObject().put("id", node.id).put("name", node.name).put("protocol", node.protocol.name)
                 .put("host", node.host).put("port", node.port)
+                .put("subscriptionPlaceholder", node.subscriptionPlaceholder)
                 .apply {
                     node.username?.let { put("username", it) }
                     node.password?.let { put("password", it) }
@@ -133,7 +134,12 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
                 val node = array.optJSONObject(index)?.let(::decodeNode) ?: return null
                 nodes += node
             }
-            ProxySubscription(sourceUrl, fetchedAt, nodes, format)
+            ProxySubscription(sourceUrl, fetchedAt, nodes.map { node ->
+                // Old caches also need eligibility fixes. Standalone local links keep their intent.
+                val subscriptionSource = sourceUrl.startsWith("https://", ignoreCase = true)
+                node.copy(subscriptionPlaceholder = node.subscriptionPlaceholder ||
+                    (subscriptionSource && isSubscriptionPlaceholder(node)))
+            }, format)
         }
     } catch (_: Exception) {
         null
@@ -154,7 +160,8 @@ class EncryptedProxySubscriptionStore(context: Context, private val alias: Strin
         // A damaged/incomplete transport must only downgrade this node to "unsupported" - the node
         // itself and the rest of the cached subscription stay intact so the user can re-fetch.
         val transport = decodeTransport(json.optJSONObject("transport"), protocol)
-        val node = ProxyNode(id, name, protocol, host, port, username, password, transport)
+        val node = ProxyNode(id, name, protocol, host, port, username, password, transport,
+            subscriptionPlaceholder = json.optBoolean("subscriptionPlaceholder", false))
         // Reusable nodes must still point somewhere; unsupported metadata may keep placeholders.
         if (node.supported && (host.isEmpty() || port !in 1..65535)) return null
         return node
