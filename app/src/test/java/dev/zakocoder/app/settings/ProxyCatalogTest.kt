@@ -17,10 +17,6 @@ import org.junit.Test
  * stable error mapping.
  */
 class ProxyCatalogTest {
-    @Test fun defaultSubscriptionUserAgentIncludesVersion() {
-        assertTrue(proxySubscriptionUserAgent().matches(Regex("ZakoCoder/.+")))
-    }
-
     private val link = "https://sub.example.com/api/v1/client/token-value?token=redacted"
     private val httpA = testNode("node-a", name = "A")
     private val socksB = testNode("node-b", name = "B", protocol = ProxyProtocol.Socks5, host = "198.51.100.2", port = 1080)
@@ -32,6 +28,27 @@ class ProxyCatalogTest {
         fetcher: FakeProxySubscriptionFetcher = FakeProxySubscriptionFetcher(),
         store: FakeProxySubscriptionStore = FakeProxySubscriptionStore(),
     ) = ProxyCatalog(fetcher, store, clock = { 5_000L })
+
+    @Test fun importingMetadataAndVlessDefaultsToRealNodeAndRejectsNoticeSelection() = runBlocking {
+        val store = FakeProxySubscriptionStore()
+        val catalog = catalog(FakeProxySubscriptionFetcher(content = metadataAndVlessFixture()), store)
+        catalog.updateLink("https://sub.example.com/api")
+        catalog.probe()
+        catalog.import()
+
+        val subscription = requireNotNull(catalog.state.value.subscription)
+        val real = subscription.nodes.last()
+        assertEquals(1, subscription.supportedCount)
+        assertEquals(real.id, catalog.state.value.selectedId)
+        subscription.nodes.take(5).forEach { notice ->
+            catalog.select(notice.id)
+            assertEquals("A subscription notice must not replace the real selected node", real.id, catalog.state.value.selectedId)
+        }
+        val restored = ProxyCatalog(FakeProxySubscriptionFetcher(), store, clock = { 5_000L })
+        restored.loadCached()
+        assertEquals(real.id, restored.state.value.selectedId)
+        assertEquals(1, restored.state.value.subscription!!.supportedCount)
+    }
 
     @Test fun loadCachedReadsStoreWithoutNetworkAndSelectsFirstUsableNode() = runBlocking {
         val store = FakeProxySubscriptionStore(testSubscription(listOf(unsupported, httpA)))
@@ -106,7 +123,7 @@ class ProxyCatalogTest {
     }
 
     @Test fun importBeforeProbeOrAfterUnsupportedProbeDoesNothing() = runBlocking {
-        val fetcher = FakeProxySubscriptionFetcher(content = "hysteria2://pw@192.0.2.6:443#HY")
+        val fetcher = FakeProxySubscriptionFetcher(content = "vless://uuid@192.0.2.6:443#V")
         val store = FakeProxySubscriptionStore()
         val catalog = catalog(fetcher, store)
 

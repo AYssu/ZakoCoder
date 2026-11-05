@@ -24,14 +24,11 @@ class ProxyTransportCodecTest {
         flow = "xtls-rprx-vision",
         network = "tcp",
         security = "reality",
-        sni = "www.example.com",
+        serverName = "www.example.com",
         fingerprint = "chrome",
-        publicKey = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV",
+        publicKey = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
         shortId = "0123456789abcdef",
         spiderX = "/",
-        host = null,
-        path = null,
-        serviceName = null,
     )
 
     private fun node(protocol: ProxyProtocol, transport: NodeTransport?, host: String = "vm.example.com", port: Int = 443) =
@@ -77,9 +74,9 @@ class ProxyTransportCodecTest {
 
     @Test fun vlessRealityRoundTripsAllKernelFields() {
         val fields = ProxyTransportCodec.toFields(node(ProxyProtocol.Vless, NodeTransport(vless = vless)))
-        assertEquals(vless.uuid, fields[ProxyTransportCodec.VLESS_UUID])
-        assertEquals("reality", fields[ProxyTransportCodec.VLESS_SECURITY])
-        assertEquals(vless.publicKey, fields[ProxyTransportCodec.VLESS_PUBLIC_KEY])
+        assertEquals(vless.uuid, fields["vless.uuid"])
+        assertEquals("reality", fields["vless.security"])
+        assertEquals(vless.publicKey, fields["vless.publicKey"])
         assertEquals(NodeTransport(vless = vless), ProxyTransportCodec.fromFields(ProxyProtocol.Vless, fields))
     }
 
@@ -142,9 +139,9 @@ class ProxyTransportCodecTest {
         // A node whose parsed transport contains an unsafe value must not be persisted at all.
         assertTrue(ProxyTransportCodec.toFields(node(ProxyProtocol.Vmess, NodeTransport(vmess = vmess.copy(path = "/bad\npath")))).isEmpty())
         val vlessFields = ProxyTransportCodec.toFields(node(ProxyProtocol.Vless, NodeTransport(vless = vless)))
-        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + (ProxyTransportCodec.VLESS_PUBLIC_KEY to "bad\nkey")))
-        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + (ProxyTransportCodec.VLESS_NETWORK to "quic")))
-        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + (ProxyTransportCodec.VLESS_UUID to "")))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.publicKey" to "bad\nkey")))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.network" to "quic")))
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, vlessFields + ("vless.uuid" to "")))
     }
 
     @Test fun unknownKeysAreIgnored() {

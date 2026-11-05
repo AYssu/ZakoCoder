@@ -6,7 +6,7 @@ package dev.zakocoder.app.settings
  * This codec is pure JVM so the persistence round-trip can be unit-tested without Android
  * Keystore. It is the only place that decides which transport fields are safe/complete enough to
  * persist, and must stay aligned with [ProxyKernelConfig]'s string limits:
- * - required identity fields missing/blank (VMess/VLESS uuid, SS method+password, Trojan password) or a
+ * - required identity fields missing/blank (VMess uuid, SS method+password, Trojan password) or a
  *   protocol/field mismatch return null, so a corrupted cache degrades to "unsupported" instead of
  *   producing a half-generated config;
  * - every persisted string is length-checked and must not contain ISO control characters;
@@ -26,27 +26,14 @@ object ProxyTransportCodec {
     const val SS_PASSWORD = "ss.password"
     const val TROJAN_PASSWORD = "trojan.password"
     const val TROJAN_SNI = "trojan.sni"
-    const val VLESS_UUID = "vless.uuid"
-    const val VLESS_ENCRYPTION = "vless.encryption"
-    const val VLESS_FLOW = "vless.flow"
-    const val VLESS_NETWORK = "vless.network"
-    const val VLESS_SECURITY = "vless.security"
-    const val VLESS_SNI = "vless.sni"
-    const val VLESS_FINGERPRINT = "vless.fingerprint"
-    const val VLESS_PUBLIC_KEY = "vless.publicKey"
-    const val VLESS_SHORT_ID = "vless.shortId"
-    const val VLESS_SPIDER_X = "vless.spiderX"
-    const val VLESS_HOST = "vless.host"
-    const val VLESS_PATH = "vless.path"
-    const val VLESS_SERVICE_NAME = "vless.serviceName"
 
     /** Flat key/value fields for persistence; empty/null/invalid transport -> empty map. */
     fun toFields(node: ProxyNode): Map<String, String> {
         val fields = when (node.protocol) {
             ProxyProtocol.Vmess -> node.transport?.vmess?.let(::vmessFields)
+            ProxyProtocol.Vless -> node.transport?.vless?.let(::vlessFields)
             ProxyProtocol.Ss -> node.transport?.shadowsocks?.let(::shadowsocksFields)
             ProxyProtocol.Trojan -> node.transport?.trojan?.let(::trojanFields)
-            ProxyProtocol.Vless -> node.transport?.vless?.let(::vlessFields)
             else -> null
         } ?: return emptyMap()
         // Never persist a transport that would not decode back to the same usable shape.
@@ -78,6 +65,26 @@ object ProxyTransportCodec {
                     ),
                 )
             }
+            ProxyProtocol.Vless -> {
+                val uuid = required(fields, "vless.uuid", 128) ?: return null
+                fun field(key: String, max: Int = 255) = optionalField(fields, "vless.$key", max)
+                val vless = VlessTransport(
+                    uuid = uuid,
+                    encryption = field("encryption", 64) ?: return null,
+                    network = field("network", 16) ?: return null,
+                    security = field("security", 16) ?: return null,
+                    flow = field("flow", 64) ?: return null,
+                    serverName = field("serverName")?.ifEmpty { null },
+                    publicKey = field("publicKey", 256)?.ifEmpty { null },
+                    shortId = field("shortId", 16)?.ifEmpty { null },
+                    fingerprint = field("fingerprint", 64)?.ifEmpty { null },
+                    spiderX = field("spiderX", 1024)?.ifEmpty { null },
+                )
+                // Optional malformed values must not disappear when loading a damaged cache.
+                if (listOf("serverName" to 255, "publicKey" to 256, "shortId" to 16, "fingerprint" to 64, "spiderX" to 1024)
+                        .any { (key, max) -> field(key, max) == null } || !ProxyKernelConfig.isSupportedVless(vless)) return null
+                NodeTransport(vless = vless)
+            }
             ProxyProtocol.Ss -> {
                 val method = required(fields, SS_METHOD, MAX_METHOD_CHARS) ?: return null
                 val password = required(fields, SS_PASSWORD, MAX_CREDENTIAL_CHARS) ?: return null
@@ -87,31 +94,6 @@ object ProxyTransportCodec {
                 val password = required(fields, TROJAN_PASSWORD, MAX_CREDENTIAL_CHARS) ?: return null
                 val sniRaw = optionalField(fields, TROJAN_SNI, MAX_SNI_CHARS) ?: return null
                 NodeTransport(trojan = TrojanTransport(password, sniRaw.ifEmpty { null }))
-            }
-            ProxyProtocol.Vless -> {
-                val uuid = required(fields, VLESS_UUID, MAX_UUID_CHARS) ?: return null
-                val encryption = optionalField(fields, VLESS_ENCRYPTION, MAX_SHORT_CHARS) ?: return null
-                val flow = optionalField(fields, VLESS_FLOW, MAX_HEADER_CHARS) ?: return null
-                val network = (optionalField(fields, VLESS_NETWORK, MAX_SHORT_CHARS) ?: return null).ifEmpty { "tcp" }
-                val security = (optionalField(fields, VLESS_SECURITY, MAX_SHORT_CHARS) ?: return null).ifEmpty { "none" }
-                if (network !in KERNEL_NETWORKS || security !in VLESS_SECURITY_MODES) return null
-                NodeTransport(
-                    vless = VlessTransport(
-                        uuid = uuid,
-                        encryption = encryption.ifEmpty { "none" },
-                        flow = flow,
-                        network = network,
-                        security = security,
-                        sni = (optionalField(fields, VLESS_SNI, MAX_SNI_CHARS) ?: return null).ifEmpty { null },
-                        fingerprint = (optionalField(fields, VLESS_FINGERPRINT, MAX_HEADER_CHARS) ?: return null).ifEmpty { null },
-                        publicKey = (optionalField(fields, VLESS_PUBLIC_KEY, MAX_PUBLIC_KEY_CHARS) ?: return null).ifEmpty { null },
-                        shortId = (optionalField(fields, VLESS_SHORT_ID, MAX_SHORT_ID_CHARS) ?: return null).ifEmpty { null },
-                        spiderX = (optionalField(fields, VLESS_SPIDER_X, MAX_PATH_CHARS) ?: return null).ifEmpty { null },
-                        host = (optionalField(fields, VLESS_HOST, MAX_HOST_CHARS) ?: return null).ifEmpty { null },
-                        path = (optionalField(fields, VLESS_PATH, MAX_PATH_CHARS) ?: return null).ifEmpty { null },
-                        serviceName = (optionalField(fields, VLESS_SERVICE_NAME, MAX_PATH_CHARS) ?: return null).ifEmpty { null },
-                    ),
-                )
             }
             else -> null
         }
@@ -129,6 +111,19 @@ object ProxyTransportCodec {
         putIfNotEmpty(VMESS_HEADER_TYPE, vmess.headerType)
     }
 
+    private fun vlessFields(value: VlessTransport): Map<String, String> = linkedMapOf<String, String>().apply {
+        put("vless.uuid", value.uuid)
+        put("vless.encryption", value.encryption)
+        put("vless.network", value.network)
+        put("vless.security", value.security)
+        put("vless.flow", value.flow)
+        putIfNotEmpty("vless.serverName", value.serverName)
+        putIfNotEmpty("vless.publicKey", value.publicKey)
+        putIfNotEmpty("vless.shortId", value.shortId)
+        putIfNotEmpty("vless.fingerprint", value.fingerprint)
+        putIfNotEmpty("vless.spiderX", value.spiderX)
+    }
+
     private fun shadowsocksFields(shadowsocks: ShadowsocksTransport): Map<String, String> = linkedMapOf(
         SS_METHOD to shadowsocks.method,
         SS_PASSWORD to shadowsocks.password,
@@ -137,22 +132,6 @@ object ProxyTransportCodec {
     private fun trojanFields(trojan: TrojanTransport): Map<String, String> = linkedMapOf<String, String>().apply {
         put(TROJAN_PASSWORD, trojan.password)
         putIfNotEmpty(TROJAN_SNI, trojan.sni)
-    }
-
-    private fun vlessFields(vless: VlessTransport): Map<String, String> = linkedMapOf<String, String>().apply {
-        put(VLESS_UUID, vless.uuid)
-        put(VLESS_ENCRYPTION, vless.encryption)
-        put(VLESS_FLOW, vless.flow)
-        put(VLESS_NETWORK, vless.network)
-        put(VLESS_SECURITY, vless.security)
-        putIfNotEmpty(VLESS_SNI, vless.sni)
-        putIfNotEmpty(VLESS_FINGERPRINT, vless.fingerprint)
-        putIfNotEmpty(VLESS_PUBLIC_KEY, vless.publicKey)
-        putIfNotEmpty(VLESS_SHORT_ID, vless.shortId)
-        putIfNotEmpty(VLESS_SPIDER_X, vless.spiderX)
-        putIfNotEmpty(VLESS_HOST, vless.host)
-        putIfNotEmpty(VLESS_PATH, vless.path)
-        putIfNotEmpty(VLESS_SERVICE_NAME, vless.serviceName)
     }
 
     private fun MutableMap<String, String>.putIfNotEmpty(key: String, value: String?) {
@@ -178,7 +157,6 @@ object ProxyTransportCodec {
     }
 
     private val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
-    private val VLESS_SECURITY_MODES = setOf("none", "tls", "reality")
     private const val MAX_UUID_CHARS = 255
     private const val MAX_CREDENTIAL_CHARS = 255
     private const val MAX_METHOD_CHARS = 64
@@ -187,6 +165,4 @@ object ProxyTransportCodec {
     private const val MAX_PATH_CHARS = 1024
     private const val MAX_HEADER_CHARS = 64
     private const val MAX_SHORT_CHARS = 16
-    private const val MAX_PUBLIC_KEY_CHARS = 255
-    private const val MAX_SHORT_ID_CHARS = 64
 }

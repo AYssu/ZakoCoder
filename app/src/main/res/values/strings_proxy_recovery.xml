@@ -1,0 +1,26 @@
+<resources>
+    <string name="proxy_kernel_dns_resolution_failed">无法解析节点域名，请检查网络和 DNS 后重试</string>
+    <string name="proxy_plugin_activate">打开插件</string>
+    <string name="proxy_plugin_activation_hint">首次安装或服务无法连接时，可先打开插件，再返回重试。若系统限制关联启动，需在系统设置中允许。</string>
+    <string name="proxy_plugin_activation_opened">已打开插件，返回后请重试启用节点。</string>
+    <string name="proxy_plugin_activation_legacy">当前插件没有打开入口，已打开应用详情。可检查启动限制；更新插件后可直接打开。</string>
+    <string name="proxy_plugin_activation_unavailable">无法打开插件，请从系统应用列表检查插件是否已启用。</string>
+    <string name="proxy_plugin_diagnostics">连接诊断</string>
+    <string name="proxy_plugin_diagnostics_loading">正在读取…</string>
+    <string name="proxy_plugin_diagnostics_hint">仅包含应用版本、系统版本、插件状态和连接阶段，不含订阅、节点凭据或完整配置。可复制或导出后用于反馈。</string>
+    <string name="proxy_plugin_diagnostics_copy">复制诊断</string>
+    <string name="proxy_plugin_diagnostics_export">导出文件</string>
+    <string name="proxy_plugin_diagnostics_copied">诊断已复制</string>
+    <string name="proxy_plugin_diagnostics_saved">诊断已导出</string>
+    <string name="proxy_plugin_diagnostics_export_failed">导出失败，请重新选择保存位置。</string>
+    <string name="proxy_binding_rejected">系统未接受插件服务连接。可先打开插件，再检查系统启动限制。</string>
+    <string name="proxy_binding_security">系统拒绝插件服务访问，请确认主应用与插件来自同一签名渠道。</string>
+    <string name="proxy_binding_timeout">等待插件服务连接超时。可先打开插件，再返回重试。</string>
+    <string name="proxy_binding_null">插件未提供可用服务连接，请更新插件后重试。</string>
+    <string name="proxy_binding_disconnected">插件服务连接已断开，请重新启用；若反复发生，可导出诊断反馈。</string>
+    <string name="proxy_binding_remote">调用插件服务失败，请重新启用并查看连接诊断。</string>
+    <string name="proxy_binding_interrupted">连接插件的等待已中断，可重新启用。</string>
+    <string name="proxy_binding_unexpected">连接插件时发生异常，请查看连接诊断。</string>
+    <string name="proxy_subscription_notice">订阅说明</string>
+    <string name="proxy_subscription_notice_hint">此项用于显示订阅信息，不作为连接节点。</string>
+</resources>

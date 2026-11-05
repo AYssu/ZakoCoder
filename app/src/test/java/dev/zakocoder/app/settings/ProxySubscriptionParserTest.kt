@@ -399,8 +399,9 @@ class ProxySubscriptionParserTest {
         val ss = ShadowsocksTransport("aes-256-gcm", "ss-secret")
         val trojan = TrojanTransport("tr-secret", null)
         val vless = VlessTransport(
-            "vless-secret", "none", "xtls-rprx-vision", "tcp", "reality",
-            "www.example.com", "chrome", "public-key-secret", "sid", "/", null, null, null,
+            uuid = "vless-secret", security = "reality", flow = "xtls-rprx-vision",
+            serverName = "www.example.com", fingerprint = "chrome", publicKey = "public-key-secret",
+            shortId = "sid", spiderX = "/",
         )
         assertFalse(vmess.toString().contains("uuid-secret"))
         assertFalse(ss.toString().contains("ss-secret"))
@@ -456,7 +457,7 @@ class ProxySubscriptionParserTest {
     @Test fun loopbackVmessPlaceholderIsNotCountedAsUsable() {
         val json = """{"v":"2","ps":"说明占位","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","type":"none","host":"","path":"","tls":""}"""
         val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
-        val node = parser.parseLink(link)
+        val node = parser.parse(link, "https://sub.example.com/api")?.nodes?.single()
         requireNotNull(node)
         assertEquals(ProxyProtocol.Vmess, node.protocol)
         assertFalse("loopback placeholder must not be usable", node.viaKernel)
@@ -465,7 +466,7 @@ class ProxySubscriptionParserTest {
     }
 
     @Test fun allUnsupportedPlaceholdersProduceUnsupportedOnly() {
-        val json = """{"v":"2","ps":"说明","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","tls":""}"""
+        val json = """{"v":"2","ps":"订阅说明","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","scy":"auto","net":"tcp","tls":""}"""
         val link = "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
         val content = "$link\nvless://aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa@198.51.100.1:443?security=reality#remote"
         val subscription = parser.parse(content, "https://sub.example.com/api")
@@ -477,7 +478,7 @@ class ProxySubscriptionParserTest {
     @Test fun vlessRealityVisionParsesAsUsableKernelNode() {
         val link = "vless://11111111-2222-3333-4444-555555555555@198.51.100.40:443" +
             "?encryption=none&security=reality&sni=www.example.com&fp=chrome" +
-            "&pbk=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV" +
+            "&pbk=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" +
             "&sid=0123456789abcdef&spx=%2F&type=tcp&flow=xtls-rprx-vision#Reality"
 
         val node = requireNotNull(parser.parseLink(link))
@@ -491,7 +492,7 @@ class ProxySubscriptionParserTest {
         assertEquals("reality", vless.security)
         assertEquals("tcp", vless.network)
         assertEquals("xtls-rprx-vision", vless.flow)
-        assertEquals("www.example.com", vless.sni)
+        assertEquals("www.example.com", vless.serverName)
         assertEquals("chrome", vless.fingerprint)
         assertEquals("/", vless.spiderX)
         requireNotNull(ProxyKernelConfig.build(node, 10808))
@@ -512,10 +513,10 @@ class ProxySubscriptionParserTest {
     @Test fun vlessLoopbackInstructionIsNotCountedAsUsable() {
         val link = "vless://11111111-2222-3333-4444-555555555555@127.0.0.1:443" +
             "?encryption=none&security=reality&sni=www.example.com&fp=chrome" +
-            "&pbk=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV" +
+            "&pbk=AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA" +
             "&sid=0123456789abcdef&type=tcp&flow=xtls-rprx-vision#Placeholder"
 
-        val node = requireNotNull(parser.parseLink(link))
+        val node = requireNotNull(parser.parse(link, "https://sub.example.com/api")).nodes.single()
 
         assertFalse(node.viaKernel)
         assertFalse(node.supported)

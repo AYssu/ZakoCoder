@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZakoCoder kernel plugin</string>
+    <string name="activation_title">Kernel plugin opened</string>
+    <string name="activation_body">Return to ZakoCoder and enable the proxy again. This page does not start the proxy or read subscriptions or node settings.</string>
+    <string name="activation_limits">If the service remains unavailable, check whether your system allows ZakoCoder to launch this plugin. Opening this page does not guarantee that device startup restrictions are removed.</string>
+    <string name="activation_done">Done</string>
+    <string name="activation_settings">Plugin app settings</string>
+</resources>

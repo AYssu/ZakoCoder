@@ -42,13 +42,18 @@ def require_go(expected_version: str) -> str:
             "Go is required to build the proxy kernel. Install the version in native-kernel/go.version "
             "(CI uses actions/setup-go) and re-run."
         )
-    actual = subprocess.check_output([go, "version"], text=True).strip()
-    if expected_version not in actual:
+    actual = subprocess.check_output([go, "env", "GOVERSION"], text=True).strip()
+    if expected_version != actual:
         raise SystemExit(
             f"Go toolchain mismatch: expected {expected_version}, found '{actual}'. "
             "The kernel hash is pinned per toolchain; use the version from native-kernel/go.version."
         )
-    return go
+    # Resolve the selected toolchain executable before setting GOTOOLCHAIN=local for builds.
+    goroot = subprocess.check_output([go, "env", "GOROOT"], text=True).strip()
+    executable = Path(goroot) / "bin" / ("go.exe" if os.name == "nt" else "go")
+    if not executable.is_file():
+        raise SystemExit("Selected Go toolchain executable is unavailable")
+    return str(executable)
 
 
 def run(go: str, args: list[str], cwd: Path, env: dict, quiet: bool = True) -> None:
@@ -71,6 +76,11 @@ def build(go: str, goarch: str, version: str) -> bytes:
                 "GOOS": "linux",
                 "GOARCH": goarch,
                 "CGO_ENABLED": "0",
+                "GOTOOLCHAIN": "local",
+                "GOWORK": "off",
+                "GOEXPERIMENT": "",
+                "GOAMD64": "v1",
+                "GOARM64": "v8.0",
                 "GOPROXY": os.environ.get("PROXY_KERNEL_GOPROXY", DEFAULT_GOPROXY),
                 "GOSUMDB": os.environ.get("PROXY_KERNEL_GOSUMDB", DEFAULT_GOSUMDB),
                 "GOFLAGS": "-mod=mod",
@@ -78,9 +88,8 @@ def build(go: str, goarch: str, version: str) -> bytes:
         )
         run(go, ["mod", "init", "kernelbuild"], work, env)
         run(go, ["get", f"github.com/xtls/xray-core@{version}"], work, env)
-        # Keep the explicit requirement: this build-only module has no source imports yet, so
-        # `go mod tidy` would remove Xray and make `go build <package>` resolve the proxy's stale
-        # "latest" version instead of the locked commit.
+        # Do not tidy this empty build module: it would remove the pinned requirement and let
+        # go build silently re-resolve @latest. -mod=mod fills lazy transitive sums during build.
         output = work / "kernel"
         run(
             go,
@@ -89,6 +98,10 @@ def build(go: str, goarch: str, version: str) -> bytes:
             work,
             env,
         )
+        info = subprocess.check_output([go, "version", "-m", str(output)], text=True, env=env)
+        module_line = next((line.split() for line in info.splitlines() if line.strip().startswith("mod\t")), [])
+        if len(module_line) < 3 or module_line[1:3] != ["github.com/xtls/xray-core", version]:
+            raise SystemExit("Built kernel module version differs from the pinned source version")
         return output.read_bytes()
 
 
@@ -120,8 +133,7 @@ def main() -> int:
         if destination.is_file() and not args.force and sha256(destination) == expected:
             print(f"Verified {abi}/{target['asset']}")
             continue
-        release = lock.get("release", version)
-        print(f"Building Xray-core {release} for {abi} ({target['goarch']})...")
+        print(f"Building Xray-core {version} for {abi} ({target['goarch']})...")
         destination_dir.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(".download")
         temporary.write_bytes(build(go, target["goarch"], version))

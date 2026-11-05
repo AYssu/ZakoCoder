@@ -10,12 +10,15 @@
 
     <application
         android:hasCode="true"
-        android:label="ZakoCoder 内核插件"
+        android:icon="@drawable/ic_kernel"
+        android:label="@string/app_name"
         >
 
+        <!-- Public activation has no privileged actions; the actual service stays signature protected. -->
         <activity
-            android:name=".ActivateActivity"
-            android:exported="true">
+            android:name=".KernelActivationActivity"
+            android:exported="true"
+            android:theme="@style/KernelActivationTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

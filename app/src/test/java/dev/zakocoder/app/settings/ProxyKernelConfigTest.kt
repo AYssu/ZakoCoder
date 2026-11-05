@@ -41,7 +41,7 @@ class ProxyKernelConfigTest {
         security: String = "reality",
         network: String = "tcp",
         flow: String = "xtls-rprx-vision",
-        publicKey: String? = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV",
+        publicKey: String? = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA",
     ) = ProxyNode(
         id = "vl-node", name = "VL", protocol = ProxyProtocol.Vless, host = "vl.example.com", port = 443,
         transport = NodeTransport(
@@ -51,14 +51,11 @@ class ProxyKernelConfigTest {
                 flow = flow,
                 network = network,
                 security = security,
-                sni = "www.example.com",
+                serverName = "www.example.com",
                 fingerprint = "chrome",
-                publicKey = publicKey,
-                shortId = "0123456789abcdef",
-                spiderX = "/",
-                host = if (network == "ws") "cdn.example.com" else null,
-                path = if (network == "ws") "/ws" else null,
-                serviceName = if (network == "grpc") "vless-service" else null,
+                publicKey = publicKey.takeIf { security == "reality" },
+                shortId = "0123456789abcdef".takeIf { security == "reality" },
+                spiderX = "/".takeIf { security == "reality" },
             ),
         ),
     )
@@ -132,21 +129,15 @@ class ProxyKernelConfigTest {
         assertTrue(json.contains("\"security\":\"reality\""))
         assertTrue(json.contains("\"serverName\":\"www.example.com\""))
         assertTrue(json.contains("\"fingerprint\":\"chrome\""))
-        assertTrue(json.contains("\"publicKey\":\"abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUV\""))
+        assertTrue(json.contains("\"publicKey\":\"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA\""))
         assertTrue(json.contains("\"shortId\":\"0123456789abcdef\""))
         assertTrue(json.contains("\"spiderX\":\"/\""))
         assertTrue(json.contains("\"auth\":\"password\""))
     }
 
-    @Test fun vlessWebSocketAndGrpcUseTheirTransportSettings() {
-        val ws = ProxyKernelConfig.build(vlessNode(security = "tls", network = "ws", flow = ""), 10808)
-        requireNotNull(ws)
-        assertTrue(ws.contains("\"wsSettings\":{\"path\":\"/ws\",\"headers\":{\"Host\":\"cdn.example.com\"}}"))
-        assertTrue(ws.contains("\"tlsSettings\":{\"serverName\":\"www.example.com\"}"))
-
-        val grpc = ProxyKernelConfig.build(vlessNode(security = "tls", network = "grpc", flow = ""), 10808)
-        requireNotNull(grpc)
-        assertTrue(grpc.contains("\"grpcSettings\":{\"serviceName\":\"vless-service\"}"))
+    @Test fun unimplementedVlessTransportsFailClosed() {
+        assertNull(ProxyKernelConfig.build(vlessNode(security = "tls", network = "ws", flow = ""), 10808))
+        assertNull(ProxyKernelConfig.build(vlessNode(security = "tls", network = "grpc", flow = ""), 10808))
     }
 
     @Test fun quotesAndBackslashesAreJsonEscapedAndNewlinesAreRejected() {

@@ -34,7 +34,7 @@ class ProxyProbeClassificationTest {
     @Test fun allUnsupportedNodesAreReportedAsUnsupportedOnly() {
         val content = listOf(
             "vmess://eyJhZGQiOiIxOTIuMC4yLjUiLCJwb3J0IjoiNDQzIiwicHMiOiJWIn0=",
-            "hysteria2://pw@192.0.2.6:443#HY",
+            "vless://uuid@192.0.2.6:443#VLESS",
         ).joinToString("\n")
         val probe = parser.probe("https://sub.example.com/api", content)
         assertTrue(probe is ProxyProbe.UnsupportedOnly)
@@ -42,13 +42,13 @@ class ProxyProbeClassificationTest {
     }
 
     @Test fun oneUnsupportedNodeIsStillUnsupportedOnly() {
-        val probe = parser.probe("https://sub.example.com/api", "hysteria2://pw@192.0.2.6:443#HY")
+        val probe = parser.probe("https://sub.example.com/api", "vless://uuid@192.0.2.6:443#VLESS")
         assertTrue(probe is ProxyProbe.UnsupportedOnly)
         assertEquals(1, (probe as ProxyProbe.UnsupportedOnly).total)
     }
 
     @Test fun mixedProtocolsStayAnAirportWithUsableCount() {
-        val content = "http://192.0.2.5:8080#A\nhysteria2://pw@192.0.2.6:443#HY"
+        val content = "http://192.0.2.5:8080#A\nvless://uuid@192.0.2.6:443#VLESS"
         val probe = parser.probe("https://sub.example.com/api", content)
         assertTrue(probe is ProxyProbe.Airport)
         assertEquals(1, (probe as ProxyProbe.Airport).subscription.supportedCount)
@@ -59,9 +59,22 @@ class ProxyProbeClassificationTest {
         val probe = parser.probe("https://sub.example.com/api", content)
         assertTrue(probe is ProxyProbe.Airport)
         val airport = probe as ProxyProbe.Airport
-        assertEquals(2, airport.subscription.supportedCount)
+        assertEquals(1, airport.subscription.supportedCount)
         assertTrue(airport.subscription.nodes[0].viaKernel)
-        assertTrue(airport.subscription.nodes[1].viaKernel)
+    }
+
+    @Test fun subscriptionNoticesDoNotInflateUsableVlessNodeCount() {
+        val result = parser.probe("https://sub.example.com/api", metadataAndVlessFixture())
+        assertTrue(result is ProxyProbe.Airport)
+        val subscription = (result as ProxyProbe.Airport).subscription
+        assertEquals(6, subscription.nodes.size)
+        assertEquals(1, subscription.supportedCount)
+        assertTrue(subscription.nodes.take(5).all { it.subscriptionPlaceholder && !it.supported && !it.viaKernel })
+        val real = subscription.nodes.last()
+        assertEquals(ProxyProtocol.Vless, real.protocol)
+        assertTrue(real.supported)
+        assertTrue(real.viaKernel)
+        assertEquals("xtls-rprx-vision", real.transport!!.vless!!.flow)
     }
 
     @Test fun emptyJunkAndNoKnownNodesAreNotASubscription() {
@@ -90,4 +103,21 @@ class ProxyProbeClassificationTest {
         assertEquals("No link validation may touch the network", 0, fetcher.calls)
         assertEquals(0, store.saves)
     }
+}
+
+/** Synthetic names/identities only; no downloaded subscription or provider credentials. */
+internal fun metadataAndVlessFixture(): String {
+    val notices = listOf("请立即到官网下载新客户端！", "通知更新于 2026/11/4", "邀请新用户20%返利", "示例.com", "subscription.example.com")
+    val links = notices.map { name ->
+        val escapedName = name.map { character ->
+            if (character.code > 127) "\\u" + character.code.toString(16).padStart(4, '0')
+            else if (character == '/') "\\/" else character.toString()
+        }.joinToString("")
+        val json = """{"v":"2","ps":"$escapedName","add":"127.0.0.1","port":"443","id":"11111111-2222-3333-4444-555555555555","aid":"0","net":"tcp","tls":""}"""
+        "vmess://" + java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+    }
+    val publicKey = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32) { (it + 1).toByte() })
+    return (links + ("vless://11111111-2222-3333-4444-555555555555@198.51.100.7:443" +
+        "?encryption=none&type=tcp&security=reality&flow=xtls-rprx-vision&sni=example.com&fp=chrome&pbk=$publicKey&sid=0123456789abcdef#Real"))
+        .joinToString("\n")
 }

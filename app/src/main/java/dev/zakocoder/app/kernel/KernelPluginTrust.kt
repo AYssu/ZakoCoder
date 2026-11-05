@@ -42,7 +42,6 @@ sealed interface KernelPluginInstallResult {
 object KernelPluginTrust {
     const val PLUGIN_PACKAGE = "dev.zakocoder.app.kernel"
     const val SERVICE_CLASS = "dev.zakocoder.app.kernel.KernelService"
-    const val ACTIVATOR_CLASS = "dev.zakocoder.app.kernel.ActivateActivity"
     const val PERMISSION = "dev.zakocoder.app.permission.KERNEL"
     const val CONTRACT_VERSION = 1
     const val MIN_MAIN_VERSION_METADATA = "dev.zakocoder.app.kernel.MIN_MAIN_VERSION"

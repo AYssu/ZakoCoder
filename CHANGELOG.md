@@ -2,8 +2,8 @@
 
 ## 未发布
 
-- 代理内核升级到 Xray-core `v26.10.31` 与 Go 1.27.1，纳入上游 MPTCP 安全修复；修正构建脚本在依赖整理后回退旧版的问题。
-- 机场订阅新增 VLESS 支持，覆盖 TCP/WebSocket/gRPC、none/TLS/REALITY 与 `xtls-rprx-vision`，节点参数继续经加密缓存持久化。
+- 代理内核升级到 Xray-core `v26.10.31` 与 Go 1.27.3，纳入上游 MPTCP 安全修复；修正构建脚本在依赖整理后回退旧版的问题。
+- 机场订阅新增 VLESS 支持，覆盖 TCP/raw、TLS/REALITY（明文仅限本地／私网字面地址） 与 `xtls-rprx-vision`，节点参数继续经加密缓存持久化。
 - 内核插件增加显式激活入口，用于清除 Android stopped 状态并引导一加/OPPO 等系统解除关联启动限制。
 - 订阅中指向本机的 VMess/VLESS/SS/Trojan 占位条目不计为可用节点。
 - 订阅请求默认使用带应用版本的 User-Agent，兼容拒绝裸客户端标识的机场服务。
