@@ -161,6 +161,10 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         if (state.historyError && workbench.ai.canRetryHistorySave) TextButton(onClick = { workbench.ai.retryHistorySave() }) {
             Text(stringResource(R.string.ai_history_retry_save))
         }
+        if (state.historyError && !workbench.ai.canRetryHistorySave) AiHistoryRecoveryActions(state.historyProblem,
+            enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving,
+            onRetry = workbench.ai::retryHistoryLoad,
+            onRemove = { if (!workbench.ai.recoverUnreadableConversation(it)) messageActionError = true })
         if (state.active || state.permissionsLoading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
         if (state.permissionsLoading) Text(stringResource(R.string.ai_loading_conversation), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
