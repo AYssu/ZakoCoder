@@ -53,7 +53,7 @@ data class AiEntry(val id: String, val text: String = "", val toolId: String? = 
 }
 data class AiConversation(val id: String, val title: String, val updated: Long, val turns: Int)
 data class AiPlanStep(val title: String, val status: String)
-data class AiCallDraft(val index: Int, val name: String, val arguments: String)
+data class AiCallDraft(val index: Int, val name: String, val arguments: String, val argumentTail: String = "", val previewLine: String = "")
 
 /** User-facing failures are constructed exclusively from local string resources. */
 class AiTerminalException(message: String) : IllegalStateException(message)

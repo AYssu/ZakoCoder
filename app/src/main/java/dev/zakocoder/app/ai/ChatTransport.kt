@@ -250,7 +250,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                                 lastPublished = now
                                 val argumentChars = calls.values.sumOf { value -> value.third.length }
                                 // Only UI previews are copied repeatedly; execution retains complete arguments below.
-                                toolDelta(calls.map { (index, value) -> AiCallDraft(index, value.second.toString(), value.third.substring(0, minOf(value.third.length, 64000))) })
+                                toolDelta(calls.map { (index, value) -> liveCallDraft(index, value.second.toString(), value.third) })
                                 val previewLimit = 16000 + ((config.requestHeaders.values + config.key).maxOfOrNull { it.length * 2 } ?: 0) + 1024
                                 val preview = buildString {
                                     append(text.substring(0, minOf(text.length, previewLimit)))

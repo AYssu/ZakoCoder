@@ -1,7 +1,6 @@
 <resources>
     <string name="ai_tool_ask_user">询问用户</string>
     <string name="ai_tool_ask_user_desc">向用户提出一个问题，等待选择或自定义回答后继续当前任务</string>
-    <string name="ai_question_title">助手提问</string>
     <string name="ai_question_waiting">等待回答</string>
     <string name="ai_question_answered">已回答</string>
     <string name="ai_question_your_answer">你的回答</string>

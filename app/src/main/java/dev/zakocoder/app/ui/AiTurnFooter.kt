@@ -24,8 +24,8 @@ internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifi
     val timing = state.turnTimings.lastOrNull { it.turn == turn }
     val style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 13.sp, fontWeight = FontWeight.Normal)
     CompositionLocalProvider(LocalTextStyle provides style, LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
-        Column(modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = androidx.compose.ui.Alignment.Start) {
+            Row(Modifier.align(androidx.compose.ui.Alignment.Start).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp, androidx.compose.ui.Alignment.Start)) {
                 UsageCount("↑", usage.input, R.string.ai_usage_input)
                 UsageCount("↓", usage.output, R.string.ai_usage_output)
                 UsageCount("Σ", usage.total, R.string.ai_usage_total)
@@ -42,7 +42,7 @@ internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifi
                     stringResource(R.string.ai_usage_cache, tokenWindowLabel(usage.cached),
                         usage.cachePercent?.let { String.format(Locale.ROOT, "%.2f", it).trimEnd('0').trimEnd('.') + "%" } ?: "—"))
             }
-            Text(details.joinToString(" · "), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), maxLines = 1)
+            Text(details.joinToString(" · "), modifier = Modifier.align(androidx.compose.ui.Alignment.Start).horizontalScroll(rememberScrollState()), maxLines = 1, textAlign = androidx.compose.ui.text.style.TextAlign.Start)
         }
     }
 }

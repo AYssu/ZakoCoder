@@ -2,7 +2,6 @@
     <string name="ai_extensions">AI 扩展</string>
     <string name="ai_extensions_types">管理 Skill 与 MCP 服务</string>
     <string name="ai_extensions_back">返回</string>
-    <string name="ai_extensions_summary">已启用 %1$d 个 Skill、%2$d 个 MCP 服务</string>
     <string name="ai_conversation">对话</string>
     <string name="extensions_context">当前项目</string>
     <string name="extensions_readonly">任务执行或会话恢复期间仅可查看。</string>

@@ -6,9 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
@@ -38,7 +37,10 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     var maintenance by remember { mutableStateOf(false) }
     var repair by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf(false) }
-    var logs by remember { mutableStateOf(false) }
+    val environmentScroll = rememberLazyListState()
+    LaunchedEffect(state.busy, state.showProgress) {
+        if (state.busy && state.showProgress) environmentScroll.animateScrollToItem(1)
+    }
     var dependency by remember { mutableStateOf<Pair<String, DependencyPlan>?>(null) }
     var selectedBundles by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var selectedRun by remember(project?.id) { mutableStateOf<ProjectRun?>(null) }
@@ -59,7 +61,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     }
     Column(Modifier.fillMaxSize()) {
         PageHeading(stringResource(R.string.environment_title))
-    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
+    LazyColumn(Modifier.weight(1f), state = environmentScroll, verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
         item { Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer,
             border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF1E3450) else androidx.compose.ui.graphics.Color(0xFFE3EAFB))) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -90,6 +92,11 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                 if (!state.installed) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.installRuntime() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install_runtime)) }
             }
         } }
+        if (state.log.isNotEmpty() || (state.busy && state.showProgress) ||
+            (state.messageIsError && state.operation.isNotBlank())) item(key = "operation-log") {
+            OperationLogPanel(log = state.log, running = state.busy,
+                title = state.operation, error = state.message.takeIf { state.messageIsError })
+        }
         item { DetailGroup(stringResource(R.string.project_selected)) {
             Row(Modifier.fillMaxWidth().clickable(enabled = !state.busy) { if (project == null) onProjects() else profiles = true }
                 .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -127,10 +134,6 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                 }
             } }
         }
-        if (state.log.isNotEmpty()) item { DetailGroup(stringResource(R.string.execution_log)) {
-            DetailRow(stringResource(if (logs) R.string.hide_log else R.string.show_log), "", onClick = { logs = !logs })
-            if (logs) SelectionContainer { Text(state.log.takeLast(20000), Modifier.padding(16.dp), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) }
-        } }
     }
     ToolBundleInstallAction(workbench, state, selectedBundles) { selectedBundles = emptyList() }
     }

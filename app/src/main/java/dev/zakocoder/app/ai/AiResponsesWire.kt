@@ -181,7 +181,7 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     override val reasoningChars get() = summaries.values.sumOf { it.length }
     override val argumentChars get() = items.values.sumOf { it.arguments.length }
     val drafts get() = items.filterValues { it.type == "function_call" }.map { (index, item) ->
-        AiCallDraft(index, item.name, item.arguments.substring(0, minOf(item.arguments.length, 64000)))
+        liveCallDraft(index, item.name, item.arguments)
     }
     private fun invalid(code: String): Nothing = AiResponsesWire.invalid(code)
     private fun index(event: JSONObject): Int = event.getInt("output_index").also { if (it !in 0..63) invalid("responses_output_index_limit") }

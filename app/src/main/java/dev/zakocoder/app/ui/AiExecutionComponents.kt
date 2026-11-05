@@ -2,8 +2,6 @@ package dev.zakocoder.app.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
@@ -82,59 +80,76 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
     var expanded by remember(event.id) { mutableStateOf(false) }
     val expandAction = stringResource(if (expanded) R.string.ai_tool_collapse else R.string.ai_tool_details)
     val expandState = stringResource(if (expanded) R.string.mobile_expanded else R.string.mobile_collapsed)
-    val targetColor = when (event.status) {
-        AiToolStatus.Failed -> MaterialTheme.colorScheme.error
-        AiToolStatus.Waiting, AiToolStatus.Running -> MaterialTheme.colorScheme.primary
-        AiToolStatus.Succeeded -> androidx.compose.ui.graphics.Color(if (LocalWorkbenchDark.current) 0xFF6EE7B7 else 0xFF087F5B)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val color by animateColorAsState(targetColor, tween(180), label = "tool-status")
-    Surface(modifier = Modifier.animateContentSize(tween(200)), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            Box(Modifier.width(3.dp).fillMaxHeight().background(color))
-            Column(Modifier.weight(1f).padding(11.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = expandState }
-                    .clickable(role = Role.Button, onClickLabel = expandAction) { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {
-                    WorkbenchIcon(when (event.tool) { AiTool.RunCommand, AiTool.ReadCommandLog, AiTool.ListTerminals, AiTool.ReadTerminal, AiTool.StartTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal -> Glyph.Terminal; AiTool.SearchFiles -> Glyph.Search; AiTool.UpdatePlan -> Glyph.Check; else -> Glyph.File }, Modifier.size(16.dp), tint = color)
-                    Text(event.tool?.let { stringResource(it.label) } ?: event.name, Modifier.weight(1f).padding(start = 7.dp), style = MaterialTheme.typography.labelLarge)
-                    Crossfade(event.status, animationSpec = tween(140), label = "tool-state") { status ->
-                        Text(stringResource(status.label), color = color, style = MaterialTheme.typography.labelSmall)
-                    }
-                    WorkbenchIcon(if (expanded) Glyph.Up else Glyph.Down, Modifier.padding(start = 8.dp).size(14.dp))
-                }
-                if (event.target.isNotEmpty()) Text(event.target, maxLines = if (expanded) 8 else 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-                Text(event.reason.ifBlank { stringResource(R.string.ai_reason_missing) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (event.status == AiToolStatus.Incomplete && event.preview == stringResource(R.string.ai_rules_deferred))
-                    Text(stringResource(R.string.ai_rules_deferred_visible), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.ai_tool_authority, stringResource(event.permissionSource), stringResource(event.permission.label)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    event.exitCode?.let { Text(stringResource(R.string.ai_tool_exit_code, it), style = MaterialTheme.typography.labelSmall, color = color) }
-                    if (event.finished != null && event.started != null) Text(stringResource(R.string.ai_tool_elapsed, maxOf(0, event.finished - event.started)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (terminalNumber != null) TextButton(onClick = onTerminal) {
-                    WorkbenchIcon(Glyph.Terminal, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.ai_open_terminal, terminalNumber))
-                }
-                if (expanded) {
-                    HorizontalDivider()
-                    Text(stringResource(R.string.ai_tool_parameters), style = MaterialTheme.typography.labelSmall)
-                    CodeDetail(event.input)
-                    if (event.preview.isNotEmpty()) CodeDetail(event.preview)
-                    if (event.output.isNotEmpty()) { Text(stringResource(R.string.ai_tool_output), style = MaterialTheme.typography.labelSmall); CodeDetail(event.output) }
-                    if (event.truncated) Text(stringResource(R.string.ai_output_truncated), style = MaterialTheme.typography.labelSmall)
-                } else if (event.status == AiToolStatus.Failed && event.output.isNotEmpty()) {
-                    Text(event.output.take(800), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
-                        maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                } else if (event.tool == AiTool.RunCommand && event.output.isNotEmpty()) {
-                    Text(event.output.takeLast(400), fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 4)
-                }
+    val color = if (event.status == AiToolStatus.Failed) MaterialTheme.colorScheme.error
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .semantics { stateDescription = expandState }
+            .clickable(role = Role.Button, onClickLabel = expandAction) { expanded = !expanded }
+            .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(event.tool?.let { stringResource(it.label) } ?: event.name,
+                fontSize = 11.sp, color = color, maxLines = 1)
+            Text(if (event.status == AiToolStatus.Running) event.target.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty().takeLast(120) else event.target, Modifier.weight(1f), maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Crossfade(event.status, animationSpec = tween(140), label = "tool-state") { status ->
+                Text(stringResource(status.label), color = color, style = MaterialTheme.typography.labelSmall)
             }
+            WorkbenchIcon(if (expanded) Glyph.Up else Glyph.Down, Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // Pending approval and failures stay visible without requiring the detail disclosure.
+        if (event.status == AiToolStatus.Waiting) {
+            Text(event.reason.ifBlank { stringResource(R.string.ai_reason_missing) },
+                style = MaterialTheme.typography.bodySmall, color = color)
+            Text(stringResource(R.string.ai_tool_authority, stringResource(event.permissionSource),
+                stringResource(event.permission.label)), style = MaterialTheme.typography.labelSmall, color = color)
+        }
+        if (event.status == AiToolStatus.Incomplete && event.preview == stringResource(R.string.ai_rules_deferred))
+            Text(stringResource(R.string.ai_rules_deferred_visible), style = MaterialTheme.typography.bodySmall, color = color)
+        AnimatedVisibility(expanded, enter = fadeIn(tween(140)) + expandVertically(tween(180)),
+            exit = fadeOut(tween(100)) + shrinkVertically(tween(160))) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (event.target.isNotEmpty()) Text(event.target, fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(event.reason.ifBlank { stringResource(R.string.ai_reason_missing) },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ai_tool_authority, stringResource(event.permissionSource),
+                    stringResource(event.permission.label)), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (event.finished != null && event.started != null) Text(
+                    stringResource(R.string.ai_tool_elapsed, maxOf(0, event.finished - event.started)),
+                    style = MaterialTheme.typography.labelSmall, color = color)
+                event.exitCode?.let { Text(stringResource(R.string.ai_tool_exit_code, it),
+                    style = MaterialTheme.typography.labelSmall, color = color) }
+                Text(stringResource(R.string.ai_tool_parameters), style = MaterialTheme.typography.labelSmall)
+                CodeDetail(event.input)
+                if (event.preview.isNotEmpty()) CodeDetail(event.preview)
+                if (event.output.isNotEmpty()) {
+                    Text(stringResource(R.string.ai_tool_output), style = MaterialTheme.typography.labelSmall)
+                    CodeDetail(event.output)
+                }
+                if (event.truncated) Text(stringResource(R.string.ai_output_truncated),
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (!expanded && event.status == AiToolStatus.Failed && event.output.isNotEmpty()) {
+            Text(event.output.take(800), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        if (terminalNumber != null) TextButton(onClick = onTerminal, modifier = Modifier.heightIn(min = 48.dp),
+            contentPadding = PaddingValues(horizontal = 0.dp)) {
+            Text(stringResource(R.string.ai_open_terminal, terminalNumber), style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun CodeDetail(text: String) {
+internal fun CodeDetail(text: String) {
     androidx.compose.foundation.text.selection.SelectionContainer {
         Text(text, Modifier.fillMaxWidth().heightIn(max = 240.dp).background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 17.sp)
     }
