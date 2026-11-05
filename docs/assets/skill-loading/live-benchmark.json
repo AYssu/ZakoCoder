@@ -319,5 +319,6 @@
   "date": "2026-11-05",
   "device": "Android 13 ARM64",
   "decision": "Keep eager default; lazy remains opt-in. Four accepted tasks are insufficient for general cache or cost claims.",
-  "testedCommit": "0a63e1d67ace5c5060af9b24a7213d4bbe17b913"
+  "sourceReferenceCommit": "0a63e1d67ace5c5060af9b24a7213d4bbe17b913",
+  "sourceReferenceNote": "Product and AndroidTest sources match this integrated reference; screenshot archives were committed after building the tested APK. The later upstream proxy/CI merge was not part of this provider experiment."
 }
