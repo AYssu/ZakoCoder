@@ -11,6 +11,8 @@ data class AiModelProbeProgress(
     val argumentChars: Int = 0,
     val preview: String = "",
     val truncated: Boolean = false,
+    val diagnostic: String = "",
+    val failure: AiFailure? = null,
 ) {
     companion object {
         /** Transport has already redacted credentials before publishing this record. */
@@ -18,6 +20,7 @@ data class AiModelProbeProgress(
             startedAt = log.started, status = log.status, elapsedMs = log.elapsed, firstEventMs = log.firstEvent,
             events = log.events, textChars = log.textChars, argumentChars = log.argumentChars,
             preview = log.response.take(4000), truncated = log.truncated || log.response.length > 4000,
+            diagnostic = log.diagnostic, failure = log.failure,
         )
     }
 }

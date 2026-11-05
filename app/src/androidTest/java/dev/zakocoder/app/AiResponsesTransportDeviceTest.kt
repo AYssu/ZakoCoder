@@ -53,6 +53,19 @@ class AiResponsesTransportDeviceTest {
         }
     }
 
+    @Test(timeout = 30000) fun compatibleGatewayMetadataStillRequiresCompletedSnapshot() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val metadata = event("response.metadata", JSONObject().put("metadata", JSONObject().put("gateway", "fixture")))
+            f.server.enqueue(MockResponse().setBody(added() + delta("Hello") + metadata + completed("Hello")))
+            assertEquals("Hello", f.transport.request(config(f), messages(), JSONArray()) {}.text)
+            f.server.enqueue(MockResponse().setBody(added() + delta("partial") + metadata))
+            try {
+                f.transport.request(config(f), messages(), JSONArray()) {}
+                fail("Metadata cannot complete a truncated response")
+            } catch (error: AiTransportException) { assertEquals("missing_done", error.diagnostic) }
+        }
+    }
+
     @Test(timeout = 30000) fun truncatedStreamRetriesSameInputAndReplacesOnlyPartialText() = runBlocking {
         AiDeviceTest.Fixture(context, maxAttempts = 3).use { f ->
             f.server.enqueue(MockResponse().setBody(added() + delta("partial")))

@@ -79,6 +79,16 @@ internal object AiResponsesWire {
             }
     }
 
+    /** Explicit non-streaming replies share every terminal validation with SSE. */
+    fun completed(response: JSONObject, stream: AiResponsesStream = AiResponsesStream()): AiResponsesStream = stream.apply {
+        val type = when {
+            !response.isNull("error") || response.optString("status") == "failed" -> "response.failed"
+            response.optString("status") == "incomplete" -> "response.incomplete"
+            else -> "response.completed"
+        }
+        accept(JSONObject().put("type", type).put("response", response))
+    }
+
     private fun content(value: Any, assistant: Boolean): JSONArray {
         if (value is String) return JSONArray().put(JSONObject().put("type", if (assistant) "output_text" else "input_text").put("text", value))
         val source = value as? JSONArray ?: invalid("responses_invalid_input")
@@ -104,7 +114,11 @@ internal object AiResponsesWire {
     fun diagnostic(body: JSONObject): JSONObject {
         fun scrub(value: Any?): Any? = when (value) {
             is JSONObject -> JSONObject().apply { value.keys().forEach { name ->
-                put(name, if (name == "encrypted_content") "[opaque reasoning omitted]" else scrub(value.get(name)))
+                put(name, when {
+                    name == "encrypted_content" -> "[opaque reasoning omitted]"
+                    name == "text" && value.optString("type") == "reasoning_text" -> "[reasoning text omitted]"
+                    else -> scrub(value.get(name))
+                })
             } }
             is JSONArray -> JSONArray().apply { repeat(value.length()) { put(scrub(value.get(it))) } }
             else -> value
@@ -123,7 +137,9 @@ internal object AiResponsesWire {
         repeat(output.length()) { index ->
             val item = output.getJSONObject(index)
             validateOutputType(item)
-            val id = item.getString("id")
+            val id = if (item.has("id")) item.getString("id")
+                else if (item.optString("type") == "function_call") item.getString("call_id")
+                else invalid("responses_item_identity_mismatch")
             if (id.isEmpty() || id.length > 200 || !ids.add(id)) invalid("responses_item_identity_mismatch")
             if (item.optString("status", "completed") != "completed") invalid("responses_incomplete_output_item")
             when (item.getString("type")) {
@@ -146,12 +162,14 @@ internal object AiResponsesWire {
                 }
                 "reasoning" -> {
                     opaque += item.optString("encrypted_content").length
-                    val parts = item.getJSONArray("summary")
-                    if (parts.length() > 128) invalid("responses_content_limit")
-                    repeat(parts.length()) { partIndex ->
-                        val part = parts.getJSONObject(partIndex)
-                        if (part.getString("type") != "summary_text") invalid("responses_unsupported_output_content")
-                        publicReasoning += part.getString("text").length
+                    listOf("summary" to "summary_text", "content" to "reasoning_text").forEach { (key, type) ->
+                        val parts = if (key == "summary" || !item.isNull(key)) item.getJSONArray(key) else JSONArray()
+                        if (parts.length() > 128) invalid("responses_content_limit")
+                        repeat(parts.length()) { partIndex ->
+                            val part = parts.getJSONObject(partIndex)
+                            if (part.getString("type") != type) invalid("responses_unsupported_output_content")
+                            publicReasoning += part.getString("text").length
+                        }
                     }
                 }
             }
@@ -164,11 +182,14 @@ internal object AiResponsesWire {
 /** One attempt only. No tool leaves this decoder until response.completed validates all output. */
 internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     private val reasoningDelta: (String) -> Unit = {}, private val toolDelta: (List<AiCallDraft>) -> Unit = {}) : AiProviderStream {
-    private data class Item(val id: String, val type: String, var opaqueChars: Int = 0,
+    private data class Item(var id: String, val type: String, var explicitId: Boolean = true, var opaqueChars: Int = 0,
         var callId: String = "", var name: String = "", val arguments: StringBuilder = StringBuilder())
     private val items = sortedMapOf<Int, Item>()
     private val texts = sortedMapOf<Pair<Int, Int>, StringBuilder>(compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second })
     private val summaries = sortedMapOf<Pair<Int, Int>, StringBuilder>(compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second })
+    private val reasoningTexts = sortedMapOf<Pair<Int, Int>, StringBuilder>(compareBy<Pair<Int, Int>> { it.first }.thenBy { it.second })
+    // Validate and replay both channels, display the first non-empty channel per item only.
+    private val visibleReasoning = mutableMapOf<Int, String>()
     private var completed: JSONArray? = null
     override var done: Boolean = false; private set
     override var inputTokens: Long? = null; private set
@@ -176,9 +197,12 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     override var cachedTokens: Long? = null; private set
     override var finish: String = ""; private set
     override val text get() = texts.values.joinToString("")
-    override val reasoning get() = summaries.values.joinToString("")
+    override val reasoning get() = items.keys.joinToString("") { index ->
+        val map = if (visibleReasoning[index] == "content") reasoningTexts else summaries
+        map.filterKeys { it.first == index }.values.joinToString("")
+    }
     override val textChars get() = texts.values.sumOf { it.length }
-    override val reasoningChars get() = summaries.values.sumOf { it.length }
+    override val reasoningChars get() = summaries.values.sumOf { it.length } + reasoningTexts.values.sumOf { it.length }
     override val argumentChars get() = items.values.sumOf { it.arguments.length }
     val drafts get() = items.filterValues { it.type == "function_call" }.map { (index, item) ->
         liveCallDraft(index, item.name, item.arguments)
@@ -186,38 +210,70 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     private fun invalid(code: String): Nothing = AiResponsesWire.invalid(code)
     private fun index(event: JSONObject): Int = event.getInt("output_index").also { if (it !in 0..63) invalid("responses_output_index_limit") }
     private fun item(event: JSONObject): Pair<Int, Item> {
-        val index = index(event)
-        val item = items[index] ?: invalid("responses_unknown_output_item")
-        if (event.optString("item_id") != item.id) invalid("responses_item_identity_mismatch")
-        return index to item
+        val suppliedIndex = if (event.has("output_index")) index(event) else null
+        val itemId = if (event.has("item_id")) event.getString("item_id") else null
+        val callId = if (event.has("call_id")) event.getString("call_id") else null
+        if (suppliedIndex == null && itemId == null && callId == null) invalid("responses_unknown_output_item")
+        val matches = items.filter { (index, item) ->
+            (suppliedIndex == null || suppliedIndex == index) && (callId == null || callId == item.callId) &&
+                (itemId == null || itemId == item.id || (!item.explicitId && (suppliedIndex != null || callId != null)))
+        }
+        if (matches.size != 1) invalid(if (matches.isEmpty() && suppliedIndex != null && items[suppliedIndex] == null)
+            "responses_unknown_output_item" else "responses_item_identity_mismatch")
+        val match = matches.entries.single()
+        if (itemId != null && itemId != match.value.id) bindId(match.key, match.value, itemId)
+        return match.key to match.value
+    }
+    private fun bindId(index: Int, item: Item, id: String) {
+        if (id.isEmpty() || id.length > 200) invalid("invalid_tool_identity")
+        if (items.any { it.key != index && it.value.id == id }) invalid("responses_duplicate_item_id")
+        if (item.explicitId && item.id != id) invalid("responses_item_identity_mismatch")
+        item.id = id; item.explicitId = true
     }
     private fun add(index: Int, value: JSONObject): Item {
         AiResponsesWire.validateOutputType(value)
-        val id = value.getString("id")
+        val type = value.getString("type")
+        val explicitId = value.has("id")
+        val id = if (explicitId) value.getString("id")
+            else if (type == "function_call") value.getString("call_id")
+            else invalid("invalid_tool_identity")
         if (id.isEmpty() || id.length > 200) invalid("invalid_tool_identity")
         if (items.any { it.key != index && it.value.id == id }) invalid("responses_duplicate_item_id")
-        val type = value.getString("type")
-        val item = items.getOrPut(index) { Item(id, type) }
-        if (item.id != id || item.type != type) invalid("responses_item_identity_mismatch")
+        val item = items.getOrPut(index) { Item(id, type, explicitId) }
+        if (item.type != type) invalid("responses_item_identity_mismatch")
+        if (explicitId) bindId(index, item, id)
         if (type == "function_call") {
             if (items.values.count { it.type == "function_call" } > 8) throw AiTransportException(kind = AiFailure.ToolLimit)
             val callId = value.getString("call_id"); val name = value.getString("name")
             if (callId.isEmpty() || callId.length > 200 || name.isEmpty() || name.length > 100) invalid("invalid_tool_identity")
             if ((item.callId.isNotEmpty() && item.callId != callId) || (item.name.isNotEmpty() && item.name != name)) invalid("responses_item_identity_mismatch")
+            if (items.any { it.key != index && it.value.callId == callId }) invalid("duplicate_tool_id")
             item.callId = callId; item.name = name
         }
         return item
     }
+
     private fun append(builder: StringBuilder, fragment: String, kind: String) {
         val available = when (kind) { "arguments" -> 8 * 1024 * 1024 - argumentChars; "reasoning" -> AI_RESPONSE_TEXT_LIMIT - reasoningChars; else -> AI_RESPONSE_TEXT_LIMIT - textChars }
         if (fragment.length > available) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "responses_${kind}_limit")
         builder.append(fragment)
-        when (kind) { "reasoning" -> if (fragment.isNotEmpty()) reasoningDelta(fragment); "text" -> if (fragment.isNotEmpty()) delta(fragment) }
+        if (kind == "text" && fragment.isNotEmpty()) delta(fragment)
     }
     private fun reconcile(builder: StringBuilder, final: String, kind: String) {
         if (!final.startsWith(builder.toString())) invalid("responses_output_snapshot_mismatch")
         append(builder, final.substring(builder.length), kind)
     }
+    private fun reconcileReasoning(index: Int, partIndex: Int, channel: String, value: String, complete: Boolean) {
+        val map = if (channel == "content") reasoningTexts else summaries
+        val builder = map.getOrPut(index to partIndex) { StringBuilder() }
+        val before = builder.length
+        if (complete) reconcile(builder, value, "reasoning") else append(builder, value, "reasoning")
+        if (builder.length > before) {
+            visibleReasoning.putIfAbsent(index, channel)
+            if (visibleReasoning[index] == channel) reasoningDelta(builder.substring(before))
+        }
+    }
+
     private fun snapshot(index: Int, value: JSONObject) {
         val item = add(index, value)
         if (value.optString("status", "completed") !in setOf("completed", "in_progress")) invalid("responses_incomplete_output_item")
@@ -236,14 +292,17 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
                 if (texts.keys.any { it.first == index && it.second >= parts.length() }) invalid("responses_output_snapshot_mismatch")
             }
             "reasoning" -> {
-                val parts = value.getJSONArray("summary")
-                if (parts.length() > 128) invalid("responses_content_limit")
-                repeat(parts.length()) { partIndex ->
-                    val part = parts.getJSONObject(partIndex)
-                    if (part.getString("type") != "summary_text") invalid("responses_unsupported_output_content")
-                    reconcile(summaries.getOrPut(index to partIndex) { StringBuilder() }, part.getString("text"), "reasoning")
+                listOf("summary" to "summary_text", "content" to "reasoning_text").forEach { (channel, type) ->
+                    val parts = if (channel == "summary" || !value.isNull(channel)) value.getJSONArray(channel) else JSONArray()
+                    if (parts.length() > 128) invalid("responses_content_limit")
+                    repeat(parts.length()) { partIndex ->
+                        val part = parts.getJSONObject(partIndex)
+                        if (part.getString("type") != type) invalid("responses_unsupported_output_content")
+                        reconcileReasoning(index, partIndex, channel, part.getString("text"), true)
+                    }
+                    val map = if (channel == "content") reasoningTexts else summaries
+                    if (map.keys.any { it.first == index && it.second >= parts.length() }) invalid("responses_output_snapshot_mismatch")
                 }
-                if (summaries.keys.any { it.first == index && it.second >= parts.length() }) invalid("responses_output_snapshot_mismatch")
                 item.opaqueChars = value.optString("encrypted_content").length
                 if (items.values.sumOf { it.opaqueChars.toLong() } > 8 * 1024 * 1024) throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "responses_opaque_limit")
             }
@@ -251,20 +310,31 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
         }
     }
 
-    private fun readUsage(response: JSONObject) {
+    internal fun readUsage(response: JSONObject) {
         response.optJSONObject("usage")?.let { usage ->
-            fun number(name: String) = if (usage.isNull(name)) null else usage.getLong(name).also { if (it < 0) invalid("responses_invalid_usage") }
-            inputTokens = number("input_tokens"); outputTokens = number("output_tokens")
-            cachedTokens = usage.optJSONObject("input_tokens_details")?.let {
-                if (it.isNull("cached_tokens")) null else it.getLong("cached_tokens").also { count -> if (count < 0) invalid("responses_invalid_usage") }
-            }
+            fun number(value: JSONObject, name: String): Long? = try { AiStreamUsage.count(value, name) }
+                catch (_: AiTransportException) { invalid("responses_invalid_usage") }
+            inputTokens = number(usage, "input_tokens") ?: number(usage, "prompt_tokens") ?: inputTokens
+            outputTokens = number(usage, "output_tokens") ?: number(usage, "completion_tokens") ?: outputTokens
+            cachedTokens = usage.optJSONObject("input_tokens_details")?.let { number(it, "cached_tokens") }
+                ?: usage.optJSONObject("prompt_tokens_details")?.let { number(it, "cached_tokens") }
+                ?: number(usage, "cached_tokens") ?: number(usage, "prompt_cache_hit_tokens") ?: cachedTokens
         }
     }
 
+    private val lifecycleNotifications = setOf("response.created", "response.in_progress", "response.queued")
+    // Content is reconciled against the required terminal output snapshot, not these envelopes.
+    private val structuralNotifications = setOf("response.content_part.added", "response.content_part.done",
+        "response.reasoning_summary_part.added", "response.reasoning_summary_part.done")
+    private val metadataNotifications = setOf("response.metadata", "response.output_text.annotation.added")
+
     override fun accept(event: JSONObject) {
         if (done) invalid("responses_event_after_completed")
-        when (val type = event.getString("type")) {
-            "response.created", "response.in_progress", "response.queued" -> Unit
+        val type = event.getString("type")
+        // Lifecycle and metadata are notifications only: neither can complete or supply output.
+        // Keep a bounded whitelist rather than accepting arbitrary response.* extensions.
+        if (type in lifecycleNotifications || type in structuralNotifications || type in metadataNotifications) return
+        when (type) {
             "response.output_item.added" -> { val index = index(event); add(index, event.getJSONObject("item")); toolDelta(drafts) }
             "response.output_item.done" -> snapshot(index(event), event.getJSONObject("item"))
             "response.output_text.delta", "response.refusal.delta" -> {
@@ -272,10 +342,12 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
                 val partIndex = event.getInt("content_index"); if (partIndex !in 0..127) invalid("responses_content_limit")
                 append(texts.getOrPut(index to partIndex) { StringBuilder() }, event.getString("delta"), "text")
             }
-            "response.reasoning_summary_text.delta" -> {
+            "response.reasoning_summary_text.delta", "response.reasoning_text.delta" -> {
                 val (index, item) = item(event); if (item.type != "reasoning") invalid("responses_item_type_mismatch")
-                val summaryIndex = event.getInt("summary_index"); if (summaryIndex !in 0..127) invalid("responses_content_limit")
-                append(summaries.getOrPut(index to summaryIndex) { StringBuilder() }, event.getString("delta"), "reasoning")
+                val channel = if (type == "response.reasoning_text.delta") "content" else "summary"
+                val partIndex = event.getInt(if (channel == "content") "content_index" else "summary_index")
+                if (partIndex !in 0..127) invalid("responses_content_limit")
+                reconcileReasoning(index, partIndex, channel, event.getString("delta"), false)
             }
             "response.function_call_arguments.delta" -> {
                 val (_, item) = item(event); if (item.type != "function_call") invalid("responses_item_type_mismatch")
@@ -285,16 +357,15 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
                 val (_, item) = item(event); if (item.type != "function_call") invalid("responses_item_type_mismatch")
                 reconcile(item.arguments, event.getString("arguments"), "arguments"); toolDelta(drafts)
             }
-            "response.output_text.done", "response.refusal.done", "response.reasoning_summary_text.done" -> {
+            "response.output_text.done", "response.refusal.done", "response.reasoning_summary_text.done", "response.reasoning_text.done" -> {
                 val (index, item) = item(event)
-                val reasoning = type == "response.reasoning_summary_text.done"
+                val reasoning = type in setOf("response.reasoning_summary_text.done", "response.reasoning_text.done")
                 if (item.type != if (reasoning) "reasoning" else "message") invalid("responses_item_type_mismatch")
-                val partIndex = event.getInt(if (reasoning) "summary_index" else "content_index")
+                val partIndex = event.getInt(if (type == "response.reasoning_summary_text.done") "summary_index" else "content_index")
                 if (partIndex !in 0..127) invalid("responses_content_limit")
-                val map = if (reasoning) summaries else texts
-                reconcile(map.getOrPut(index to partIndex) { StringBuilder() }, event.getString(if (type == "response.refusal.done") "refusal" else "text"), if (reasoning) "reasoning" else "text")
+                if (reasoning) reconcileReasoning(index, partIndex, if (type == "response.reasoning_text.done") "content" else "summary", event.getString("text"), true)
+                else reconcile(texts.getOrPut(index to partIndex) { StringBuilder() }, event.getString(if (type == "response.refusal.done") "refusal" else "text"), "text")
             }
-            "response.content_part.added", "response.content_part.done", "response.reasoning_summary_part.added", "response.reasoning_summary_part.done", "response.output_text.annotation.added" -> Unit
             "response.completed" -> {
                 val response = event.getJSONObject("response")
                 if (response.getString("status") != "completed" || !response.isNull("error")) invalid("responses_invalid_completion")
@@ -311,12 +382,13 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
                 completed = JSONArray(output.toString()); done = true
                 finish = if (items.values.any { it.type == "function_call" }) "tool_calls" else "stop"
             }
-            "response.failed", "response.incomplete", "error" -> {
+            "response.failed", "response.incomplete", "response.error", "error" -> {
                 val response = event.optJSONObject("response")
                 response?.let(::readUsage)
                 val reason = response?.optJSONObject("incomplete_details")?.optString("reason")
                 if (type == "response.incomplete" && reason == "max_output_tokens") throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "finish_length")
-                val code = response?.optJSONObject("error")?.optString("code") ?: event.optString("code")
+                val code = sequenceOf(response?.optJSONObject("error")?.optString("code"), event.optJSONObject("error")?.optString("code"), event.optString("code"))
+                    .firstOrNull { !it.isNullOrEmpty() }.orEmpty()
                 invalid(when {
                     code == "server_error" -> "responses_server_error"
                     code == "rate_limit_exceeded" -> "responses_rate_limit"

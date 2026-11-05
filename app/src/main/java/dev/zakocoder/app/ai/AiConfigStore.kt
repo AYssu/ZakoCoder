@@ -83,7 +83,8 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         if (json.has("reasoningEffort")) AiReasoningEffort.valueOf(json.getString("reasoningEffort")) else null,
         if (json.has("frequencyPenalty")) json.getDouble("frequencyPenalty") else null,
         if (json.has("presencePenalty")) json.getDouble("presencePenalty") else null,
-        if (json.has("seed")) json.getInt("seed") else null).also { it.validate() }
+        if (json.has("seed")) json.getInt("seed") else null,
+        AiServiceOptionsJson.decode(json.optJSONObject("service"))).also { it.validate() }
     private fun contextOptions(json: JSONObject): AiContextOptions = json.optJSONObject("context")?.let {
         decodeContextOptions(it)
     }?.also { it.validate() } ?: AiContextOptions()
@@ -178,6 +179,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val item = encrypt(JSONObject().put("id", id).put("name", draft.name.trim()).put("endpoint", resolved.endpoint)
             .put("model", resolved.model).put("hasKey", resolved.key.isNotEmpty()).put("protocol", resolved.protocol.name).put("systemPrompt", resolved.systemPrompt), resolved.key, id)
         resolved.parameters.maxTokens?.let { item.put("maxTokens", it) }; resolved.parameters.temperature?.let { item.put("temperature", it) }; resolved.parameters.topP?.let { item.put("topP", it) }
+        item.put("service", AiServiceOptionsJson.encode(resolved.parameters.service))
         item.put("thinking", resolved.parameters.thinking.name)
         resolved.parameters.reasoningEffort?.let { item.put("reasoningEffort", it.name) }
         resolved.parameters.frequencyPenalty?.let { item.put("frequencyPenalty", it) }

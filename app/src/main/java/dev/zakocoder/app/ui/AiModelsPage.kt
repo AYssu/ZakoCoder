@@ -164,7 +164,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                 Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ModelField(endpoint, { endpoint = it; changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
-                if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model)
+                if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model, options.service.streaming)
                 if (original != null && normalized != null && runCatching { !sameModelOrigin(original.endpoint, normalized) }.getOrDefault(false) &&
                     (original.hasKey || original.headerNames.isNotEmpty())) Text(stringResource(R.string.ai_provider_origin_hint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -192,7 +192,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                 ParameterInput(R.string.ai_models_temperature, tempEnabled, { tempEnabled = it; changed() }, temperature, { temperature = it; changed() }, editable, temperature.toDoubleOrNull()?.let { it.isFinite() && it in 0.0..2.0 } == true)
                 ParameterInput(R.string.ai_models_top_p, topEnabled, { topEnabled = it; changed() }, topP, { topP = it; changed() }, editable, topP.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 && it <= 1.0 } == true)
             }
-            ModelOptions(options, original, editable, ::changed)
+            ModelOptions(options, original, editable, protocol, ::changed)
             ModelSection(stringResource(R.string.ai_models_test_title)) {
                 Text(stringResource(R.string.ai_models_test_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)

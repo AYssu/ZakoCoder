@@ -11,7 +11,8 @@ enum class AiReasoningEffort(val wire: String) { Low("low"), Medium("medium"), H
 /** Only explicit parameters are sent; omission preserves the provider's defaults. */
 data class AiParameters(val maxTokens: Int? = null, val temperature: Double? = null, val topP: Double? = null,
     val thinking: AiThinking = AiThinking.Default, val reasoningEffort: AiReasoningEffort? = null,
-    val frequencyPenalty: Double? = null, val presencePenalty: Double? = null, val seed: Int? = null) {
+    val frequencyPenalty: Double? = null, val presencePenalty: Double? = null, val seed: Int? = null,
+    val service: AiServiceOptions = AiServiceOptions()) {
     fun validate() {
         require(maxTokens == null || maxTokens in 1..32768)
         require(temperature == null || (temperature.isFinite() && temperature in 0.0..2.0))
