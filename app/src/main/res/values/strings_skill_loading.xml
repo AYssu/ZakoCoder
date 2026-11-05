@@ -1,0 +1,6 @@
+<resources>
+    <string name="ai_tool_load_skill">读取 Skill</string>
+    <string name="ai_tool_load_skill_desc">读取已选 Skill 指令及其参考文件，沿用读取文件权限。</string>
+    <string name="ai_skill_on_demand">按需读取 Skill</string>
+    <string name="ai_skill_on_demand_hint">实验性。先发送已选指令的摘要，再按任务读取正文；沿用读取文件权限。关闭时发送完整指令。</string>
+</resources>

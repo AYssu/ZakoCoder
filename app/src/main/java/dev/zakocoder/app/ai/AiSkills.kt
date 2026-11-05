@@ -169,6 +169,25 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
         require(result.length <= 32000)
         return result
     }
+    /** Uses metadata already shown to the user; constructing a request must not scan skill bodies. */
+    internal fun session(project: String, paths: List<String>, metadataSnapshot: List<AiSkill>): AiSkillSession {
+        require(paths.size <= MAX_ENABLED && paths.distinct().size == paths.size)
+        require(paths.count { it in AiBuiltinSkills.expressionStyles } <= 1)
+        val available = metadataSnapshot.filter { it.valid }.associateBy { it.path }
+        val selected = paths.map { path -> requireNotNull(available[path]).also { skill ->
+            if (skill.builtIn) require(AiBuiltinSkills.contains(path))
+            else {
+                require(path.startsWith(".zakocoder/skills/") && path.endsWith("/SKILL.md"))
+                validateSkillResource(path)
+            }
+        } }
+        return AiSkillSession(selected) { skill, resource ->
+            validateSkillResource(resource)
+            if (skill.builtIn) requireNotNull(builtIns).resource(skill.path, resource)
+            else files.read(project, skill.path.substringBeforeLast('/') + "/" + resource).text
+        }
+    }
+
     private fun metadata(text: String): Pair<String, String> {
         if (!text.startsWith("---\n") && !text.startsWith("---\r\n")) return "" to ""
         val lines = text.lineSequence().drop(1).takeWhile { it.trim() != "---" }.take(100).toList()

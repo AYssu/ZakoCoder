@@ -9,10 +9,10 @@ import org.junit.Test
 /** Contract checks use Android's real JSON implementation; no model, files or device settings. */
 class AiToolRegistryDeviceTest {
     @Test fun schemasHaveExactlyOneDefinitionPerAvailableToolAndFreshMutableObjects() {
-        for (screen in listOf(false, true)) for (ssh in listOf(false, true)) {
-            val schema = AiController.schemas(screen, ssh)
+        for (screen in listOf(false, true)) for (ssh in listOf(false, true)) for (skills in listOf(false, true)) {
+            val schema = AiController.schemas(screen, ssh, skills)
             val names = (0 until schema.length()).map { schema.getJSONObject(it).getJSONObject("function").getString("name") }
-            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) }.map { it.wire }
+            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) }.map { it.wire }
             assertEquals(expected.toSet(), names.toSet())
             assertEquals(expected.size, names.size)
             repeat(schema.length()) { index ->
@@ -21,12 +21,12 @@ class AiToolRegistryDeviceTest {
                 assertTrue(parameters.getJSONObject("properties").has("reason"))
             }
             schema.getJSONObject(0).getJSONObject("function").put("name", "tampered")
-            assertEquals("update_plan", AiController.schemas(screen, ssh).getJSONObject(0).getJSONObject("function").getString("name"))
+            assertEquals("update_plan", AiController.schemas(screen, ssh, skills).getJSONObject(0).getJSONObject("function").getString("name"))
         }
     }
 
     @Test fun descriptorsCoverMetadataPermissionTargetsAndUnknownNamesAreNotExecutable() {
-        val all = AiToolRegistry.definitions(screen = true, ssh = true)
+        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true)
         assertEquals(AiTool.entries.toSet(), all.map { it.tool }.toSet())
         assertEquals(AiTool.entries.size, all.size)
         assertNull(AiToolRegistry.named("unregistered_tool"))
@@ -58,6 +58,10 @@ class AiToolRegistryDeviceTest {
         rejects(AiTool.SshRemote, JSONObject().put("action", "exec").put("password", "must-not-be-model-input"))
         rejects(AiTool.UseMcp, JSONObject().put("server_id", "x").put("method", "tools/list").put("params", JSONArray()))
         rejects(AiTool.ReadCommandLog, JSONObject().put("run_id", "not-a-uuid"))
+        rejects(AiTool.LoadSkill, JSONObject().put("skill", 12))
+        rejects(AiTool.LoadSkill, JSONObject().put("skill", "builtin:chosen").put("resource", "../outside"))
+        rejects(AiTool.LoadSkill, JSONObject().put("skill", "builtin:chosen").put("resource", JSONObject.NULL))
+        rejects(AiTool.LoadSkill, JSONObject().put("skill", "builtin:chosen").put("authorization", "not-allowed"))
     }
 
     @Test fun editDescriptorPreservesStructuredArgumentsForPreviewWithoutReparsing() {
@@ -73,6 +77,7 @@ class AiToolRegistryDeviceTest {
     }
 
     @Test fun targetAndSharedActionVocabularyMatchWireContracts() {
+        assertEquals("builtin:chosen · SKILL.md", AiToolRegistry.target(AiTool.LoadSkill, JSONObject().put("skill", "builtin:chosen"), "Plan"))
         assertEquals("echo hello", AiToolRegistry.target(AiTool.RunCommand, JSONObject().put("command", "echo hello"), "Plan"))
         assertEquals("Plan", AiToolRegistry.target(AiTool.UpdatePlan, JSONObject(), "Plan"))
         assertEquals("server · tools/call · search", AiToolRegistry.target(AiTool.UseMcp,

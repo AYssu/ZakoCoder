@@ -43,6 +43,7 @@ internal suspend fun wireImageMessages(source: JSONArray, resolve: (suspend (AiI
         val message = JSONObject(source.getJSONObject(i).toString())
         val images = message.optJSONArray("zako_images")?.let(::decodeAiImages).orEmpty()
         message.remove("zako_images")
+        message.remove(AI_SKILL_SNAPSHOT) // Local resource identities never enter a provider protocol.
         message.remove("zako_steering") // Local transcript marker, never a provider protocol field.
         val text = message.optString("content")
         val content = JSONArray().put(JSONObject().put("type", "text").put("text", text))

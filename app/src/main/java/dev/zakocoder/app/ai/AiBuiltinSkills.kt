@@ -9,10 +9,21 @@ class AiBuiltinSkills(private val context: Context) {
         AiSkill("builtin:${entry.id}", entry.id, context.getString(entry.description), builtIn = true,
             recommended = entry.id in recommendedIds, category = entry.category)
     }
-    fun content(path: String): String {
+    fun content(path: String): String = resource(path, "SKILL.md")
+    internal fun resource(path: String, resource: String): String {
         require(contains(path))
-        return context.assets.open("skills/${path.removePrefix("builtin:")}/SKILL.md").bufferedReader().use { it.readText() }
-            .also { require(it.length <= 32000) }
+        validateSkillResource(resource)
+        return context.assets.open("skills/${path.removePrefix("builtin:")}/$resource").bufferedReader().use { reader ->
+            val buffer = CharArray(32001)
+            var count = 0
+            while (count < buffer.size) {
+                val read = reader.read(buffer, count, buffer.size - count)
+                if (read < 0) break
+                count += read
+            }
+            require(count <= 32000)
+            String(buffer, 0, count)
+        }
     }
     private data class Entry(val id: String, val description: Int, val category: AiSkillCategory = AiSkillCategory.Coding)
     companion object {

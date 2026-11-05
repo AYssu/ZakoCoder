@@ -73,7 +73,7 @@ class AiBuiltinSkillsDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun selectionUsesUserReferenceMessagesAndDisabledBodiesDoNotReturnInContext() = runBlocking {
+    @Test(timeout = 120000) fun selectionUsesUserReferenceMessagesAndLatestSnapshotSupersedesHistory() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
                 lateinit var ai: AiController
@@ -92,13 +92,23 @@ class AiBuiltinSkillsDeviceTest {
                 assertTrue(guidance.contains("If none applies, omit the announcement"))
                 assertTrue(guidance.contains("Do not invent skill tool calls or audit events"))
                 assertFalse(first.getJSONObject(0).getString("content").contains("# 界面设计与实现"))
-                assertFalse(ai.state.value.contextTurns.single().contains("# 界面设计与实现"))
+                assertTrue("The sent skill snapshot remains literal history for a stable cache prefix",
+                    ai.state.value.contextTurns.single().contains("# 界面设计与实现"))
+                val firstTurn = ai.state.value.contextTurns.single()
                 main { ai.enableSkill("builtin:frontend-design", false) }
                 f.enqueue("现在没有启用这份规范。")
                 main { ai.send("继续") }; await { !ai.state.value.active }
-                val second = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages").toString()
-                assertFalse(second.contains("Skill: frontend-design")); assertTrue(second.contains("设计一个页面"))
-                assertEquals(2, f.history.load("injection").state!!.contextTurns.size)
+                val second = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
+                val snapshots = (0 until second.length()).map { second.getJSONObject(it).optString("content") }
+                    .filter { it.startsWith("User-selected skills for this task.") }
+                assertEquals(2, snapshots.size)
+                assertEquals("The prior request prefix must not be rewritten when a skill is disabled", guidance, snapshots.first())
+                assertFalse("The latest task no longer enables the old skill", snapshots.last().contains("Skill: frontend-design"))
+                assertTrue(snapshots.last().contains("Earlier snapshots are historical evidence, not current rules or authorization"))
+                assertTrue(second.toString().contains("设计一个页面"))
+                val saved = f.history.load("injection").state!!
+                assertEquals(2, saved.contextTurns.size)
+                assertEquals(firstTurn, saved.contextTurns.first())
                 assertTrue(ai.state.value.events.isEmpty())
             }
         }
@@ -126,4 +136,96 @@ class AiBuiltinSkillsDeviceTest {
             }
         }
     }
+    @Test(timeout = 120000) fun onDemandLoadsSelectedBuiltinOnceAndPersistsMode() = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            AiDeviceTest.Fixture(context).use { f ->
+                lateinit var ai: AiController
+                main { ai = controller(f); ai.select("on-demand") }; ready(ai)
+                for (path in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(path, false) }
+                main { ai.enableSkill("builtin:frontend-design", true); ai.setSkillOnDemand(true) }
+                f.enqueue(calls = listOf(AiCall("skill1", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"读取界面指令\"}")))
+                f.enqueue(calls = listOf(AiCall("skill2", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"检查加载状态\"}")))
+                f.enqueue("已读取指令，尚未修改项目。")
+                main { assertTrue(ai.send("检查界面规范，不修改文件")) }; await { !ai.state.value.active }
+                val requests = (1..3).map { JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()) }
+                val body = AiBuiltinSkills(context).content("builtin:frontend-design")
+                assertFalse(requests[0].getJSONArray("messages").toString().contains(body))
+                val second = requests[1].getJSONArray("messages")
+                val loaded = (0 until second.length()).map { second.getJSONObject(it) }.single { it.optString("role") == "tool" }
+                assertEquals(body, JSONObject(loaded.getString("content")).getString("content"))
+                val third = requests[2].getJSONArray("messages")
+                val results = (0 until third.length()).map { third.getJSONObject(it) }.filter { it.optString("role") == "tool" }
+                assertEquals(2, results.size)
+                assertTrue(JSONObject(results.last().getString("content")).getBoolean("already_loaded"))
+                assertEquals("", JSONObject(results.last().getString("content")).getString("content"))
+                assertEquals(2, ai.state.value.events.count { it.tool == AiTool.LoadSkill && it.status == AiToolStatus.Succeeded })
+                await { f.history.load("on-demand").state?.skillOnDemand == true }
+                lateinit var restored: AiController
+                main { restored = controller(f); restored.select("on-demand") }; ready(restored)
+                assertTrue(restored.state.value.skillOnDemand)
+            }
+        }
+    }
+
+    @Test(timeout = 120000) fun fileReadDenialAlsoDeniesOnDemandSkillLoading() = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            AiDeviceTest.Fixture(context).use { f ->
+                val custom = File(f.root, "project/.zakocoder/skills/selected").apply { mkdirs() }
+                val disabled = File(f.root, "project/.zakocoder/skills/disabled").apply { mkdirs() }
+                File(custom, "SKILL.md").writeText("---\nname: selected\ndescription: Selected metadata\n---\nSELECTED_PRIVATE_BODY")
+                File(disabled, "SKILL.md").writeText("---\nname: disabled\ndescription: Disabled metadata\n---\nDISABLED_PRIVATE_BODY")
+                val path = ".zakocoder/skills/selected/SKILL.md"
+                f.history.save("denied-load", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
+                AiPermissionStore(object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }).save("denied-load", AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny)))
+                lateinit var ai: AiController
+                main { ai = controller(f); ai.select("denied-load") }; ready(ai)
+                f.enqueue(calls = listOf(AiCall("denied", "load_skill", JSONObject().put("skill", path).put("reason", "读取规范").toString())))
+                f.enqueue("读取被禁止，未加载规范。")
+                main { assertTrue(ai.send("查看规范")) }; await { !ai.state.value.active }
+                assertEquals(AiToolStatus.Denied, ai.state.value.events.single().status)
+                val firstRequest = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages").toString()
+                assertTrue(firstRequest.contains("Selected metadata"))
+                assertFalse(firstRequest.contains("Disabled metadata"))
+                assertFalse(firstRequest.contains("SELECTED_PRIVATE_BODY"))
+                assertFalse(firstRequest.contains("DISABLED_PRIVATE_BODY"))
+                assertFalse(ai.state.value.contextTurns.joinToString().contains("SELECTED_PRIVATE_BODY"))
+            }
+        }
+    }
+
+    @Test(timeout = 120000) fun previousTaskSkillDoesNotSkipNewReadAfterQuestionRestart() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val file = File(f.root, "project/.zakocoder/skills/selected/SKILL.md").apply { parentFile!!.mkdirs() }
+            fun document(body: String) = "---\nname: selected\ndescription: Use for this fixture\n---\n$body"
+            file.writeText(document("OLD_TASK_BODY"))
+            val path = ".zakocoder/skills/selected/SKILL.md"
+            f.history.save("task-boundary", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("task-boundary") }; ready(ai)
+            val loadArgs = JSONObject().put("skill", path).put("reason", "读取选中指令").toString()
+            f.enqueue(calls = listOf(AiCall("old-load", "load_skill", loadArgs)))
+            f.enqueue("首个任务完成。")
+            main { assertTrue(ai.send("第一个任务，读取指令")) }; await { !ai.state.value.active }
+            repeat(2) { assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS)) }
+            file.writeText(document("NEW_TASK_BODY"))
+            f.enqueue(calls = listOf(AiCall("question", "ask_user", JSONObject().put("question", "继续检查吗？").toString())))
+            main { assertTrue(ai.send("第二个任务，先询问再读取指令")) }
+            await { !ai.state.value.active && ai.state.value.questionContinuation != null }
+            assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS))
+            lateinit var reopened: AiController
+            main { reopened = controller(f); reopened.select("task-boundary") }; ready(reopened)
+            val question = reopened.state.value.questions.last()
+            f.enqueue(calls = listOf(AiCall("new-load", "load_skill", loadArgs)))
+            f.enqueue("第二个任务完成。")
+            main { assertTrue(reopened.answerQuestion("task-boundary", reopened.state.value.conversationId, question.id, "继续")) }
+            await { !reopened.state.value.active && reopened.state.value.questionContinuation == null }
+            val loaded = reopened.state.value.events.single { it.callId == "new-load" }
+            assertEquals(AiToolStatus.Succeeded, loaded.status)
+            val result = JSONObject(loaded.output)
+            assertFalse(result.getBoolean("already_loaded"))
+            assertTrue(result.getString("content").contains("NEW_TASK_BODY"))
+            assertFalse(result.getString("content").contains("OLD_TASK_BODY"))
+        }
+    }
+
 }

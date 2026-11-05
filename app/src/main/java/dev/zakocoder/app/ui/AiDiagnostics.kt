@@ -147,6 +147,15 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                     TextButton(onClick = controller::recommendedSkills, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
                 }
                 Text(stringResource(R.string.ai_skills_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val onDemandLabel = stringResource(R.string.ai_skill_on_demand)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(onDemandLabel, style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.ai_skill_on_demand_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = state.skillOnDemand, onCheckedChange = controller::setSkillOnDemand, enabled = editable,
+                        modifier = Modifier.semantics { contentDescription = onDemandLabel })
+                }
                 AiCustomSkillActions(state, controller)
                 val searchLabel = stringResource(R.string.ai_skills_search)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

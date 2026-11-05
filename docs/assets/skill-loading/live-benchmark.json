@@ -1,0 +1,324 @@
+{
+  "kind": "real_controller_skill_task_comparison",
+  "project_id": "public-skill-rename-benchmark",
+  "order": "eager-1,lazy-1,eager-2,lazy-2",
+  "provider_cache_guaranteed": false,
+  "caveat": "Real provider usage; unavailable counters remain null. Backend caching, independent session keys, request order and model decisions affect results. Four independent identical public tasks; no user projects or stored settings changed.",
+  "enabled_skills": [
+    "builtin:lean-build",
+    "builtin:surgical-patch",
+    "builtin:investigate-first",
+    "builtin:verify-and-stop",
+    "builtin:caveman"
+  ],
+  "tasks": [
+    {
+      "mode": "eager",
+      "repeat": 1,
+      "finished": true,
+      "input_tokens": 67818,
+      "input_tokens_reported_requests": 7,
+      "input_tokens_reported_subtotal": 67818,
+      "output_tokens": 506,
+      "output_tokens_reported_requests": 7,
+      "output_tokens_reported_subtotal": 506,
+      "cache_read_tokens": 9344,
+      "cache_read_tokens_reported_requests": 7,
+      "cache_read_tokens_reported_subtotal": 9344,
+      "requests": [
+        {
+          "input_tokens": 9263,
+          "output_tokens": 117,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9395,
+          "output_tokens": 49,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9495,
+          "output_tokens": 79,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9589,
+          "output_tokens": 64,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9925,
+          "output_tokens": 51,
+          "cache_read_tokens": 9344,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 10028,
+          "output_tokens": 80,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 10123,
+          "output_tokens": 66,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        }
+      ],
+      "request_count": 7,
+      "elapsed_ms": 50726,
+      "phase": "Completed",
+      "failure_kind": null,
+      "load_skill_count": 0,
+      "command_executions": 0,
+      "file_correct": true,
+      "workflow_correct": true,
+      "accepted": true
+    },
+    {
+      "mode": "lazy",
+      "repeat": 1,
+      "finished": true,
+      "input_tokens": 70209,
+      "input_tokens_reported_requests": 8,
+      "input_tokens_reported_subtotal": 70209,
+      "output_tokens": 611,
+      "output_tokens_reported_requests": 8,
+      "output_tokens_reported_subtotal": 611,
+      "cache_read_tokens": 0,
+      "cache_read_tokens_reported_requests": 8,
+      "cache_read_tokens_reported_subtotal": 0,
+      "requests": [
+        {
+          "input_tokens": 8038,
+          "output_tokens": 127,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8180,
+          "output_tokens": 41,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8594,
+          "output_tokens": 98,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8743,
+          "output_tokens": 79,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8837,
+          "output_tokens": 64,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9171,
+          "output_tokens": 51,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9274,
+          "output_tokens": 83,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9372,
+          "output_tokens": 68,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        }
+      ],
+      "request_count": 8,
+      "elapsed_ms": 53561,
+      "phase": "Completed",
+      "failure_kind": null,
+      "load_skill_count": 1,
+      "command_executions": 0,
+      "file_correct": true,
+      "workflow_correct": true,
+      "accepted": true
+    },
+    {
+      "mode": "eager",
+      "repeat": 2,
+      "finished": true,
+      "input_tokens": 57910,
+      "input_tokens_reported_requests": 6,
+      "input_tokens_reported_subtotal": 57910,
+      "output_tokens": 414,
+      "output_tokens_reported_requests": 6,
+      "output_tokens_reported_subtotal": 414,
+      "cache_read_tokens": 0,
+      "cache_read_tokens_reported_requests": 6,
+      "cache_read_tokens_reported_subtotal": 0,
+      "requests": [
+        {
+          "input_tokens": 9262,
+          "output_tokens": 115,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9392,
+          "output_tokens": 48,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9491,
+          "output_tokens": 65,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9827,
+          "output_tokens": 49,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9928,
+          "output_tokens": 67,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 10010,
+          "output_tokens": 70,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        }
+      ],
+      "request_count": 6,
+      "elapsed_ms": 40895,
+      "phase": "Completed",
+      "failure_kind": null,
+      "load_skill_count": 0,
+      "command_executions": 0,
+      "file_correct": true,
+      "workflow_correct": true,
+      "accepted": true
+    },
+    {
+      "mode": "lazy",
+      "repeat": 2,
+      "finished": true,
+      "input_tokens": 70094,
+      "input_tokens_reported_requests": 8,
+      "input_tokens_reported_subtotal": 70094,
+      "output_tokens": 592,
+      "output_tokens_reported_requests": 8,
+      "output_tokens_reported_subtotal": 592,
+      "cache_read_tokens": 7936,
+      "cache_read_tokens_reported_requests": 8,
+      "cache_read_tokens_reported_subtotal": 7936,
+      "requests": [
+        {
+          "input_tokens": 8039,
+          "output_tokens": 116,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8170,
+          "output_tokens": 40,
+          "cache_read_tokens": 7936,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8583,
+          "output_tokens": 95,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8729,
+          "output_tokens": 72,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 8816,
+          "output_tokens": 64,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9151,
+          "output_tokens": 51,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9254,
+          "output_tokens": 83,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        },
+        {
+          "input_tokens": 9352,
+          "output_tokens": 71,
+          "cache_read_tokens": 0,
+          "http_status": 200,
+          "complete": true
+        }
+      ],
+      "request_count": 8,
+      "elapsed_ms": 48262,
+      "phase": "Completed",
+      "failure_kind": null,
+      "load_skill_count": 1,
+      "command_executions": 0,
+      "file_correct": true,
+      "workflow_correct": true,
+      "accepted": true
+    }
+  ],
+  "date": "2026-11-05",
+  "device": "Android 13 ARM64",
+  "decision": "Keep eager default; lazy remains opt-in. Four accepted tasks are insufficient for general cache or cost claims.",
+  "sourceReferenceCommit": "0a63e1d67ace5c5060af9b24a7213d4bbe17b913",
+  "sourceReferenceNote": "Product and AndroidTest sources match this integrated reference; screenshot archives were committed after building the tested APK. The later upstream proxy/CI merge was not part of this provider experiment."
+}

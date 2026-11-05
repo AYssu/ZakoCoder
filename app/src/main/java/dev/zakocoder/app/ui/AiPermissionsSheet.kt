@@ -46,7 +46,7 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
                 } else workbench.ai.setPolicy(policy)
             }
         }
-        val denied = AiTool.entries.count { state.policy.permission(it) == AiPermission.Deny }
+        val denied = AiTool.entries.filter { it != AiTool.LoadSkill }.count { state.policy.permission(it) == AiPermission.Deny }
         if (state.policy.yolo) Text(stringResource(R.string.ai_permission_yolo_boundary),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (denied > 0) Text(stringResource(R.string.ai_permission_retained_denials, denied),
@@ -61,7 +61,7 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
                 choose(state.policy.copy(default = value, yolo = false), value == AiPermission.Allow)
             }
             HorizontalDivider()
-            AiTool.entries.forEach { tool ->
+            AiTool.entries.filter { it != AiTool.LoadSkill }.forEach { tool ->
                 PermissionRow(stringResource(tool.label), state.policy.overrides[tool], state.policy.permission(tool), enabled) { value ->
                     val overrides = state.policy.overrides.toMutableMap().apply { if (value == null) remove(tool) else put(tool, value) }
                     confirmingPreset = null

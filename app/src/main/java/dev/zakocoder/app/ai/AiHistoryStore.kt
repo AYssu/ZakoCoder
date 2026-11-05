@@ -221,7 +221,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("context", JSONArray(state.contextTurns.map { JSONArray(it) }))
         .put("commandChanges", JSONArray(state.commandChanges.map { it.encode() })).put("commandReviewLimited", state.commandReviewLimited)
         .put("requests", JSONArray(state.requests.map { it.encode() })).put("recovery", JSONArray(state.recoveryNotes))
-        .put("skillsInitialized", state.skillsInitialized)
+        .put("skillsInitialized", state.skillsInitialized).put("skillOnDemand", state.skillOnDemand)
         .put("estimatedContextTokens", state.estimatedContextTokens).put("contextWindowTokens", state.contextWindowTokens).put("contextOutputReserveTokens", state.contextOutputReserveTokens)
         .put("contextSummary", state.contextSummary).put("contextCompactions", state.contextCompactions).put("contextChars", state.contextChars)
         .put("taskRecovery", state.taskRecovery).put("taskPrompt", state.taskPrompt).put("enabledSkills", JSONArray(state.enabledSkills))
@@ -308,18 +308,19 @@ open class AiHistoryStore(private val directory: File) {
         val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering"))
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering") && !turn.getJSONObject(0).has(AI_SKILL_SNAPSHOT))
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
                 val message = turn.getJSONObject(messageIndex)
+                validatedSkillSnapshot(message)
                 val steering = steeringMessage(message)
                 when (message.getString("role")) {
                     "user" -> {
                         // App-generated dynamic evidence is appended only after a complete tool
                         // batch. Ordinary user turns keep the original pre-assistant ordering.
                         val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
-                            message.keys().asSequence().toSet() == setOf("role", "content") &&
+                            message.keys().asSequence().toSet() in setOf(setOf("role", "content"), setOf("role", "content", AI_SKILL_SNAPSHOT)) &&
                             turn.getJSONObject(messageIndex - 1).let { previous ->
                                 previous.optString("role") == "tool" || steeringMessage(previous)
                             }
@@ -381,7 +382,7 @@ open class AiHistoryStore(private val directory: File) {
             contextOutputReserveTokens = json.optInt("contextOutputReserveTokens", 8192).coerceAtLeast(0),
             messages = timeline.filter { it.toolId == null }.takeLast(100).map { it.text }, contextTurns = turns,
             commandChanges = commandChanges, commandReviewLimited = json.optBoolean("commandReviewLimited"),
-            requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),
+            requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillOnDemand = json.optBoolean("skillOnDemand", false), skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),
             taskDiagnostic = json.optString("taskDiagnostic").take(2048),
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
             historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,

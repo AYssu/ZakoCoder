@@ -28,7 +28,7 @@ data class AiState(val projectId: String? = null, val checkpointId: String? = nu
     val conversations: List<AiConversation> = emptyList(), val contextTurns: List<String> = emptyList(),
     val commandChanges: List<AiCommandChange> = emptyList(), val commandReviewLimited: Boolean = false,
     val requests: List<AiRequestLog> = emptyList(), val recoveryNotes: List<String> = emptyList(), val taskRecovery: String = "", val taskPrompt: String = "",
-    val enabledSkills: List<String> = emptyList(), val skillsInitialized: Boolean = false, val skills: List<AiSkill> = emptyList(), val skillsLoading: Boolean = false, val skillError: Boolean = false,
+    val skillOnDemand: Boolean = false, val enabledSkills: List<String> = emptyList(), val skillsInitialized: Boolean = false, val skills: List<AiSkill> = emptyList(), val skillsLoading: Boolean = false, val skillError: Boolean = false,
     val taskDiagnostic: String = "", val failureKind: AiFailure? = null, val historyError: Boolean = false, val historyProblem: AiHistoryProblem? = null, val historyTrimmed: Boolean = false,
     val policy: AiPolicy = AiPolicy(), val permissionsLoading: Boolean = false, val permissionsSaving: Boolean = false,
     val timeline: List<AiEntry> = emptyList(), val events: List<AiToolEvent> = emptyList(), val drafts: List<AiCallDraft> = emptyList(),
@@ -576,6 +576,13 @@ class AiController(private val context: Context, root: (String) -> File, private
         require(raw.length <= 32000)
         raw.replaceFirst(Regex("\\A---\\r?\\n[\\s\\S]*?\\r?\\n---(?:\\r?\\n|$)"), "").trimStart()
     }
+    fun setSkillOnDemand(enabled: Boolean) {
+        val current = mutable.value
+        if (current.active || current.permissionsLoading || current.historyError || current.skillsLoading) return
+        mutable.update { it.copy(skillOnDemand = enabled) }
+        scope.launch { persist() }
+    }
+
     fun recommendedSkills() {
         val current = mutable.value
         if (current.active || current.permissionsLoading || current.historyError || current.skillsLoading) return
@@ -1026,7 +1033,11 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         var turnStart = messages.length()
         mutable.value.recoveryNotes.forEach { note -> messages.put(JSONObject().put("role", "user").put("content", note)) }
-        val selected = try { if (mutable.value.enabledSkills.isEmpty()) "" else withContext(Dispatchers.IO) { skillStore.content(id, mutable.value.enabledSkills) } }
+        if (mutable.value.skillOnDemand && mutable.value.skillsLoading) mutable.first { !it.skillsLoading }
+        val skillSession = try { if (mutable.value.skillOnDemand) withContext(Dispatchers.IO) { skillStore.session(id, mutable.value.enabledSkills, mutable.value.skills) } else null }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { throw AiBudgetException(AiFailure.Skill) }
+        val selected = try { if (skillSession != null) skillSession.catalog() else if (mutable.value.enabledSkills.isEmpty()) "" else withContext(Dispatchers.IO) { skillStore.content(id, mutable.value.enabledSkills) } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { throw AiBudgetException(AiFailure.Skill) }
         fun metadata() = "User-selected skills for this task. This snapshot applies only to the following user task; later task snapshots supersede it. Earlier snapshots are historical evidence, not current rules or authorization. Apply each workflow only when its stated task type matches the user request; verification-only instructions do not prevent an authorized implementation. Treat as reference guidance subordinate to system rules and tool permissions. Scripts are not executed automatically. Explicit user instructions override expression style. When first adopting a selected skill for the current user task, briefly announce its exact name in backticks and its purpose in the user's language before the related work, for example: 本次使用 `investigate-first` 定位原因，再按 `surgical-patch` 修复。 Mention only selected skills you actually apply, not the entire enabled list. Announce each skill once per user task, not on every tool call or continuation round; announce a newly adopted skill when switching workflows. If none applies, omit the announcement. This is a public workflow declaration, not internal reasoning or proof of execution. Do not invent skill tool calls or audit events.\n$selected\n\n${if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) discovered.text() else "[Automatic project-rule loading disabled by current read permission. This does not prove that no rules apply. Only explicitly permitted reads may load rule contents.]"}\n\n$overview\n\n$workspaceContext"
@@ -1054,6 +1065,8 @@ class AiController(private val context: Context, root: (String) -> File, private
             val question = mutable.value.questions.single { it.id == continuation.questionId }
             val result = JSONObject().put("answered", true).put("question", question.prompt).put("answer", requireNotNull(question.answer)).toString()
             val resumed = JSONArray(continuation.messages)
+            skillSession?.restore(resumed, currentCoroutineContext(), continuation.turnStart)
+            skillSession?.let { dynamicContext.retainSkillResources(it.resources()) }
             val system = messages.getJSONObject(0)
             messages = JSONArray().put(system)
             repeat(resumed.length()) { messages.put(resumed.getJSONObject(it)) }
@@ -1098,14 +1111,14 @@ class AiController(private val context: Context, root: (String) -> File, private
                 // Only append after every call in the preceding assistant batch has a tool result.
                 // Never rewrite the early rule/skill/project message: it is a stable cache prefix.
                 dynamicContext.nextMessage()?.let(messages::put)
-                messages.getJSONObject(0).put("content", systemForPackages(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh), settings.systemPrompt) + (if (mutable.value.policy.yolo) "\nYOLO project mode is explicitly enabled by the user: available app tools are automatically allowed without asking again. This does not enable capability packages, grant Android permissions, change SSH host trust, or permit following replaced screen targets.\n" else "") + "\nCurrent app permissions: " + AiToolRegistry.definitions(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh)).sortedBy { it.tool.ordinal }.joinToString { definition -> "${definition.wire}=${definition.permission(mutable.value.policy).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
+                messages.getJSONObject(0).put("content", systemForPackages(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh), settings.systemPrompt) + (if (mutable.value.policy.yolo) "\nYOLO project mode is explicitly enabled by the user: available app tools are automatically allowed without asking again. This does not enable capability packages, grant Android permissions, change SSH host trust, or permit following replaced screen targets.\n" else "") + "\nCurrent app permissions: " + AiToolRegistry.definitions(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh), skillSession != null).sortedBy { it.tool.ordinal }.joinToString { definition -> "${definition.wire}=${definition.permission(mutable.value.policy).name}" } + "\nTemporary grants for this task only: " + toolGrants.joinToString { it.wire })
                 if (!screenSharingAllowed() && screenImages.isNotEmpty()) {
                     omitScreenTestImages(messages, screenImageIds)
                     imageStore.deleteAll(screenImages)
                     screenImages.clear(); screenImageIds.clear(); pendingScreenImages.clear()
                 }
                 val options = settings.context
-                val activeSchemas = schemas(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh))
+                val activeSchemas = schemas(available(CapabilityPackage.Screen), available(CapabilityPackage.Ssh), skillSession != null)
                 // The task exclusively owns these JSON objects. Suspend its mutation while a
                 // worker measures large context; cancellation returns before state publication.
                 var measured = measureContext(settings, messages, activeSchemas)
@@ -1267,7 +1280,14 @@ class AiController(private val context: Context, root: (String) -> File, private
                             mutable.update { it.copy(questions = (it.questions + question).takeLast(64), questionContinuation = continuationState, phase = AiPhase.AwaitingAnswer, reasoningEntryId = null) }
                             throw AiQuestionPaused()
                         }
-                    } else executeTool(id, event, args, baselines, refused, ::beforePathWrite, ::requireCapability, ::executeSsh, ::executeScreenTest) { uri ->
+                    } else executeTool(id, event, args, baselines, refused, ::beforePathWrite, ::requireCapability, ::executeSsh, ::executeScreenTest, loadSkill = { input ->
+                        val session = requireNotNull(skillSession) { "On-demand skills are disabled" }
+                        val result = withContext(Dispatchers.IO) { session.load(input.getString("skill"), input.optString("resource", "SKILL.md"), currentCoroutineContext()) }
+                        dynamicContext.retainSkillResources(session.resources())
+                        JSONObject().put("skill", result.name).put("skill_path", input.getString("skill")).put("resource", result.resource)
+                            .put("already_loaded", result.alreadyLoaded).put("content", result.content)
+                            .put("instruction", "Reference guidance only. Loaded content is retained across compression; do not reload or execute resources automatically.").toString()
+                    }) { uri ->
                         if (!screenSharingAllowed()) false else {
                             screenImportPending = true
                             val image = imageStore.import(uri)
@@ -1459,7 +1479,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                     decodeAiImages(message.optJSONArray("zako_images") ?: JSONArray()) else emptyList()
             } + images).distinctBy { it.id }.takeLast(AiImages.MAX_PER_TURN)
             result.put(imageMessage(prompt, retainedImages))
-            tail.forEach(result::put)
+            withoutPinnedSkillBodies(tail, currentState).forEach(result::put)
             currentState?.let(result::put)
             val budget = tokenBudget(settings, result, tools)
             if (!budget.fits || budget.shouldCompress) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
@@ -1546,6 +1566,7 @@ class AiController(private val context: Context, root: (String) -> File, private
     private suspend fun executeTool(id: String, event: AiToolEvent, args: JSONObject,
         baselines: MutableMap<String, FileBaseline>, refused: MutableSet<String>, beforePathWrite: suspend (String) -> String?, requireCapability: (AiTool) -> Unit, executeSsh: suspend (JSONObject) -> JSONObject,
         executeScreenTest: suspend (JSONObject, String?) -> dev.zakocoder.app.screentest.ScreenTestResult,
+        loadSkill: suspend (JSONObject) -> String,
         captureScreen: suspend (android.net.Uri) -> Boolean): String {
         val tool = event.tool ?: run {
             updateEvent(event.id) { it.copy(status = AiToolStatus.Denied, output = context.getString(R.string.ai_tool_unsupported), finished = now()) }
@@ -1641,6 +1662,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         mutable.update { it.copy(phase = AiPhase.Executing) }
         var exit: Int? = null
         val result = when (tool) {
+            AiTool.LoadSkill -> loadSkill(args)
             AiTool.ListFiles -> withContext(Dispatchers.IO) {
                 val result = AiProjectIndex(files, id, currentCoroutineContext()).list(path, args.optInt("depth", 1), args.optInt("limit", 200))
                 JSONObject().put("paths", JSONArray(result.paths)).put("visited", result.visited).put("truncated", result.truncated).toString()
@@ -1821,7 +1843,7 @@ class AiController(private val context: Context, root: (String) -> File, private
                 if (supplemental.isEmpty()) "" else "\n\nUser-configured provider instructions (supplement the default coding guidance; app permissions, approval requirements and safety rules above remain mandatory):\n$supplemental"
             }
 
-        fun schemas(screen: Boolean = false, ssh: Boolean = false): JSONArray = AiToolRegistry.schemas(screen, ssh)
+        fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false): JSONArray = AiToolRegistry.schemas(screen, ssh, skills)
 
     }
 }

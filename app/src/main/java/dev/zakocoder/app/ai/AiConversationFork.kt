@@ -45,6 +45,7 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
         conversations = conversations,
         workspaceRevision = workspaceRevision,
         enabledSkills = enabledSkills,
+        skillOnDemand = skillOnDemand,
         skillsInitialized = skillsInitialized,
         skills = skills,
         policy = policy,

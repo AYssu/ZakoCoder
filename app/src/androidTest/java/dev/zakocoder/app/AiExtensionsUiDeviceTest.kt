@@ -202,14 +202,18 @@ class AiExtensionsUiDeviceTest {
                     await("specific skill") { find(toggle) != null }
                     if ("builtin:frontend-design" !in workbench.ai.state.value.enabledSkills) click(toggle)
                     await("skill saved") { workbench.ai.state.value.enabledSkills == listOf("builtin:frontend-design") && !workbench.ai.state.value.permissionsSaving }
+                    if (!workbench.ai.state.value.skillOnDemand) click(context.getString(R.string.ai_skill_on_demand))
+                    await("on demand mode") { workbench.ai.state.value.skillOnDemand }
                     screenshot("skill-$suffix-360-font130")
                     click(firstTitle); click(secondTitle)
                     await("second selection") { workbench.ai.state.value.conversationId == second && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading }
                     assertEquals(AiBuiltinSkills.defaults, workbench.ai.state.value.enabledSkills)
+                    assertFalse(workbench.ai.state.value.skillOnDemand)
                     assertTrue("References must not cross conversations", workbench.ai.state.value.references.isEmpty())
                     click(secondTitle); click(firstTitle)
                     await("first selection restored") { workbench.ai.state.value.conversationId == first && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading }
                     assertEquals(listOf("builtin:frontend-design"), workbench.ai.state.value.enabledSkills)
+                    assertTrue(workbench.ai.state.value.skillOnDemand)
                     click(context.getString(R.string.ai_extensions_back))
                     await("draft restored") { find(draft) != null }
                     assertEquals("entry.txt", workbench.ai.state.value.references.single().path)
