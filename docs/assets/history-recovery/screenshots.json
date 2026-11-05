@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-05",
+  "device": "Android 13 ARM64",
+  "source": "AiHistoryRecoveryUiDeviceTest: real full application and confirmed single-conversation recovery; synthetic corrupt and unsupported records only",
+  "baseCommit": "70843e5ebd4ba8e377e6dc0778cf9e255cb2e207",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-cancelled.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "9db926dca5f7dc76b742f93b0689d7dd636c6c1473d60c00153f0bec0bbd0513",
+      "captureSha256": "22f8aee9b5ad71ee7292e1ec9b4d1e3b0538a787833f80919fc80384410418c1"
+    },
+    {
+      "file": "day-confirm.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "8cc192ae556325f220817dc15bc2dfa3db28287ad1817a186958dac7b7978208",
+      "captureSha256": "da197bf1e20cca67a3c053b5c2239ea48091683fc936f5276345ec90c8bd4160"
+    },
+    {
+      "file": "day-error.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "9db926dca5f7dc76b742f93b0689d7dd636c6c1473d60c00153f0bec0bbd0513",
+      "captureSha256": "f720d870adaafad85e7a19e18669b5548add7ebdf09a85278ebbf7e135409efa"
+    },
+    {
+      "file": "day-recovered.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "330af48cf4a0ff5df399ef6b45acede8f43faaf9cb1a101064f8991c204c503b",
+      "captureSha256": "03a53f88ea144c96f33d04feac00ef2b7d13786e3eabdab300ba1cd6f13c11e5"
+    },
+    {
+      "file": "night-cancelled.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "a871e81d3cbe35cf24f8d3e44ce60cab708796b81570e533ddec5b8813d3cc2d",
+      "captureSha256": "93fac817445f655a9794836b5b7a8a2690e622f5f20f7c4330aebb057c6d3d41"
+    },
+    {
+      "file": "night-confirm.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "661fe805a27c6dab21034a08a466acb76960dbfd8a3b4a8e70e25d177c93b284",
+      "captureSha256": "67b3a9d46babc9a9fe803aef5dd990304b3923c701db1cdc05cad1dff63a0a4f"
+    },
+    {
+      "file": "night-error.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "a871e81d3cbe35cf24f8d3e44ce60cab708796b81570e533ddec5b8813d3cc2d",
+      "captureSha256": "28a753b0cc70c78aad01f7fb1a94063c0fad7723e1cdb9668ea8e53b94f1dbdb"
+    },
+    {
+      "file": "night-recovered.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "395795bb2fe3fef669c7e39bdd66918592a95599d8b3998ccb11205374edc4d5",
+      "captureSha256": "a1c8909c347de25ce1051de7641a7a33ebf8a9478502075363db05b44c34ed0e"
+    }
+  ]
+}
