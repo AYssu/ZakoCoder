@@ -44,6 +44,7 @@ internal val WorkbenchDarkColors = darkColorScheme(
 
 /** Small, locally drawn line icons; no product assets imported from references. */
 internal enum class Glyph(private val drawing: String) {
+    Menu("M4 6H20 M4 12H20 M4 18H20"),
     Copy("M8 7H21V21H8Z M4 17H3V3H17V4"),
     History("M4 5H20V21H4Z M8 9H16 M8 13H16 M8 17H13 M8 2V5"),
     Projects("M3 9Q3 7 5 7V5H10L12 7H19Q21 7 21 9V18Q21 20 19 20H5Q3 20 3 18Z M3 9H21"),

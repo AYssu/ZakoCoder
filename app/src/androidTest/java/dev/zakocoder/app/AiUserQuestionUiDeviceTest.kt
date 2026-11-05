@@ -12,16 +12,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.ai.*
-import dev.zakocoder.app.ui.AiPage
+import dev.zakocoder.app.ui.ZakoCoderApp
 import dev.zakocoder.app.ui.AiQuestionCard
 import dev.zakocoder.app.ui.LocalWorkbenchDark
 import dev.zakocoder.app.ui.WorkbenchColors
@@ -45,10 +43,11 @@ class AiUserQuestionUiDeviceTest {
     private fun nodes(): List<AccessibilityNodeInfo> {
         instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo
         fun descendants(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = buildList {
+            if (!node.refresh()) return@buildList
             add(node)
             repeat(node.childCount) { node.getChild(it)?.let { addAll(descendants(it)) } }
         }
-        return instrumentation.uiAutomation.windows.mapNotNull { it.root }
+        return instrumentation.uiAutomation.windows.mapNotNull { it.root?.takeIf { root -> root.refresh() } }
             .filter { it.packageName?.toString() == context.packageName }.flatMap(::descendants)
     }
     private fun find(label: String) = nodes().firstOrNull {
@@ -92,6 +91,9 @@ class AiUserQuestionUiDeviceTest {
     @Test(timeout = 120_000) fun dayRealAiPagePausesAndContinuesWithOption() = runBlocking { exercisePage(false) }
     @Test(timeout = 120_000) fun nightRealAiPagePausesAndContinuesWithCustomAnswer() = runBlocking { exercisePage(true) }
 
+    private fun shell(command: String): String = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+        instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes().toString(Charsets.UTF_8).trim() }
+
     private suspend fun exercisePage(dark: Boolean) {
         check(context.packageName.endsWith(".runtimecheck"))
         val automation = instrumentation.uiAutomation
@@ -109,7 +111,15 @@ class AiUserQuestionUiDeviceTest {
         }
         var owned: Workbench? = null
         val prefix = if (dark) "night" else "day"
+        val originalNight = withContext(Dispatchers.IO) { shell("cmd uimode night").substringAfter(":").trim() }
+        check(originalNight in setOf("yes", "no", "auto", "custom_schedule", "custom_bedtime")) {
+            "Cannot safely restore original night mode: $originalNight"
+        }
         try {
+            withContext(Dispatchers.IO) {
+                shell("cmd uimode night ${if (dark) "yes" else "no"}")
+                fixture.config.save(fixture.server.url("/v1").toString(), "gpt-6.1-sol", "test-only-placeholder")
+            }
             withContext(Dispatchers.Main) {
                 owned = Workbench(isolated, aiTransport = fixture.transport, aiConfig = fixture.config,
                     aiHistory = fixture.history, aiPermissions = AiPermissionStore(isolated))
@@ -130,22 +140,19 @@ class AiUserQuestionUiDeviceTest {
             fixture.enqueue("布局已确认，我会按你的选择继续原任务。")
             withContext(Dispatchers.IO) { warmDeviceActivity() }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                scenario.onActivity { activity -> activity.setContent {
-                    CompositionLocalProvider(LocalWorkbenchDark provides dark) {
-                        MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
-                            val pageState by workbench.state.collectAsStateWithLifecycle()
-                            Surface(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), color = MaterialTheme.colorScheme.background) {
-                                AiPage(workbench, pageState, onModels = {}, onProjects = {}, onTerminal = {})
-                            }
-                        }
-                    }
-                } }
+                scenario.onActivity { activity -> activity.setContent { ZakoCoderApp(workbench) } }
+                click(context.getString(R.string.app_navigation_open))
+                click(context.getString(R.string.nav_ai))
+                await("Real application shell is visible") {
+                    find(context.getString(R.string.app_navigation_open)) != null &&
+                        find(context.getString(R.string.ai_more)) != null
+                }
                 withContext(Dispatchers.Main) { assertTrue(workbench.ai.send("请先询问我首页的布局，再继续实现。")) }
                 await("Actual controller pauses for answer") {
                     workbench.ai.state.value.phase == AiPhase.AwaitingAnswer && !workbench.ai.state.value.active
                 }
                 val originalTurn = workbench.ai.state.value.turn
-                await("Question in actual conversation") { find(context.getString(R.string.ai_question_waiting)) != null }
+                await("Question in actual conversation") { find(context.getString(R.string.ai_question_confirmation_pending)) != null }
                 var composer = requireNotNull(find(context.getString(R.string.ai_question_composer_hint)))
                 while (composer.isEnabled && composer.className?.toString() != "android.widget.EditText" && composer.parent != null) composer = composer.parent
                 assertFalse("Ordinary composer is disabled while waiting", composer.isEnabled)
@@ -156,13 +163,19 @@ class AiUserQuestionUiDeviceTest {
                 screenshot("$prefix-page-waiting")
                 val expected = if (dark) "使用列表，增加按名称搜索。" else "项目列表"
                 if (dark) {
+                    click(context.getString(R.string.ai_question_custom_entry))
                     await("Question custom answer editor") { nodes().any { it.isVisibleToUser && it.isEditable && it.isEnabled } }
                     val editor = requireNotNull(nodes().firstOrNull { it.isVisibleToUser && it.isEditable && it.isEnabled })
                     assertTrue(editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                         putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, expected)
                     }))
                     delay(150)
-                } else click(expected)
+                    screenshot("$prefix-page-custom-expanded")
+                } else {
+                    click(expected)
+                    screenshot("$prefix-page-option-selected")
+                }
+                assertNotNull("Navigation entry remains visible with the question", find(context.getString(R.string.app_navigation_open)))
                 click(context.getString(R.string.ai_question_submit))
                 await("Actual resumed model request completes") {
                     !workbench.ai.state.value.active && workbench.ai.state.value.phase == AiPhase.Completed
@@ -185,17 +198,21 @@ class AiUserQuestionUiDeviceTest {
                 assertTrue("Actual TLS continuation includes user's answer", result.getString("content").contains(expected))
                 await("Answered receipt in actual conversation") { find(context.getString(R.string.ai_question_answered)) != null }
                 await("Smoothed response finishes rendering") { find("布局已确认，我会按你的选择继续原任务。") != null }
+                assertNotNull("Answered conversation keeps the real navigation", find(context.getString(R.string.app_navigation_open)))
                 screenshot("$prefix-page-answered")
             }
         } finally {
             withContext(Dispatchers.Main) { owned?.stopAll() }
-            withContext(Dispatchers.IO) { fixture.close() }
+            withContext(Dispatchers.IO) {
+                try { fixture.close() } finally { shell("cmd uimode night $originalNight") }
+            }
             automation.serviceInfo = automation.serviceInfo.apply { flags = previousFlags }
         }
     }
 
     private suspend fun exercise(dark: Boolean) {
-        check(context.packageName.endsWith(".runtimecheck"))
+        // Component-only content replaces the activity view; it never creates or modifies a workspace.
+        check(context.packageName == "dev.zakocoder.app" || context.packageName.endsWith(".runtimecheck"))
         val automation = instrumentation.uiAutomation
         val previousInfo = automation.serviceInfo
         val previousFlags = previousInfo.flags
@@ -225,7 +242,7 @@ class AiUserQuestionUiDeviceTest {
                         }
                     }
                 } }
-                await("Question is displayed") { find(context.getString(R.string.ai_question_waiting)) != null }
+                await("Question is displayed") { find(context.getString(R.string.ai_question_confirmation_pending)) != null }
                 screenshot("$prefix-waiting")
                 click(question.value.options.first())
                 screenshot("$prefix-option-selected")
@@ -233,15 +250,35 @@ class AiUserQuestionUiDeviceTest {
                 await("Selected answer returned") { captured.get() == question.value.options.first() }
                 await("Read-only answer receipt") { find(context.getString(R.string.ai_question_answered)) != null }
                 assertFalse(nodes().any { it.isVisibleToUser && it.isEditable })
+                assertNull("Receipt starts collapsed", find(context.getString(R.string.ai_question_your_answer)))
                 screenshot("$prefix-answered")
+                click(context.getString(R.string.ai_question_answered))
+                await("Receipt expands to saved answer") { find(context.getString(R.string.ai_question_your_answer)) != null }
+                assertNotNull(find(question.value.prompt))
+                screenshot("$prefix-answer-expanded")
+                click(context.getString(R.string.ai_question_answered))
+                await("Receipt collapses without losing resume") { find(context.getString(R.string.ai_question_your_answer)) == null }
                 click(context.getString(R.string.ai_question_resume))
                 assertEquals(1, resumed.get())
 
                 scenario.onActivity { question.value = question.value.copy(id = UUID.randomUUID().toString(), answer = null) }
-                await("New question editor") { nodes().any { it.isVisibleToUser && it.isEditable } }
+                await("New question offers lightweight custom entry") { find(context.getString(R.string.ai_question_custom_entry)) != null }
+                assertFalse("Custom input is initially collapsed", nodes().any { it.isVisibleToUser && it.isEditable })
                 click(question.value.options.last())
+                click(context.getString(R.string.ai_question_custom_entry))
+                await("Custom input opens on request") { nodes().any { it.isVisibleToUser && it.isEditable } }
                 val custom = "保留列表，增加按名称搜索，不需要卡片网格。"
-                val editor = requireNotNull(nodes().firstOrNull { it.isVisibleToUser && it.isEditable })
+                var editor = requireNotNull(nodes().firstOrNull { it.isVisibleToUser && it.isEditable })
+                assertTrue(editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "  $custom  ")
+                }))
+                delay(180)
+                click(context.getString(R.string.ai_question_custom_clear))
+                await("Clear also folds the custom editor") { nodes().none { it.isVisibleToUser && it.isEditable } }
+                click(context.getString(R.string.ai_question_custom_entry))
+                await("Custom editor can reopen") { nodes().any { it.isVisibleToUser && it.isEditable } }
+                editor = requireNotNull(nodes().firstOrNull { it.isVisibleToUser && it.isEditable })
+                assertFalse("Clearing removed the previous draft", editor.text?.toString()?.contains(custom) == true)
                 assertTrue(editor.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "  $custom  ")
                 }))

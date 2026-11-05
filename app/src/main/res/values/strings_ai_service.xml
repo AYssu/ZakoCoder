@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_service_title">服务兼容</string>
+    <string name="ai_service_hint">按服务商文档调整这些选项。关闭不支持的参数后再测试连接；切换协议会保留各项设置。</string>
+    <string name="ai_service_streaming">流式接收回复</string>
+    <string name="ai_service_sampling">发送采样参数</string>
+    <string name="ai_service_sampling_hint">关闭后不发送 temperature 和 top_p，已填写的值仍会保留。</string>
+    <string name="ai_service_stream_usage">请求流式用量统计</string>
+    <string name="ai_service_chat_thinking">思考开关格式</string>
+    <string name="ai_service_thinking_object">thinking 对象</string>
+    <string name="ai_service_enable_thinking">enable_thinking 开关</string>
+    <string name="ai_service_reasoning_object">reasoning 对象</string>
+    <string name="ai_service_omit_thinking">不发送思考参数</string>
+    <string name="ai_service_token_limit">输出上限字段</string>
+    <string name="ai_service_max_tokens">max_tokens</string>
+    <string name="ai_service_max_completion_tokens">max_completion_tokens</string>
+    <string name="ai_service_responses_summary">请求思考摘要</string>
+    <string name="ai_service_encrypted_reasoning">请求加密推理续接</string>
+    <string name="ai_service_responses_cache">发送稳定缓存标识</string>
+    <string name="ai_service_cache_hint">仅在服务支持时启用。缓存是否命中及保存时长由服务商决定，可能产生额外费用。</string>
+    <string name="ai_service_anthropic_cache">提示缓存</string>
+    <string name="ai_service_cache_disabled">关闭</string>
+    <string name="ai_service_cache_five_minutes">5 分钟</string>
+    <string name="ai_service_cache_one_hour">1 小时</string>
+</resources>

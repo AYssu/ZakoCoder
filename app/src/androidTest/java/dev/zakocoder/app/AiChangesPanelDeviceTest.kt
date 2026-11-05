@@ -47,13 +47,12 @@ class AiChangesPanelDeviceTest {
         delay(200)
     }
     private fun reviewText(): String? {
-        var result: String? = null
-        fun walk(view: android.view.View) {
-            if (view is io.github.rosemoe.sora.widget.CodeEditor && !view.isEditable && view.isShown) result = view.text.toString()
-            if (view is android.view.ViewGroup) for (index in 0 until view.childCount) walk(view.getChildAt(index))
+        val preview = find(context.getString(R.string.ai_review_content)) ?: return null
+        fun collect(node: AccessibilityNodeInfo): String = buildString {
+            node.text?.let { append(it); append('\n') }
+            for (index in 0 until node.childCount) node.getChild(index)?.let { append(collect(it)) }
         }
-        instrumentation.runOnMainSync { android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::walk) }
-        return result
+        return collect(preview)
     }
 
     private suspend fun screenshot(name: String) {
@@ -121,6 +120,7 @@ class AiChangesPanelDeviceTest {
             val shown = mutableStateOf(controller.state.value)
             val store = AiCheckpoints(AiHistoryStore(historyPath).checkpointDirectory) { check(it == project); projectRoot }
             val languages = EditorLanguages(context)
+            warmDeviceActivity()
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity -> activity.setContent {
                     val dark = isSystemInDarkTheme()
@@ -155,7 +155,8 @@ class AiChangesPanelDeviceTest {
                 click("a.py")
                 await("actual first diff") { reviewText()?.let { "A_BEFORE" in it && "A_AFTER" in it } == true }
                 screenshot("changes-first-diff")
-                click(context.getString(R.string.close))
+                click("a.py")
+                await("inline review collapsed without leaving changes list") { reviewText() == null && find("a.py") != null }
                 withContext(Dispatchers.IO) {
                     val dir = File(AiHistoryStore(historyPath).checkpointDirectory.listFiles()!!.single(), second)
                     val entries = JSONObject(File(dir, "manifest.json").readText()).getJSONArray("entries")

@@ -152,8 +152,6 @@
     <string name="environment_maintenance">环境维护</string>
     <string name="tools_install_hint">安装运行环境后，即可检测开发工具。</string>
     <string name="execution_log">运行日志</string>
-    <string name="show_log">查看日志</string>
-    <string name="hide_log">收起日志</string>
     <string name="terminal_font">字体大小</string>
     <string name="extra_path">附加 PATH</string>
     <string name="not_configured">未设置</string>
@@ -369,7 +367,7 @@
     <string name="ai_status_cancelled">已取消</string>
     <string name="ai_status_incomplete">未完成</string>
     <string name="ai_phase_idle">等待新任务</string>
-    <string name="ai_phase_requesting">正在请求模型</string>
+    <string name="ai_phase_requesting">Thinking</string>
     <string name="ai_phase_receiving">正在接收回复</string>
     <string name="ai_phase_executing">正在执行工具</string>
     <string name="ai_phase_stopping">正在停止</string>
@@ -468,6 +466,7 @@
     <string name="ai_models_not_found">地址或模型接口不存在（404）。请核对基础地址和模型标识；也可以手动填写模型。</string>
     <string name="ai_models_rate_limit">服务请求受限（429）。请稍后重试，并检查账户额度。</string>
     <string name="ai_models_request_rejected">服务不接受此请求（400/422）。请检查模型是否支持流式工具调用，或关闭不兼容的生成参数。</string>
+    <string name="ai_models_protocol_error">响应格式不兼容（%1$s）。请确认服务支持所选协议。</string>
     <string name="ai_models_network_error">未收到完整的兼容响应。请检查网络、证书、服务地址及流式工具调用支持。</string>
     <string name="ai_models_service_error">服务暂时无法完成请求，请稍后重试。</string>
     <string name="ai_models_invalid">请检查配置名称、服务地址、模型标识和参数范围。支持 HTTP / HTTPS 域名或 IP，可指定端口。HTTP 连接不加密。</string>
