@@ -98,6 +98,23 @@ class AiSteeringHistoryDeviceTest {
         }
     }
 
+    @Test fun stateEvidenceAfterValidatedSupplementRoundtripsWithoutRelaxingToolPairing() = runBlocking(Dispatchers.IO) {
+        AiDeviceTest.Fixture(context).use { f ->
+            fun user(text: String) = JSONObject().put("role", "user").put("content", text)
+            fun assistant() = JSONObject().put("role", "assistant").put("content", "answer")
+            val supplement = user("补充要求").put("zako_steering", true)
+            val update = user(AI_CONTEXT_UPDATE + " task changes]")
+            val turn = JSONArray().put(user("原任务")).put(assistant()).put(supplement).put(update).put(assistant())
+            f.history.save("valid-state-after-steer", AiState(turn = 1, contextTurns = listOf(turn.toString())))
+            assertEquals(turn.toString(), f.history.load("valid-state-after-steer").state!!.contextTurns.single())
+            val batch = JSONObject().put("role", "assistant").put("tool_calls", JSONArray().put(JSONObject().put("id", "pending")))
+            val unpaired = JSONArray().put(user("原任务")).put(batch).put(supplement).put(update).put(assistant())
+            f.history.save("invalid-state-after-steer", AiState(turn = 1, contextTurns = listOf(unpaired.toString())))
+            try { f.history.load("invalid-state-after-steer"); fail("State evidence must not bypass a missing tool result") }
+            catch (_: IllegalArgumentException) { }
+        }
+    }
+
     @Test fun rejectsMalformedSteeringAndMissingOrDuplicateToolResults() = runBlocking(Dispatchers.IO) {
         AiDeviceTest.Fixture(context).use { f ->
             fun user(text: Any = "补充") = JSONObject().put("role", "user").put("content", text)

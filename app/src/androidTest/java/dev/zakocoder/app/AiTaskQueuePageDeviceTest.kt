@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit
 class AiTaskQueuePageDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private var failureScreenshot = "failure"
+    private var diagnostic: () -> String = { "Workbench not yet created" }
     private fun nodes(): List<AccessibilityNodeInfo> {
         fun descendants(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> = buildList {
             if (!node.refresh()) return@buildList
@@ -41,7 +43,10 @@ class AiTaskQueuePageDeviceTest {
     }
     private suspend fun await(label: String, predicate: () -> Boolean) {
         try { withTimeout(25000) { while (!predicate()) delay(60) } }
-        catch (error: TimeoutCancellationException) { throw AssertionError(label, error) }
+        catch (error: TimeoutCancellationException) {
+            try { screenshot(failureScreenshot) } catch (_: Exception) { }
+            throw AssertionError("$label\n${diagnostic()}", error)
+        }
     }
     private suspend fun click(label: String) {
         fun target(): AccessibilityNodeInfo? {
@@ -115,6 +120,7 @@ class AiTaskQueuePageDeviceTest {
         }
         var owned: Workbench? = null
         val theme = if (dark) "night" else "day"
+        failureScreenshot = "$theme-failure"
         val previousNight = withContext(Dispatchers.IO) { shell("cmd uimode night").substringAfter(":").trim() }
         check(previousNight in setOf("yes", "no", "auto", "custom_schedule", "custom_bedtime"))
         try {
@@ -127,6 +133,14 @@ class AiTaskQueuePageDeviceTest {
                     aiHistory = fixture.history, aiPermissions = AiPermissionStore(isolated))
             }
             val workbench = requireNotNull(owned)
+            diagnostic = {
+                val state = workbench.ai.state.value
+                val models = workbench.ai.models.state.value
+                "configured=${state.configured}, projectSelected=${workbench.state.value.project != null}, busy=${workbench.state.value.busy}, " +
+                    "active=${state.active}, phase=${state.phase}, permissionsLoading=${state.permissionsLoading}, permissionsSaving=${state.permissionsSaving}, " +
+                    "restoring=${state.restoring}, imagesLoading=${state.imagesLoading}, historyError=${state.historyError}, skillsLoading=${state.skillsLoading}, " +
+                    "modelsLoading=${models.loading}, modelsSaving=${models.saving}, failure=${state.failureKind}\n${state.taskDiagnostic}"
+            }
             await("Workbench initialized") { !workbench.state.value.loading && !workbench.ai.models.state.value.loading && !workbench.mcp.state.value.loading }
             withContext(Dispatchers.Main) { workbench.create("移动端队列验收") }
             await("Synthetic project created") { !workbench.state.value.busy && workbench.state.value.project != null }

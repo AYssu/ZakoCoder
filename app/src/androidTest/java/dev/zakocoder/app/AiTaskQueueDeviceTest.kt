@@ -13,6 +13,9 @@ import java.util.concurrent.TimeUnit
 class AiTaskQueueDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
+    private fun diagnostic(ai: AiController) = ai.state.value.let {
+        "phase=${it.phase}, active=${it.active}, turn=${it.turn}, failure=${it.failureKind}, historyError=${it.historyError}, skillsLoading=${it.skillsLoading}\n${it.taskDiagnostic}"
+    }
     private suspend fun await(predicate: () -> Boolean) = withTimeout(20000) { while (!predicate()) delay(30) }
     private fun controller(f: AiDeviceTest.Fixture): AiController {
         val isolated = object : ContextWrapper(context) {
@@ -26,7 +29,7 @@ class AiTaskQueueDeviceTest {
     private suspend fun start(f: AiDeviceTest.Fixture): AiController {
         lateinit var ai: AiController
         main { ai = controller(f); ai.select("fixture") }
-        await { ai.state.value.configured && !ai.state.value.permissionsLoading }
+        await { ai.state.value.configured && !ai.models.state.value.loading && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading }
         return ai
     }
     @Test(timeout = 60000) fun steeringWaitsForWholeToolBatchAndDoesNotGrantPermission() = runBlocking {
@@ -61,8 +64,9 @@ class AiTaskQueueDeviceTest {
             try {
                 f.enqueue("第一轮完成", delayMillis = 25); f.enqueue("第二轮完成")
                 main { assertTrue(ai.send("第一项")); assertTrue(ai.enqueue("第二项", AiQueuedKind.FollowUp)) }
-                await { ai.state.value.turn == 2 && !ai.state.value.active }
-                assertEquals(2, f.server.requestCount)
+                await { !ai.state.value.active && (ai.state.value.turn == 2 || ai.state.value.phase == AiPhase.Failed) }
+                assertEquals(diagnostic(ai), AiPhase.Completed, ai.state.value.phase)
+                assertEquals(diagnostic(ai), 2, f.server.requestCount)
                 assertEquals(AiPhase.Completed, ai.state.value.phase)
                 assertEquals(AiQueuedStatus.Applied, ai.state.value.queuedMessages.single().status)
                 assertEquals(listOf("第一项", "第二项"), ai.state.value.timeline.filter { it.role == AiRole.User }.map { it.text })
@@ -78,10 +82,11 @@ class AiTaskQueueDeviceTest {
                 f.enqueue("未结束", done = false, delayMillis = 20)
                 main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("后续任务", AiQueuedKind.FollowUp)) }
                 await { !ai.state.value.active }
-                assertEquals(AiPhase.Failed, ai.state.value.phase)
+                assertEquals(diagnostic(ai), AiPhase.Failed, ai.state.value.phase)
+                assertEquals(diagnostic(ai), 1, f.server.requestCount)
                 main { restored = controller(f); restored!!.select("fixture") }
                 val fresh = restored!!
-                await { fresh.state.value.configured && !fresh.state.value.permissionsLoading }
+                await { fresh.state.value.configured && !fresh.models.state.value.loading && !fresh.state.value.permissionsLoading && !fresh.state.value.skillsLoading }
                 assertFalse(fresh.state.value.active)
                 assertEquals(1, f.server.requestCount)
                 val queued = fresh.state.value.queuedMessages.single()
@@ -101,7 +106,8 @@ class AiTaskQueueDeviceTest {
                 f.enqueue("原任务输出", delayMillis = 60)
                 main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("旧补充", AiQueuedKind.Steer));
                     assertTrue(ai.enqueue("旧后续", AiQueuedKind.FollowUp)) }
-                await { f.server.requestCount == 1 }
+                await { f.server.requestCount == 1 || (!ai.state.value.active && ai.state.value.phase == AiPhase.Failed) }
+                assertEquals(diagnostic(ai), 1, f.server.requestCount)
                 main { ai.stop() }
                 await { !ai.state.value.active }
                 f.enqueue("新任务完成")

@@ -321,7 +321,9 @@ open class AiHistoryStore(private val directory: File) {
                         // batch. Ordinary user turns keep the original pre-assistant ordering.
                         val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
                             message.keys().asSequence().toSet() in setOf(setOf("role", "content"), setOf("role", "content", AI_SKILL_SNAPSHOT)) &&
-                            turn.getJSONObject(messageIndex - 1).optString("role") == "tool"
+                            turn.getJSONObject(messageIndex - 1).let { previous ->
+                                previous.optString("role") == "tool" || steeringMessage(previous)
+                            }
                         require(pending.isEmpty() && (!seenAssistant || stateUpdate || steering))
                     }
                     "assistant" -> {
