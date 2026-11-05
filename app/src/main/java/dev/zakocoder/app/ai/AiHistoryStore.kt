@@ -34,7 +34,11 @@ open class AiHistoryStore(private val directory: File) {
             output.toByteArray()
         } }
         require(bytes.size <= 64 * 1024 * 1024)
-        return JSONObject(bytes.toString(Charsets.UTF_8)).also { require(it.getInt("schemaVersion") == 1) }
+        return JSONObject(bytes.toString(Charsets.UTF_8)).also { json ->
+            val version = json.opt("schemaVersion")
+            require(version is Int)
+            if (version != 1) throw AiHistoryReadFailure(AiHistoryProblem(null, AiHistoryProblem.Reason.Unsupported))
+        }
     }
     private fun write(file: File, json: JSONObject) {
         require(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
@@ -42,25 +46,44 @@ open class AiHistoryStore(private val directory: File) {
         val atomic = AtomicFile(file); val output = atomic.startWrite()
         try { output.write(bytes); atomic.finishWrite(output) } catch (error: Exception) { atomic.failWrite(output); throw error }
     }
+    private fun <T> checkedRecord(file: File, block: () -> T): T {
+        val conversation = file.name.removeSuffix(".json").takeIf { name ->
+            runCatching { UUID.fromString(name).toString() == name }.getOrDefault(false)
+        }
+        try { return block() }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (error: AiHistoryReadFailure) { throw AiHistoryReadFailure(error.problem.copy(conversationId = conversation)) }
+        catch (_: org.json.JSONException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        catch (_: IllegalArgumentException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        catch (_: IllegalStateException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        // IO and permission failures deliberately keep their original classification: they are not proof of corrupt data.
+    }
     private fun records(id: String): List<Pair<File, JSONObject>> {
-        val files = project(id).listFiles()?.mapNotNull { file ->
+        val directory = project(id)
+        val entries = if (!directory.exists()) emptyArray() else directory.listFiles() ?: throw java.io.IOException("history_directory_unreadable")
+        val files = entries.mapNotNull { file ->
             val name = file.name.removeSuffix(".bak")
             if (name != "selected.json" && name.endsWith(".json")) File(file.parentFile, name) else null
-        }?.distinctBy { it.name }.orEmpty()
+        }.distinctBy { it.name }
         require(files.size <= 20)
-        return files.map { file -> session(file.nameWithoutExtension); file to read(file).also { require(it.getString("id") == file.nameWithoutExtension) } }
+        return files.map { file -> checkedRecord(file) {
+            session(file.nameWithoutExtension)
+            file to read(file).also { require(it.getString("id") == file.nameWithoutExtension) }
+        } }
     }
     private fun summaries(records: List<Pair<File, JSONObject>>) = records.map { (_, item) ->
-        AiConversation(item.getString("id"), item.getString("title").take(80), item.getLong("updated"), item.getInt("turn"))
+        checkedRecord(File(session(item.getString("id")))) {
+            AiConversation(item.getString("id"), item.getString("title").take(80), item.getLong("updated"), item.getInt("turn"))
+        }
     }.sortedByDescending { it.updated }
     open fun load(projectId: String, conversation: String? = null): Loaded {
         val records = records(projectId)
         val pointer = File(project(projectId), "selected.json")
-        val selected = conversation ?: if (pointer.exists() || File(pointer.path + ".bak").exists()) read(pointer).getString("id") else null
-        val json = records.find { it.second.getString("id") == selected }?.second ?: records.maxByOrNull { it.second.getLong("updated") }?.second
+        val selected = conversation ?: if (pointer.exists() || File(pointer.path + ".bak").exists()) checkedRecord(pointer) { read(pointer).getString("id") } else null
         val list = summaries(records)
+        val json = records.find { it.second.getString("id") == selected }?.second ?: records.find { it.second.getString("id") == list.firstOrNull()?.id }?.second
         metadata[projectId] = list
-        return Loaded(json?.let(::decode), list)
+        return Loaded(json?.let { checkedRecord(File(session(it.getString("id")))) { decode(it) } }, list)
     }
     open fun save(projectId: String, state: AiState): List<AiConversation> {
         val records = metadata[projectId] ?: summaries(records(projectId))
@@ -80,6 +103,29 @@ open class AiHistoryStore(private val directory: File) {
         AtomicFile(File(project(projectId), session(conversation))).delete()
         metadata.remove(projectId)
     }
+    /** Explicit destructive recovery is restricted to one still-unreadable canonical UUID record. */
+    open fun deleteUnreadable(projectId: String, problem: AiHistoryProblem) {
+        val conversation = requireNotNull(problem.conversationId)
+        val file = File(project(projectId), session(conversation))
+        var confirmed = false
+        try {
+            checkedRecord(file) {
+                val json = read(file)
+                require(json.getString("id") == conversation)
+                summaries(listOf(file to json))
+                decode(json)
+            }
+        } catch (error: AiHistoryReadFailure) {
+            require(error.problem == problem)
+            confirmed = true
+        }
+        check(confirmed) { "history_record_changed" }
+        // AtomicFile removes only this exact base/backup/new record, never a project directory.
+        delete(projectId, conversation)
+        if (listOf(file, File(file.path + ".bak"), File(file.path + ".new")).any { Files.exists(it.toPath(), NOFOLLOW_LINKS) })
+            throw java.io.IOException("history_record_delete_failed")
+    }
+
     open fun deleteProject(projectId: String) { metadata.remove(projectId); check(!project(projectId).exists() || project(projectId).deleteRecursively()) }
 
     /** Blocking fail-closed scan. The owner must hold its history mutex through scan and pruning.
@@ -160,6 +206,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("round", state.round).put("toolCount", state.toolCount)
+        .put("queuedMessages", AiTaskQueue.encode(state.queuedMessages))
         .put("questions", JSONArray(state.questions.map { it.encode() }))
         .put("questionContinuation", state.questionContinuation?.encode())
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
@@ -181,6 +228,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
         .also {
             validateTimeline(state.timeline)
+            require(state.queuedMessages.all { it.turn <= state.turn })
             validateQuestions(state.questions, state.questionContinuation, state.events, state.turn)
         }
     private fun validateTimeline(timeline: List<AiEntry>) {
@@ -206,6 +254,16 @@ open class AiHistoryStore(private val directory: File) {
             require(events.single { it.id == question.eventId }.let { it.tool == AiTool.AskUser && it.callId == pending.callId })
         }
     }
+    /** Explicit app-owned envelope; text contents alone can never opt into mid-turn user messages. */
+    private fun steeringMessage(message: JSONObject): Boolean {
+        if (!message.has("zako_steering")) return false
+        require(message.opt("zako_steering") == true && message.opt("role") == "user")
+        require(message.keys().asSequence().toSet() == setOf("role", "content", "zako_steering"))
+        val text = message.opt("content")
+        require(text is String && text.isNotBlank() && text.length <= 16000)
+        return true
+    }
+
     private fun decode(json: JSONObject): AiState {
         // Additive v1 field: old records contain no plan; old readers ignore this field.
         val planArray = json.optJSONArray("plan") ?: JSONArray()
@@ -250,25 +308,32 @@ open class AiHistoryStore(private val directory: File) {
         val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user")
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering"))
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
                 val message = turn.getJSONObject(messageIndex)
+                val steering = steeringMessage(message)
                 when (message.getString("role")) {
                     "user" -> {
                         // App-generated dynamic evidence is appended only after a complete tool
                         // batch. Ordinary user turns keep the original pre-assistant ordering.
                         val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
                             message.keys().asSequence().toSet() == setOf("role", "content") &&
-                            turn.getJSONObject(messageIndex - 1).optString("role") == "tool"
-                        require(pending.isEmpty() && (!seenAssistant || stateUpdate))
+                            turn.getJSONObject(messageIndex - 1).let { previous ->
+                                previous.optString("role") == "tool" || steeringMessage(previous)
+                            }
+                        require(pending.isEmpty() && (!seenAssistant || stateUpdate || steering))
                     }
                     "assistant" -> {
                         seenAssistant = true
                         require(pending.isEmpty())
                         val calls = message.optJSONArray("tool_calls")
-                        if (calls == null || calls.length() == 0) require(messageIndex == turn.length() - 1)
+                        if (calls == null || calls.length() == 0) {
+                            // A late supplement may arrive after the provider's first final reply.
+                            // Only a validated steering envelope can reopen that same task.
+                            require(messageIndex == turn.length() - 1 || steeringMessage(turn.getJSONObject(messageIndex + 1)))
+                        }
                         else {
                             require(calls.length() <= 8 && messageIndex < turn.length() - 1)
                             repeat(calls.length()) { call -> require(pending.add(calls.getJSONObject(call).getString("id"))) }
@@ -308,7 +373,7 @@ open class AiHistoryStore(private val directory: File) {
         val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
             AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
         } }
-        val state = AiState(questions = questions, questionContinuation = continuation,
+        val state = AiState(queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
             round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
             toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,
@@ -321,6 +386,7 @@ open class AiHistoryStore(private val directory: File) {
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
             historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,
             phase = if (continuation != null) AiPhase.AwaitingAnswer else if (json.getBoolean("active")) AiPhase.Cancelled else AiPhase.valueOf(json.getString("phase")))
+        require(state.queuedMessages.all { it.turn <= state.turn })
         val interrupted = json.getBoolean("active") && continuation == null
         val legacyFailed = !json.has("recovery") && state.phase == AiPhase.Failed
         return if (continuation == null && (pendingRecovery.isNotBlank() || interrupted || legacyFailed)) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state

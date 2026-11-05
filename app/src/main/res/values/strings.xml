@@ -482,7 +482,6 @@
     <string name="ai_history_empty">还没有保存的会话</string>
     <string name="ai_history_delete">删除会话</string>
     <string name="ai_history_delete_detail">将删除这段会话在本机保存的提问、回复和工具记录，项目文件不受影响。</string>
-    <string name="ai_history_load_error">本地会话或权限读取失败。为保留原记录，已暂停发送，请重启后重试。</string>
     <string name="ai_history_save_error">本地会话保存失败，最新内容可能未落盘。请检查存储空间后重启。</string>
     <string name="ai_history_limit">每个项目最多保存 20 个会话，请先删除不再需要的会话。</string>
     <string name="ai_history_trimmed">较早记录已达到本地保留上限。</string>

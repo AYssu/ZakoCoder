@@ -161,6 +161,10 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         if (state.historyError && workbench.ai.canRetryHistorySave) TextButton(onClick = { workbench.ai.retryHistorySave() }) {
             Text(stringResource(R.string.ai_history_retry_save))
         }
+        if (state.historyError && !workbench.ai.canRetryHistorySave) AiHistoryRecoveryActions(state.historyProblem,
+            enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving,
+            onRetry = workbench.ai::retryHistoryLoad,
+            onRemove = { if (!workbench.ai.recoverUnreadableConversation(it)) messageActionError = true })
         if (state.active || state.permissionsLoading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
         if (state.permissionsLoading) Text(stringResource(R.string.ai_loading_conversation), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -244,10 +248,17 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active,
                 label = { Text(if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference) else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "", modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
         }
+        AiTaskQueuePanel(state.queuedMessages, state.active, enabled = !state.restoring && !state.historyError && !state.permissionsLoading && !state.permissionsSaving && state.questionContinuation == null,
+            onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }
+        if (state.active && state.questionContinuation == null && input.isNotBlank()) AiRunningInputActions(
+            enabled = input.isNotBlank() && !state.historyError && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping &&
+                state.queuedMessages.count { it.status == dev.zakocoder.app.ai.AiQueuedStatus.Pending } < dev.zakocoder.app.ai.AiTaskQueue.MAX_PENDING,
+            onSteer = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.Steer)) input = "" else messageActionError = true },
+            onFollowUp = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.FollowUp)) input = "" else messageActionError = true })
         AiComposerDock(input, { if (it.length <= 16000) input = it },
-            inputEnabled = !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
+            inputEnabled = state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             awaitingAnswer = state.questionContinuation != null,
             attachEnabled = project != null && !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             running = state.active || state.questionContinuation != null,

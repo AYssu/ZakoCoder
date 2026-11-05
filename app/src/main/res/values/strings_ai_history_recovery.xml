@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_history_read_unsupported">这条会话使用了当前版本不支持的历史格式。可以删除这条会话后重新开始，或返回使用保存它的应用版本。</string>
+    <string name="ai_history_read_corrupt">这条会话的数据不完整或格式无法读取。可以删除这条会话后重新开始。</string>
+    <string name="ai_history_read_unavailable">暂时无法读取会话历史。请检查存储访问情况后重新读取；尚未定位到可安全删除的会话。</string>
+    <string name="ai_history_read_retry">重新读取</string>
+    <string name="ai_history_remove_unreadable">删除这条会话</string>
+    <string name="ai_history_remove_unreadable_title">删除无法读取的会话？</string>
+    <string name="ai_history_remove_unreadable_detail">仅删除已定位的这一条会话记录和其中的聊天上下文。此操作无法撤销；项目源码、其他会话与文件检查点会保留。删除后将打开其他会话，没有其他会话时新建一条。确认前不会删除任何记录。</string>
+    <string name="ai_history_remove_unreadable_confirm">删除并继续</string>
+    <string name="ai_history_remove_unreadable_record">会话标识：%1$s</string>
+</resources>

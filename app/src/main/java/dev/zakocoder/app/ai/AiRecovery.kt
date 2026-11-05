@@ -17,6 +17,9 @@ fun recoveryNote(state: AiState, reason: AiFailure): String {
         entries.firstOrNull { it.role == AiRole.User }?.text?.takeIf { it != question }?.let {
             appendLine("Original attached reference snapshot (may be truncated; inspect current source):\n${it.removePrefix(question).take(12000)}")
         }
+        entries.filter { it.role == AiRole.User }.drop(1).forEach { entry ->
+            appendLine("Additional user instruction received during this task:\n${entry.text.take(16000)}")
+        }
         entries.forEach { entry ->
             if (entry.role == AiRole.Assistant && entry.text.isNotBlank()) appendLine("Assistant partial output (not a completion guarantee):\n${entry.text.take(6000)}")
         }
