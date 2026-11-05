@@ -21,7 +21,7 @@ internal fun AiToolLivePreview(draft: AiCallDraft) {
     var expanded by remember(draft.index, draft.name) { mutableStateOf(false) }
     val label = AiTool.named(draft.name)?.let { stringResource(it.label) }
         ?: draft.name.ifBlank { stringResource(R.string.ai_receiving_arguments) }
-    val preview = remember(draft.arguments, draft.previewLine) { draft.previewLine.ifEmpty { dev.zakocoder.app.ai.toolArgumentLine(draft.arguments) } }
+    val preview = remember(draft.arguments, draft.previewLine) { draft.previewLine.ifEmpty { dev.zakocoder.app.ai.toolArgumentLine(draft.arguments, localEdit = draft.name == "edit_file") } }
     Column {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

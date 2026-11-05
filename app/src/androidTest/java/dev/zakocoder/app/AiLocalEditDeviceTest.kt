@@ -132,6 +132,19 @@ class AiLocalEditDeviceTest {
         }
     }
 
+    @Test fun inheritedPermissionSourceSurvivesHistoryRoundtrip() = runBlocking(Dispatchers.IO) {
+        AiDeviceTest.Fixture(context).use { fixture ->
+            val event = AiToolEvent("event", "call", AiTool.EditFile, "edit_file", "{}", "fixture", "main.txt",
+                status = AiToolStatus.Denied, permission = AiPermission.Deny, permissionSource = R.string.ai_edit_inherited_permission)
+            val state = AiState(projectId = "edit-history", events = listOf(event))
+            fixture.history.save("edit-history", state)
+            val restored = fixture.history.load("edit-history").state!!.events.single()
+            assertEquals(AiTool.EditFile, restored.tool)
+            assertEquals(R.string.ai_edit_inherited_permission, restored.permissionSource)
+            assertEquals(AiToolStatus.Denied, restored.status)
+        }
+    }
+
     @Test fun schemaAndParameterValidationExposeStructuredEditsOnly() {
         val tools = AiController.schemas()
         val function = (0 until tools.length()).map { tools.getJSONObject(it).getJSONObject("function") }.single { it.getString("name") == "edit_file" }
