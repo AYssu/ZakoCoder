@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-05",
+  "device": "POCO F5",
+  "android": 13,
+  "abi": "arm64-v8a",
+  "widthDp": 360,
+  "fontScale": 1.3,
+  "source": "AiServiceOptionsUiDeviceTest actual Compose component with synthetic settings",
+  "screenshots": [
+    {
+      "file": "service-options-Responses-default-day.png",
+      "sha256": "8af18d41cb49559018a3bd93cc5932746dcefca3fa7dbd3bb98aad851aa53e02",
+      "state": "default-enabled"
+    },
+    {
+      "file": "service-options-Responses-default-night.png",
+      "sha256": "ee11a4dee224d809c941a6d8368aae1fad0b26ace363f81bb389fc2438d9047c",
+      "state": "default-enabled"
+    },
+    {
+      "file": "service-options-Responses-day.png",
+      "sha256": "1ab8b60eeb065b02d474ab6f5a0b58d94e5a4e6330221e68df3fd8c836bf21ee",
+      "state": "manual-disabled"
+    },
+    {
+      "file": "service-options-Responses-night.png",
+      "sha256": "a4710cc192f4fd5714d32b518d1abdd2147f3ae52684252cf437b02dea0c15f0",
+      "state": "manual-disabled"
+    }
+  ]
+}

@@ -195,8 +195,10 @@ class AiServiceOptionsUiDeviceTest {
                     }
                     AiApiProtocol.Responses -> {
                         scrollTo(R.string.ai_service_responses_cache)
-                        click(R.string.ai_service_responses_cache)
                         assertTrue(value.value.responsesCacheKey)
+                        capture("service-options-Responses-default-${if (dark) "night" else "day"}.png")
+                        click(R.string.ai_service_responses_cache)
+                        assertFalse(value.value.responsesCacheKey)
                     }
                     AiApiProtocol.Anthropic -> {
                         scrollTo(R.string.ai_service_cache_disabled)
