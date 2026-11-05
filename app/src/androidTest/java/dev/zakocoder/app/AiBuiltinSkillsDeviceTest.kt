@@ -73,7 +73,7 @@ class AiBuiltinSkillsDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun selectionUsesUserReferenceMessagesAndDisabledBodiesDoNotReturnInContext() = runBlocking {
+    @Test(timeout = 120000) fun selectionUsesUserReferenceMessagesAndLatestSnapshotSupersedesHistory() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
                 lateinit var ai: AiController
@@ -92,13 +92,23 @@ class AiBuiltinSkillsDeviceTest {
                 assertTrue(guidance.contains("If none applies, omit the announcement"))
                 assertTrue(guidance.contains("Do not invent skill tool calls or audit events"))
                 assertFalse(first.getJSONObject(0).getString("content").contains("# 界面设计与实现"))
-                assertFalse(ai.state.value.contextTurns.single().contains("# 界面设计与实现"))
+                assertTrue("The sent skill snapshot remains literal history for a stable cache prefix",
+                    ai.state.value.contextTurns.single().contains("# 界面设计与实现"))
+                val firstTurn = ai.state.value.contextTurns.single()
                 main { ai.enableSkill("builtin:frontend-design", false) }
                 f.enqueue("现在没有启用这份规范。")
                 main { ai.send("继续") }; await { !ai.state.value.active }
-                val second = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages").toString()
-                assertFalse(second.contains("Skill: frontend-design")); assertTrue(second.contains("设计一个页面"))
-                assertEquals(2, f.history.load("injection").state!!.contextTurns.size)
+                val second = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
+                val snapshots = (0 until second.length()).map { second.getJSONObject(it).optString("content") }
+                    .filter { it.startsWith("User-selected skills for this task.") }
+                assertEquals(2, snapshots.size)
+                assertEquals("The prior request prefix must not be rewritten when a skill is disabled", guidance, snapshots.first())
+                assertFalse("The latest task no longer enables the old skill", snapshots.last().contains("Skill: frontend-design"))
+                assertTrue(snapshots.last().contains("Earlier snapshots are historical evidence, not current rules or authorization"))
+                assertTrue(second.toString().contains("设计一个页面"))
+                val saved = f.history.load("injection").state!!
+                assertEquals(2, saved.contextTurns.size)
+                assertEquals(firstTurn, saved.contextTurns.first())
                 assertTrue(ai.state.value.events.isEmpty())
             }
         }
