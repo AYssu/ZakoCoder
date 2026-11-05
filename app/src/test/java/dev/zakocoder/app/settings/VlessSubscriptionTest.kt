@@ -35,8 +35,13 @@ class VlessSubscriptionTest {
     }
 
     @Test fun webSocketAndGrpcLinksKeepTransportSettings() {
-        val wsLink = link.replace("type=tcp", "type=ws")
+        val wsLink = link
+            .replace("type=tcp", "type=ws")
+            .replace("security=reality", "security=tls")
             .replace("&flow=xtls-rprx-vision", "")
+            .replace("&pbk=$key", "")
+            .replace("&sid=0123", "")
+            .replace("&spx=%2Ftest%3Fa%3D1", "")
             .replace("#Test", "&host=cdn.example.com&path=%2Fsocket#WS")
         val wsNode = requireNotNull(parser.parseLink(wsLink))
         assertTrue(wsNode.supported)
@@ -61,6 +66,38 @@ class VlessSubscriptionTest {
         assertTrue(grpcJson.contains("\"grpcSettings\":{\"serviceName\":\"grpc-service\"}"))
         val grpcFields = ProxyTransportCodec.toFields(grpcNode)
         assertEquals(grpcNode.transport, ProxyTransportCodec.fromFields(ProxyProtocol.Vless, grpcFields))
+    }
+
+    @Test fun webSocketRealityIsRejectedAtUrlClashCacheAndConfig() {
+        val wsReality = link
+            .replace("type=tcp", "type=ws")
+            .replace("&flow=xtls-rprx-vision", "")
+            .replace("#Test", "&host=cdn.example.com&path=%2Fsocket#WS")
+        val node = requireNotNull(parser.parseLink(wsReality))
+        assertFalse(node.supported)
+        assertFalse(ProxyKernelConfig.isSupportedVless(requireNotNull(node.transport?.vless)))
+        assertNull(ProxyKernelConfig.build(node, 10808))
+        assertTrue(ProxyTransportCodec.toFields(node).isEmpty())
+
+        val clash = "proxies:\n  - {name: WS, type: vless, server: edge.example, port: 443, uuid: $uuid, network: ws, tls: true, servername: www.example.com, client-fingerprint: chrome, ws-opts: {path: /socket}, reality-opts: {public-key: $key, short-id: '0123'}}"
+        val clashNode = requireNotNull(parser.parse(clash)).nodes.single()
+        assertFalse(clashNode.supported)
+        assertNull(ProxyKernelConfig.build(clashNode, 10808))
+
+        val cached = mapOf(
+            "vless.uuid" to uuid,
+            "vless.encryption" to "none",
+            "vless.network" to "ws",
+            "vless.security" to "reality",
+            "vless.flow" to "",
+            "vless.serverName" to "www.example.com",
+            "vless.publicKey" to key,
+            "vless.shortId" to "0123",
+            "vless.fingerprint" to "chrome",
+            "vless.host" to "cdn.example.com",
+            "vless.path" to "/socket",
+        )
+        assertNull(ProxyTransportCodec.fromFields(ProxyProtocol.Vless, cached))
     }
 
     @Test fun clashWebSocketAndGrpcOptionsArePreserved() {

@@ -2,8 +2,11 @@ package dev.zakocoder.app.settings
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.net.InetAddress
+import java.util.concurrent.CancellationException
 
 class ProxyEndpointAddressesTest {
     @Test fun selectsFirstReachableAddressAndKeepsIpv6Fallback() {
@@ -35,5 +38,63 @@ class ProxyEndpointAddressesTest {
         assertEquals(ipv6.hostAddress, selected)
         assertNull(ProxyEndpointAddresses.selectReachable(listOf(ipv4), 443) { _, _, _ -> false })
         assertNull(ProxyEndpointAddresses.selectReachable(listOf(ipv4), 0) { _, _, _ -> true })
+    }
+
+    @Test fun overallBudgetStopsLaterAddressesAndCapsAttemptTimeout() {
+        val first = InetAddress.getByName("192.0.2.10")
+        val second = InetAddress.getByName("192.0.2.11")
+        val third = InetAddress.getByName("192.0.2.12")
+        var now = 0L
+        val attempts = mutableListOf<Pair<String?, Int>>()
+
+        val selected = ProxyEndpointAddresses.selectReachable(
+            addresses = listOf(first, second, third),
+            port = 443,
+            timeoutMillis = 3000,
+            totalTimeoutMillis = 2500,
+            nowMillis = { now },
+            probe = { address, _, timeout ->
+                attempts += address.hostAddress to timeout
+                now += 1300
+                false
+            },
+        )
+
+        assertNull(selected)
+        assertEquals(listOf(first.hostAddress to 2500, second.hostAddress to 1200), attempts)
+    }
+
+    @Test fun inactiveStartStopsAfterTheCurrentProbe() {
+        val first = InetAddress.getByName("192.0.2.20")
+        val second = InetAddress.getByName("192.0.2.21")
+        var active = true
+        val attempts = mutableListOf<String?>()
+
+        val selected = ProxyEndpointAddresses.selectReachable(
+            addresses = listOf(first, second),
+            port = 443,
+            isActive = { active },
+            probe = { address, _, _ ->
+                attempts += address.hostAddress
+                active = false
+                false
+            },
+        )
+
+        assertNull(selected)
+        assertEquals(listOf(first.hostAddress), attempts)
+    }
+
+    @Test fun ordinaryProbeFailureIsUnreachableButCancellationPropagates() {
+        val address = InetAddress.getByName("192.0.2.30")
+        assertNull(ProxyEndpointAddresses.selectReachable(listOf(address), 443) { _, _, _ ->
+            throw java.io.IOException("down")
+        })
+
+        val cancelled = CancellationException("stopped")
+        val thrown = assertThrows(CancellationException::class.java) {
+            ProxyEndpointAddresses.selectReachable(listOf(address), 443) { _, _, _ -> throw cancelled }
+        }
+        assertSame(cancelled, thrown)
     }
 }

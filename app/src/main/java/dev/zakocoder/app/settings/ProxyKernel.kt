@@ -6,16 +6,19 @@ import dev.zakocoder.app.kernel.IKernelService
 import dev.zakocoder.app.kernel.KernelPluginManager
 import dev.zakocoder.app.kernel.KernelPluginStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import kotlin.coroutines.CoroutineContext
 import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
@@ -88,7 +91,12 @@ class ProxyKernel(
             mutable.value = ProxyKernelState.Starting(node.id)
             generation
         }
-        withContext(Dispatchers.IO) { startLocked(node, token) }
+        try {
+            withContext(Dispatchers.IO) { startLocked(node, token, coroutineContext) }
+        } catch (cancelled: CancellationException) {
+            stop()
+            throw cancelled
+        }
     }
 
     /** Stops the plugin kernel (if any) and returns to [ProxyKernelState.Stopped]; never blocks UI. */
@@ -126,8 +134,8 @@ class ProxyKernel(
         mutable.value.takeIf { it is ProxyKernelState.Failed } ?: ProxyKernelState.Stopped
     }
 
-    private fun startLocked(node: ProxyNode, token: Long): ProxyKernelState {
-        if (!isCurrent(token)) return supersededState()
+    private fun startLocked(node: ProxyNode, token: Long, owner: CoroutineContext): ProxyKernelState {
+        if (!isCurrent(token) || !owner.isActive) return supersededState()
         plugins.refresh()
         when (plugins.status.value) {
             KernelPluginStatus.NotInstalled -> return fail(KernelFailure.PluginNotInstalled, token)
@@ -149,12 +157,18 @@ class ProxyKernel(
         } catch (_: SecurityException) {
             return fail(KernelFailure.DnsResolutionFailed, token)
         }
-        val destination = ProxyEndpointAddresses.selectReachable(addresses.toList(), node.port)
-            ?: return fail(KernelFailure.EndpointUnavailable, token)
-        if (!isCurrent(token)) return supersededState()
+        val destination = ProxyEndpointAddresses.selectReachable(
+            addresses.toList(),
+            node.port,
+            isActive = { isCurrent(token) && owner.isActive },
+        )
+        if (destination == null) {
+            return if (!owner.isActive) supersededState() else fail(KernelFailure.EndpointUnavailable, token)
+        }
+        if (!isCurrent(token) || !owner.isActive) return supersededState()
         val config = ProxyKernelConfig.build(node, port, user, password, resolvedAddress = destination)
             ?: return fail(KernelFailure.UnsupportedNode, token)
-        if (!isCurrent(token)) return supersededState()
+        if (!isCurrent(token) || !owner.isActive) return supersededState()
         val bound = plugins.bind(onLost = { handleServiceDied(token) }) ?: run {
             val status = plugins.status.value
             return fail(
@@ -166,7 +180,7 @@ class ProxyKernel(
                 token,
             )
         }
-        if (!isCurrent(token)) {
+        if (!isCurrent(token) || !owner.isActive) {
             plugins.unbind()
             return supersededState()
         }

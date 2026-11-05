@@ -160,6 +160,18 @@ class ProxyKernelConfigTest {
         assertTrue(grpc.contains("\"grpcSettings\":{\"serviceName\":\"grpc-service\"}"))
     }
 
+    @Test fun vlessWebSocketRealityIsRejectedByThePinnedKernel() {
+        val node = vlessNode(
+            security = "reality",
+            network = "ws",
+            flow = "",
+            host = "cdn.example.com",
+            path = "/ws",
+        )
+        assertFalse(ProxyKernelConfig.isSupportedVless(requireNotNull(node.transport?.vless)))
+        assertNull(ProxyKernelConfig.build(node, 10808))
+    }
+
     @Test fun quotesAndBackslashesAreJsonEscapedAndNewlinesAreRejected() {
         val escaped = ProxyKernelConfig.build(ssNode(pw = "pa\"ss\\word"), 10808)
         requireNotNull(escaped)

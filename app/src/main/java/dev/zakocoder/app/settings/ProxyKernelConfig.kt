@@ -74,6 +74,8 @@ object ProxyKernelConfig {
         if (runCatching { java.util.UUID.fromString(v.uuid).toString().equals(v.uuid, ignoreCase = true) }.getOrDefault(false).not()) return false
         if (v.encryption != "none" || v.network !in VLESS_NETWORKS) return false
         if (v.security !in setOf("none", "tls", "reality")) return false
+        // The pinned Xray 26.10.31 kernel rejects REALITY over WebSocket.
+        if (v.security == "reality" && v.network !in VLESS_REALITY_NETWORKS) return false
         if (v.flow !in setOf("", "xtls-rprx-vision")) return false
         if (v.flow.isNotEmpty() && (v.network !in setOf("tcp", "raw") || v.security == "none")) return false
         val bounded = listOf(
@@ -301,6 +303,7 @@ object ProxyKernelConfig {
     )
     private val KERNEL_NETWORKS = setOf("tcp", "ws", "grpc")
     private val VLESS_NETWORKS = setOf("tcp", "raw", "ws", "grpc")
+    private val VLESS_REALITY_NETWORKS = setOf("tcp", "raw", "grpc")
     private val VMESS_SECURITY = setOf("auto", "none", "zero", "aes-128-gcm", "chacha20-poly1305")
     private val SS_METHODS = setOf(
         "aes-128-gcm", "aes-256-gcm", "chacha20-poly1305", "chacha20-ietf-poly1305",
