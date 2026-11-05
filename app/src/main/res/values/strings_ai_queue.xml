@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_queue_steer">补充当前任务</string>
+    <string name="ai_queue_followup">排队下一任务</string>
+    <string name="ai_queue_steer_pending">等待当前工具完成后接收</string>
+    <string name="ai_queue_followup_pending">当前任务成功结束后执行</string>
+    <string name="ai_queue_continue">继续</string>
+    <string name="ai_queue_cancel">移除待处理消息</string>
+    <string name="ai_queue_tool_deferred">用户补充了任务要求，此操作尚未执行。请先根据新要求重新规划。</string>
+</resources>

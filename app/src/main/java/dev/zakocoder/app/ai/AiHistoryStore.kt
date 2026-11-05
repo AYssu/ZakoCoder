@@ -160,6 +160,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("round", state.round).put("toolCount", state.toolCount)
+        .put("queuedMessages", AiTaskQueue.encode(state.queuedMessages))
         .put("questions", JSONArray(state.questions.map { it.encode() }))
         .put("questionContinuation", state.questionContinuation?.encode())
         .put("plan", JSONArray(state.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
@@ -308,7 +309,7 @@ open class AiHistoryStore(private val directory: File) {
         val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
             AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
         } }
-        val state = AiState(questions = questions, questionContinuation = continuation,
+        val state = AiState(queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
             round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
             toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,

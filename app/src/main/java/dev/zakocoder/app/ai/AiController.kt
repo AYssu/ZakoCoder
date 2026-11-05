@@ -18,6 +18,7 @@ data class AiChange(val path: String, val before: FileBaseline?, val after: File
 data class AiState(val projectId: String? = null, val checkpointId: String? = null, val references: List<AiReference> = emptyList(), val pendingImages: List<AiImageAttachment> = emptyList(), val imagesLoading: Boolean = false, val ruleSources: List<String> = emptyList(), val rulesLimited: Boolean = false, val restoring: Boolean = false, val workspaceRevision: Int = 0, val active: Boolean = false, val messages: List<String> = emptyList(),
     val conversationId: String = java.util.UUID.randomUUID().toString(), val turn: Int = 0,
     val turnTimings: List<AiTurnTiming> = emptyList(),
+    val queuedMessages: List<AiQueuedMessage> = emptyList(),
     val questions: List<AiUserQuestion> = emptyList(), val questionContinuation: AiQuestionContinuation? = null,
     /** Transient streaming ownership; history never reopens an ended reasoning section. */
     val reasoningEntryId: String? = null, val retryNotice: String = "",
@@ -778,6 +779,35 @@ class AiController(private val context: Context, root: (String) -> File, private
         return true
     }
 
+    /** Admission and execution are separate: persist intent before the next safe boundary. */
+    fun enqueue(text: String, kind: AiQueuedKind): Boolean {
+        val current = mutable.value
+        if (!current.active || current.phase == AiPhase.Stopping || current.historyError || current.restoring ||
+            current.questionContinuation != null || text.isBlank() || text.length > 16000 ||
+            current.queuedMessages.count { it.status == AiQueuedStatus.Pending } >= AiTaskQueue.MAX_PENDING) return false
+        mutable.update { it.copy(queuedMessages = AiTaskQueue.add(it.queuedMessages,
+            AiQueuedMessage(text = text, kind = kind, turn = it.turn))) }
+        scope.launch { try { persist() } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Failed persistence prevents boundary delivery. */ } }
+        return true
+    }
+    fun cancelQueued(messageId: String) {
+        if (mutable.value.restoring || mutable.value.historyError) return
+        mutable.update { it.copy(queuedMessages = it.queuedMessages.map { q ->
+            if (q.id == messageId && q.status == AiQueuedStatus.Pending) q.copy(status = AiQueuedStatus.Cancelled) else q }) }
+        scope.launch { try { persist() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { } }
+    }
+    /** Restart never auto-executes queued work. User explicitly chooses one item to continue. */
+    fun startQueued(messageId: String): Boolean {
+        val current = mutable.value
+        val message = current.queuedMessages.singleOrNull { it.id == messageId && it.status == AiQueuedStatus.Pending } ?: return false
+        if (current.active || current.questionContinuation != null || current.references.isNotEmpty() || current.pendingImages.isNotEmpty()) return false
+        mutable.update { it.copy(queuedMessages = it.queuedMessages.map { q -> if (q.id == messageId) q.copy(status = AiQueuedStatus.Applied) else q }) }
+        if (send(message.text)) return true
+        mutable.update { it.copy(queuedMessages = current.queuedMessages) }
+        return false
+    }
+
     fun send(text: String): Boolean {
         val id = mutable.value.projectId ?: return false
         if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || mutable.value.questionContinuation != null || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
@@ -861,6 +891,10 @@ class AiController(private val context: Context, root: (String) -> File, private
                     screenTaskOwner = null
                     mutable.update { it.copy(active = false, retryNotice = "") }; grants.clear(); toolGrants.clear(); activityChanged()
                 }
+            }
+            if (!paused && mutable.value.phase == AiPhase.Completed && !mutable.value.historyError) {
+                mutable.value.queuedMessages.firstOrNull { it.status == AiQueuedStatus.Pending && it.kind == AiQueuedKind.FollowUp }
+                    ?.let { startQueued(it.id) }
             }
         }
     }
@@ -957,7 +991,23 @@ class AiController(private val context: Context, root: (String) -> File, private
             updateEvent(question.eventId) { it.copy(status = AiToolStatus.Succeeded, output = result, finished = now()) }
         }
         val baselines = linkedMapOf<String, FileBaseline>(); val refused = mutableSetOf<String>(); var count = mutable.value.toolCount
+        suspend fun receiveSteering(): Boolean {
+            if (mutable.value.queuedMessages.none { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }) return false
+            // Do not deliver unsaved intent, or insert user messages between a tool call and its results.
+            persist()
+            val pending = mutable.value.queuedMessages.filter { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }
+            if (pending.isEmpty()) return false
+            pending.forEach { queued ->
+                messages.put(JSONObject().put("role", "user").put("content", queued.text))
+                append(queued.text, role = AiRole.User, inputLength = queued.text.length)
+            }
+            val ids = pending.map { it.id }.toSet()
+            mutable.update { it.copy(queuedMessages = it.queuedMessages.map { q -> if (q.id in ids) q.copy(status = AiQueuedStatus.Applied) else q }) }
+            persist()
+            return true
+        }
         while (true) {
+            receiveSteering()
             currentCoroutineContext().ensureActive()
             dynamicContext.update("commands", projectCommandContext?.invoke(id).orEmpty())
             val changeContext = if (mutable.value.policy.permission(AiTool.ReadFile) == AiPermission.Allow) {
@@ -1071,6 +1121,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             val assistant = reply.asAssistantMessage()
             messages.put(assistant)
             if (reply.calls.isEmpty()) {
+                if (receiveSteering()) continue
                 omitScreenTestImages(messages, screenImageIds)
                 var completed = JSONArray()
                 for (index in turnStart until messages.length()) {
@@ -1108,6 +1159,8 @@ class AiController(private val context: Context, root: (String) -> File, private
             reply.calls.zip(events).forEach { (call, event) ->
                 count++; mutable.update { it.copy(toolCount = count) }
                 val result = try {
+                    if (mutable.value.queuedMessages.any { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending })
+                        throw AiSteeringBoundary()
                     val args = JSONObject(call.arguments)
                     if (reply.calls.any { it.name == AiTool.AskUser.wire }) {
                         if (reply.calls.size != 1) throw AiTerminalException(context.getString(R.string.ai_question_single_call))
@@ -1154,6 +1207,11 @@ class AiController(private val context: Context, root: (String) -> File, private
                         }
                     }
                 } catch (paused: AiQuestionPaused) { throw paused }
+                catch (_: AiSteeringBoundary) {
+                    val detail = context.getString(R.string.ai_queue_tool_deferred)
+                    updateEvent(event.id) { it.copy(status = AiToolStatus.Cancelled, output = detail, finished = now()) }
+                    detail
+                }
                 catch (_: TimeoutCancellationException) {
                     // A nested command deadline is a tool result; an expired outer task still propagates cancellation.
                     currentCoroutineContext().ensureActive()
