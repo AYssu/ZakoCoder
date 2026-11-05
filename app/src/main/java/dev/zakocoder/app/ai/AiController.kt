@@ -978,7 +978,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         var turnStart = messages.length()
         mutable.value.recoveryNotes.forEach { note -> messages.put(JSONObject().put("role", "user").put("content", note)) }
-        val skillSession = try { if (mutable.value.skillOnDemand) withContext(Dispatchers.IO) { skillStore.session(id, mutable.value.enabledSkills) } else null }
+        if (mutable.value.skillOnDemand && mutable.value.skillsLoading) mutable.first { !it.skillsLoading }
+        val skillSession = try { if (mutable.value.skillOnDemand) withContext(Dispatchers.IO) { skillStore.session(id, mutable.value.enabledSkills, mutable.value.skills) } else null }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { throw AiBudgetException(AiFailure.Skill) }
         val selected = try { if (skillSession != null) skillSession.catalog() else if (mutable.value.enabledSkills.isEmpty()) "" else withContext(Dispatchers.IO) { skillStore.content(id, mutable.value.enabledSkills) } }

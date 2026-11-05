@@ -50,11 +50,28 @@ class AiSkillSessionTest {
         File(directory, "references/help.md").writeText("help content")
         val outside = File(root, "outside.txt").apply { writeText("outside") }
         Files.createSymbolicLink(File(directory, "linked.md").toPath(), outside.toPath())
-        val session = store.session("p", listOf(selected.path))
+        val session = store.session("p", listOf(selected.path), listOf(selected))
         assertTrue(load(session, selected.path).content.contains("original body"))
         assertEquals("help content", load(session, selected.path, "references/help.md").content)
         assertThrows(AiFileFailure::class.java) { load(session, selected.path, "linked.md") }
     }
+    @Test fun requestConstructionAndDeniedLoadHaveZeroProjectFileAccess() {
+        val root = temporary.newFolder()
+        var rootAccesses = 0
+        val store = AiSkills(AiProjectFiles { rootAccesses++; root })
+        val selected = AiSkill(".zakocoder/skills/selected/SKILL.md", "selected", "Selected metadata")
+        val disabled = AiSkill(".zakocoder/skills/disabled/SKILL.md", "disabled", "Disabled metadata")
+        val session = store.session("p", listOf(selected.path), listOf(selected, disabled))
+        assertTrue(session.catalog().contains("Selected metadata"))
+        assertFalse(session.catalog().contains("Disabled metadata"))
+        assertEquals("Constructing the session/catalog must not even resolve a project file", 0, rootAccesses)
+        val denied = AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny))
+        if (denied.permission(AiTool.LoadSkill) != AiPermission.Deny) load(session, selected.path)
+        assertEquals("Read denial never reaches the file adapter", 0, rootAccesses)
+        assertThrows(IllegalArgumentException::class.java) { load(session, disabled.path) }
+        assertEquals("Disabled skills are rejected before IO", 0, rootAccesses)
+    }
+
     @Test fun cancellationBeforeReadAndDuringReadDoesNotPublishContent() {
         val before = Job().also { it.cancel() }; var reads = 0
         val session = AiSkillSession(listOf(skill)) { _, _ -> reads++; "body" }

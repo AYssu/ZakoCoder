@@ -160,15 +160,25 @@ class AiBuiltinSkillsDeviceTest {
     @Test(timeout = 120000) fun fileReadDenialAlsoDeniesOnDemandSkillLoading() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
-                f.history.save("denied-load", AiState(enabledSkills = listOf("builtin:frontend-design"), skillsInitialized = true, skillOnDemand = true))
+                val custom = File(f.root, "project/.zakocoder/skills/selected").apply { mkdirs() }
+                val disabled = File(f.root, "project/.zakocoder/skills/disabled").apply { mkdirs() }
+                File(custom, "SKILL.md").writeText("---\nname: selected\ndescription: Selected metadata\n---\nSELECTED_PRIVATE_BODY")
+                File(disabled, "SKILL.md").writeText("---\nname: disabled\ndescription: Disabled metadata\n---\nDISABLED_PRIVATE_BODY")
+                val path = ".zakocoder/skills/selected/SKILL.md"
+                f.history.save("denied-load", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
                 AiPermissionStore(object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }).save("denied-load", AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny)))
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("denied-load") }; ready(ai)
-                f.enqueue(calls = listOf(AiCall("denied", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"读取规范\"}")))
+                f.enqueue(calls = listOf(AiCall("denied", "load_skill", JSONObject().put("skill", path).put("reason", "读取规范").toString())))
                 f.enqueue("读取被禁止，未加载规范。")
                 main { assertTrue(ai.send("查看规范")) }; await { !ai.state.value.active }
                 assertEquals(AiToolStatus.Denied, ai.state.value.events.single().status)
-                assertFalse(ai.state.value.contextTurns.joinToString().contains(AiBuiltinSkills(context).content("builtin:frontend-design")))
+                val firstRequest = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages").toString()
+                assertTrue(firstRequest.contains("Selected metadata"))
+                assertFalse(firstRequest.contains("Disabled metadata"))
+                assertFalse(firstRequest.contains("SELECTED_PRIVATE_BODY"))
+                assertFalse(firstRequest.contains("DISABLED_PRIVATE_BODY"))
+                assertFalse(ai.state.value.contextTurns.joinToString().contains("SELECTED_PRIVATE_BODY"))
             }
         }
     }
