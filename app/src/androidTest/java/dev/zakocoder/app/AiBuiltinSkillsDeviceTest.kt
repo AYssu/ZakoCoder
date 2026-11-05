@@ -126,4 +126,51 @@ class AiBuiltinSkillsDeviceTest {
             }
         }
     }
+    @Test(timeout = 120000) fun onDemandLoadsSelectedBuiltinOnceAndPersistsMode() = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            AiDeviceTest.Fixture(context).use { f ->
+                lateinit var ai: AiController
+                main { ai = controller(f); ai.select("on-demand") }; ready(ai)
+                for (path in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(path, false) }
+                main { ai.enableSkill("builtin:frontend-design", true); ai.setSkillOnDemand(true) }
+                f.enqueue(calls = listOf(AiCall("skill1", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"读取界面指令\"}")))
+                f.enqueue(calls = listOf(AiCall("skill2", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"检查加载状态\"}")))
+                f.enqueue("已读取指令，尚未修改项目。")
+                main { assertTrue(ai.send("检查界面规范，不修改文件")) }; await { !ai.state.value.active }
+                val requests = (1..3).map { JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()) }
+                val body = AiBuiltinSkills(context).content("builtin:frontend-design")
+                assertFalse(requests[0].getJSONArray("messages").toString().contains(body))
+                val second = requests[1].getJSONArray("messages")
+                val loaded = (0 until second.length()).map { second.getJSONObject(it) }.single { it.optString("role") == "tool" }
+                assertEquals(body, JSONObject(loaded.getString("content")).getString("content"))
+                val third = requests[2].getJSONArray("messages")
+                val results = (0 until third.length()).map { third.getJSONObject(it) }.filter { it.optString("role") == "tool" }
+                assertEquals(2, results.size)
+                assertTrue(JSONObject(results.last().getString("content")).getBoolean("already_loaded"))
+                assertEquals("", JSONObject(results.last().getString("content")).getString("content"))
+                assertEquals(2, ai.state.value.events.count { it.tool == AiTool.LoadSkill && it.status == AiToolStatus.Succeeded })
+                await { f.history.load("on-demand").state?.skillOnDemand == true }
+                lateinit var restored: AiController
+                main { restored = controller(f); restored.select("on-demand") }; ready(restored)
+                assertTrue(restored.state.value.skillOnDemand)
+            }
+        }
+    }
+
+    @Test(timeout = 120000) fun fileReadDenialAlsoDeniesOnDemandSkillLoading() = runBlocking {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            AiDeviceTest.Fixture(context).use { f ->
+                f.history.save("denied-load", AiState(enabledSkills = listOf("builtin:frontend-design"), skillsInitialized = true, skillOnDemand = true))
+                AiPermissionStore(object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }).save("denied-load", AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny)))
+                lateinit var ai: AiController
+                main { ai = controller(f); ai.select("denied-load") }; ready(ai)
+                f.enqueue(calls = listOf(AiCall("denied", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"读取规范\"}")))
+                f.enqueue("读取被禁止，未加载规范。")
+                main { assertTrue(ai.send("查看规范")) }; await { !ai.state.value.active }
+                assertEquals(AiToolStatus.Denied, ai.state.value.events.single().status)
+                assertFalse(ai.state.value.contextTurns.joinToString().contains(AiBuiltinSkills(context).content("builtin:frontend-design")))
+            }
+        }
+    }
+
 }

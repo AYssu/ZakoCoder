@@ -175,7 +175,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("context", JSONArray(state.contextTurns.map { JSONArray(it) }))
         .put("commandChanges", JSONArray(state.commandChanges.map { it.encode() })).put("commandReviewLimited", state.commandReviewLimited)
         .put("requests", JSONArray(state.requests.map { it.encode() })).put("recovery", JSONArray(state.recoveryNotes))
-        .put("skillsInitialized", state.skillsInitialized)
+        .put("skillsInitialized", state.skillsInitialized).put("skillOnDemand", state.skillOnDemand)
         .put("estimatedContextTokens", state.estimatedContextTokens).put("contextWindowTokens", state.contextWindowTokens).put("contextOutputReserveTokens", state.contextOutputReserveTokens)
         .put("contextSummary", state.contextSummary).put("contextCompactions", state.contextCompactions).put("contextChars", state.contextChars)
         .put("taskRecovery", state.taskRecovery).put("taskPrompt", state.taskPrompt).put("enabledSkills", JSONArray(state.enabledSkills))
@@ -333,7 +333,7 @@ open class AiHistoryStore(private val directory: File) {
             contextOutputReserveTokens = json.optInt("contextOutputReserveTokens", 8192).coerceAtLeast(0),
             messages = timeline.filter { it.toolId == null }.takeLast(100).map { it.text }, contextTurns = turns,
             commandChanges = commandChanges, commandReviewLimited = json.optBoolean("commandReviewLimited"),
-            requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),
+            requests = requests, recoveryNotes = recovery, taskPrompt = taskPrompt, enabledSkills = enabledSkills, skillOnDemand = json.optBoolean("skillOnDemand", false), skillsInitialized = json.optBoolean("skillsInitialized", enabledSkills.isNotEmpty()), error = json.optString("error").take(500),
             taskDiagnostic = json.optString("taskDiagnostic").take(2048),
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
             historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,

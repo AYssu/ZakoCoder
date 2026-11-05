@@ -6,6 +6,7 @@ import dev.zakocoder.app.R
 enum class AiTool(val wire: String, val label: Int, val description: Int, val writes: Boolean = false) {
     ListFiles("list_files", R.string.ai_tool_list, R.string.ai_tool_list_desc),
     ReadFile("read_file", R.string.ai_tool_read, R.string.ai_tool_read_desc),
+    LoadSkill("load_skill", R.string.ai_tool_load_skill, R.string.ai_tool_load_skill_desc),
     SearchFiles("search_files", R.string.ai_tool_search, R.string.ai_tool_search_desc),
     WriteFile("write_file", R.string.ai_tool_write, R.string.ai_tool_write_desc, true),
     EditFile("edit_file", R.string.ai_tool_edit, R.string.ai_tool_edit_desc, true),
@@ -28,8 +29,8 @@ enum class AiPermission(val label: Int) { Allow(R.string.ai_permission_allow), A
 data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }, val yolo: Boolean = false) {
     // YOLO is a separately confirmed project choice. It grants app tool execution only;
     // capability packages, target leases and Android/SSH system authorization still apply.
-    fun permission(tool: AiTool): AiPermission = if (yolo) AiPermission.Allow else overrides[tool] ?: (if (tool == AiTool.EditFile) overrides[AiTool.WriteFile] else null) ?: default
-    fun source(tool: AiTool) = if (yolo) R.string.ai_permission_yolo_rule else if (tool in overrides) R.string.ai_permission_tool_rule else if (tool == AiTool.EditFile && AiTool.WriteFile in overrides) R.string.ai_edit_inherited_permission else R.string.ai_permission_default_rule
+    fun permission(tool: AiTool): AiPermission = if (tool == AiTool.LoadSkill) permission(AiTool.ReadFile) else if (yolo) AiPermission.Allow else overrides[tool] ?: (if (tool == AiTool.EditFile) overrides[AiTool.WriteFile] else null) ?: default
+    fun source(tool: AiTool): Int = if (tool == AiTool.LoadSkill) source(AiTool.ReadFile) else if (yolo) R.string.ai_permission_yolo_rule else if (tool in overrides) R.string.ai_permission_tool_rule else if (tool == AiTool.EditFile && AiTool.WriteFile in overrides) R.string.ai_edit_inherited_permission else R.string.ai_permission_default_rule
 }
 enum class AiToolStatus(val label: Int) {
     Queued(R.string.ai_status_queued), Waiting(R.string.ai_status_waiting), Running(R.string.ai_status_running),

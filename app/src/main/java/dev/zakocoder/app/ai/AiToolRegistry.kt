@@ -17,9 +17,10 @@ internal class AiToolDefinition internal constructor(val tool: AiTool, private v
     fun permissionSource(policy: AiPolicy): Int = policy.source(tool)
     fun target(args: JSONObject, planTitle: String): String = AiToolRegistry.target(tool, args, planTitle)
     fun validate(args: JSONObject, target: String) = AiToolRegistry.validateArguments(tool, args, target)
-    fun available(screen: Boolean, ssh: Boolean): Boolean = when (tool) {
+    fun available(screen: Boolean, ssh: Boolean, skills: Boolean): Boolean = when (tool) {
         AiTool.AndroidTest -> screen
         AiTool.SshRemote -> ssh
+        AiTool.LoadSkill -> skills
         else -> true
     }
 }
@@ -38,12 +39,12 @@ internal object AiToolRegistry {
         }
         result
     }
-    fun definitions(screen: Boolean = false, ssh: Boolean = false): List<AiToolDefinition> =
-        catalog.filter { it.available(screen, ssh) }
+    fun definitions(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false): List<AiToolDefinition> =
+        catalog.filter { it.available(screen, ssh, skills) }
     fun definition(tool: AiTool): AiToolDefinition = catalog.single { it.tool == tool }
     fun named(name: String): AiToolDefinition? = catalog.singleOrNull { it.wire == name }
-    fun schemas(screen: Boolean = false, ssh: Boolean = false): JSONArray = JSONArray().also { result ->
-        definitions(screen, ssh).forEach { result.put(it.schema) }
+    fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false): JSONArray = JSONArray().also { result ->
+        definitions(screen, ssh, skills).forEach { result.put(it.schema) }
     }
 
     val SCREEN_TEST_ACTIONS = listOf("status", "prepare", "install", "launch", "observe", "click", "long_click", "swipe", "input_text", "back", "assert_text", "screenshot", "finish")
@@ -53,6 +54,7 @@ internal object AiToolRegistry {
     fun target(tool: AiTool?, args: JSONObject, planTitle: String) = when (tool) {
         AiTool.RunCommand, AiTool.StartTerminal -> args.optString("command")
         AiTool.ReadTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal -> args.optString("terminal_id")
+        AiTool.LoadSkill -> args.optString("skill") + " · " + args.optString("resource", "SKILL.md")
         AiTool.SearchFiles -> args.optString("query")
         AiTool.ReadCommandLog -> args.optString("run_id")
         AiTool.UseMcp -> args.optString("server_id") + " · " + args.optString("method") + " · " +
@@ -67,6 +69,13 @@ internal object AiToolRegistry {
     fun validateArguments(tool: AiTool, args: JSONObject, target: String): List<AiTextEdit>? {
         if (tool == AiTool.EditFile) return AiTextEdits.parse(args)
         when (tool) {
+            AiTool.LoadSkill -> {
+                require(args.keys().asSequence().all { it in setOf("skill", "resource", "reason") })
+                val skill = args.get("skill")
+                require(skill is String && skill.isNotBlank() && skill.length <= 1000 && skill.none(Char::isISOControl))
+                require(!args.has("resource") || args.get("resource") is String)
+                validateSkillResource(args.optString("resource", "SKILL.md"))
+            }
             AiTool.ReadCommandLog -> {
                 require(java.util.UUID.fromString(args.getString("run_id")).toString() == args.getString("run_id"))
                 require(args.optInt("offset", 0) >= 0 && args.optInt("limit", 12000) in 1..30000 && args.optString("query").length <= 200)
@@ -179,7 +188,10 @@ internal object AiToolRegistry {
         listOf("offset", "limit", "timeout_seconds").forEach { rp.put(it, JSONObject().put("type", "integer")) }
         rp.getJSONObject("expected_sha256").put("description", "Current SHA-256 from read_file; required when replacing an existing remote file")
         rp.getJSONObject("key").put("enum", JSONArray(listOf("Enter", "C-c", "C-d", "Escape", "Tab")))
-        val optional = JSONArray().put(plan).put(askUser).put(listing).put(mcp)
+        val loader = tool("load_skill", "Load instructions or a referenced text resource from a user-selected skill. skill must be an exact catalog source; resource defaults to SKILL.md and is relative to that skill. Instructions must be loaded first. Uses read_file permission. Never executes scripts. Repeated loads are not duplicated; loaded content is retained across compression.", "skill")
+        loader.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
+            .put("resource", JSONObject().put("type", "string").put("maxLength", 400))
+        val optional = JSONArray().put(plan).put(askUser).put(listing).put(mcp).put(loader)
         optional.put(screenTest).put(remote)
         return optional
             .put(read)

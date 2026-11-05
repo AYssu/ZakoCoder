@@ -12,6 +12,9 @@ internal class AiContextCache(initial: Map<String, String> = emptyMap()) {
 
     fun update(section: String, text: String) { latest[section] = text }
 
+    // Content has already been delivered in a tool result. Preserve it for compaction without duplicating it.
+    fun retain(section: String, text: String) { latest[section] = text; delivered[section] = text }
+
     fun nextMessage(): JSONObject? {
         val changed = latest.filter { (key, value) -> semantic(key, value) != delivered[key]?.let { semantic(key, it) } }
         if (changed.isEmpty()) return null
