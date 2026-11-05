@@ -36,7 +36,7 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 | **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
 | **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart 可选实验性本机语言服务。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
-| **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／SS／Trojan 节点经随 APK 提供的自编译 Xray 内核启用。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
+| **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／VLESS／SS／Trojan 节点经可选的自编译 Xray 内核插件启用。VLESS 支持 REALITY、TLS、TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 XTLS Vision。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情，按日／月、项目和模型筛选本机用量，查看请求、Token、工具调用趋势及模型分布；在任务内选择或填写回答，重启后继续待答任务。 |
 | **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
 | **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
@@ -129,10 +129,10 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
 
 
-> 主 APK 不包含、也不构建 Xray 内核。只有可选的 **内核插件**（`:kernel-plugin`）需要 **Go 1.26.4**
+> 主 APK 不包含、也不构建 Xray 内核。只有可选的 **内核插件**（`:kernel-plugin`）需要 **Go 1.27.1**
 > （版本见 `native-kernel/go.version`）与可访问的 Go 模块代理：`:kernel-plugin:prepareProxyKernel`
 > 会自编译 Xray-core 并按 `native-kernel/artifacts.lock.json` 校验 SHA-256；主 APK 构建不需要 Go。
-> 需要 VMess／SS／Trojan 的用户另行安装该插件（应用内在线下载或本地导入）。
+> 需要 VMess／VLESS／SS／Trojan 的用户另行安装该插件（应用内在线下载或本地导入）。
 ## 开发者区域
 
 面向源码构建、架构维护与贡献协作。欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。
