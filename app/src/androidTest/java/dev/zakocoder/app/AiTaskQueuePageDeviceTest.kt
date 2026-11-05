@@ -37,10 +37,11 @@ class AiTaskQueuePageDeviceTest {
         return instrumentation.uiAutomation.windows.mapNotNull { it.root?.takeIf { root -> root.refresh() } }
             .filter { it.packageName?.toString() == context.packageName }.flatMap(::descendants)
     }
-    private fun find(label: String) = nodes().firstOrNull {
+    private fun candidates(label: String) = nodes().filter {
         it.isVisibleToUser && (it.text?.toString()?.lines()?.contains(label) == true ||
             it.contentDescription?.toString()?.lines()?.contains(label) == true)
     }
+    private fun find(label: String) = candidates(label).firstOrNull()
     private suspend fun await(label: String, predicate: () -> Boolean) {
         try { withTimeout(25000) { while (!predicate()) delay(60) } }
         catch (error: TimeoutCancellationException) {
@@ -50,11 +51,28 @@ class AiTaskQueuePageDeviceTest {
     }
     private suspend fun click(label: String) {
         fun target(): AccessibilityNodeInfo? {
-            var node = find(label) ?: return null
-            while (!node.isClickable && node.parent != null) node = node.parent
-            return node.takeIf { it.isEnabled && it.isClickable }
+            fun clickable(node: AccessibilityNodeInfo) = node.isVisibleToUser && node.isEnabled && node.isClickable &&
+                node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
+            val matches = candidates(label)
+            matches.firstOrNull(::clickable)?.let { return it }
+            for (match in matches) {
+                var node = match.parent
+                while (node != null) {
+                    if (clickable(node)) return node
+                    node = node.parent
+                }
+            }
+            return null
         }
-        await("Enabled action: $label") { target() != null }
+        try { await("Enabled action: $label") { target() != null } }
+        catch (error: AssertionError) {
+            val chain = candidates(label).joinToString("\n") { match ->
+                generateSequence(match) { it.parent }.take(8).joinToString(" -> ") {
+                    "${it.className}(visible=${it.isVisibleToUser},enabled=${it.isEnabled},clickable=${it.isClickable},actions=${it.actionList.map { action -> action.id }})"
+                }
+            }
+            throw AssertionError("${error.message}\nMatching accessibility chains:\n$chain", error)
+        }
         assertTrue("Click $label", requireNotNull(target()).performAction(AccessibilityNodeInfo.ACTION_CLICK))
         delay(120)
     }
