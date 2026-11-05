@@ -34,7 +34,11 @@ open class AiHistoryStore(private val directory: File) {
             output.toByteArray()
         } }
         require(bytes.size <= 64 * 1024 * 1024)
-        return JSONObject(bytes.toString(Charsets.UTF_8)).also { require(it.getInt("schemaVersion") == 1) }
+        return JSONObject(bytes.toString(Charsets.UTF_8)).also { json ->
+            val version = json.opt("schemaVersion")
+            require(version is Int)
+            if (version != 1) throw AiHistoryReadFailure(AiHistoryProblem(null, AiHistoryProblem.Reason.Unsupported))
+        }
     }
     private fun write(file: File, json: JSONObject) {
         require(file.parentFile!!.isDirectory || file.parentFile!!.mkdirs())
@@ -42,25 +46,43 @@ open class AiHistoryStore(private val directory: File) {
         val atomic = AtomicFile(file); val output = atomic.startWrite()
         try { output.write(bytes); atomic.finishWrite(output) } catch (error: Exception) { atomic.failWrite(output); throw error }
     }
+    private fun <T> checkedRecord(file: File, block: () -> T): T {
+        val conversation = file.name.removeSuffix(".json").takeIf { name ->
+            runCatching { UUID.fromString(name).toString() == name }.getOrDefault(false)
+        }
+        try { return block() }
+        catch (error: AiHistoryReadFailure) { throw AiHistoryReadFailure(error.problem.copy(conversationId = conversation)) }
+        catch (_: org.json.JSONException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        catch (_: IllegalArgumentException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        catch (_: IllegalStateException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
+        // IO and permission failures deliberately keep their original classification: they are not proof of corrupt data.
+    }
     private fun records(id: String): List<Pair<File, JSONObject>> {
-        val files = project(id).listFiles()?.mapNotNull { file ->
+        val directory = project(id)
+        val entries = if (!directory.exists()) emptyArray() else directory.listFiles() ?: throw java.io.IOException("history_directory_unreadable")
+        val files = entries.mapNotNull { file ->
             val name = file.name.removeSuffix(".bak")
             if (name != "selected.json" && name.endsWith(".json")) File(file.parentFile, name) else null
-        }?.distinctBy { it.name }.orEmpty()
+        }.distinctBy { it.name }
         require(files.size <= 20)
-        return files.map { file -> session(file.nameWithoutExtension); file to read(file).also { require(it.getString("id") == file.nameWithoutExtension) } }
+        return files.map { file -> checkedRecord(file) {
+            session(file.nameWithoutExtension)
+            file to read(file).also { require(it.getString("id") == file.nameWithoutExtension) }
+        } }
     }
     private fun summaries(records: List<Pair<File, JSONObject>>) = records.map { (_, item) ->
-        AiConversation(item.getString("id"), item.getString("title").take(80), item.getLong("updated"), item.getInt("turn"))
+        checkedRecord(File(session(item.getString("id")))) {
+            AiConversation(item.getString("id"), item.getString("title").take(80), item.getLong("updated"), item.getInt("turn"))
+        }
     }.sortedByDescending { it.updated }
     open fun load(projectId: String, conversation: String? = null): Loaded {
         val records = records(projectId)
         val pointer = File(project(projectId), "selected.json")
-        val selected = conversation ?: if (pointer.exists() || File(pointer.path + ".bak").exists()) read(pointer).getString("id") else null
-        val json = records.find { it.second.getString("id") == selected }?.second ?: records.maxByOrNull { it.second.getLong("updated") }?.second
+        val selected = conversation ?: if (pointer.exists() || File(pointer.path + ".bak").exists()) checkedRecord(pointer) { read(pointer).getString("id") } else null
         val list = summaries(records)
+        val json = records.find { it.second.getString("id") == selected }?.second ?: records.find { it.second.getString("id") == list.firstOrNull()?.id }?.second
         metadata[projectId] = list
-        return Loaded(json?.let(::decode), list)
+        return Loaded(json?.let { checkedRecord(File(session(it.getString("id")))) { decode(it) } }, list)
     }
     open fun save(projectId: String, state: AiState): List<AiConversation> {
         val records = metadata[projectId] ?: summaries(records(projectId))
@@ -80,6 +102,29 @@ open class AiHistoryStore(private val directory: File) {
         AtomicFile(File(project(projectId), session(conversation))).delete()
         metadata.remove(projectId)
     }
+    /** Explicit destructive recovery is restricted to one still-unreadable canonical UUID record. */
+    open fun deleteUnreadable(projectId: String, problem: AiHistoryProblem) {
+        val conversation = requireNotNull(problem.conversationId)
+        val file = File(project(projectId), session(conversation))
+        var confirmed = false
+        try {
+            checkedRecord(file) {
+                val json = read(file)
+                require(json.getString("id") == conversation)
+                summaries(listOf(file to json))
+                decode(json)
+            }
+        } catch (error: AiHistoryReadFailure) {
+            require(error.problem == problem)
+            confirmed = true
+        }
+        check(confirmed) { "history_record_changed" }
+        // AtomicFile removes only this exact base/backup/new record, never a project directory.
+        delete(projectId, conversation)
+        if (listOf(file, File(file.path + ".bak"), File(file.path + ".new")).any { Files.exists(it.toPath(), NOFOLLOW_LINKS) })
+            throw java.io.IOException("history_record_delete_failed")
+    }
+
     open fun deleteProject(projectId: String) { metadata.remove(projectId); check(!project(projectId).exists() || project(projectId).deleteRecursively()) }
 
     /** Blocking fail-closed scan. The owner must hold its history mutex through scan and pruning.
