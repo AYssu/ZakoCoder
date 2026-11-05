@@ -21,6 +21,15 @@ class AiServiceOptionsConfigDeviceTest {
         val automatic = explicit.copy(usePreset = true)
         assertEquals(automatic, AiServiceOptionsJson.decode(AiServiceOptionsJson.encode(automatic)))
     }
+    @Test fun missingCacheKeyChoiceUsesDefaultButExplicitOptOutRoundTrips() {
+        assertTrue(AiServiceOptionsJson.decode(null).responsesCacheKey)
+        assertTrue(AiServiceOptionsJson.decode(JSONObject()).responsesCacheKey)
+        val off = AiServiceOptionsJson.decode(JSONObject().put("responsesCacheKey", false))
+        assertFalse(off.responsesCacheKey)
+        assertFalse(off.usePreset)
+        assertEquals(off, AiServiceOptionsJson.decode(AiServiceOptionsJson.encode(off)))
+        assertTrue(AiServiceOptionsJson.decode(JSONObject().put("responsesCacheKey", true)).responsesCacheKey)
+    }
     @Test fun profileSaveEditAndProtocolSwitchRetainCapabilities() {
         val target = InstrumentationRegistry.getInstrumentation().targetContext
         val directory = File(target.cacheDir, "service-options-${UUID.randomUUID()}").apply { mkdirs() }
@@ -30,7 +39,7 @@ class AiServiceOptionsConfigDeviceTest {
         try {
             val service = AiServiceOptions(streaming = false, streamUsage = false, samplingParameters = false,
                 responsesSummary = false, responsesEncryptedReasoning = false, chatThinking = AiChatThinkingFormat.None,
-                chatTokenLimit = AiChatTokenLimit.MaxCompletionTokens, responsesCacheKey = true,
+                chatTokenLimit = AiChatTokenLimit.MaxCompletionTokens, responsesCacheKey = false,
                 anthropicCache = AiAnthropicCache.FiveMinutes)
             store.saveProfile(AiModelDraft(null, "Fixture", "https://example.invalid/v1", "fixture", "fixture-key",
                 parameters = AiParameters(maxTokens = 100, service = service)))

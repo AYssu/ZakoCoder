@@ -137,23 +137,36 @@ class AiServiceTransportDeviceTest {
         }
     }
 
-    @Test fun activeCachingIsOptInStableAndDoesNotIncludeProjectNames() = runBlocking {
+    @Test fun responsesSessionKeyIsDefaultStablePrivateAndCanBeDisabled() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
             val key = AiServiceRequestPolicy.sessionCacheKey("private-project", "conversation-1")
             assertEquals(key, AiServiceRequestPolicy.sessionCacheKey("private-project", "conversation-1"))
             assertNotEquals(key, AiServiceRequestPolicy.sessionCacheKey("private-project", "conversation-2"))
+            assertNotEquals(key, AiServiceRequestPolicy.sessionCacheKey("other-project", "conversation-1"))
             assertFalse(key.contains("private-project"))
-            val config = config(f, AiApiProtocol.Responses, AiServiceOptions(streaming = false, responsesCacheKey = true,
+            val config = config(f, AiApiProtocol.Responses, AiServiceOptions(streaming = false,
                 responsesSummary = false, responsesEncryptedReasoning = false)).copy(parameters = AiParameters(thinking = AiThinking.Enabled,
-                    service = AiServiceOptions(streaming = false, responsesCacheKey = true, responsesSummary = false, responsesEncryptedReasoning = false)))
+                    service = AiServiceOptions(streaming = false, responsesSummary = false, responsesEncryptedReasoning = false)))
             repeat(2) {
                 f.server.enqueue(json(response())); f.transport.request(config, messages(), JSONArray(), cacheKey = key) {}
                 val sent = JSONObject(f.server.takeRequest().body.readUtf8())
                 assertEquals(key, sent.getString("prompt_cache_key")); assertFalse(sent.has("include")); assertFalse(sent.has("reasoning"))
+                assertFalse(sent.getBoolean("store"))
             }
             f.server.enqueue(json(response())); f.transport.request(config.copy(parameters = config.parameters.copy(
                 service = config.parameters.service.copy(responsesCacheKey = false))), messages(), JSONArray(), cacheKey = key) {}
             assertFalse(JSONObject(f.server.takeRequest().body.readUtf8()).has("prompt_cache_key"))
+            f.server.enqueue(json(response())); f.transport.request(config, messages(), JSONArray()) {}
+            assertFalse(JSONObject(f.server.takeRequest().body.readUtf8()).has("prompt_cache_key"))
+            val automatic = AiServiceRequestPolicy.effectiveConfig(config.copy(parameters = config.parameters.copy(
+                service = AiServiceOptions(usePreset = true))))
+            val automaticBody = AiResponsesWire.request(automatic, messages(), JSONArray())
+            AiServiceRequestPolicy.apply(automatic, automaticBody, key)
+            assertEquals(key, automaticBody.getString("prompt_cache_key"))
+            assertFalse(automaticBody.getBoolean("store"))
+            val chatBody = JSONObject()
+            AiServiceRequestPolicy.apply(config.copy(protocol = AiApiProtocol.ChatCompletions), chatBody, key)
+            assertFalse(chatBody.has("prompt_cache_key"))
             for ((setting, ttl) in listOf(AiAnthropicCache.FiveMinutes to "5m", AiAnthropicCache.OneHour to "1h")) {
                 f.server.enqueue(json(anthropic()))
                 f.transport.request(config(f, AiApiProtocol.Anthropic, AiServiceOptions(streaming = false, anthropicCache = setting)), messages(), JSONArray()) {}

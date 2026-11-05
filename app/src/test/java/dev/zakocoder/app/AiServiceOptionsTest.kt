@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AiServiceOptionsTest {
-    @Test fun defaultsPreserveExistingRequestsAndCacheIsOptIn() {
+    @Test fun defaultsEnableResponsesSessionKeyButKeepAnthropicCacheOptIn() {
         val options = AiParameters().service
         assertTrue(options.streaming)
         assertTrue(options.streamUsage)
@@ -15,7 +15,7 @@ class AiServiceOptionsTest {
         assertTrue(options.responsesEncryptedReasoning)
         assertEquals(AiChatThinkingFormat.ThinkingObject, options.chatThinking)
         assertEquals(AiChatTokenLimit.MaxTokens, options.chatTokenLimit)
-        assertFalse(options.responsesCacheKey)
+        assertTrue(options.responsesCacheKey)
         assertEquals(AiAnthropicCache.Disabled, options.anthropicCache)
     }
     @Test fun editingOrdinaryParametersRetainsAllExplicitCapabilities() {
