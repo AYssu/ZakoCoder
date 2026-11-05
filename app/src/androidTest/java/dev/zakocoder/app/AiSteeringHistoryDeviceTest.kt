@@ -7,12 +7,14 @@ import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 /** Exercises complete successful steering transcripts, rather than empty queue metadata alone. */
 class AiSteeringHistoryDeviceTest {
+    @Before fun foregroundForDeviceNetwork() { warmDeviceActivity() }
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(predicate: () -> Boolean) = withTimeout(25000) { while (!predicate()) delay(30) }

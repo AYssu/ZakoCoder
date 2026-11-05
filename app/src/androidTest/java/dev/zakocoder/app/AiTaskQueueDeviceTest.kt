@@ -6,11 +6,13 @@ import dev.zakocoder.app.ai.*
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 class AiTaskQueueDeviceTest {
+    @Before fun foregroundForDeviceNetwork() { warmDeviceActivity() }
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private fun diagnostic(ai: AiController) = ai.state.value.let {
