@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-05",
+  "device": "Android 13 ARM64",
+  "source": "AiLocalEditUiDeviceTest: real full application, streamed edit_file arguments, actual approval rejection and unchanged synthetic source; local TLS model only",
+  "baseCommit": "4c0dd39dc744fb72c9c24b0f18ba7ca352058775",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-approval-preview.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d3e2b8d553eafac3c2abd7499a58df6d0fce25a3d0fcc0523fbebdc16ae107ab",
+      "captureSha256": "48e218b44a325d72332fa563364709ef4076232d43ff2b37d718a14cc5d76ccd"
+    },
+    {
+      "file": "day-rejected-unchanged.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "5d72b56f0acab1fff0235c6297074721ad29ece1c8c4809a1bc0357517297418",
+      "captureSha256": "0abcba0d1ff7d8d1ff9bac6b6379120239ec922ce36b8e3d00c3b128913e3f46"
+    },
+    {
+      "file": "day-streaming-preview.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "b9c9d038c5f87ab76ef8ab00312838bbc7f2535182e6f4dd409462f9b1592ad6",
+      "captureSha256": "500c47218b12c8a7eccc94f55534978ec3dad9e00bb8e4e8ba59f30aaa5701e4"
+    },
+    {
+      "file": "night-approval-preview.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d4fe96ed954ee29c11662d740e9c2720e9f5dc6c642e164c65ad4d5d82f2100d",
+      "captureSha256": "19d35f278f9ce63545185614987cb2d3bdc4c519ebdee73d27c598282194d53e"
+    },
+    {
+      "file": "night-rejected-unchanged.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "f2745646400d9072c6367adc50f8d281eaccdaa4ba93b2b83bd369970ea63fcf",
+      "captureSha256": "705a1dcba478f39bb4ea2712955644de344edaec9a2eb58274ab14b839fbae5a"
+    },
+    {
+      "file": "night-streaming-preview.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "d0747c24d3e1e1a6409575ec6dc36df32e80ed3dd968d8fdd0f19f5f241266b9",
+      "captureSha256": "672410c554426dd35f1d398173bf3313d33cf8eed0076b5683e871f1ebbe83f4"
+    }
+  ]
+}
