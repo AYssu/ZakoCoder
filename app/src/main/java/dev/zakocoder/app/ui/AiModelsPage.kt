@@ -135,7 +135,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     val modelValid = model.isNotBlank() && model.length <= 200 &&
         (protocol != AiApiProtocol.Gemini || normalized != null && runCatching { AiProviderRouting.requestAddress(normalized, protocol, model) }.isSuccess)
     val valid = name.isNotBlank() && name.length <= 80 && normalized != null && modelValid && parametersValid
-    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters()) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
+    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
     fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
@@ -159,12 +159,16 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                     TextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_provider_choose)) }
                 }
                 AiProtocolOptions(protocol, editable, { protocol = it; changed() })
-                if (!protocolParametersValid) Text(stringResource(R.string.ai_protocol_parameters_invalid),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!protocolParametersValid) {
+                    Text(stringResource(R.string.ai_protocol_parameters_invalid),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 ModelField(endpoint, { endpoint = it; changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
-                if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model, options.service.streaming)
+                AiServiceOptionsSection(protocol, options.service, editable, normalized ?: endpoint) { options.service = it; changed() }
+                if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model,
+                    AiServicePresets.resolve(options.service, normalized, protocol).streaming)
                 if (original != null && normalized != null && runCatching { !sameModelOrigin(original.endpoint, normalized) }.getOrDefault(false) &&
                     (original.hasKey || original.headerNames.isNotEmpty())) Text(stringResource(R.string.ai_provider_origin_hint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

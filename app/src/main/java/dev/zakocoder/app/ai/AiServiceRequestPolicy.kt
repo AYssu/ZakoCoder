@@ -6,7 +6,7 @@ import java.security.MessageDigest
 /** Explicit service capabilities; model names never select a protocol or silently trigger a retry. */
 internal object AiServiceRequestPolicy {
     fun effectiveConfig(config: AiConfig, forceTool: String? = null): AiConfig {
-        var parameters = config.parameters
+        var parameters = config.parameters.copy(service = AiServicePresets.resolve(config.parameters.service, config.endpoint, config.protocol))
         if (!parameters.service.samplingParameters) parameters = parameters.copy(temperature = null, topP = null)
         // The official DeepSeek probe requires thinking disabled with a forced tool. Apply this
         // before formatting the parameter so every explicit format retains the same probe behavior.
@@ -32,6 +32,7 @@ internal object AiServiceRequestPolicy {
                     body.put("max_completion_tokens", body.remove("max_tokens"))
                 when (options.chatThinking) {
                     AiChatThinkingFormat.ThinkingObject -> Unit
+                    AiChatThinkingFormat.EffortOnly -> body.remove("thinking")
                     AiChatThinkingFormat.EnableThinking -> {
                         body.remove("thinking")
                         if (config.parameters.thinking != AiThinking.Default)

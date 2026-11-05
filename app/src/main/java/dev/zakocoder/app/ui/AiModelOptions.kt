@@ -17,7 +17,7 @@ import dev.zakocoder.app.ai.*
 internal class ModelOptionsDraft(profile: AiProfile?) {
     var systemPrompt by mutableStateOf(profile?.systemPrompt.orEmpty())
     private var selectedModel = profile?.model.orEmpty().trim().lowercase(java.util.Locale.ROOT)
-    var service by mutableStateOf(profile?.parameters?.service ?: AiServiceOptions())
+    var service by mutableStateOf(profile?.parameters?.service ?: AiServiceOptions(usePreset = true))
     var thinking by mutableStateOf(profile?.parameters?.thinking ?: AiThinking.Default)
     var effort by mutableStateOf(profile?.parameters?.reasoningEffort)
     var frequency by mutableStateOf(profile?.parameters?.frequencyPenalty?.toString().orEmpty())
@@ -50,7 +50,7 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
     }
     fun valid() = runCatching { parameters(AiParameters()).validate(); context(); headers(); AiSystemPrompt.normalize(systemPrompt) }.isSuccess
     fun dirty(profile: AiProfile?) = runCatching {
-        parameters(AiParameters()) != (profile?.parameters ?: AiParameters()).copy(maxTokens = null, temperature = null, topP = null) ||
+        parameters(AiParameters()) != (profile?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))).copy(maxTokens = null, temperature = null, topP = null) ||
             context() != (profile?.context ?: AiContextOptions()) || replaceHeaders ||
             AiSystemPrompt.normalize(systemPrompt) != AiSystemPrompt.normalize(profile?.systemPrompt.orEmpty())
     }.getOrDefault(true)
@@ -65,7 +65,6 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
     }
     if (!open) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AiServiceOptionsSection(protocol, draft.service, editable) { draft.service = it; changed() }
         Text(stringResource(R.string.ai_options_thinking), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.ai_options_thinking_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -29,6 +29,35 @@ class AiServiceTransportDeviceTest {
         .put("content", JSONObject().put("role", "model").put("parts", JSONArray().put(JSONObject().put("text", "answer"))))))
     private fun json(body: JSONObject) = MockResponse().setHeader("Content-Type", "application/json").setBody(body.toString())
 
+    @Test fun automaticGatewayPresetIsAppliedToActualRequestsWithoutChangingStoredOverrides() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val options = AiServiceOptions(streaming = false, chatThinking = AiChatThinkingFormat.ReasoningObject,
+                chatTokenLimit = AiChatTokenLimit.MaxCompletionTokens, usePreset = true)
+            val current = config(f, AiApiProtocol.ChatCompletions, options).copy(parameters = AiParameters(
+                maxTokens = 2048, thinking = AiThinking.Enabled, reasoningEffort = AiReasoningEffort.High, service = options))
+            f.enqueue("answer")
+            assertEquals("answer", f.transport.request(current, messages(), JSONArray()) {}.text)
+            val sent = JSONObject(f.server.takeRequest().body.readUtf8())
+            assertTrue(sent.getBoolean("stream"))
+            assertEquals(2048, sent.getInt("max_tokens"))
+            assertFalse(sent.has("max_completion_tokens"))
+            assertFalse(sent.has("thinking")); assertFalse(sent.has("reasoning")); assertFalse(sent.has("reasoning_effort"))
+            assertEquals(options, current.parameters.service)
+        }
+    }
+
+    @Test fun officialChatPresetUsesCompletionLimitAndEffortWithoutUnsupportedThinkingObject() {
+        val config = AiServiceRequestPolicy.effectiveConfig(AiConfig("https://api.openai.com/v1", "fixture",
+            parameters = AiParameters(thinking = AiThinking.Enabled, reasoningEffort = AiReasoningEffort.High,
+                service = AiServiceOptions(usePreset = true))))
+        val body = JSONObject().put("max_tokens", 2048).put("thinking", JSONObject().put("type", "enabled"))
+            .put("reasoning_effort", "high")
+        AiServiceRequestPolicy.apply(config, body, null)
+        assertEquals(2048, body.getInt("max_completion_tokens"))
+        assertEquals("high", body.getString("reasoning_effort"))
+        assertFalse(body.has("thinking")); assertFalse(body.has("max_tokens"))
+    }
+
     @Test fun fourExplicitJsonProtocolsUseTheirOwnRequestPathsAndPreserveUnknownUsage() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
             for ((protocol, body) in listOf(AiApiProtocol.ChatCompletions to chat(), AiApiProtocol.Responses to response(),
@@ -86,6 +115,7 @@ class AiServiceTransportDeviceTest {
                 AiChatThinkingFormat.EnableThinking -> assertFalse(body.getBoolean("enable_thinking"))
                 AiChatThinkingFormat.ReasoningObject -> assertFalse(body.getJSONObject("reasoning").getBoolean("enabled"))
                 AiChatThinkingFormat.None -> assertFalse(body.has("thinking"))
+                AiChatThinkingFormat.EffortOnly -> assertFalse(body.has("thinking"))
             }
             assertEquals(AiThinking.Enabled, AiServiceRequestPolicy.effectiveConfig(original).parameters.thinking)
             assertEquals(AiThinking.Enabled, AiServiceRequestPolicy.effectiveConfig(original.copy(endpoint = "https://gateway.example/v1"),
