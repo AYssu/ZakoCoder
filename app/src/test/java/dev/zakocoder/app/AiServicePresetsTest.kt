@@ -9,6 +9,7 @@ class AiServicePresetsTest {
     @Test fun newDraftUsesPresetAndExistingManualProfileRemainsClean() {
         val fresh = ModelOptionsDraft(null)
         assertTrue(fresh.service.usePreset)
+        assertTrue(fresh.service.responsesCacheKey)
         assertFalse(fresh.dirty(null))
         val manual = AiServiceOptions(streaming = false, chatThinking = AiChatThinkingFormat.EnableThinking,
             chatTokenLimit = AiChatTokenLimit.MaxCompletionTokens)
@@ -50,5 +51,18 @@ class AiServicePresetsTest {
         assertEquals(4096, preset.parameters.maxTokens)
         assertEquals(AiChatThinkingFormat.ThinkingObject, preset.parameters.service.chatThinking)
         assertEquals(manual, config.parameters.service)
+    }
+
+    @Test fun responsesPresetEnablesSessionKeyAndManualOptOutIsPreserved() {
+        for (endpoint in listOf("https://api.openai.com/v1", "https://gateway.example/v1")) {
+            val manual = AiServiceOptions(responsesCacheKey = false)
+            val config = AiConfig(endpoint, "fixture", protocol = AiApiProtocol.Responses,
+                parameters = AiParameters(service = manual))
+            assertFalse(AiServiceRequestPolicy.effectiveConfig(config).parameters.service.responsesCacheKey)
+            val automatic = AiServiceRequestPolicy.effectiveConfig(config.copy(parameters = config.parameters.copy(
+                service = manual.copy(usePreset = true))))
+            assertTrue(automatic.parameters.service.responsesCacheKey)
+            assertFalse(manual.responsesCacheKey)
+        }
     }
 }
