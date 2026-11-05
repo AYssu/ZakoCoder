@@ -51,6 +51,7 @@ open class AiHistoryStore(private val directory: File) {
             runCatching { UUID.fromString(name).toString() == name }.getOrDefault(false)
         }
         try { return block() }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: AiHistoryReadFailure) { throw AiHistoryReadFailure(error.problem.copy(conversationId = conversation)) }
         catch (_: org.json.JSONException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
         catch (_: IllegalArgumentException) { throw AiHistoryReadFailure(AiHistoryProblem(conversation, AiHistoryProblem.Reason.Corrupt)) }
