@@ -182,6 +182,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
         .also {
             validateTimeline(state.timeline)
+            require(state.queuedMessages.all { it.turn <= state.turn })
             validateQuestions(state.questions, state.questionContinuation, state.events, state.turn)
         }
     private fun validateTimeline(timeline: List<AiEntry>) {
@@ -322,6 +323,7 @@ open class AiHistoryStore(private val directory: File) {
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
             historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,
             phase = if (continuation != null) AiPhase.AwaitingAnswer else if (json.getBoolean("active")) AiPhase.Cancelled else AiPhase.valueOf(json.getString("phase")))
+        require(state.queuedMessages.all { it.turn <= state.turn })
         val interrupted = json.getBoolean("active") && continuation == null
         val legacyFailed = !json.has("recovery") && state.phase == AiPhase.Failed
         return if (continuation == null && (pendingRecovery.isNotBlank() || interrupted || legacyFailed)) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state

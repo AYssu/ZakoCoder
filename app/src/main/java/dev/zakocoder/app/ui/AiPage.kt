@@ -248,7 +248,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }
-        if (state.active && state.questionContinuation == null) AiRunningInputActions(
+        if (state.active && state.questionContinuation == null && input.isNotBlank()) AiRunningInputActions(
             enabled = input.isNotBlank() && !state.historyError && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping &&
                 state.queuedMessages.count { it.status == dev.zakocoder.app.ai.AiQueuedStatus.Pending } < dev.zakocoder.app.ai.AiTaskQueue.MAX_PENDING,
             onSteer = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.Steer)) input = "" else messageActionError = true },
