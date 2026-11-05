@@ -1,5 +1,15 @@
 package dev.zakocoder.app.ai
 
+/** HTTP success and validated tool arguments are separate evidence. Neither verifies thinking controls. */
+internal data class AiModelProbeChecks(val connected: Boolean, val toolsVerified: Boolean) {
+    companion object {
+        fun from(state: AiModelsState) = AiModelProbeChecks(
+            connected = state.probe == AiProbe.Passed || state.probeProgress?.status?.let { it in 200..299 } == true,
+            toolsVerified = state.probe == AiProbe.Passed,
+        )
+    }
+}
+
 /** Memory-only presentation of a test request. No endpoint, credentials or request body. */
 data class AiModelProbeProgress(
     val startedAt: Long = System.currentTimeMillis(),

@@ -41,6 +41,13 @@ internal fun AiModelProbeProgressContent(state: AiModelsState) {
             Text(stringResource(R.string.ai_probe_live_title), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Text(stringResource(stage), style = MaterialTheme.typography.bodySmall,
                 color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            val checks = dev.zakocoder.app.ai.AiModelProbeChecks.from(state)
+            Text(stringResource(if (checks.connected) R.string.ai_probe_connection_passed else R.string.ai_probe_connection_unverified),
+                style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(if (checks.toolsVerified) R.string.ai_probe_tools_passed else R.string.ai_probe_tools_unverified),
+                style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.ai_probe_thinking_unverified), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(R.string.ai_probe_elapsed, elapsed / 1000.0), style = MaterialTheme.typography.labelSmall)
                 progress.status?.let { Text(stringResource(R.string.ai_probe_http, it), style = MaterialTheme.typography.labelSmall) }

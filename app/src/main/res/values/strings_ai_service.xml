@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ai_service_title">服务兼容</string>
-    <string name="ai_service_hint">按服务商文档调整这些选项。关闭不支持的参数后再测试连接；切换协议会保留各项设置。</string>
+    <string name="ai_service_title">高级兼容设置</string>
+    <string name="ai_service_hint">仅在连接异常或服务商要求时调整。修改后请重新测试；切换协议会保留手动设置。</string>
+    <string name="ai_service_preset">按服务预设配置</string>
+    <string name="ai_service_custom">使用手动兼容配置</string>
+    <string name="ai_service_existing_hint">已保留原配置。正常使用时无需调整，也可以在高级兼容设置中切换为服务预设。</string>
+    <string name="ai_service_preset_named">已匹配 %1$s 预设，通常填写地址、密钥和模型即可开始。预设不是能力验证，具体支持情况仍取决于模型。</string>
+    <string name="ai_service_preset_generic">使用当前协议的通用预设，不额外发送 Chat Completions 思考控制参数。自定义中转服务如需控制思考，请按服务商说明手动调整。</string>
+    <string name="ai_service_manual_hint">兼容参数由预设管理。需要自行调整下方参数时，先关闭“按服务预设配置”。</string>
+    <string name="ai_service_streaming_hint">开启后边生成边显示；关闭后等待完整回复。服务不支持流式回复时再关闭。</string>
+    <string name="ai_service_stream_usage_hint">让服务在流式回复中返回 Token 用量；不决定是否生成回复。服务拒绝 stream_options 参数时可关闭。</string>
+    <string name="ai_service_thinking_hint">决定如何发送“深度思考”和“推理强度”，不是思考强弱。thinking / enable_thinking / reasoning 是不同服务要求的参数名；请选择服务文档指定的格式。“不发送”代表交给服务默认处理，不等于关闭思考。</string>
+    <string name="ai_service_token_hint">只决定如何发送“最大输出长度”设置，不改变数值或回复排版。请选择服务要求的字段；未启用输出上限时不发送这两个字段。</string>
+    <string name="ai_service_summary_hint">请求服务提供可展示的思考摘要；不等于开启思考，也不保证服务一定返回摘要。</string>
+    <string name="ai_service_encrypted_hint">请求服务返回用于后续对话的加密推理数据，帮助保持推理连续性；不会显示为思考正文。服务不支持该参数时可关闭。</string>
     <string name="ai_service_streaming">流式接收回复</string>
     <string name="ai_service_sampling">发送采样参数</string>
     <string name="ai_service_sampling_hint">关闭后不发送 temperature 和 top_p，已填写的值仍会保留。</string>
@@ -10,10 +22,18 @@
     <string name="ai_service_thinking_object">thinking 对象</string>
     <string name="ai_service_enable_thinking">enable_thinking 开关</string>
     <string name="ai_service_reasoning_object">reasoning 对象</string>
+    <string name="ai_service_thinking_object_help">将思考开关写入 thinking.type；例如官方 DeepSeek。推理强度仍单独发送。</string>
+    <string name="ai_service_enable_thinking_help">通过 enable_thinking 的 true／false 控制思考；例如通义千问兼容接口。模型是否支持关闭取决于服务。</string>
+    <string name="ai_service_reasoning_object_help">将思考开关和推理强度一起写入 reasoning；例如 OpenRouter 接口。</string>
     <string name="ai_service_omit_thinking">不发送思考参数</string>
+    <string name="ai_service_effort_only">仅发送推理强度（reasoning_effort）</string>
+    <string name="ai_service_effort_only_hint">当前格式仅发送“推理强度”，不发送独立的“开启／关闭思考”开关。是否支持所选强度由模型决定。</string>
+    <string name="ai_service_no_thinking_hint">当前格式不发送“深度思考”和“推理强度”，这两项交给服务默认处理。</string>
     <string name="ai_service_token_limit">输出上限字段</string>
     <string name="ai_service_max_tokens">max_tokens</string>
     <string name="ai_service_max_completion_tokens">max_completion_tokens</string>
+    <string name="ai_service_max_tokens_help">将“最大输出长度”写入常见的 max_tokens 字段。</string>
+    <string name="ai_service_max_completion_tokens_help">将同一数值写入 max_completion_tokens；用于要求此字段的服务，例如官方 OpenAI Chat 接口。</string>
     <string name="ai_service_responses_summary">请求思考摘要</string>
     <string name="ai_service_encrypted_reasoning">请求加密推理续接</string>
     <string name="ai_service_responses_cache">发送稳定缓存标识</string>

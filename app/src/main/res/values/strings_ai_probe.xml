@@ -5,6 +5,11 @@
     <string name="ai_probe_waiting">已收到响应头，等待流式内容…</string>
     <string name="ai_probe_receiving">正在接收文本和工具参数…</string>
     <string name="ai_probe_verified">工具调用格式与参数已验证</string>
+    <string name="ai_probe_connection_passed">连接：已收到成功响应</string>
+    <string name="ai_probe_connection_unverified">连接：尚未验证通过</string>
+    <string name="ai_probe_tools_passed">工具调用：格式与参数已验证通过</string>
+    <string name="ai_probe_tools_unverified">工具调用：尚未验证通过</string>
+    <string name="ai_probe_thinking_unverified">思考设置：未验证。本次测试不验证思考开关、推理强度或输出上限是否生效；收到思考内容也不代表这些设置已生效。</string>
     <string name="ai_probe_failed">测试失败，已收到的内容保留如下</string>
     <string name="ai_probe_cancelled">测试已取消</string>
     <string name="ai_probe_elapsed">耗时 %1$.1f s</string>

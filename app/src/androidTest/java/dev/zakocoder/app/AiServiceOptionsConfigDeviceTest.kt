@@ -17,6 +17,9 @@ class AiServiceOptionsConfigDeviceTest {
         val explicit = AiServiceOptions(false, false, false, false, false,
             AiChatThinkingFormat.EnableThinking, AiChatTokenLimit.MaxCompletionTokens, true, AiAnthropicCache.OneHour)
         assertEquals(explicit, AiServiceOptionsJson.decode(AiServiceOptionsJson.encode(explicit)))
+        assertFalse(AiServiceOptionsJson.decode(JSONObject().put("chatThinking", "EnableThinking")).usePreset)
+        val automatic = explicit.copy(usePreset = true)
+        assertEquals(automatic, AiServiceOptionsJson.decode(AiServiceOptionsJson.encode(automatic)))
     }
     @Test fun profileSaveEditAndProtocolSwitchRetainCapabilities() {
         val target = InstrumentationRegistry.getInstrumentation().targetContext
