@@ -106,11 +106,16 @@ class AiTaskQueueDeviceTest {
             val ai = start(f)
             try {
                 f.enqueue("原任务输出", responseDelayMillis = 500)
-                main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("旧补充", AiQueuedKind.Steer));
-                    assertTrue(ai.enqueue("旧后续", AiQueuedKind.FollowUp)) }
+                main { assertTrue(ai.send("原任务")) }
                 await { f.server.requestCount == 1 || (!ai.state.value.active && ai.state.value.phase == AiPhase.Failed) }
                 assertEquals(diagnostic(ai), 1, f.server.requestCount)
-                main { ai.stop() }
+                // Enqueue only after this request left its steering boundary. Stop in the same
+                // Main callback so neither pending item can be delivered before cancellation.
+                main {
+                    assertTrue(ai.enqueue("旧补充", AiQueuedKind.Steer))
+                    assertTrue(ai.enqueue("旧后续", AiQueuedKind.FollowUp))
+                    ai.stop()
+                }
                 await { !ai.state.value.active }
                 f.enqueue("新任务完成")
                 main { assertTrue(ai.send("独立的新任务")) }
