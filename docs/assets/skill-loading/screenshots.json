@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-05",
+  "device": "Android 13 ARM64",
+  "source": "AiSkillLoadingUiDeviceTest: real full application, native skill selection and on-demand toggle, conversation-specific persistence in system day and night modes; synthetic histories and no provider request",
+  "baseCommit": "712a1d02b76b410152f5454496bcb894b372598b",
+  "systemBarsCropped": true,
+  "cropPixels": {
+    "top": 90,
+    "bottom": 48
+  },
+  "format": "lossless WebP",
+  "screenshots": [
+    {
+      "file": "day-default-eager.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "90f8e9f47b2bf0076e915192b7384f94b9a9a5c9f7df92cb58d5bc8aa2c2865f",
+      "captureSha256": "85cc89618ddf070ef87cd290ecd264645a5b66c15e68ee46175319f0c5a026ed"
+    },
+    {
+      "file": "day-first-restored.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "a96db6beafb7e212216ad295a0b458acd198f3951906ba6a2ba28b664c6a0ab8",
+      "captureSha256": "afc106072f29f6800feb05f48761ff48e8b676176521e991fddf0b1b5302466d"
+    },
+    {
+      "file": "day-on-demand-selected.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "683a46eed01fb5a6fdf2a9ca43f1913f83d83f698fe2947152d125c07302191d",
+      "captureSha256": "aef3ce4b0e52100b81179ce51f5edcb2927132661712d77f3a63cfddb0ce504b"
+    },
+    {
+      "file": "day-second-eager.webp",
+      "theme": "light",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "115f492ba63f107e6741653b19eb5a13dd941e41e794f74198ba94955a78e379",
+      "captureSha256": "b5a70de0ce58e21b4a993c926fc6edd0b8ede851a02641f916377f436e749cc2"
+    },
+    {
+      "file": "night-default-eager.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "fe4fa53a5c2ee8e914979bc89ba12d88ea2cc6bdeae77c90c84c14b9f1655472",
+      "captureSha256": "b86ed19f4b7e9997c4e7052e596ed6f945f79665b610f1e733e73d999c9247b4"
+    },
+    {
+      "file": "night-first-restored.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "70dd50fe05847835df7bc049c902d2e87d6b861cae8aecb508281035953b61cc",
+      "captureSha256": "7ef5216e30879b2e2d48fbda4a812cd732378f1d97671226abed7043fee79b45"
+    },
+    {
+      "file": "night-on-demand-selected.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "c793ab48dca1d67f1228c024fb7c96bd99b727de07bad7bba728ceaff1086742",
+      "captureSha256": "26ccefa906fc13f0878656069d44b09834a6e422c48cb8cbce2c4c7132f11728"
+    },
+    {
+      "file": "night-second-eager.webp",
+      "theme": "dark",
+      "width": 1080,
+      "height": 2262,
+      "sha256": "0c78a9431e70584a67aa9240e76465da7c2caad7472860739a127b7f11834a32",
+      "captureSha256": "ee79ae9b199a0995c2a52db869c57c4af6ae1c17d9c20ec3b59903630dd33b0a"
+    }
+  ]
+}
