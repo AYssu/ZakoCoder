@@ -208,6 +208,16 @@ open class AiHistoryStore(private val directory: File) {
             require(events.single { it.id == question.eventId }.let { it.tool == AiTool.AskUser && it.callId == pending.callId })
         }
     }
+    /** Explicit app-owned envelope; text contents alone can never opt into mid-turn user messages. */
+    private fun steeringMessage(message: JSONObject): Boolean {
+        if (!message.has("zako_steering")) return false
+        require(message.opt("zako_steering") == true && message.opt("role") == "user")
+        require(message.keys().asSequence().toSet() == setOf("role", "content", "zako_steering"))
+        val text = message.opt("content")
+        require(text is String && text.isNotBlank() && text.length <= 16000)
+        return true
+    }
+
     private fun decode(json: JSONObject): AiState {
         // Additive v1 field: old records contain no plan; old readers ignore this field.
         val planArray = json.optJSONArray("plan") ?: JSONArray()
@@ -252,11 +262,12 @@ open class AiHistoryStore(private val directory: File) {
         val context = json.getJSONArray("context"); require(context.length() <= AI_RETAINED_CONTEXT_TURNS)
         val turns = (0 until context.length()).map { index ->
             val turn = context.getJSONArray(index)
-            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user")
+            require(turn.length() in 2..AI_RETAINED_TURN_MESSAGES && turn.getJSONObject(0).getString("role") == "user" && !turn.getJSONObject(0).has("zako_steering"))
             val pending = mutableSetOf<String>()
             var seenAssistant = false
             for (messageIndex in 1 until turn.length()) {
                 val message = turn.getJSONObject(messageIndex)
+                val steering = steeringMessage(message)
                 when (message.getString("role")) {
                     "user" -> {
                         // App-generated dynamic evidence is appended only after a complete tool
@@ -264,13 +275,17 @@ open class AiHistoryStore(private val directory: File) {
                         val stateUpdate = message.optString("content").startsWith(AI_CONTEXT_UPDATE) &&
                             message.keys().asSequence().toSet() == setOf("role", "content") &&
                             turn.getJSONObject(messageIndex - 1).optString("role") == "tool"
-                        require(pending.isEmpty() && (!seenAssistant || stateUpdate))
+                        require(pending.isEmpty() && (!seenAssistant || stateUpdate || steering))
                     }
                     "assistant" -> {
                         seenAssistant = true
                         require(pending.isEmpty())
                         val calls = message.optJSONArray("tool_calls")
-                        if (calls == null || calls.length() == 0) require(messageIndex == turn.length() - 1)
+                        if (calls == null || calls.length() == 0) {
+                            // A late supplement may arrive after the provider's first final reply.
+                            // Only a validated steering envelope can reopen that same task.
+                            require(messageIndex == turn.length() - 1 || steeringMessage(turn.getJSONObject(messageIndex + 1)))
+                        }
                         else {
                             require(calls.length() <= 8 && messageIndex < turn.length() - 1)
                             repeat(calls.length()) { call -> require(pending.add(calls.getJSONObject(call).getString("id"))) }

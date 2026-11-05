@@ -244,7 +244,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active,
                 label = { Text(if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference) else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "", modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
         }
-        AiTaskQueuePanel(state.queuedMessages, state.active, enabled = !state.restoring && !state.historyError && state.questionContinuation == null,
+        AiTaskQueuePanel(state.queuedMessages, state.active, enabled = !state.restoring && !state.historyError && !state.permissionsLoading && !state.permissionsSaving && state.questionContinuation == null,
             onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }

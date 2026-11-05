@@ -68,6 +68,8 @@ class AiController(private val context: Context, root: (String) -> File, private
     private val canStartTask: () -> Boolean = { true }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutable = MutableStateFlow(AiState())
+    // Auto-delivery belongs to this live task chain only. Reloads and unrelated sends never revive it.
+    private val liveQueue = linkedSetOf<String>()
     val state = mutable.asStateFlow()
     private val usageStore = AiUsageStore(context)
     private val usageMutable = MutableStateFlow(AiUsageState())
@@ -782,33 +784,50 @@ class AiController(private val context: Context, root: (String) -> File, private
     /** Admission and execution are separate: persist intent before the next safe boundary. */
     fun enqueue(text: String, kind: AiQueuedKind): Boolean {
         val current = mutable.value
-        if (!current.active || current.phase == AiPhase.Stopping || current.historyError || current.restoring ||
+        if (!current.active || current.phase in setOf(AiPhase.Stopping, AiPhase.Completed, AiPhase.Failed, AiPhase.Cancelled) ||
+            current.historyError || current.restoring || current.permissionsLoading || current.permissionsSaving ||
             current.questionContinuation != null || text.isBlank() || text.length > 16000 ||
             current.queuedMessages.count { it.status == AiQueuedStatus.Pending } >= AiTaskQueue.MAX_PENDING) return false
-        mutable.update { it.copy(queuedMessages = AiTaskQueue.add(it.queuedMessages,
-            AiQueuedMessage(text = text, kind = kind, turn = it.turn))) }
-        scope.launch { try { persist() } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* Failed persistence prevents boundary delivery. */ } }
+        val queued = AiQueuedMessage(text = text, kind = kind, turn = current.turn)
+        liveQueue += queued.id
+        mutable.update { it.copy(queuedMessages = AiTaskQueue.add(it.queuedMessages, queued)) }
+        persistQueueIntent()
         return true
     }
+    private fun persistQueueIntent() {
+        val owner = mutable.value.projectId to mutable.value.conversationId
+        val generation = sessionGeneration
+        scope.launch {
+            if (generation != sessionGeneration || owner != (mutable.value.projectId to mutable.value.conversationId)) return@launch
+            try { persist() } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* persist exposes the owning storage failure. */ }
+        }
+    }
     fun cancelQueued(messageId: String) {
-        if (mutable.value.restoring || mutable.value.historyError) return
+        val current = mutable.value
+        if (current.restoring || current.historyError || current.permissionsLoading || current.permissionsSaving ||
+            current.queuedMessages.none { it.id == messageId && it.status == AiQueuedStatus.Pending }) return
+        liveQueue -= messageId
         mutable.update { it.copy(queuedMessages = it.queuedMessages.map { q ->
             if (q.id == messageId && q.status == AiQueuedStatus.Pending) q.copy(status = AiQueuedStatus.Cancelled) else q }) }
-        scope.launch { try { persist() } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { } }
+        persistQueueIntent()
     }
     /** Restart never auto-executes queued work. User explicitly chooses one item to continue. */
-    fun startQueued(messageId: String): Boolean {
+    fun startQueued(messageId: String): Boolean = startQueued(messageId, automatic = false)
+    private fun startQueued(messageId: String, automatic: Boolean): Boolean {
         val current = mutable.value
         val message = current.queuedMessages.singleOrNull { it.id == messageId && it.status == AiQueuedStatus.Pending } ?: return false
-        if (current.active || current.questionContinuation != null || current.references.isNotEmpty() || current.pendingImages.isNotEmpty()) return false
+        if (current.active || current.restoring || current.permissionsLoading || current.permissionsSaving || current.historyError ||
+            current.questionContinuation != null || current.references.isNotEmpty() || current.pendingImages.isNotEmpty()) return false
+        if (automatic && messageId !in liveQueue) return false
         mutable.update { it.copy(queuedMessages = it.queuedMessages.map { q -> if (q.id == messageId) q.copy(status = AiQueuedStatus.Applied) else q }) }
-        if (send(message.text)) return true
+        if (beginTask(message.text, preserveQueue = automatic)) { liveQueue -= messageId; return true }
         mutable.update { it.copy(queuedMessages = current.queuedMessages) }
         return false
     }
 
-    fun send(text: String): Boolean {
+    fun send(text: String): Boolean = beginTask(text, preserveQueue = false)
+    private fun beginTask(text: String, preserveQueue: Boolean): Boolean {
         val id = mutable.value.projectId ?: return false
         if (mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || mutable.value.questionContinuation != null || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
         if (!canStartTask()) {
@@ -822,6 +841,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (mutable.value.recoveryNotes.isNotEmpty()) mutable.value.timeline.lastOrNull { it.role == AiRole.User }?.images.orEmpty()
             else emptyList()
         }
+        if (!preserveQueue) liveQueue.clear()
         sessionGeneration++
         mutable.update { it.copy(active = true, interrupted = false, error = "", retryNotice = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images, inputLength = text.length, inputReferences = mutable.value.references.toList())
         draftImages.remove(id to mutable.value.conversationId)
@@ -893,8 +913,8 @@ class AiController(private val context: Context, root: (String) -> File, private
                 }
             }
             if (!paused && mutable.value.phase == AiPhase.Completed && !mutable.value.historyError) {
-                mutable.value.queuedMessages.firstOrNull { it.status == AiQueuedStatus.Pending && it.kind == AiQueuedKind.FollowUp }
-                    ?.let { startQueued(it.id) }
+                mutable.value.queuedMessages.firstOrNull { it.id in liveQueue && it.status == AiQueuedStatus.Pending && it.kind == AiQueuedKind.FollowUp }
+                    ?.let { startQueued(it.id, automatic = true) }
             }
         }
     }
@@ -992,13 +1012,13 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         val baselines = linkedMapOf<String, FileBaseline>(); val refused = mutableSetOf<String>(); var count = mutable.value.toolCount
         suspend fun receiveSteering(): Boolean {
-            if (mutable.value.queuedMessages.none { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }) return false
+            if (mutable.value.queuedMessages.none { it.id in liveQueue && it.turn == mutable.value.turn && it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }) return false
             // Do not deliver unsaved intent, or insert user messages between a tool call and its results.
             persist()
-            val pending = mutable.value.queuedMessages.filter { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }
+            val pending = mutable.value.queuedMessages.filter { it.id in liveQueue && it.turn == mutable.value.turn && it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending }
             if (pending.isEmpty()) return false
             pending.forEach { queued ->
-                messages.put(JSONObject().put("role", "user").put("content", queued.text))
+                messages.put(JSONObject().put("role", "user").put("content", queued.text).put("zako_steering", true))
                 append(queued.text, role = AiRole.User, inputLength = queued.text.length)
             }
             val ids = pending.map { it.id }.toSet()
@@ -1159,7 +1179,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             reply.calls.zip(events).forEach { (call, event) ->
                 count++; mutable.update { it.copy(toolCount = count) }
                 val result = try {
-                    if (mutable.value.queuedMessages.any { it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending })
+                    if (mutable.value.queuedMessages.any { it.id in liveQueue && it.turn == mutable.value.turn && it.kind == AiQueuedKind.Steer && it.status == AiQueuedStatus.Pending })
                         throw AiSteeringBoundary()
                     val args = JSONObject(call.arguments)
                     if (reply.calls.any { it.name == AiTool.AskUser.wire }) {
