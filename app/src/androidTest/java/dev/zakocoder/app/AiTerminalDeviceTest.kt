@@ -128,7 +128,7 @@ class AiTerminalDeviceTest {
                     }
                     assertEquals(AiPermission.Ask, AiPolicy().permission(AiTool.ReadTerminal))
                     assertEquals(AiPermission.Ask, AiPolicy().permission(AiTool.StartTerminal))
-                    assertEquals(AiTool.entries.size, AiController.schemas().length())
+                    assertEquals(AiTool.entries.size, AiController.schemas(screen = true, ssh = true).length())
                 }
             } finally {
                 main { ai?.stop() }
