@@ -48,6 +48,7 @@ class AiTaskQueueDeviceTest {
                 f.server.takeRequest(5, TimeUnit.SECONDS)
                 val messages = JSONObject(requireNotNull(f.server.takeRequest(5, TimeUnit.SECONDS)).body.readUtf8()).getJSONArray("messages")
                 val objects = (0 until messages.length()).map(messages::getJSONObject)
+                assertTrue(objects.none { it.has("zako_steering") })
                 val steering = objects.indexOfFirst { it.optString("content") == "下一轮先检查，不要继续修改" }
                 assertTrue(steering > objects.indexOfFirst { it.optString("tool_call_id") == "write" })
                 assertTrue(steering > objects.indexOfFirst { it.optString("tool_call_id") == "second" })
@@ -91,6 +92,27 @@ class AiTaskQueueDeviceTest {
                 assertEquals(AiQueuedStatus.Applied, fresh.state.value.queuedMessages.single().status)
                 assertEquals(2, f.server.requestCount)
             } finally { main { ai.stop(); restored?.stop() } }
+        }
+    }
+    @Test(timeout = 60000) fun stoppedQueueDoesNotAttachToUnrelatedNewTask() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val ai = start(f)
+            try {
+                f.enqueue("原任务输出", delayMillis = 60)
+                main { assertTrue(ai.send("原任务")); assertTrue(ai.enqueue("旧补充", AiQueuedKind.Steer));
+                    assertTrue(ai.enqueue("旧后续", AiQueuedKind.FollowUp)) }
+                await { f.server.requestCount == 1 }
+                main { ai.stop() }
+                await { !ai.state.value.active }
+                f.enqueue("新任务完成")
+                main { assertTrue(ai.send("独立的新任务")) }
+                await { !ai.state.value.active }
+                assertEquals(2, f.server.requestCount)
+                assertEquals(2, ai.state.value.queuedMessages.count { it.status == AiQueuedStatus.Pending })
+                f.server.takeRequest(5, TimeUnit.SECONDS)
+                val request = requireNotNull(f.server.takeRequest(5, TimeUnit.SECONDS)).body.readUtf8()
+                assertFalse(request.contains("旧补充")); assertFalse(request.contains("旧后续"))
+            } finally { main { ai.stop() } }
         }
     }
     @Test fun historyRoundtripAndLegacyDefaults() {
