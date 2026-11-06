@@ -1053,20 +1053,25 @@ internal fun KernelPluginCard(
                             Text(stringResource(R.string.proxy_plugin_install_local))
                         }
                     }
-                    is KernelPluginStatus.Installed -> Row(
+                    is KernelPluginStatus.Installed -> Column(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         // Updating must not require uninstalling first: a failed install keeps the old version.
-                        OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_update_online))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(stringResource(R.string.proxy_plugin_update_online), textAlign = TextAlign.Center)
+                            }
+                            OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(stringResource(R.string.proxy_plugin_update_local), textAlign = TextAlign.Center)
+                            }
                         }
-                        OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.proxy_plugin_update_local))
-                        }
-                        TextButton(onClick = onUninstall, modifier = Modifier.heightIn(min = 48.dp)) {
+                        TextButton(onClick = onUninstall,
+                            modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_uninstall), color = MaterialTheme.colorScheme.error)
                         }
                     }
