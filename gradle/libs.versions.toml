@@ -1,9 +1,9 @@
 [versions]
 agp = "9.5.0"
 kotlin = "2.4.21"
-compose-bom = "2026.02.01"
+compose-bom = "2026.09.00"
 activity = "1.10.1"
-core = "1.16.0"
+core = "1.19.1"
 coroutines = "1.10.2"
 
 commons-compress = "1.27.1"
