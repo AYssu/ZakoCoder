@@ -1,12 +1,12 @@
 # Beta 测试
 
-首个计划版本为 **0.1.0-beta.1**，面向愿意反馈问题的 Android ARM64 用户。请以仓库 **Releases** 中实际存在且标为 **Pre-release** 的版本为准；本文不是已发布声明。
+首批 Beta 从 **0.1.0-beta.1** 起面向愿意反馈问题的 Android 用户；当前构建提供 Lite／Full × ARM64／x86_64 四种单 ABI 包，具体附件以所选发布为准。请以仓库 **Releases** 中实际存在且标为 **Pre-release** 的版本为准；本文不是已发布声明。
 
 ## 下载与安装
 
-1. 打开 [ZakoCoder Releases](https://github.com/AYssu/ZakoCoder/releases)，选择 Beta 预发布，下载 ARM64 APK 和 `SHA256SUMS.txt`。构建信息在发布正文的折叠详情中；完整源码使用该页指向本次固定提交／标签的 **Source code** 归档。
+1. 打开 [ZakoCoder Releases](https://github.com/AYssu/ZakoCoder/releases)，选择 Beta 预发布，选择适合设备 ABI 的 Lite 或 Full APK，并下载 `SHA256SUMS.txt`；普通手机通常使用 ARM64，x86_64 用于对应设备或模拟器。构建信息在发布正文的折叠详情中；完整源码使用该页指向本次固定提交／标签的 **Source code** 归档。
 2. 按摘要核对下载文件。系统提示时，仅为你使用的浏览器或文件管理器开启安装未知应用权限。
-3. 打开 APK 安装。首次进入先创建或导入一个可用于测试的项目，再按需要安装 Ubuntu 和开发工具；模型服务由你配置。
+3. 打开 APK 安装。Full 首次进入会在本地准备内置基础 Ubuntu，可查看进度、取消或失败后重试；Lite 按需要在线安装或导入 Ubuntu。创建或导入测试项目后再选择开发工具，模型服务由你配置。
 
 本次 Beta 使用 Release + R8 构建，应用不可调试，但默认沿用仓库 CI Debug 签名（可选自有签名），并非正式长期发布证书。相同 CI 签名、同一包名和更高 versionCode 的 Beta 可以覆盖对应 Debug 安装；本地或其他来源的 Debug 签名可能不同。已有安装提示签名不一致时，不要直接卸载或清数据；先导出重要项目并确认备份范围，再按发布说明处理。应用私有会话、草稿、设置和凭据不包含在普通项目源码导出中。后续同签名、更高 versionCode 的 Beta 才能覆盖更新；更新应用不会自动替换 Ubuntu。
 

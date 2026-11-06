@@ -140,10 +140,10 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
 
 
-> 主 APK 不包含、也不构建 Xray 内核。只有可选的 **内核插件**（`:kernel-plugin`）需要 **Go 1.27.1**
-> （版本见 `native-kernel/go.version`）与可访问的 Go 模块代理：`:kernel-plugin:prepareProxyKernel`
-> 会自编译 Xray-core 并按 `native-kernel/artifacts.lock.json` 校验 SHA-256；主 APK 构建不需要 Go。
-> 需要 VMess／VLESS／SS／Trojan 的用户另行安装该插件（应用内在线下载或本地导入）。
+> Lite 主 APK 不含 Xray；Full 直接集成仓库锁定的自编译 Xray。普通主应用打包由 JVM 校验预编译制品，无需 Go。
+> 独立插件模块 `:kernel-plugin` 普通打包同样由 JVM 校验并复用仓库预编译制品，无需 Python 或 Go；
+> 制品缺失或主动源码重建时才需 Python、固定 **Go 1.27.3**（见 `native-kernel/go.version`）及可访问的 Go 模块代理，产物按 `native-kernel/artifacts.lock.json` 校验。
+> Lite 用户使用 VMess／VLESS／SS／Trojan 时另行安装插件（应用内在线下载或本地导入）；Full 无需另装插件。
 ## 开发者区域
 
 面向源码构建、架构维护与贡献协作。欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。
@@ -163,7 +163,7 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 <details>
 <summary><strong>开发者快速构建</strong></summary>
 
-准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3，配置 `ANDROID_HOME` 或本地 `local.properties`，然后运行：
+打包准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，配置 `ANDROID_HOME` 或本地 `local.properties`。以下仓库检查另需 Python 3；仅打包可直接执行 Gradle 命令：
 
 ```sh
 python3 scripts/check_repository.py

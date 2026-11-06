@@ -116,7 +116,7 @@ CI 的每次候选会生成自己的截图及绑定制品摘要的报告；本�
 
 ## 手动打包测试 APK
 
-**Actions → Build Debug APK → Run workflow** 保留原入口。成功后在 Artifacts 下载 ARM64 Debug APK、`SHA256SUMS.txt`、`BUILD.txt`、自编译运行时及对应源码包；保留 14 天，需登录 GitHub。在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
+**Actions → Build Debug APK → Run workflow** 保留原入口。成功后在 Artifacts 下载 Lite／Full × ARM64／x86_64 四个 Debug APK、`SHA256SUMS.txt`、`BUILD.txt`、自编译运行时及对应源码包；保留 14 天，需登录 GitHub。在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
 
 该入口与默认 Beta 签名共用 `ZAKOCODER_DEBUG_KEYSTORE_BASE64` Secret：CI 专用 Debug keystore、`androiddebugkey` 别名及 Android 默认 Debug 口令。缺失时失败，不生成替代签名；它不得指向正式发布密钥。CI 在临时 runner 恢复并删除，不上传或缓存 keystore。
 
