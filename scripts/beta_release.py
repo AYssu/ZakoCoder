@@ -151,19 +151,27 @@ def create_metadata(directory, version, code, commit, certificate, run_url, sign
     directory = Path(directory)
     apks = list(directory.glob("*.apk"))
     required = ("native-runtime-sources.tar.gz", "licenses.tar.gz", "runtime-validation.tar.gz", "LICENSE.txt", "THIRD_PARTY.md")
-    if len(apks) != 1 or apks[0].name != f"ZakoCoder-{version}-arm64.apk":
-        raise ValueError("Expected exactly the public ARM64 release APK")
+    from distribution import VARIANTS, apk_name
+    matrix = {path.name for path in apks} == {apk_name(version, *variant) for variant in VARIANTS}
+    if not matrix and (len(apks) != 1 or apks[0].name != f"ZakoCoder-{version}-arm64.apk"):
+        raise ValueError("Expected all four distribution APKs (or a legacy ARM64 candidate)")
+    primary = directory / (apk_name(version, "lite", "arm64-v8a") if matrix else apks[0].name)
     if any(not (directory / name).is_file() or (directory / name).is_symlink() for name in required):
         raise ValueError("Corresponding source, licenses and runtime evidence must accompany the APK")
     metadata = {"schemaVersion": 1, "version": version, "versionCode": code, "package": PACKAGE,
                 "commit": commit, "abi": "arm64-v8a", "buildType": "release", "minified": True,
-                "prerelease": "-" in version, "signingKeyKind": signing_key_kind, "apk": apks[0].name, "apkSha256": sha256(apks[0]),
+                "prerelease": "-" in version, "signingKeyKind": signing_key_kind, "apk": primary.name, "apkSha256": sha256(primary),
                 "signingCertificateSha256": certificate, "workflowRun": run_url,
                 "createdAt": datetime.now(timezone.utc).isoformat(),
                 "correspondingSourceSha256": sha256(directory / required[0])}
+    if matrix:
+        validation = read_json(directory / "distribution-validation.json")
+        metadata["distributions"] = [{"edition": edition, "abi": abi, "apk": apk_name(version, edition, abi),
+            "sha256": sha256(directory / apk_name(version, edition, abi))} for edition, abi in VARIANTS]
+        validate_distribution_inspections(directory, metadata, validation)
     (directory / "BUILD.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     (directory / "BUILD.txt").write_text(f"ZakoCoder {version} / Android versionCode {code}\nCommit: {commit}\n"
-        f"ARM64 minified {'pre-release' if metadata['prerelease'] else 'stable release'}.\nAPK SHA-256: {metadata['apkSha256']}\n"
+        f"{'Lite/Full ARM64/x86_64' if matrix else 'ARM64'} minified {'pre-release' if metadata['prerelease'] else 'stable release'}.\nPrimary APK SHA-256: {metadata['apkSha256']}\n"
         f"Certificate SHA-256: {certificate}\nWorkflow: {run_url}\n" +
         ("Signing key: existing CI Debug key retained for upgrade continuity; not a dedicated production signing key.\n"
          if signing_key_kind == "debug-reused-for-beta" else "Signing key: configured release key.\n") +
@@ -204,6 +212,45 @@ def validate_smoke(report, qa_apk, public_apk, metadata):
         raise ValueError("Actual APK signing certificate differs from BUILD metadata")
 
 
+def validate_distribution_inspections(directory, metadata, reports):
+    from distribution import VARIANTS, apk_name
+    expected = {(edition, abi): apk_name(metadata['version'], edition, abi) for edition, abi in VARIANTS}
+    items = metadata.get('distributions', [])
+    if len(items) != 4 or {(item.get('edition'), item.get('abi')) for item in items} != set(expected):
+        raise ValueError('Release needs exactly four distributions')
+    if not isinstance(reports, list) or len(reports) != 4:
+        raise ValueError('Four actual APK inspections are required')
+    for item in items:
+        key = item['edition'], item['abi']
+        name = expected[key]
+        if item.get('apk') != name or item.get('sha256') != sha256(Path(directory) / name):
+            raise ValueError('Distribution APK changed or has an unexpected filename')
+        matches = [r for r in reports if (r.get('edition'), r.get('abi')) == key]
+        if len(matches) != 1:
+            raise ValueError('Missing or duplicated distribution inspection')
+        r = matches[0]
+        expected_fields = {'status': 'passed', 'package': PACKAGE, 'versionName': metadata['version'],
+            'versionCode': metadata['versionCode'], 'nativeAbis': [item['abi']],
+            'sha256': item['sha256'], 'certificateSha256': metadata['signingCertificateSha256']}
+        if any(r.get(field) != value for field, value in expected_fields.items()):
+            raise ValueError('Actual distribution inspection disagrees with release identity')
+
+
+def validate_matrix_smoke(directory, metadata, reports):
+    validate_distribution_inspections(directory, metadata, read_json(Path(directory) / 'distribution-validation.json'))
+    if not isinstance(reports, dict) or reports.get('status') != 'passed' or set(reports.get('editions', {})) != {'lite', 'full'}:
+        raise ValueError('Both Lite and Full Release smoke must pass')
+    from distribution import apk_name
+    for edition, report in reports['editions'].items():
+        if report.get('status') != 'passed' or report.get('certificateSha256') != metadata['signingCertificateSha256']:
+            raise ValueError('Distribution smoke failed or signing certificate differs')
+        for field, abi in [('apkSha256', 'x86_64'), ('comparisonApkSha256', 'arm64-v8a')]:
+            if report.get(field) != sha256(Path(directory) / apk_name(metadata['version'], edition, abi)):
+                raise ValueError('Distribution smoke identifies a different APK')
+        if report.get('comparisonCodeIdentity', {}).get('status') != 'matched':
+            raise ValueError('Same-edition code/resource identity was not proven')
+
+
 def verify_assets(directory):
     directory = Path(directory)
     expected = {}
@@ -223,9 +270,14 @@ def verify_assets(directory):
 
 
 
-def public_files(version, with_smoke):
+def public_files(version, with_smoke, matrix=False):
     names = {f"ZakoCoder-{version}-arm64.apk", "BUILD.json", "BUILD.txt", "SHA256SUMS.txt", "LICENSE.txt",
              "THIRD_PARTY.md", "licenses.tar.gz", "native-runtime-sources.tar.gz", "runtime-validation.tar.gz"}
+    if matrix:
+        from distribution import VARIANTS, apk_name
+        names.remove(f"ZakoCoder-{version}-arm64.apk")
+        names.update(apk_name(version, *variant) for variant in VARIANTS)
+        names.add("distribution-validation.json")
     if with_smoke:
         names.add("release-validation.tar.gz")
     return names
@@ -235,12 +287,15 @@ def finalize(directory, qa_apk, report_file):
     directory, report_file = Path(directory), Path(report_file)
     verify_assets(directory)
     metadata = read_json(directory / "BUILD.json")
-    if {path.name for path in directory.iterdir()} != public_files(metadata["version"], False):
+    if {path.name for path in directory.iterdir()} != public_files(metadata["version"], False, bool(metadata.get("distributions"))):
         raise ValueError("Unexpected public assets; QA APKs and mapping files must remain private")
-    apk = directory / f"ZakoCoder-{metadata['version']}-arm64.apk"
+    apk = directory / metadata["apk"]
     if metadata.get("apkSha256") != sha256(apk):
         raise ValueError("Candidate APK changed before smoke validation")
-    validate_smoke(read_json(report_file), qa_apk, apk, metadata)
+    if metadata.get("distributions"):
+        validate_matrix_smoke(directory, metadata, read_json(report_file))
+    else:
+        validate_smoke(read_json(report_file), qa_apk, apk, metadata)
     evidence = report_file.parent
     files = sorted(evidence.rglob("*"))
     if any(path.is_symlink() or (not path.is_dir() and not path.is_file()) for path in files):
@@ -263,21 +318,24 @@ def publish(repo, directory, qa_apk, report_file):
     verify_assets(directory)
     metadata = read_json(directory / "BUILD.json")
     version, code, commit = metadata["version"], metadata["versionCode"], metadata["commit"]
-    if {path.name for path in directory.iterdir()} != public_files(version, True):
+    if {path.name for path in directory.iterdir()} != public_files(version, True, bool(metadata.get("distributions"))):
         raise ValueError("Only the approved public release assets may be uploaded")
     validate_inputs(version, code)
     validate_commit(commit)
     if (metadata.get("schemaVersion") != 1 or metadata.get("package") != PACKAGE or metadata.get("abi") != "arm64-v8a"
             or metadata.get("buildType") != "release" or metadata.get("minified") is not True or metadata.get("prerelease") is not ("-" in version)):
         raise ValueError("Invalid public build metadata")
-    apk = directory / f"ZakoCoder-{version}-arm64.apk"
+    apk = directory / metadata["apk"]
     if metadata.get("apk") != apk.name or metadata.get("apkSha256") != sha256(apk):
         raise ValueError("BUILD metadata does not identify the public APK")
     if (metadata.get("qaApkSha256") != sha256(qa_apk) or metadata.get("releaseSmokeReportSha256") != sha256(report_file)
             or metadata.get("correspondingSourceSha256") != sha256(directory / "native-runtime-sources.tar.gz")):
         raise ValueError("Finalized provenance differs from supplied files")
     smoke = read_json(report_file)
-    validate_smoke(smoke, qa_apk, apk, metadata)
+    if metadata.get("distributions"):
+        validate_matrix_smoke(directory, metadata, smoke)
+    else:
+        validate_smoke(smoke, qa_apk, apk, metadata)
     with tarfile.open(directory / "release-validation.tar.gz") as evidence:
         reports = [member for member in evidence.getmembers() if member.name in ("report.json", "./report.json") and member.isfile()]
         if len(reports) != 1 or reports[0].size > 1_000_000:
@@ -292,7 +350,7 @@ def publish(repo, directory, qa_apk, report_file):
         raise ValueError("BUILD must identify its actual signing key kind")
     signing_note = ("沿用现有 CI Debug 证书以保持覆盖升级兼容；尚未切换专用正式发布证书。 "
                     if key_kind == "debug-reused-for-beta" else "Signed with the configured release key. ")
-    notes = (f"ZakoCoder {version} · ARM64 {'RC 候选版' if '-rc.' in version else ('测试版' if prerelease else '正式版')}\n\n"
+    notes = (f"ZakoCoder {version} · Lite / Full · ARM64 / x86_64 {'RC 候选版' if '-rc.' in version else ('测试版' if prerelease else '正式版')}\n\n"
              + ("### 发布阶段\n\n本版本是准备转正式版的 Release Candidate，标记为 Pre-release，尚非稳定版。"
                 "本阶段原则上不新增功能，重点进行问题修复、兼容适配、性能与交互优化，以及安装、升级和数据保留验收。"
                 "如发现问题将发布后续 RC，验收通过后再发布正式版，不承诺固定转正日期。\n\n"
@@ -305,12 +363,12 @@ def publish(repo, directory, qa_apk, report_file):
              "- 自行配置模型，支持流式对话、文件与图片引用、工具审批、Skill 和 MCP。\n"
              "- 文件差异审阅、任务检查点、项目验证命令、Git 与按需启用的实验性多语言 LSP。\n\n"
              "### 安装与开始\n\n"
-             "下载下方 ARM64 APK 安装；SHA256SUMS.txt 可用于校验文件。升级前请先备份重要项目。"
+             "按设备架构选择 Lite 或 Full APK 安装；Full 内置 Ubuntu 安装包与代理内核，Lite 按需下载。SHA256SUMS.txt 可用于校验文件。升级前请先备份重要项目。"
              "首次进入可创建或导入项目；终端开发需按需安装 Ubuntu 和工具包，AI 功能需自行配置有额度的模型服务。\n\n"
              f"使用方法见 [项目介绍](https://github.com/{repo}/blob/{commit}/README.md) 和 "
              f"[Beta 测试指南](https://github.com/{repo}/blob/{commit}/docs/BETA_TESTING.md)。\n\n"
              "### 测试范围与已知限制\n\n"
-             "面向 ARM64 设备，测试目标为 Android 11–17；模拟器兼容性基线不代表全部厂商真机。"
+             "提供 ARM64 与 x86_64 安装包，测试目标为 Android 11–17；模拟器兼容性基线不代表全部厂商真机。"
              + ("维护者已确认本轮 RC 验证；厂商系统、复杂工程及真实 16 KiB 页设备仍需持续验证。"
                 if not prerelease else "最终 ARM64 Release 的真机安装、覆盖升级、Ubuntu／终端／HTTP 链路及真实 16 KiB 页设备仍待补测。") +
              "绑定目录会直接修改原文件；建议先使用测试项目。项目导出不包含会话、设置和密钥的完整备份。\n\n"
@@ -335,7 +393,9 @@ def publish(repo, directory, qa_apk, report_file):
     downloads = tempfile.TemporaryDirectory(prefix="zako-beta-downloads-")
     try:
         download_directory = Path(downloads.name)
-        shutil.copyfile(apk, download_directory / apk.name)
+        for item in metadata.get("distributions", [{"apk": apk.name}]):
+            source = directory / item["apk"]
+            shutil.copyfile(source, download_directory / source.name)
         checksums(download_directory)
         with tempfile.TemporaryDirectory(prefix="zako-beta-") as temporary:
             body = Path(temporary) / "release.json"

@@ -47,7 +47,7 @@ class KernelPluginLayoutDeviceTest {
                                 Column(Modifier.fillMaxWidth().safeDrawingPadding().padding(16.dp)) {
                                     KernelPluginCard(KernelPluginStatus.Installed(KernelPluginInfo("0.1.1", 1007)),
                                         false, false, null, null, false, false, false,
-                                        { online++ }, { local++ }, {}, { removed++ })
+                                        { online++ }, { local++ }, {}, { removed++ }, bundled = false)
                                 }
                             }
                         }

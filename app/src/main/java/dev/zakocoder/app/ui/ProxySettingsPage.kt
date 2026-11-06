@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.zakocoder.app.BuildConfig
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
@@ -972,7 +973,27 @@ internal fun KernelPluginCard(
     diagnosticsBusy: Boolean = false,
     onActivate: () -> Unit = {},
     onDiagnostics: () -> Unit = {},
+    bundled: Boolean = BuildConfig.BUNDLED_KERNEL,
 ) {
+    if (bundled) {
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface, border = cardBorder(), shadowElevation = cardElevation()) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.proxy_bundled_kernel_title), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.proxy_bundled_kernel_version, BuildConfig.KERNEL_VERSION),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                bindingFailure?.let {
+                    Text(stringResource(it.bindingMessageRes()), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDiagnostics, enabled = !diagnosticsBusy,
+                    modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp)) {
+                    Text(stringResource(if (diagnosticsBusy) R.string.proxy_plugin_diagnostics_loading else R.string.proxy_plugin_diagnostics))
+                }
+            }
+        }
+        return
+    }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -1117,7 +1138,7 @@ private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRet
             if (kernel is ProxyKernelState.Running) {
                 Text(stringResource(R.string.proxy_kernel_running_hint),
                     style = MaterialTheme.typography.labelSmall, color = TertiaryText)
-                Text(stringResource(R.string.proxy_kernel_plugin_running_detail),
+                Text(stringResource(if (BuildConfig.BUNDLED_KERNEL) R.string.proxy_bundled_kernel_running_detail else R.string.proxy_kernel_plugin_running_detail),
                     style = MaterialTheme.typography.labelSmall, color = TertiaryText)
             }
             if (kernel is ProxyKernelState.Running || failed != null) {

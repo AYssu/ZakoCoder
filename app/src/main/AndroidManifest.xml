@@ -41,6 +41,9 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apk_paths" />
         </provider>
+        <!-- Full owns the kernel in a private process; Lite retains its separate companion APK. -->
+        <service android:name=".kernel.KernelService" android:exported="false"
+            android:enabled="${bundledKernelEnabled}" android:process=":kernel" />
         <service android:name=".terminal.DevelopmentService" android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

@@ -62,6 +62,44 @@ class KernelReleaseTest(unittest.TestCase):
             with patch.object(release, 'run', side_effect=["package: name='dev.zakocoder.app' versionCode='1006'", "package: name='dev.zakocoder.app.kernel' versionCode='1006'"]), patch.object(release, 'certificate', return_value='a'):
                 self.assertEqual((1006, 'a', kernel), release.validate(apk, Path('main.apk'), Path('/tools'), lock))
 
+    def test_x86_plugin_must_be_single_abi_and_match_its_own_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / 'plugin.apk'
+            kernel = b'x86 regression fixture'
+            lock = {'targets': {'x86_64': {'sha256': hashlib.sha256(kernel).hexdigest()}}}
+            for abi, binary, succeeds in [('x86_64', kernel, True), ('arm64-v8a', kernel, False), ('x86_64', b'wrong', False)]:
+                with self.subTest(abi=abi, succeeds=succeeds):
+                    with zipfile.ZipFile(apk, 'w') as archive:
+                        archive.writestr(f'lib/{abi}/libzakocoder_xray.so', binary)
+                    with patch.object(release, 'run', side_effect=[
+                            "package: name='dev.zakocoder.app' versionCode='1006'",
+                            "package: name='dev.zakocoder.app.kernel' versionCode='1006'"
+                    ]), patch.object(release, 'certificate', return_value='a'):
+                        if succeeds:
+                            self.assertEqual((1006, 'a', kernel), release.validate(apk, Path('main.apk'), Path('/tools'), lock, 'x86_64'))
+                        else:
+                            with self.assertRaises(ValueError):
+                                release.validate(apk, Path('main.apk'), Path('/tools'), lock, 'x86_64')
+
+    def test_two_plugin_packages_require_same_version_and_certificate(self):
+        arguments = [Path(name) for name in ('arm.apk', 'x86.apk', 'main-arm.apk', 'main-x86.apk', 'tools')]
+        for x86, succeeds in [((1006, 'a', b'x86'), True), ((1005, 'a', b'x86'), False), ((1006, 'b', b'x86'), False)]:
+            with self.subTest(x86=x86, succeeds=succeeds), patch.object(release, 'validate', side_effect=[(1006, 'a', b'arm'), x86]) as validate:
+                if succeeds:
+                    self.assertEqual({'arm64-v8a', 'x86_64'}, set(release.validate_distributions(*arguments, {})))
+                    self.assertEqual('arm64-v8a', validate.call_args_list[0].args[-1])
+                    self.assertEqual('x86_64', validate.call_args_list[1].args[-1])
+                else:
+                    with self.assertRaises(ValueError):
+                        release.validate_distributions(*arguments, {})
+
+    def test_plugin_workflow_builds_and_signs_both_architectures(self):
+        text = (Path(__file__).resolve().parents[1] / '.github/workflows/release-kernel-plugin.yml').read_text()
+        self.assertIn('for abi in arm64-v8a x86_64', text)
+        self.assertIn('-PcompatibilityAbis="$abi"', text)
+        self.assertIn('--x86-apk out/plugin/kernel-plugin-x86_64.apk', text)
+        self.assertIn('--force --strict-hash', text)
+
 
 if __name__ == '__main__':
     unittest.main()

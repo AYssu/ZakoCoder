@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_bundled_kernel_title">内置内核</string>
+    <string name="proxy_bundled_kernel_version">版本 %1$s</string>
+    <string name="proxy_bundled_kernel_running_detail">内核运行在独立进程中，随应用一起更新。</string>
+</resources>

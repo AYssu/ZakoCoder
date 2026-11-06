@@ -45,7 +45,9 @@ import java.util.concurrent.TimeUnit
  */
 class KernelPluginManager(context: Context) {
     private val appContext = context.applicationContext
-    private val installer = KernelPluginInstaller(appContext)
+    private val installer by lazy { KernelPluginInstaller(appContext) }
+    val bundled: Boolean get() = BuildConfig.BUNDLED_KERNEL
+    private val servicePackage: String get() = if (bundled) appContext.packageName else KernelPluginTrust.PLUGIN_PACKAGE
     private val mutable = MutableStateFlow<KernelPluginStatus>(KernelPluginStatus.NotInstalled)
     val status: StateFlow<KernelPluginStatus> = mutable.asStateFlow()
 
@@ -147,7 +149,7 @@ class KernelPluginManager(context: Context) {
         // bind/unbind and all waits happen outside the state lock, including rejected attempts.
         val failure = try {
             val accepted = appContext.bindService(
-                Intent().setComponent(ComponentName(KernelPluginTrust.PLUGIN_PACKAGE, KernelPluginTrust.SERVICE_CLASS)),
+                Intent().setComponent(ComponentName(servicePackage, KernelPluginTrust.SERVICE_CLASS)),
                 pending.connection,
                 Context.BIND_AUTO_CREATE,
             )
@@ -202,6 +204,7 @@ class KernelPluginManager(context: Context) {
 
     /** User initiated only. An explicit foreground Activity launch can clear first-install stopped state. */
     fun openActivation(activity: Activity): KernelPluginActivationResult {
+        if (bundled) return KernelPluginActivationResult.Unavailable
         refresh()
         when (status.value) {
             KernelPluginStatus.NotInstalled -> return KernelPluginActivationResult.NotInstalled
@@ -228,7 +231,7 @@ class KernelPluginManager(context: Context) {
     /** White-listed metadata only: no nodes, subscriptions, config, ports or exception messages. */
     fun diagnostics(): String {
         refresh()
-        val info = runCatching { appContext.packageManager.getApplicationInfo(KernelPluginTrust.PLUGIN_PACKAGE, 0) }.getOrNull()
+        val info = runCatching { appContext.packageManager.getApplicationInfo(servicePackage, 0) }.getOrNull()
         val installed = status.value as? KernelPluginStatus.Installed
         val remote = synchronized(bindGuard) { binding?.service }
         // Never perform Binder IPC under bindGuard or on the UI thread. Old plugins remain valid.
@@ -240,6 +243,8 @@ class KernelPluginManager(context: Context) {
             appendLine("ZakoCoder kernel diagnostic v2")
             appendLine("android_sdk=${Build.VERSION.SDK_INT}")
             appendLine("main_version_code=${BuildConfig.VERSION_CODE}")
+            appendLine("distribution=${BuildConfig.DISTRIBUTION_EDITION}")
+            appendLine("kernel_version=${if (bundled) BuildConfig.KERNEL_VERSION else installed?.info?.versionName ?: "unknown"}")
             appendLine("plugin_status=${when (status.value) {
                 KernelPluginStatus.NotInstalled -> "not_installed"
                 KernelPluginStatus.Incompatible -> "incompatible"
@@ -270,13 +275,14 @@ class KernelPluginManager(context: Context) {
 
     /** Downloads the pinned plugin APK, validates it and opens the platform installer. */
     suspend fun downloadAndInstall(onProgress: ((downloaded: Long, total: Long?) -> Unit)? = null): KernelPluginInstallResult {
+        if (bundled) return KernelPluginInstallResult.Cancelled
         if (!installMutex.tryLock()) return KernelPluginInstallResult.Failed(KernelPluginFailure.Io)
         return try {
             withContext(Dispatchers.IO) {
                 installer.clearStaged()
                 val target = File(installer.stagingDirectory(), "download-${java.util.UUID.randomUUID()}.apk")
                 val request = Request.Builder()
-                    .url(DOWNLOAD_URL)
+                    .url(downloadUrl(Build.SUPPORTED_ABIS.toList()) ?: return@withContext KernelPluginInstallResult.Failed(KernelPluginFailure.InvalidPackage))
                     .header("User-Agent", "ZakoCoder/${BuildConfig.VERSION_NAME}")
                     .build()
                 val failure = try {
@@ -316,6 +322,7 @@ class KernelPluginManager(context: Context) {
 
     /** Copies a user-picked plugin APK (SAF/document provider), validates it and opens the installer. */
     suspend fun installFromUri(uri: Uri): KernelPluginInstallResult {
+        if (bundled) return KernelPluginInstallResult.Cancelled
         if (!installMutex.tryLock()) return KernelPluginInstallResult.Failed(KernelPluginFailure.Io)
         return try {
             withContext(Dispatchers.IO) {
@@ -357,6 +364,7 @@ class KernelPluginManager(context: Context) {
 
     /** Opens the platform uninstall confirmation for the plugin; UI refreshes on resume. */
     fun uninstall() {
+        if (bundled) return
         unbind()
         runCatching {
             appContext.startActivity(
@@ -381,6 +389,7 @@ class KernelPluginManager(context: Context) {
     }
 
     private fun queryStatus(): KernelPluginStatus {
+        if (bundled) return KernelPluginStatus.Installed(KernelPluginInfo(BuildConfig.KERNEL_VERSION, BuildConfig.VERSION_CODE))
         val info = try {
             appContext.packageManager.getPackageInfo(KernelPluginTrust.PLUGIN_PACKAGE, KernelPluginInstaller.signingFlags())
         } catch (_: PackageManager.NameNotFoundException) {
@@ -441,9 +450,10 @@ class KernelPluginManager(context: Context) {
     }
 
     companion object {
-        /** Placeholder release asset; replaced with the published plugin asset before release. */
-        const val DOWNLOAD_URL =
-            "https://github.com/AYssu/ZakoCoder/releases/download/kernel-plugin-v1/kernel-plugin-arm64-v8a.apk"
+        internal fun downloadUrl(abis: List<String>): String? {
+            val abi = abis.firstOrNull { it == "arm64-v8a" || it == "x86_64" } ?: return null
+            return "https://github.com/AYssu/ZakoCoder/releases/download/kernel-plugin-v1/kernel-plugin-$abi.apk"
+        }
         private const val BIND_TIMEOUT_MS = 5_000L
     }
 }

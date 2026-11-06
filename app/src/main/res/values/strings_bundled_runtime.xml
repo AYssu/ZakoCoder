@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bundled_runtime_preparing">正在准备内置 Ubuntu · %1$d%%</string>
+    <string name="bundled_runtime_description">内置基础 Ubuntu，无需下载环境包。开发工具包仍需按需安装。</string>
+    <string name="bundled_runtime_initialize">准备内置环境</string>
+    <string name="bundled_runtime_missing">安装包缺少当前设备的 Ubuntu 环境，请重新安装对应架构的完整版本。</string>
+    <string name="runtime_architecture_unknown">未知架构</string>
+</resources>

@@ -8,6 +8,16 @@ import dev.zakocoder.app.ui.ZakoCoderApp
 
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        (application as ZakoApplication).workbench.activityVisibilityChanged(true)
+    }
+
+    override fun onPause() {
+        (application as ZakoApplication).workbench.activityVisibilityChanged(false)
+        super.onPause()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

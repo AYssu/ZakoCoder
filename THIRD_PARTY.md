@@ -70,7 +70,7 @@ APT 的 clangd、gopls、Go、Rust、JDK 和构建依赖不固定整个依赖树
 - termux/proot 提交 `b27d81a68d765f3462e807f4a14e01a03f8e89ea`：同一源码树编译 PRoot 与 `src/loader`，源文件为 GPL-2.0-or-later，原始 COPYING 保留。
 - Samba talloc 2.5.0：库为 LGPL-3.0-or-later，包含原始源码和 libreplace 构建输入；构建工具遵循归档内各自声明。
 - termux/libandroid-shmem v0.7，提交 `7f0bd7e25dbdd146265aff7c6a890029e374622d`：BSD-3-Clause。
-- NDK r28c `28.2.13676358`、Android API 26、ARM64；静态链接 talloc/libreplace 和 shmem，动态依赖仅为 Android 系统库。PRoot 组合制品按 GPL-3.0-or-later 分发，loader 保留 GPL-2.0-or-later；不将本项目 Apache-2.0 当作第三方代码许可。
+- NDK r28c `28.2.13676358`、Android API 26、ARM64 / x86_64；静态链接 talloc/libreplace 和 shmem，动态依赖仅为 Android 系统库。PRoot 组合制品按 GPL-3.0-or-later 分发，loader 保留 GPL-2.0-or-later；不将本项目 Apache-2.0 当作第三方代码许可。
 
 本地修改为 shmem 私有临时目录适配、错误返回及 PRoot 缺失头文件修复，均独立保存在 `native-runtime/patches/`。talloc 交叉编译答案及 PRoot 构建选项参考 termux/termux-packages 固定提交 `b9229f0be3ebdcad3f99ec1860e5512d32efeb02`，保留参考仓库完整许可声明（包脚本随对应包许可，基础设施为 Apache-2.0）。源码归档不引用 `example/`。
 
@@ -80,7 +80,24 @@ APK 的 `assets/licenses/` 保留 PRoot COPYING、GPL v3、talloc LGPL v3 和 sh
 
 ## Ubuntu 基础系统
 
-来源：https://github.com/termux/proot-distro/releases/tag/v4.18.0 ，资源 `ubuntu-noble-aarch64-pd-v4.18.0.tar.xz`；确切大小、摘要、解包前缀见制品清单。不是本项目编译的操作系统。Ubuntu 24.04 各软件包遵循各自许可，在环境 `/usr/share/doc/<package>/copyright` 中保留；APT 从用户选定的 Ubuntu 官方或清华镜像获取签名软件包。环境包不提交源码仓库、不内置 APK；公开分发镜像时需单独落实所有包的许可和源码提供义务。
+Full APK 新增分发 Ubuntu 基础系统；Lite 仍为用户在线下载或手动导入。来源为 Termux `proot-distro` **v4.18.0** 的 Ubuntu **24.04 Noble** 原始根文件系统，不是本项目编译的操作系统。Full 按所选 ABI 将原包放入 `assets/ubuntu-rootfs/<ABI>.tar.xz`；构建及安装均验证固定字节数和 SHA-256。准确 URL、大小、摘要、解包前缀以 [`runtime/artifacts.json`](runtime/artifacts.json) 及其 APK 内相同清单为准：
+
+| ABI | 固定原包 | 字节数 | SHA-256 |
+| --- | --- | --- | --- |
+| arm64-v8a | `ubuntu-noble-aarch64-pd-v4.18.0.tar.xz` | 64,133,552 | `91acaa786b8e2fbba56a9fd0f8a1188cee482b5c7baeed707b29ddaa9a294daa` |
+| x86_64 | `ubuntu-noble-x86_64-pd-v4.18.0.tar.xz` | 67,761,056 | `3a769bce23985effb504140d43b6ddd73dac9e261d1932894afa31de81e45414` |
+
+固定下载入口为 `https://github.com/termux/proot-distro/releases/download/v4.18.0/` 加上述文件名；对应发行页为 `https://github.com/termux/proot-distro/releases/tag/v4.18.0`。上游生成方式见同标签的 `distro-build/ubuntu.sh` 及归档构建脚本；本项目不修改原归档字节，不裁剪 `/usr/share/doc/`、`/usr/share/common-licenses/`、`/var/lib/dpkg/status` 或 `/var/lib/dpkg/info/`。安装仅复用本项目记录的配置及就绪流程，不能将 ZakoCoder 的 Apache-2.0 当作这些软件包的许可。
+
+2026-11-06 对两份固定归档的检查均发现 **185 个已安装二进制包**、182 个 `/usr/share/doc/*/copyright` 路径及 17 个 common-license 条目；不同二进制包可共享文档，并非每个包都对应一个独立版权文件。保留这些原始材料是技术分发要求，不代表已完成全部组件的逐项许可审查。其名称、二进制版本、架构、`Source` 名称与精确源版本记录于 [`docs/ubuntu-rootfs-packages.json`](docs/ubuntu-rootfs-packages.json)。清单从每份原包的 dpkg 状态生成；未设置 `Source` 时采用包名和版本，显式 `Source: name (version)` 则采用指定源版本。
+
+### Ubuntu 对应源码入口
+
+上述清单对应 **127 个源包／版本组合**，逐项记录 Ubuntu Launchpad 的版本页、source publication 和 `sourceFileUrls` 返回的 `.dsc`、原始源码归档及 Debian／Ubuntu 打包补丁链接。2026-11-06 已为全部 127 项查询到源文件 URL 元数据；这不是“已下载并校验全部对应源码”的证明。源版本入口为 `https://launchpad.net/ubuntu/+source/<source-name>/<source-version>`，例如 Bash 为 `https://launchpad.net/ubuntu/+source/bash/5.2.21-2ubuntu4`，glibc 为 `https://launchpad.net/ubuntu/+source/glibc/2.39-0ubuntu8.3`。
+
+获取指定版本时下载同一 source publication 下 `.dsc` 列出的全部文件，保留原始源码、打包修改和构建元数据，并依 `.dsc` 的摘要验证；不能仅链接上游项目的最新分支。也可查询官方 API `https://api.launchpad.net/1.0/ubuntu/+archive/primary?ws.op=getPublishedSources&source_name=<name>&version=<version>&exact_match=true`，再对选中的 `self_link` 调用 `?ws.op=sourceFileUrls`。当前滚动 APT 源不保证保留旧源版本，因此不能把不指定版本的 `apt source` 结果当成本镜像对应源码。
+
+Full 增加了实际随 APK 分发的包集合，不能沿用“仅在用户设备下载”的发行判断。完整源码归档的下载、摘要复核、持续可用性及各组件附加条件仍需发布维护者逐项确认；本记录及上游链接本身不构成已履行全部源码提供义务的法律结论。原始 rootfs 已携带包级版权／许可证与 dpkg 元数据，本次不另外改动 APK 通知资源，也不删改包内声明。后续 APT 安装的工具包仍由用户确认后单独获取，版本不属于本次固定基础系统清单。
 
 ## Ubuntu 内的 npm 兼容工具
 
@@ -176,8 +193,8 @@ SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源
 
 ## 本地代理内核 Xray-core
 
-机场订阅中的 VMess／VLESS／SS／Trojan 节点由**可选内核插件 APK**（`dev.zakocoder.app.kernel`）中的 Xray-core 转发；主 APK 不包含该内核：
+机场订阅中的 VMess／VLESS／SS／Trojan 节点由 Xray-core 转发：**Lite** 通过可选内核插件 APK（`dev.zakocoder.app.kernel`），**Full** 将同一内核及服务直接集成在主 APK 的独立进程中，不要求安装插件：
 
 - 来源：<https://github.com/XTLS/Xray-core>，Go 模块 `github.com/xtls/xray-core`，固定上游发布 `v26.10.31`（Go 伪版本 `v1.260327.1-0.20261031132019-a4a3dff5b20c`）；许可证 MPL-2.0，完整文本随 APK 保存在 `assets/licenses/Xray-MPL-2.0.txt`。未修改上游源码，仅用于转发现有订阅节点。
-- 构建：本仓库以固定 Go 工具链（`native-kernel/go.version`）执行 `go build -trimpath -ldflags "-s -w"`，`GOOS=linux`、`CGO_ENABLED=0`，交叉编译 arm64 与 amd64，作为插件 APK 的 jniLib 资产 `libzakocoder_xray.so` 打包（二进制不提交）；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 校验模块版本、工具链与 SHA-256，CI 自编译生成，不下载预编译制品。
+- 构建：本仓库以固定 Go 工具链（`native-kernel/go.version`）执行 `go build -trimpath -ldflags "-s -w"`，`GOOS=linux`、`CGO_ENABLED=0`，交叉编译 arm64 与 amd64，作为插件或 Full 主 APK 的 jniLib 资产 `libzakocoder_xray.so` 打包。`native-kernel/prebuilt/` 保存与 `native-kernel/artifacts.lock.json` SHA-256 完全一致的 ARM64／x86_64 二进制及来源记录，供本地校验后复用，无需为普通本地打包另行安装 Go；源码重建使用 `scripts/prepare_proxy_kernel.py`。CI 仍使用固定工具链从源码重建、校验模块版本与 SHA-256，不因仓库已有二进制而跳过构建验证。
 - 对应源码可从上述固定标签获取；本项目自有代码的 Apache-2.0 不适用于该内核。内核只接受应用生成的单节点配置（SOCKS inbound + 单 outbound），不读取订阅链接，日志不输出配置与凭据。Xray-core 的 Go 传递依赖（MIT/BSD/Apache 等）尚未逐项列入本文件；发布材料需补齐依赖许可证清单或在源码包中提供，见 `docs/RELEASING.md` 的发行检查。

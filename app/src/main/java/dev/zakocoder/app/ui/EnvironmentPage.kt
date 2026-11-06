@@ -71,7 +71,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.ubuntu_version), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                        Text(stringResource(R.string.runtime_architecture), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.runtime_architecture, workbench.runtime.abiName ?: stringResource(R.string.runtime_architecture_unknown)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     StatusChip(stringResource(if (state.installed) R.string.bundle_ready else R.string.bundle_missing), if (state.installed) ReadyGreen else WaitingAmber)
                 }
@@ -89,7 +89,9 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }
                 }
-                if (!state.installed) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.installRuntime() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install_runtime)) }
+                if (workbench.runtime.hasBundledImage && !state.installed) Text(stringResource(R.string.bundled_runtime_description),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!state.installed) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.installRuntime() }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (workbench.runtime.hasBundledImage) R.string.bundled_runtime_initialize else R.string.install_runtime)) }
             }
         } }
         if (state.log.isNotEmpty() || (state.busy && state.showProgress) ||

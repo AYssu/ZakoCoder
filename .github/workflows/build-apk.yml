@@ -9,7 +9,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -46,54 +46,58 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
-      - name: Check repository and build test APK
-        run: |
-          python3 scripts/check_repository.py
-          ./gradlew -PrebuildRuntime=true :app:assembleDebug :app:lintDebug :kernel-plugin:assembleDebug :kernel-plugin:lintDebug --stacktrace
-      - name: Verify and collect APK
+      - name: Build four Debug distributions and optional Lite plugin
         shell: bash
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/check_repository.py
+          for abi in arm64-v8a x86_64; do
+            python3 scripts/prepare_runtime.py --ndk "$ANDROID_HOME/ndk/28.2.13676358" --abi "$abi" --build-from-source
+          done
+          python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a x86_64 --force --strict-hash
+          ./gradlew :app:lintDebug --stacktrace
           mkdir -p apk-output
-          python3 native-runtime/checks/verify.py
-          python3 native-runtime/bundle_sources.py --output apk-output/native-runtime-sources.tar.gz
-          mkdir -p apk-output/native-runtime/arm64-v8a
-          cp native-runtime/build/jniLibs/arm64-v8a/libzakocoder_*.so apk-output/native-runtime/arm64-v8a/
-          cp native-runtime/build/build-record.json native-runtime/artifacts.lock.json native-runtime/toolchain.lock.json native-runtime/VALIDATION.md apk-output/native-runtime/
-          apk_name="ZakoCoder-debug-arm64-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
-          plugin_name="ZakoCoder-kernel-plugin-debug-arm64-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}.apk"
-          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$signer" sign --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
-            --out "apk-output/$apk_name" app/build/outputs/apk/debug/app-debug.apk
-          expected_certificate=$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" \
-            -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)
-          actual_certificate=$("$signer" verify --print-certs "apk-output/$apk_name" \
-            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
-          if [[ "$actual_certificate" != "$expected_certificate" ]]; then
-            echo '::error::APK signer differs from the configured CI debug key.'
-            exit 1
-          fi
-          "$signer" sign --ks "$HOME/.android/debug.keystore" \
-            --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
-            --out "apk-output/$plugin_name" kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk
-          rm -f "apk-output/$apk_name.idsig" "apk-output/$plugin_name.idsig"
-          (cd apk-output && sha256sum "$apk_name" "$plugin_name" native-runtime-sources.tar.gz native-runtime/arm64-v8a/*.so native-runtime/*.json native-runtime/VALIDATION.md > SHA256SUMS.txt)
+          version="debug-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          for edition in lite full; do
+            for abi in arm64-v8a x86_64; do
+              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" --stacktrace
+              name="ZakoCoder-$version-$edition-$abi.apk"
+              "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" \
+                --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
+                --out "apk-output/$name" app/build/outputs/apk/debug/app-debug.apk
+              rm -f "apk-output/$name.idsig"
+            done
+          done
+          python3 scripts/distribution.py --directory apk-output --version "$version" --debug \
+            --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          mkdir -p plugin-output
+          for abi in arm64-v8a x86_64; do
+            ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug -PcompatibilityAbis="$abi" --stacktrace
+            cp kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk "plugin-output/ZakoCoder-kernel-plugin-debug-$abi.apk"
+          done
+          (cd plugin-output && sha256sum *.apk > SHA256SUMS.txt)
           printf '%s\n' \
-            'ZakoCoder ARM64 Debug test build; not a production release.' \
+            'ZakoCoder Lite/Full ARM64/x86_64 Debug test builds; not production releases.' \
             "Commit: $GITHUB_SHA" \
             "Ref: $GITHUB_REF" \
             "Run: $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
             'Signed with the repository CI debug key; local debug signatures may differ.' \
-            'The kernel plugin APK is optional; install it only for VMess/VLESS/SS/Trojan nodes.' \
+            'The kernel plugin APK is optional for Lite; Full integrates the kernel.' \
             'Upgrading does not automatically replace the installed Ubuntu environment.' \
             > apk-output/BUILD.txt
+          python3 native-runtime/bundle_sources.py --output apk-output/native-runtime-sources.tar.gz
+      - name: Upload optional Lite plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-optional-kernel-plugin-${{ github.run_number }}-${{ github.run_attempt }}
+          path: plugin-output/
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload test APK
         id: upload
         uses: actions/upload-artifact@v7
         with:
-          name: ZakoCoder-debug-arm64-${{ github.run_number }}-${{ github.run_attempt }}
+          name: ZakoCoder-debug-four-distributions-${{ github.run_number }}-${{ github.run_attempt }}
           path: apk-output/
           if-no-files-found: error
           compression-level: 0
@@ -103,7 +107,7 @@ jobs:
           APK_ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         shell: bash
         run: |
-          printf '## ARM64 Debug 测试包\n\n[下载 APK、运行时产物、对应源码、SHA-256 和构建信息](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '## Lite / Full · ARM64 / x86_64 Debug 测试包\n\n[下载四个 APK、SHA-256 和包体检查记录](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' '保存 14 天，需要登录 GitHub 下载。这是测试包，不是正式 Release；PRoot 发行门槛保持不变。' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove signing material
         if: always()

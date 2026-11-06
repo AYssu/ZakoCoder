@@ -69,6 +69,79 @@ class SmokeSafetyTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'Expected visible UI label'):
                 device.saved_model_card(profile)
 
+    def test_primary_navigation_opens_drawer_before_selecting_destination(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        self.assertEqual('打开导航', device.labels['app_navigation_open'])
+        for target in ('nav_settings', 'nav_workspace'):
+            with self.subTest(target=target), patch.object(device, 'click') as click:
+                device.navigate(target)
+                self.assertEqual([
+                    unittest.mock.call('app_navigation_open', description_only=True),
+                    unittest.mock.call(target),
+                ], click.call_args_list)
+        with patch.object(device, 'click', side_effect=RuntimeError('drawer missing')) as click:
+            with self.assertRaisesRegex(RuntimeError, 'drawer missing'):
+                device.navigate('nav_settings')
+            self.assertEqual(1, click.call_count)
+
+    def test_full_environment_must_reach_ready_before_project_work(self):
+        device = MagicMock()
+        device.labels = {'bundle_ready': '已就绪'}
+        report = {'checks': []}
+        release_smoke.prepare_full_environment(device, 'full', report)
+        self.assertEqual([unittest.mock.call('nav_environment'), unittest.mock.call('nav_workspace')], device.navigate.call_args_list)
+        device.find.assert_called_once_with('已就绪', scroll='up', timeout=180)
+        self.assertIn('full-bundled-ubuntu-ready-through-real-ui', report['checks'])
+        device.reset_mock()
+        with patch.object(device, 'find', side_effect=RuntimeError('not ready')):
+            with self.assertRaisesRegex(RuntimeError, 'not ready'):
+                release_smoke.prepare_full_environment(device, 'full', {'checks': []})
+        device.navigate.assert_called_once_with('nav_environment')
+
+    def test_environment_ready_search_scrolls_toward_hidden_first_card(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        tools = ET.fromstring('<hierarchy><node text="工具包" enabled="true" bounds="[0,100][1080,300]" /></hierarchy>')
+        ready = ET.fromstring('<hierarchy><node text="已就绪" enabled="true" bounds="[800,100][1000,180]" /></hierarchy>')
+        with patch.object(device, 'dump', side_effect=[tools, ready]), \
+                patch.object(device, 'shell', return_value='Physical size: 1080x2400') as shell, \
+                patch.object(release_smoke.time, 'sleep'):
+            self.assertEqual('已就绪', device.find('已就绪', scroll='up').get('text'))
+        self.assertEqual([
+            unittest.mock.call('wm', 'size'),
+            unittest.mock.call('input', 'swipe', 540, 840, 540, 1776, 250),
+        ], shell.call_args_list)
+
+    def test_edition_switch_rejects_wrong_identity_abi_or_certificate(self):
+        identity = {'package': 'dev.zakocoder.app', 'versionName': '1.2.3', 'versionCode': 1009, 'nativeAbis': ['x86_64']}
+        arguments = (Path('lite.apk'), Path('full.apk'), Path('/tools/aapt'))
+        with patch.object(release_smoke, 'inspect_apk', side_effect=[identity, identity | {'versionCode': 1008}]):
+            with self.assertRaisesRegex(ValueError, 'preserve package'):
+                release_smoke.validate_edition_switch(*arguments)
+        for signer, succeeds in [('a', True), ('b', False)]:
+            with self.subTest(signer=signer), patch.object(release_smoke, 'inspect_apk', side_effect=[identity, identity]), \
+                    patch.object(release_smoke, 'apk_edition', side_effect=lambda apk: 'lite' if apk.name == 'lite.apk' else 'full'), \
+                    patch('distribution.inspect', side_effect=[{'certificateSha256': 'a'}, {'certificateSha256': signer}]):
+                if succeeds:
+                    self.assertEqual({'certificateSha256': 'a'}, release_smoke.validate_edition_switch(*arguments))
+                else:
+                    with self.assertRaisesRegex(ValueError, 'certificates differ'):
+                        release_smoke.validate_edition_switch(*arguments)
+
+    def test_edition_switch_uses_replace_install_and_checks_saved_source_and_model(self):
+        device = MagicMock()
+        device.adb.return_value = 'Success'
+        device.last_xml = 'saved-source-marker'
+        report = {'checks': []}
+        with patch.object(release_smoke, 'apk_edition', return_value='lite'):
+            release_smoke.verify_edition_switch(device, Path('lite.apk'), 'test-project', 'saved-source-marker', 'saved-profile', report)
+        device.adb.assert_called_once_with('install', '-r', '--no-incremental', 'lite.apk')
+        device.saved_model_card.assert_called_once_with('saved-profile')
+        self.assertIn('switch-to-lite-project-source-and-model-configuration-retained', report['checks'])
+        device.last_xml = 'different source'
+        with patch.object(release_smoke, 'apk_edition', return_value='lite'):
+            with self.assertRaisesRegex(RuntimeError, 'did not survive'):
+                release_smoke.verify_edition_switch(device, Path('lite.apk'), 'test-project', 'saved-source-marker', 'saved-profile', {'checks': []})
+
     def test_text_input_never_sends_back_or_infers_keyboard_visibility(self):
         device = release_smoke.Device('emulator-5554', self.root)
         with patch.object(device, 'click') as click, patch.object(device, 'shell') as shell:

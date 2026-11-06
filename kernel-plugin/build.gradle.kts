@@ -4,8 +4,7 @@ plugins {
 
 dependencies { testImplementation(libs.junit) }
 
-// Standalone, optional kernel plugin APK. It is the only module that packages Xray; the main app
-// builds without Go and without the kernel.
+// Optional Lite companion APK. Full embeds the same service sources and kernel in the main APK.
 val compatibilityAbis = providers.gradleProperty("compatibilityAbis").orElse("arm64-v8a").get()
     .split(",").map(String::trim).distinct().also { abis ->
         require(abis.isNotEmpty() && abis.all { it in setOf("arm64-v8a", "x86_64") }) {
@@ -43,6 +42,7 @@ android {
         aidl = true
         buildConfig = true
     }
+    sourceSets.getByName("main").java.srcDir(rootProject.file("kernel-shared/src/main/java"))
     sourceSets.getByName("main").jniLibs.directories.add(
         rootProject.file("runtime-artifacts/kernel-jniLibs").absolutePath,
     )

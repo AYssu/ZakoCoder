@@ -38,7 +38,7 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -64,6 +64,22 @@ jobs:
           python3 native-runtime/checks/verify.py native-runtime/prebuilt/arm64-v8a
           python3 native-runtime/checks/verify.py native-runtime/prebuilt/x86_64 --abi x86_64
       - run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest --stacktrace
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: native-kernel/go.version
+          cache: false
+      - name: Check all four distribution builds and actual package inventories
+        run: |
+          set -euo pipefail
+          mkdir -p distribution-ci
+          for edition in lite full; do
+            for abi in arm64-v8a x86_64; do
+              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" --stacktrace
+              cp app/build/outputs/apk/debug/app-debug.apk "distribution-ci/ZakoCoder-ci-$edition-$abi.apk"
+            done
+          done
+          python3 scripts/distribution.py --directory distribution-ci --version ci --debug \
+            --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner"
       - name: Verify self-built runtime artifacts and regression checks
         run: |
           python3 native-runtime/checks/verify.py
@@ -97,6 +113,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
+      - name: Rebuild both Xray ABIs independently of repository binaries
+        run: python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a x86_64 --force --strict-hash
       - name: Build and verify the optional kernel plugin
         run: |
           set -euo pipefail

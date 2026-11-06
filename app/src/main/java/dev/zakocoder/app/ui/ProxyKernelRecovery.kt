@@ -72,7 +72,7 @@ internal fun KernelRecoveryActions(
     }
 }
 
-private fun KernelBindingFailure.bindingMessageRes(): Int = when (this) {
+internal fun KernelBindingFailure.bindingMessageRes(): Int = when (this) {
     KernelBindingFailure.Rejected -> R.string.proxy_binding_rejected
     KernelBindingFailure.SecurityDenied -> R.string.proxy_binding_security
     KernelBindingFailure.Timeout -> R.string.proxy_binding_timeout
