@@ -51,6 +51,8 @@ class AiProtocolUiDeviceTest {
         assertFalse(supported(AiApiProtocol.Gemini, AiParameters(thinking = AiThinking.Disabled, reasoningEffort = AiReasoningEffort.Low)))
         assertEquals(AiProviderPresets.all.size, AiProviderPresets.all.map { it.id }.distinct().size)
         AiProviderPresets.all.forEach { assertEquals(it.endpoint, AiConfigStore.endpoint(it.endpoint)) }
+        assertEquals("Provider choices must have distinct accessible names", AiProviderPresets.all.size,
+            AiProviderPresets.all.map { context.getString(it.label) }.distinct().size)
     }
 
     private fun <T> nodes(block: (List<SemanticsNode>) -> T): T {

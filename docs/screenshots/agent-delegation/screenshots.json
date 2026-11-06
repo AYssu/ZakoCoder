@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-06",
+  "source_commit": "0d9800a284538113e99ea25897e88a7449f5a63e",
+  "source_base": "aa0bbec7a56d65db5b09d1cf04d1b4274df22353",
+  "device": "23049RAD8C",
+  "android": 13,
+  "abi": "arm64-v8a",
+  "width_dp": 360,
+  "font_scale": 1.3,
+  "test_data": "isolated synthetic project, local TLS model fixture; no personal model credentials or project content",
+  "application_apk_sha256": "c98017857d71c2c94ad630d58ad919b921c4e76636a08a574a80e0a577dd9ad9",
+  "test_apk_sha256": "b46a15ebceb6a68f3d8f5a1167cbb406d0c361eec5e03e809797d72ee48c4862",
+  "screenshots": [
+    {
+      "file": "agent-settings-day.png",
+      "sha256": "16b16f89a1ba01c4801484e29131cccbd4cf763c3daca55f88099e1bcda75295"
+    },
+    {
+      "file": "agent-settings-night.png",
+      "sha256": "dc5325f5d51b5e21fb744c8c593f2091309afccf419453a2725857339728102a"
+    },
+    {
+      "file": "compatibility-help-day.png",
+      "sha256": "545dc508e06769c033fb3b03ffca02f7cca1cfd5048bf66705304e51bf42ecc3"
+    },
+    {
+      "file": "compatibility-help-night.png",
+      "sha256": "5601275340dac09cdfe554d192e04ede3643e70cdca014a980399b7019d80b0a"
+    },
+    {
+      "file": "delegation-requests-day.png",
+      "sha256": "37ce2d2c99145fa993d9d727210c32c67e34ebe07e049d9a8cdb58894e11f6ba"
+    },
+    {
+      "file": "delegation-requests-night.png",
+      "sha256": "a08f899539af09f384d241c3ab5898303ac75feafb294108478d25f6c80c3b2b"
+    },
+    {
+      "file": "delegation-running-day.png",
+      "sha256": "b06bca4a0f1fa6e051be04a729100ab1aef48230e6665f63c261a220c45f0823"
+    },
+    {
+      "file": "delegation-running-night.png",
+      "sha256": "c0ccb10934af357835e006d50c8fb0e3a250c90752a7143440ff8ad5eb73f5dd"
+    },
+    {
+      "file": "protocol-defaults-day.png",
+      "sha256": "dcf19a8a815591e597661c2fa32760938a956e470056a3954546e05d07ea87e8"
+    },
+    {
+      "file": "protocol-defaults-night.png",
+      "sha256": "783ae269f6adb28599a253f8aff13553eab3ba80d170a02282017130ebf2b26a"
+    },
+    {
+      "file": "provider-presets-day.png",
+      "sha256": "14ef0ebb4f1d9c5d1313aa7d7b9a94b547251c8aaa2d648dbceb76c48f9fbc10"
+    },
+    {
+      "file": "provider-presets-night.png",
+      "sha256": "bfccaa8257dc9555e1ace83cffdd9105a9f5d87efa79a8198c0b070e74b3441d"
+    }
+  ]
+}

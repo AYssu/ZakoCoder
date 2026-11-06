@@ -1,0 +1,63 @@
+{
+  "source_commit": "0d9800a284538113e99ea25897e88a7449f5a63e",
+  "device": {
+    "model": "23049RAD8C",
+    "abi": "arm64-v8a",
+    "api": "33"
+  },
+  "device_tests": {
+    "passed": true,
+    "count": 73,
+    "classes": [
+      "AiSubagentsDeviceTest",
+      "AiSubagentProtocolsDeviceTest",
+      "AiAgentOptimizationDeviceTest",
+      "AiCompactionFallbackDeviceTest",
+      "AiContextDeviceTest",
+      "AiToolRegistryDeviceTest",
+      "AgentRunnerControllerDeviceTest",
+      "AiServiceOptionsConfigDeviceTest",
+      "AiProviderTransportDeviceTest",
+      "AiSteeringHistoryDeviceTest",
+      "AiTaskQueueDeviceTest",
+      "AiUserQuestionDeviceTest",
+      "ui.AiAgentSettingsUiDeviceTest",
+      "ui.AiDelegationEvidenceUiDeviceTest",
+      "ui.AiProtocolUiDeviceTest",
+      "ui.AiServiceOptionsUiDeviceTest"
+    ]
+  },
+  "jvm": {
+    "app": {
+      "tests": 567,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "third_party/terminal-emulator": {
+      "tests": 145,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "python_tests": {
+    "count": 120,
+    "passed": true
+  },
+  "build_and_lint": "passed",
+  "repository_check": "passed",
+  "application_apk_sha256": "c98017857d71c2c94ad630d58ad919b921c4e76636a08a574a80e0a577dd9ad9",
+  "test_apk_sha256": "b46a15ebceb6a68f3d8f5a1167cbb406d0c361eec5e03e809797d72ee48c4862",
+  "controlled_fixture_measurements": [
+    "controlled_delay_ms=150 sequential_ms=305 parallel_ms=153 requests_before=2 requests_after=2",
+    "simple_delegation_enabled=false requests=1 request_bytes=26428 estimated_input_tokens=10947",
+    "simple_delegation_enabled=true requests=1 request_bytes=27382 estimated_input_tokens=11281",
+    "oversized_summary_before=local_rejection after=completed summary_requests=4 total_requests=6"
+  ],
+  "limitations": [
+    "No real model service speed, cost or task-success evaluation",
+    "No standalone subagent panel; screenshots mount existing product tool card and request panel",
+    "Keyboard interactions were not added or separately tested in this change"
+  ]
+}

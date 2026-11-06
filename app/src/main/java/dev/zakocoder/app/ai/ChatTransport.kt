@@ -80,7 +80,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
 
     suspend fun request(config: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String? = null, proxy: String = "",
         imageData: (suspend (AiImageAttachment) -> String)? = null, toolDelta: (List<AiCallDraft>) -> Unit = {}, observe: (AiRequestLog) -> Unit = {}, reasoningDelta: (String) -> Unit = {},
-        onRetry: (AiRetryEvent) -> Unit = {}, onRetryReset: () -> Unit = {}, cacheKey: String? = null, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        onRetry: (AiRetryEvent) -> Unit = {}, onRetryReset: () -> Unit = {}, cacheKey: String? = null, beforeAttempt: () -> Unit = {}, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
         val frozenMessages = messages.toString()
         val frozenTools = tools.toString()
         val frozenConfig = config.copy(requestHeaders = config.requestHeaders.toMap())
@@ -94,6 +94,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             fun beginReplacement() {
                 if (attempt > 1 && !replacementStarted) { onRetryReset(); replacementStarted = true }
             }
+            beforeAttempt()
             try {
                 val reply = requestAttempt(frozenConfig, JSONArray(frozenMessages), JSONArray(frozenTools), forceTool, proxy,
                     imageData, { drafts ->

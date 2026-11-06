@@ -18,8 +18,8 @@
     <string name="ai_provider_choose">常用服务</string>
     <string name="ai_provider_presets_hint">自动填写服务地址和协议，请使用该服务对应的密钥。</string>
     <string name="ai_provider_origin_hint">此地址与原配置来源不同。原密钥或私密请求头不能直接复用，请在保存或测试前替换或清除。</string>
-    <string name="ai_provider_openai_responses">OpenAI</string>
-    <string name="ai_provider_openai_chat">OpenAI</string>
+    <string name="ai_provider_openai_responses">OpenAI · Responses</string>
+    <string name="ai_provider_openai_chat">OpenAI · Chat Completions</string>
     <string name="ai_provider_anthropic">Anthropic</string>
     <string name="ai_provider_google">Google</string>
     <string name="ai_provider_deepseek">DeepSeek</string>

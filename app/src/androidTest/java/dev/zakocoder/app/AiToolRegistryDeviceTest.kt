@@ -9,10 +9,10 @@ import org.junit.Test
 /** Contract checks use Android's real JSON implementation; no model, files or device settings. */
 class AiToolRegistryDeviceTest {
     @Test fun schemasHaveExactlyOneDefinitionPerAvailableToolAndFreshMutableObjects() {
-        for (screen in listOf(false, true)) for (ssh in listOf(false, true)) for (skills in listOf(false, true)) {
-            val schema = AiController.schemas(screen, ssh, skills)
+        for (screen in listOf(false, true)) for (ssh in listOf(false, true)) for (skills in listOf(false, true)) for (delegation in listOf(false, true)) {
+            val schema = AiController.schemas(screen, ssh, skills, delegation)
             val names = (0 until schema.length()).map { schema.getJSONObject(it).getJSONObject("function").getString("name") }
-            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) }.map { it.wire }
+            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) && (delegation || it != AiTool.DelegateReadOnly) }.map { it.wire }
             assertEquals(expected.toSet(), names.toSet())
             assertEquals(expected.size, names.size)
             repeat(schema.length()) { index ->
@@ -21,12 +21,12 @@ class AiToolRegistryDeviceTest {
                 assertTrue(parameters.getJSONObject("properties").has("reason"))
             }
             schema.getJSONObject(0).getJSONObject("function").put("name", "tampered")
-            assertEquals("update_plan", AiController.schemas(screen, ssh, skills).getJSONObject(0).getJSONObject("function").getString("name"))
+            assertEquals("update_plan", AiController.schemas(screen, ssh, skills, delegation).getJSONObject(0).getJSONObject("function").getString("name"))
         }
     }
 
     @Test fun descriptorsCoverMetadataPermissionTargetsAndUnknownNamesAreNotExecutable() {
-        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true)
+        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true, delegation = true)
         assertEquals(AiTool.entries.toSet(), all.map { it.tool }.toSet())
         assertEquals(AiTool.entries.size, all.size)
         assertNull(AiToolRegistry.named("unregistered_tool"))

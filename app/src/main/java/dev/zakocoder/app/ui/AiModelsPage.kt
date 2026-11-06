@@ -138,6 +138,13 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
+    fun selectProtocol(value: AiApiProtocol) {
+        val next = options.applyProtocol(parameters, value)
+        maxEnabled = next.maxTokens != null; next.maxTokens?.let { maxTokens = it.toString() }
+        tempEnabled = next.temperature != null; next.temperature?.let { temperature = it.toString() }
+        topEnabled = next.topP != null; next.topP?.let { topP = it.toString() }
+        protocol = value; changed()
+    }
     fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
     fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt)
     fun leave() { if (state.saving) return; if (dirty) discard = true else close() }
@@ -158,7 +165,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                     Text(stringResource(R.string.ai_protocol_heading), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                     TextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_provider_choose)) }
                 }
-                AiProtocolOptions(protocol, editable, { protocol = it; changed() })
+                AiProtocolOptions(protocol, editable, ::selectProtocol)
                 if (!protocolParametersValid) {
                     Text(stringResource(R.string.ai_protocol_parameters_invalid),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -230,7 +237,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     }
     if (templates) WorkbenchSheet(stringResource(R.string.ai_provider_choose), { templates = false }) {
         AiProviderPresetList(editable) { preset ->
-            endpoint = preset.endpoint; protocol = preset.protocol; changed(); templates = false
+            endpoint = preset.endpoint; selectProtocol(preset.protocol); templates = false
         }
     }
     if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },
