@@ -48,8 +48,12 @@ jobs:
           git checkout --detach "$SOURCE_COMMIT"
           mkdir -p out/main
           gh release download "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern 'ZakoCoder-*-arm64.apk' --pattern SHA256SUMS.txt --dir out/main
-          (cd out/main && sha256sum -c SHA256SUMS.txt)
+            --pattern 'ZakoCoder-*-lite-*.apk' --pattern SHA256SUMS.txt --dir out/main || {
+            rm -f out/main/SHA256SUMS.txt
+            gh release download "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'ZakoCoder-*-arm64.apk' --pattern SHA256SUMS.txt --dir out/main
+          }
+          (cd out/main && sha256sum --ignore-missing -c SHA256SUMS.txt)
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
@@ -70,20 +74,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
-      - name: Build the independent ARM64 Release plugin
+      - name: Build independent ARM64 and x86_64 Release plugins
         run: |
           set -euo pipefail
-          main_apks=(out/main/*.apk)
-          [[ "${#main_apks[@]}" == 1 ]]
+          main_apks=(out/main/*lite-arm64-v8a.apk)
+          if [[ ! -f "${main_apks[0]}" ]]; then main_apks=(out/main/*-arm64.apk); fi
+          [[ "${#main_apks[@]}" == 1 && -f "${main_apks[0]}" ]]
           version_code=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${main_apks[0]}" | sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p")
           [[ "$version_code" =~ ^[1-9][0-9]*$ ]]
           echo "PLUGIN_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
           python3 scripts/check_repository.py
           python3 -m unittest discover -s scripts -p 'test_kernel_release.py' -v
-          python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a --strict-hash
-          ./gradlew :kernel-plugin:assembleRelease :kernel-plugin:lintRelease \
-            -PcompatibilityAbis=arm64-v8a -PkernelPluginVersionCode="$version_code" \
-            -PkernelPluginVersionName="${MAIN_RELEASE_TAG#v}" -x :kernel-plugin:prepareProxyKernel --stacktrace
+          python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a x86_64 --force --strict-hash
+          mkdir -p out/unsigned
+          for abi in arm64-v8a x86_64; do
+            ./gradlew :kernel-plugin:assembleRelease :kernel-plugin:lintRelease \
+              -PcompatibilityAbis="$abi" -PkernelPluginVersionCode="$version_code" \
+              -PkernelPluginVersionName="${MAIN_RELEASE_TAG#v}" -x :kernel-plugin:prepareProxyKernel --stacktrace
+            cp kernel-plugin/build/outputs/apk/release/kernel-plugin-release-unsigned.apk "out/unsigned/$abi.apk"
+          done
       - name: Sign with the main app signing configuration
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.ZAKOCODER_RELEASE_KEYSTORE_BASE64 }}
@@ -120,18 +129,25 @@ jobs:
           printf '%s' "$key_base64" | base64 --decode > "$key_dir/signing.keystore"
           mkdir -p out/plugin
           tools="$ANDROID_HOME/build-tools/36.0.0"
-          "$tools/zipalign" -f -P 16 4 kernel-plugin/build/outputs/apk/release/kernel-plugin-release-unsigned.apk "$key_dir/aligned.apk"
-          "$tools/apksigner" sign --ks "$key_dir/signing.keystore" --ks-key-alias "$key_alias" \
-            --ks-pass env:ACTIVE_STORE_PASSWORD --key-pass env:ACTIVE_KEY_PASSWORD \
-            --out out/plugin/kernel-plugin-arm64-v8a.apk "$key_dir/aligned.apk"
+          for abi in arm64-v8a x86_64; do
+            "$tools/zipalign" -f -P 16 4 "out/unsigned/$abi.apk" "$key_dir/aligned.apk"
+            "$tools/apksigner" sign --ks "$key_dir/signing.keystore" --ks-key-alias "$key_alias" \
+              --ks-pass env:ACTIVE_STORE_PASSWORD --key-pass env:ACTIVE_KEY_PASSWORD \
+              --out "out/plugin/kernel-plugin-$abi.apk" "$key_dir/aligned.apk"
+            "$tools/zipalign" -c -P 16 4 "out/plugin/kernel-plugin-$abi.apk"
+          done
           rm -f out/plugin/*.idsig
-          "$tools/zipalign" -c -P 16 4 out/plugin/kernel-plugin-arm64-v8a.apk
       - name: Verify certificate, package and kernel; bundle corresponding sources
         run: |
           set -euo pipefail
-          main_apks=(out/main/*.apk)
+          main_arm=(out/main/*lite-arm64-v8a.apk)
+          if [[ ! -f "${main_arm[0]}" ]]; then main_arm=(out/main/*-arm64.apk); fi
+          main_x86=(out/main/*lite-x86_64.apk)
+          if [[ ! -f "${main_x86[0]}" ]]; then main_x86=("${main_arm[0]}"); fi
+          [[ "${#main_arm[@]}" == 1 && "${#main_x86[@]}" == 1 ]]
           python3 scripts/kernel_release.py --apk out/plugin/kernel-plugin-arm64-v8a.apk \
-            --main-apk "${main_apks[0]}" --tools "$ANDROID_HOME/build-tools/36.0.0" \
+            --x86-apk out/plugin/kernel-plugin-x86_64.apk --main-apk "${main_arm[0]}" --x86-main-apk "${main_x86[0]}" \
+            --tools "$ANDROID_HOME/build-tools/36.0.0" \
             --output out/plugin --commit "$SOURCE_COMMIT" --main-tag "$MAIN_RELEASE_TAG"
       - name: Publish fixed download address and verify public assets
         run: |
@@ -147,7 +163,7 @@ jobs:
             fi
           else
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$SOURCE_COMMIT" \
-              --title '代理内核插件（ARM64 / 接口 v1）' --notes-file out/plugin/RELEASE.md --draft --latest=false
+              --title '代理内核插件（ARM64 / x86_64 / 接口 v1）' --notes-file out/plugin/RELEASE.md --draft --latest=false
           fi
           gh release upload "$tag" out/plugin/* --repo "$GITHUB_REPOSITORY" --clobber
           mkdir -p out/readback
@@ -164,7 +180,7 @@ jobs:
           path = Path('out/main-notes.md')
           notes = path.read_text()
           if '<!-- kernel-plugin-download -->' not in notes:
-              notes += '\n\n<!-- kernel-plugin-download -->\n### 可选代理内核\n\nVMess／VLESS／SS／Trojan 节点需额外安装[ARM64 内核插件](https://github.com/AYssu/ZakoCoder/releases/tag/kernel-plugin-v1)。可在应用设置中在线安装，或下载插件 APK 后选择本地安装。直连和手动 HTTP／SOCKS5 无需安装。\n'
+              notes += '\n\n<!-- kernel-plugin-download -->\n### 可选代理内核\n\nLite 使用 VMess／VLESS／SS／Trojan 节点需额外安装[对应架构的内核插件](https://github.com/AYssu/ZakoCoder/releases/tag/kernel-plugin-v1)。可在应用设置中在线安装，或下载插件 APK 后选择本地安装。Full 已内置内核；直连和手动 HTTP／SOCKS5 无需安装。\n'
           path.write_text(notes)
           PYNOTES
           gh release edit "$MAIN_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file out/main-notes.md

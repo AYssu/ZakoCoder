@@ -2,6 +2,14 @@
 
 本目录从保留在仓库内的源码编译 Android ARM64 或 x86_64 PRoot 和配套 loader，不下载或使用 OperitTerminalCore 的两个二进制。可将整个 `native-runtime/` 目录单独复制出去构建，不需要 Android 应用、Gradle 或上游 Git 仓库在线可用。
 
+## 应用本地打包
+
+`prebuilt/arm64-v8a/` 与 `prebuilt/x86_64/` 保存本项目从下述固定源码构建的 PRoot 和 loader。应用默认按目标 ABI 选择文件，并校验两份锁中的 SHA-256 后直接打包；ELF 类型、ABI 和 16 KiB 对齐由原生校验脚本及 CI 检查，不调用原生编译工具，也不需要 Linux 宿主；应用 Gradle 快捷路径只需 Android 构建工具链，不调用 Python；手动运行 Python 准备脚本仍需 Python。Windows／macOS 的完整 Android 打包尚需各自验证。
+
+两文件缺失时回退源码构建；存在但校验失败时停止，不静默使用损坏产物。手动重建使用 `python3 scripts/prepare_runtime.py --build-from-source --ndk <NDK目录>`（仓库根目录），或 Gradle 参数 `-PrebuildRuntime=true`。CI 对两个 ABI 显式强制重建、校验源码产物和仓库预编译产物，再进行 Android 检查；不会用本地快捷路径代替源码构建验收。
+
+预编译文件与本文源码、补丁、版本、许可及产物锁一同提交。更新原生实现时须同步重建两个 ABI、更新预编译文件与相应摘要；不得只替换二进制或关闭校验。其许可沿用下文第三方说明，源码仍完整保留。
+
 ## 构建与检查
 
 构建宿主为 Linux x86_64，准备 Python 3.12+、GNU Make、patch、binutils（readelf）、POSIX shell 和 Android NDK **28.2.13676358 / r28c**。NDK 通过 Android SDK Manager 安装，默认编译目标为 Android API 26、`arm64-v8a`；实验性 x86_64 目标通过显式 `--abi x86_64` 选择，见下文。源码及依赖已全部保留，工具链准备完成后编译无需网络。NDK 本身仍是外部工具链，不声称消除了所有外部依赖。

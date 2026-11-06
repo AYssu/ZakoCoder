@@ -66,7 +66,7 @@ class ProxyRecoveryUiDeviceTest {
                                 KernelPluginCard(KernelPluginStatus.Installed(KernelPluginInfo("1.0.2-dev", 3)),
                                     false, false, null, null, false, false, false, {}, {}, {}, {},
                                     bindingFailure = KernelBindingFailure.Rejected, onActivate = { activated++ },
-                                    onDiagnostics = { showDiagnostic = true })
+                                    onDiagnostics = { showDiagnostic = true }, bundled = false)
                                 Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 1.dp) {
                                     Column(Modifier.padding(8.dp)) {
                                         ProxyNodeRow(notice, false, true, { error("Notice selected") }, { error("Notice acted") })

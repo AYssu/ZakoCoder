@@ -53,7 +53,7 @@
 - 结果徽标行：胶囊标签（高 22dp、内距 8dp、圆角 4dp）：机场订阅（主色底 8%）/ 单节点（中性）/ 暂不支持（警告）/ 无法识别（错误）；右侧辅助文字「12 个条目 · 8 个支持连接」。
 - 单节点结果：一张卡片显示节点名、协议标签、host:port，主 CTA 直接为「保存并启用」。
 - 节点列表：每行最小高 56dp，内距 12dp，行间 1dp 分割线；左侧 20×20 协议图标位（或 2 字协议短标），主行 14sp 名称（最多 2 行截断），次行 12sp `host:port` + 协议名；右侧单选框（可用节点）或「暂不支持」标签（灰，不可选）。
-- 可用 = SOCKS5（可带用户名密码）或 HTTP（无凭据），以及参数完整的 VMess／SS／Trojan／VLESS 节点（经可选 Xray 插件）。VLESS 支持 TCP／RAW、WebSocket、gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 会被明确标记不支持；Vision 仅用于 TCP／RAW，明文仅限本地／私网字面地址。`https://`（TLS-to-proxy）、SOCKS4、Hysteria/TUIC 等显示「暂不支持」，点击给一行说明「该节点缺少必要参数或协议暂不支持」。`https://` 节点不会被降级成明文 `http://` 写入设置。
+- 可用 = SOCKS5（可带用户名密码）或 HTTP（无凭据），以及参数完整的 VMess／SS／Trojan／VLESS 节点（Lite 经可选 Xray 插件，Full 使用内置内核）。VLESS 支持 TCP／RAW、WebSocket、gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 会被明确标记不支持；Vision 仅用于 TCP／RAW，明文仅限本地／私网字面地址。`https://`（TLS-to-proxy）、SOCKS4、Hysteria/TUIC 等显示「暂不支持」，点击给一行说明「该节点缺少必要参数或协议暂不支持」。`https://` 节点不会被降级成明文 `http://` 写入设置。
 - 订阅中的回环／未指定地址若配合明确通知、流量、返利或官网说明名称，标为「订阅说明」，不计入支持数量、默认选择或启用候选；不会仅凭本地地址禁用节点，显式单节点导入保留用户意图。历史 HTTPS 订阅缓存读取时也重新识别说明。
 - 列表最多一屏内滚动，页面级滚动；固定底部区存放主 CTA，列表底部 padding ≥ 主 CTA 高度 + 24dp。
 
@@ -118,29 +118,29 @@
 
 - 仅接受 HTTPS 订阅链接；导入/刷新必须由用户显式点击，打开页面不发请求、不自动重试。
 - 订阅链接可能含口令：展示打码、日志不输出完整链接；订阅内容与节点凭据用 Android Keystore 加密保存。
-- 仅导入后可用的 HTTP/SOCKS5 节点直连；HTTP 节点只有无凭据时才可直连（应用 HTTP 代理路径不支持账号密码），带凭据的 HTTP 节点与其他协议一样标注「暂不支持」；VMess／SS／Trojan／VLESS 参数完整时经可选 Xray 内核插件启用。`https://`（TLS-to-proxy）、SOCKS4、Hysteria、TUIC 等仍不支持，且不会降级为明文 HTTP。
+- 仅导入后可用的 HTTP/SOCKS5 节点直连；HTTP 节点只有无凭据时才可直连（应用 HTTP 代理路径不支持账号密码），带凭据的 HTTP 节点与其他协议一样标注「暂不支持」；VMess／SS／Trojan／VLESS 参数完整时由 Xray 启用：Lite 使用可选插件，Full 使用内置内核。`https://`（TLS-to-proxy）、SOCKS4、Hysteria、TUIC 等仍不支持，且不会降级为明文 HTTP。
 - 订阅内容由应用直连下载，不走已配置的代理（避免先有节点才能取订阅的循环依赖）；导入成功后只预选第一个可用节点，仍由用户点「保存并启用」。
 - 单节点但协议不支持时归入「暂不支持」并列出该节点；非 ASCII/IDN 主机不作为可启用节点（写回设置会失败，直接标为不支持）。- 选中节点后写入现有代理设置并立即生效；guest 终端 `ALL_PROXY` 若带凭据对 guest 进程可见（沿用现行说明）。
 - 数量/大小上限：响应 ≤ 2 MiB（超出拒绝并提示）；最多展示 512 个节点（超出按输入顺序截断并在界面显示有效节点数）；单节点但协议不支持时归入「暂不支持」而不是「单节点」。
 
 ## 九、可选内核（VMess／SS／Trojan／VLESS）
 
-> 主 APK 不包含内核，使用独立可选插件。安装、激活、诊断与验证边界见 [代理内核插件说明](PROXY_KERNEL_PLUGIN.md)。
+> Lite 主 APK 不包含内核，使用独立可选插件；Full 直接内置内核，随主应用更新。以下插件安装与激活仅适用于 Lite，见[代理内核插件说明](PROXY_KERNEL_PLUGIN.md)。
 
-- 内核改为**可选插件 APK**（`:kernel-plugin`，applicationId `dev.zakocoder.app.kernel`，与主包同证书）：自编译 Xray-core 上游 `v26.10.31`（Go 模块固定为 `v1.260327.1-0.20261031132019-a4a3dff5b20c`）（MPL-2.0），以 jniLib 形式打进插件包（`libzakocoder_xray.so`），从**插件自己的** `nativeLibraryDir` 执行；主 APK 不含内核、不需要 Go；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
+- Lite 内核采用**可选插件 APK**（`:kernel-plugin`，applicationId `dev.zakocoder.app.kernel`，与主包同证书）：自编译 Xray-core 上游 `v26.10.31`（Go 模块固定为 `v1.260327.1-0.20261031132019-a4a3dff5b20c`）（MPL-2.0），以 jniLib 形式打进插件包（`libzakocoder_xray.so`），从**插件自己的** `nativeLibraryDir` 执行；Full 将相同服务与内核集成在主 APK，并从主应用的 `nativeLibraryDir` 执行；普通主应用打包在 JVM 中校验仓库锁定预编译制品，无需 Go；`scripts/prepare_proxy_kernel.py` 按 `native-kernel/artifacts.lock.json` 锁定模块版本、Go 工具链与 SHA-256，CI 自编译校验，不下载预编译制品。
 - 节点参数来自订阅解析（vmess base64 JSON / ss SIP002 / trojan URL / Clash YAML）；应用生成最小配置：`127.0.0.1` 空闲端口 SOCKS inbound（每次启动随机 user/pass 的 RFC 1929 认证、禁 UDP）+ 单节点 outbound（vmess tcp/ws/grpc + tls/sni/host/path；ss method/password；trojan password/sni；vless tcp/raw/ws/grpc + TLS，REALITY 仅 tcp/raw/grpc，TCP/RAW 可选 Vision，保留 serverName/publicKey/shortId/fingerprint/spiderX 与 WS/gRPC 传输参数）。
 - 生命周期：切换节点先停旧内核；启动最多等 10s 连通性；超时/进程退出→失败提示；配置写到 cacheDir 且 stop 时删除；日志不输出完整配置/凭据。
-- 限制：内核进程随应用进程存活，后台被系统回收后不保证接管；应用重启只清理自己拥有（端口标记匹配）的 loopback 残留端点，用户手动配置的本地代理不受影响；启动/停止会清理残留配置与日志；启动前对节点域名解析出的地址做有界 TCP 可达性探测，但内核启动成功只保证本地 SOCKS 端口就绪，HTTP/HTTPS、DNS 与出口 IP 仍须通过实际请求验证；SOCKS 入口使用每次启动随机生成的账号密码（RFC 1929），其它 App 不能直接借用本机代理；TLS 节点使用 Android 系统 CA（内核进程注入 `SSL_CERT_DIR`）；VMess TCP `headerType`（http/srtp 伪装）、VLESS XHTTP/H2/QUIC、Trojan ws、SS plugin 等当前无法表达，相关节点直接标“暂不支持”而不是假装可用；订阅缓存 v2 会持久化内核 transport，旧 v1 缓存需重新识别一次；TUIC、Hysteria 等仍未支持；无延迟测速/自动切换；内核体积由独立插件承担，实际大小以对应构建产物为准。
+- 限制：内核进程随应用进程存活，后台被系统回收后不保证接管；应用重启只清理自己拥有（端口标记匹配）的 loopback 残留端点，用户手动配置的本地代理不受影响；启动/停止会清理残留配置与日志；启动前对节点域名解析出的地址做有界 TCP 可达性探测，但内核启动成功只保证本地 SOCKS 端口就绪，HTTP/HTTPS、DNS 与出口 IP 仍须通过实际请求验证；SOCKS 入口使用每次启动随机生成的账号密码（RFC 1929），其它 App 不能直接借用本机代理；TLS 节点使用 Android 系统 CA（内核进程注入 `SSL_CERT_DIR`）；VMess TCP `headerType`（http/srtp 伪装）、VLESS XHTTP/H2/QUIC、Trojan ws、SS plugin 等当前无法表达，相关节点直接标“暂不支持”而不是假装可用；订阅缓存 v2 会持久化内核 transport，旧 v1 缓存需重新识别一次；TUIC、Hysteria 等仍未支持；无延迟测速/自动切换；Lite 的内核体积由独立插件承担，Full 则计入主 APK，实际大小以对应构建产物为准。
 - 安全：配置只含当前节点，不写入订阅链接；loopback SOCKS 需本次启动生成的随机账号密码，其它 App 无法直接借用；错误提示只暴露分类；不新增联网时机（内核启动本身不访问网络，节点连接在代理请求时才发生）。
 
 ## 十、交付备注
 
 - 图标沿用现有 `WorkbenchIcon`/`Glyph` 体系；协议用 2–3 字短标（HTTP/SOCKS/VM/SS/TR），不引入新图标库。
-- 适配：竖屏为主，窄屏 360dp、130% 字体、亮暗主题、键盘必须复核；列表底部留出主 CTA 高度。
-- 截图证据：识别中、识别成功（机场）、单节点、错误、不支持协议、空订阅，亮/暗各一组，至少覆盖 360dp 与 130% 字体。
+- 适配：竖屏为主，目标设备尺寸、默认字号、亮暗主题和键盘必须复核；列表底部留出主 CTA 高度。
+- 截图证据：识别中、识别成功（机场）、单节点、错误、不支持协议、空订阅，亮/暗各一组，覆盖目标设备尺寸与默认字号。
 - 待确认：机场节点延迟/测速、订阅自动更新不在本版范围。
 
-## 十一、插件连接恢复
+## 十一、Lite 插件连接恢复
 
 - 插件卡片提供「打开插件」和「连接诊断」；激活页仅显式打开插件，不接收订阅或启动内核。旧插件缺入口时转到系统应用详情。
 - 拒绝、安全异常、超时、空绑定、连接死亡和远端调用失败分别提示；诊断可复制或导出，只有固定事件代码与版本／连接元数据，不含订阅、节点、凭据或原始异常。

@@ -39,4 +39,18 @@ class ReleaseModelsTest {
         assertFalse(ReleaseClient.validAssetUrl(base.replace("github.com", "evil.example"), "v0.1.0"))
         assertFalse(ReleaseClient.validAssetUrl(base.replace("https:", "http:"), "v0.1.0"))
     }
+    @Test fun distributionSelectionNeverSwitchesEditionOrArchitecture() {
+        fun asset(name: String) = ReleaseAsset(name, "", 10)
+        val all = listOf("lite", "full").flatMap { edition -> listOf("arm64-v8a", "x86_64").map { abi ->
+            asset("ZakoCoder-1.2.3-$edition-$abi.apk")
+        } }
+        for (edition in listOf("lite", "full")) for (abi in listOf("arm64-v8a", "x86_64")) {
+            assertEquals("ZakoCoder-1.2.3-$edition-$abi.apk", selectDistributionAsset(all, "v1.2.3", edition, abi)?.name)
+        }
+        val legacy = listOf(asset("ZakoCoder-1.2.3-arm64.apk"))
+        assertNotNull(selectDistributionAsset(legacy, "v1.2.3", "lite", "arm64-v8a"))
+        assertNull(selectDistributionAsset(legacy, "v1.2.3", "full", "arm64-v8a"))
+        assertNull(selectDistributionAsset(legacy, "v1.2.3", "lite", "x86_64"))
+        assertNull(selectDistributionAsset(all + all.first(), "v1.2.3", "lite", "arm64-v8a"))
+    }
 }

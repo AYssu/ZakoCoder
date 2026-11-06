@@ -218,7 +218,7 @@
     <string name="session_minutes">%1$d 分钟</string>
     <string name="terminal_actions">终端操作</string>
     <string name="terminal_close_hint">长按会话可关闭，也可在终端操作菜单中关闭。</string>
-    <string name="runtime_architecture">ARM64 · 本地环境</string>
+    <string name="runtime_architecture">%1$s · 本地环境</string>
     <string name="use_project">设为当前项目</string>
     <string name="file_name_invalid">文件名须为 1–255 个字符，不能是点、包含斜线或控制字符。</string>
     <string name="file_already_exists">同名文件已存在，请使用其他名称。</string>

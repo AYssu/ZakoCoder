@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-06",
+  "implementationCommit": "6849097",
+  "package": "dev.zakocoder.app",
+  "buildType": "release",
+  "minified": true,
+  "version": "0.1.99-rc.1",
+  "versionPurpose": "local validation only, not a published release",
+  "abi": "x86_64",
+  "api": 35,
+  "device": "dedicated Android emulator",
+  "resolution": [
+    1080,
+    2400
+  ],
+  "densityDpi": 420,
+  "fontScale": 1.0,
+  "apkSha256": "d45d59d7616e1a7b2ae3211acc13c573e5c1183a28ca7029c7dd1b661e6dca02",
+  "screenshots": {
+    "environment-day.png": "5404a078079ccd341256f26bd8a8f9f451b041f610f6cb72bc526d93ed6045ec",
+    "environment-night.png": "1df831f1d61486139d3828a78de5fa5f769638bcef59b37956ecc5e5d01096b4",
+    "kernel-page-day.png": "293cfa9f7c0fd99d1bd57d670c635c712a29ac90b5d12e109ad044fb58d13a40",
+    "kernel-page-night.png": "9ecc6332b9eb295005cc9d80941c3775002f9a1c248c13b01007c8edf32d82ca"
+  }
+}

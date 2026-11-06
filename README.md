@@ -36,7 +36,7 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 | **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
 | **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart 可选实验性本机语言服务。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
-| **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／VLESS／SS／Trojan 节点经可选的自编译 Xray 内核插件启用。VLESS 支持 REALITY、TLS、TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 XTLS Vision。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
+| **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／VLESS／SS／Trojan 节点由自编译 Xray 内核启用，Lite 使用可选插件，Full 直接内置。VLESS 支持 REALITY、TLS、TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 XTLS Vision。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情，按日／月、项目和模型筛选本机用量，查看请求、Token、工具调用趋势及模型分布；在任务内选择或填写回答，重启后继续待答任务。 |
 | **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
 | **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
@@ -52,16 +52,27 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 ### 获取安装包
 
-从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 下载 ARM64 APK 与 `SHA256SUMS.txt` 两个附件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
+从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 选择与设备及需求对应的 APK，并下载 `SHA256SUMS.txt` 校验文件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
-开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 提供 ARM64 Debug APK、自编译运行时、对应源码、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 按 Lite／Full 和 ARM64／x86_64 区分 Debug APK，并提供运行时来源、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
 Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
+
+### 选择 Lite 或 Full
+
+每个构建类型按两种版本、两种架构提供四个 APK，以发布页实际附件为准。主流手机选择 ARM64；常见电脑 Android 模拟器选择 x86_64，架构不符不能安装。
+
+| 版本 | ARM64 / x86_64 | 首次使用 |
+| --- | --- | --- |
+| Lite 轻量版 | 各一个 APK | Ubuntu 在线安装或手动导入；需要代理内核时另行安装可选插件。 |
+| Full 完整版 | 各一个 APK | 内置基础 Ubuntu 和代理内核；首次打开自动在本机准备 Ubuntu，显示进度，可取消或失败后在环境页重试，无需另装内核插件。 |
+
+Full 不包含所有开发工具，Node.js、Java、Android SDK／NDK 等仍需按需安装，模型服务也需自行配置。x86_64 的基础 Ubuntu／终端支持不代表 ARM64 专属 Android／Flutter 工具链均可使用。Lite 与 Full 使用相同包名和存储位置；同签名且系统允许的版本升级可覆盖切换，保留项目、配置及已有环境。已有环境不会因切换或更新而重新解包覆盖，不要通过卸载来切换版本。
 
 ### 完成第一个项目
 
 1. **添加项目**：创建项目、导入副本、绑定本地目录或克隆 HTTPS 仓库。私有仓库需填写具有对应权限的用户名和访问令牌。导入副本与原目录独立；绑定本地目录直接修改原文件。
-2. **准备环境**：在环境页安装 Ubuntu，再按项目需要选择工具包。工具检测不会自动安装依赖。
+2. **准备环境**：Lite 从环境页安装或导入 Ubuntu；Full 等待首次本地初始化，失败可在环境页重试。再按项目需要选择工具包，工具检测不会自动安装依赖。
 3. **开始编辑**：点击文件打开编辑器；Markdown 可切换预览，修改后显式保存。
 4. **配置助手**：在设置中填写模型地址、模型和密钥，手动测试连接；高级设置可调整生成参数、思考模式、上下文和压缩策略、请求头；服务是否支持这些参数需实际测试。也可以独立使用编辑器和终端。
 5. **运行并核对**：通过终端或项目命令构建、测试、启动服务；使用 AI 时，核对审批、变更和实际验证结果。
@@ -129,10 +140,10 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
 
 
-> 主 APK 不包含、也不构建 Xray 内核。只有可选的 **内核插件**（`:kernel-plugin`）需要 **Go 1.27.1**
-> （版本见 `native-kernel/go.version`）与可访问的 Go 模块代理：`:kernel-plugin:prepareProxyKernel`
-> 会自编译 Xray-core 并按 `native-kernel/artifacts.lock.json` 校验 SHA-256；主 APK 构建不需要 Go。
-> 需要 VMess／VLESS／SS／Trojan 的用户另行安装该插件（应用内在线下载或本地导入）。
+> Lite 主 APK 不含 Xray；Full 直接集成仓库锁定的自编译 Xray。普通主应用打包由 JVM 校验预编译制品，无需 Go。
+> 独立插件模块 `:kernel-plugin` 普通打包同样由 JVM 校验并复用仓库预编译制品，无需 Python 或 Go；
+> 制品缺失或主动源码重建时才需 Python、固定 **Go 1.27.3**（见 `native-kernel/go.version`）及可访问的 Go 模块代理，产物按 `native-kernel/artifacts.lock.json` 校验。
+> Lite 用户使用 VMess／VLESS／SS／Trojan 时另行安装插件（应用内在线下载或本地导入）；Full 无需另装插件。
 ## 开发者区域
 
 面向源码构建、架构维护与贡献协作。欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。
@@ -152,14 +163,14 @@ SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文�
 <details>
 <summary><strong>开发者快速构建</strong></summary>
 
-准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358 和 Python 3，配置 `ANDROID_HOME` 或本地 `local.properties`，然后运行：
+打包准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，配置 `ANDROID_HOME` 或本地 `local.properties`。以下仓库检查另需 Python 3；仅打包可直接执行 Gradle 命令：
 
 ```sh
 python3 scripts/check_repository.py
 ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 使用仓库内源码和固定 NDK 离线编译；不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 默认使用仓库随附并校验的预编译产物，无需额外安装 Make 等原生构建工具；完整源码仍保留，CI 从源码重建验证，不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
 
 </details>
 

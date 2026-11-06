@@ -30,7 +30,7 @@ import kotlinx.coroutines.flow.update
 data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
     val requestId: String = java.util.UUID.randomUUID().toString())
 
-private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String)
+private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean)
 
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
@@ -308,7 +308,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     // Migrate old authentication leases before the first guest process can run.
                     if (runtime.isInstalled()) dev.zakocoder.app.git.GitCredentialAccess.prepareRuntime(runtime.root)
                     runtime.workspaces.mkdirs(); terminal.prepareTypeface()
-                    WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay()) }
+                    WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay(), runtime.hasEnvironmentDirectory()) }
+                bundledEnvironmentPresent = data.environmentPresent
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
                 // A kernel-backed proxy points at a loopback port owned by this process; after a
                 // restart that process is gone, so clear the dead endpoint instead of showing it as
@@ -326,12 +327,33 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     selectedId = selected?.takeIf { id -> data.projects.any { it.id == id } } ?: data.projects.firstOrNull()?.id) }
                 refreshPlans()
                 doctor()
+                initializeBundledRuntimeIfNeeded()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutable.update { it.copy(loading = false, message = error.message.orEmpty(), messageIsError = true) }
             }
         }
     }
+    private var bundledEnvironmentPresent = false
+    private var activityVisible = false
+    private var bundledInitializationAttempted = false
+
+    /** Only initialize from a visible activity, after startup data has been published to the UI. */
+    fun activityVisibilityChanged(visible: Boolean) {
+        activityVisible = visible
+        if (visible) initializeBundledRuntimeIfNeeded()
+    }
+
+    private fun initializeBundledRuntimeIfNeeded() {
+        if (!runtime.hasBundledImage || bundledEnvironmentPresent || !activityVisible || bundledInitializationAttempted ||
+            mutable.value.loading || mutable.value.installed || mutable.value.busy ||
+            projectTasksActive() || git.state.value.busy) return
+        bundledInitializationAttempted = true
+        // installRuntime performs IO and refuses any existing rootfs, including unknown/old ones.
+        // A failed/cancelled attempt remains a visible, manually retryable operation this session.
+        installRuntime()
+    }
+
     private var storageJob: Job? = null
     fun validateSettings(settings: AppSettings) = settingsRepository.validate(settings)
     fun refreshStorage() {

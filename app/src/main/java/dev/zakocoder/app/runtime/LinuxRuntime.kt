@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Process
 import android.os.StatFs
 import android.system.Os
+import dev.zakocoder.app.BuildConfig
 import dev.zakocoder.app.R
 import dev.zakocoder.app.settings.AppSettings
 import dev.zakocoder.app.settings.NetworkProxy
@@ -15,6 +16,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -43,6 +46,14 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         RuntimeArchitecture.X86_64 -> manifest.getJSONObject("architectures").getJSONObject("x86_64")
         null -> error(context.getString(R.string.runtime_abi_unsupported))
     }
+    private val installation = Mutex()
+    val abiName: String? get() = when (architecture) {
+        RuntimeArchitecture.Arm64 -> "arm64-v8a"
+        RuntimeArchitecture.X86_64 -> "x86_64"
+        null -> null
+    }
+    val hasBundledImage: Boolean get() = BuildConfig.BUNDLED_ROOTFS
+    fun hasEnvironmentDirectory(): Boolean = Files.exists(root.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)
     private val image get() = selectedArtifacts().getJSONObject("rootfs")
 
     /** Managed Android SDK/NDK archives currently contain ARM64 executables only. */
@@ -73,11 +84,13 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         throw IllegalArgumentException(context.getString(R.string.invalid_proxy))
     }
 
-    private fun checksum(file: File): String {
+    private suspend fun checksum(file: File): String {
+        val coroutine = currentCoroutineContext()
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
             val buffer = ByteArray(65536)
             while (true) {
+                coroutine.ensureActive()
                 val count = input.read(buffer)
                 if (count < 0) break
                 digest.update(buffer, 0, count)
@@ -86,9 +99,9 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    suspend fun install(settings: AppSettings, offline: Uri? = null, status: (String) -> Unit) = withContext(Dispatchers.IO) {
+    suspend fun install(settings: AppSettings, offline: Uri? = null, status: (String) -> Unit) = withContext(Dispatchers.IO) { installation.withLock {
         require(architecture != null) { context.getString(R.string.runtime_abi_unsupported) }
-        check(!root.exists()) { context.getString(R.string.runtime_already_present) }
+        check(!hasEnvironmentDirectory()) { context.getString(R.string.runtime_already_present) }
         require(freeBytes() > 600L * 1024 * 1024) { context.getString(R.string.storage_insufficient) }
         val nativeArtifacts = selectedArtifacts().getJSONArray("nativeArtifacts")
         for (index in 0 until nativeArtifacts.length()) {
@@ -116,6 +129,23 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
                 check(checksum(imported) == image.getString("sha256")) { context.getString(R.string.checksum_failed) }
                 check(imported.renameTo(archive))
             } finally { imported.delete() }
+        }
+        if (!archive.exists() && hasBundledImage) {
+            val abi = when (architecture) {
+                RuntimeArchitecture.Arm64 -> "arm64-v8a"
+                RuntimeArchitecture.X86_64 -> "x86_64"
+                null -> error(context.getString(R.string.runtime_abi_unsupported))
+            }
+            status(context.getString(R.string.bundled_runtime_preparing, 0))
+            // Missing/corrupt bundled data fails locally. Full never silently downloads another image.
+            val bundled = try { context.assets.open("ubuntu-rootfs/$abi.tar.xz") }
+            catch (error: java.io.IOException) { throw java.io.IOException(context.getString(R.string.bundled_runtime_missing), error) }
+            bundled.use { input ->
+                BundledRootfsArchive.copyVerified(input, archive, image.getLong("bytes"), image.getString("sha256"),
+                    context.getString(R.string.checksum_failed), { coroutine.ensureActive() }) { percent ->
+                    status(context.getString(R.string.bundled_runtime_preparing, percent))
+                }
+            }
         }
         if (!archive.exists()) {
             val partial = File(cache, "rootfs.partial")
@@ -173,11 +203,13 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             val result = execute("set -e; test \"${'$'}(/bin/pwd)\" = /root; test \"${'$'}(id -u)\" = 0; printf 'ZAKOCODER_RUNTIME_OK\\n'; /bin/bash --version | head -n 1", null, settings, staging)
             check(result.exitCode == 0 && result.output.contains("ZAKOCODER_RUNTIME_OK")) { result.output.takeLast(3000) }
             File(staging, ".zakocoder-ready").writeText(image.getString("sha256"))
+            coroutine.ensureActive()
+            check(!hasEnvironmentDirectory()) { context.getString(R.string.runtime_already_present) }
             check(staging.renameTo(root))
         } finally {
             PrivateFiles.deleteTree(staging)
         }
-    }
+    } }
 
     fun configure(settings: AppSettings, target: File = root) {
         PrivateFiles.writeConfined(target, "etc/resolv.conf", settings.dns.split(',').joinToString("\n", postfix = "\n") {

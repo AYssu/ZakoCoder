@@ -165,7 +165,7 @@ def inspect_apk(apk: Path, aapt: Path) -> dict:
         if abi not in architectures:
             raise ValueError(f"Unsupported native ABI: {abi}")
         expected = {artifact["name"]: artifact["sha256"] for artifact in architectures[abi]["nativeArtifacts"]}
-        actual = {name: digest for name, digest in libraries.items() if name.startswith("libzakocoder")}
+        actual = {name: digest for name, digest in libraries.items() if name.startswith("libzakocoder") and name != "libzakocoder_xray.so"}
         if actual != expected:
             raise ValueError(f"Pinned runtime native files differ for {abi}")
     permissions = sorted({_string(node["attrs"].get("android:name"), "permission")
@@ -183,18 +183,29 @@ def _code_entries(entries: dict[str, bytes]) -> dict[str, bytes]:
             or name.endswith(".dex")}
 
 
-def compare_code_identity(qa: Path, arm: Path) -> dict:
+def compare_code_identity(qa: Path, arm: Path, distribution=False) -> dict:
     left, right = _entries(qa), _entries(arm)
     left_code, right_code = _code_entries(left), _code_entries(right)
     if "classes.dex" not in left_code or "resources.arsc" not in left_code:
         raise ValueError("Comparison APK lacks required code/resources")
+    if distribution:
+        # ABI payloads are validated independently against pinned source/rootfs locks.
+        for entries, code in ((left, left_code), (right, right_code)):
+            marker = json.loads(entries.get('assets/distribution.json', b'{}'))
+            if marker.get('edition') not in ('lite', 'full'):
+                raise ValueError('Missing distribution identity')
+            for name in list(code):
+                if name.startswith('assets/ubuntu-rootfs/') or name == 'assets/distribution.json':
+                    code.pop(name)
+        if json.loads(left['assets/distribution.json'])['edition'] != json.loads(right['assets/distribution.json'])['edition']:
+            raise ValueError('Only the same edition can share smoke evidence')
     if left_code != right_code:
         changed = sorted(name for name in left_code.keys() | right_code.keys()
                          if left_code.get(name) != right_code.get(name))
         raise ValueError("QA and public APK code/resource mismatch: " + ", ".join(changed))
     abis = lambda data: {name.split('/')[1] for name in data if re.fullmatch(r"lib/[^/]+/[^/]+\.so", name)}
     shared = abis(left) & abis(right)
-    if "arm64-v8a" not in shared:
+    if not distribution and "arm64-v8a" not in shared:
         raise ValueError("QA/public APK comparison must include common ARM64 native files")
     common_native: dict[str, bytes] = {}
     for abi in sorted(shared):

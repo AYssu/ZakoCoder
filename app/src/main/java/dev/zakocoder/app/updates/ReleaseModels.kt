@@ -34,3 +34,15 @@ internal fun releaseChecksum(text: String, name: String): String? = text.lineSeq
     val m = Regex("^([A-Fa-f0-9]{64})[ \\t]+\\*?(.+)$").matchEntire(line.trim())
     if (m?.groupValues?.get(2) == name) m.groupValues[1].lowercase() else null
 }.singleOrNull()
+
+/** Update selection preserves the installed distribution; old unnamed ARM64 packages were Lite. */
+internal fun selectDistributionAsset(assets: List<ReleaseAsset>, tag: String, edition: String, abi: String): ReleaseAsset? {
+    if (edition !in setOf("lite", "full") || abi !in setOf("arm64-v8a", "x86_64")) return null
+    val version = tag.removePrefix("v")
+    val name = "ZakoCoder-$version-$edition-$abi.apk"
+    val exact = assets.filter { it.name == name }
+    if (exact.isNotEmpty()) return exact.singleOrNull()
+    // Never substitute the legacy ARM64 Lite package for Full or x86_64.
+    return if (edition == "lite" && abi == "arm64-v8a")
+        assets.singleOrNull { it.name == "ZakoCoder-$version-arm64.apk" } else null
+}

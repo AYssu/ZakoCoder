@@ -1,5 +1,7 @@
 package dev.zakocoder.app.updates
 
+import android.os.Build
+import dev.zakocoder.app.BuildConfig
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -13,11 +15,14 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build()) {
+    .readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build(),
+    private val edition: String = BuildConfig.DISTRIBUTION_EDITION,
+    private val abi: () -> String = { Build.SUPPORTED_ABIS.firstOrNull { it in setOf("arm64-v8a", "x86_64") }.orEmpty() }) {
     @Volatile private var activeCall: Call? = null
     fun cancel() { activeCall?.cancel() }
     suspend fun releases(): List<AppRelease> {
         val all = mutableListOf<AppRelease>()
+        val installedAbi = abi()
         // Bounded pagination includes stable releases even when many previews precede them.
         for (page in 1..3) {
             val json = JSONArray(text("https://api.github.com/repos/AYssu/ZakoCoder/releases?per_page=30&page=$page", 2_000_000))
@@ -31,7 +36,7 @@ internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Bui
                     val a = assets.getJSONObject(n); val url = a.optString("browser_download_url")
                     if (!validAssetUrl(url, tag)) null else ReleaseAsset(a.optString("name"), url, a.optLong("size"), a.optString("digest").ifEmpty { null })
                 }
-                val apk = parsed.singleOrNull { it.name == "ZakoCoder-${tag.removePrefix("v")}-arm64.apk" && it.size in 1..MAX_APK } ?: continue
+                val apk = selectDistributionAsset(parsed, tag, edition, installedAbi)?.takeIf { it.size in 1..MAX_APK } ?: continue
                 val sums = parsed.singleOrNull { it.name == "SHA256SUMS.txt" && it.size in 1..65536 } ?: continue
                 all += AppRelease(tag, r.optString("body").take(24000), r.optBoolean("prerelease"), apk, sums)
             }
@@ -94,7 +99,7 @@ internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Bui
         })
     }
     companion object {
-        private const val MAX_APK = 300_000_000L
+        private const val MAX_APK = 1_000_000_000L
         internal fun validAssetUrl(raw: String, tag: String): Boolean {
             val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return false
             return uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port == -1 &&

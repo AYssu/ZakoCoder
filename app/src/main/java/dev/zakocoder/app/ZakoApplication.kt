@@ -3,10 +3,8 @@ package dev.zakocoder.app
 import android.app.Application
 
 class ZakoApplication : Application() {
-    lateinit var workbench: Workbench
-        private set
-    override fun onCreate() {
-        super.onCreate()
-        workbench = Workbench(this)
-    }
+    // Android creates Application in :kernel too. Only UI/main-process consumers need Workbench;
+    // constructing it in the service process would rerun startup recovery against shared state.
+    private val workbenchDelegate = lazy { Workbench(this) }
+    val workbench: Workbench get() = workbenchDelegate.value
 }

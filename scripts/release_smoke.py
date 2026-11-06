@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import time
 import uuid
+import zipfile
 import xml.etree.ElementTree as ET
 
 from check_release_apk import inspect_apk, compare_code_identity
@@ -66,7 +67,8 @@ class Device:
             if scroll:
                 size = re.findall(r'(\d+)x(\d+)', self.shell('wm', 'size'))[-1]
                 width, height = map(int, size)
-                self.shell('input', 'swipe', width//2, int(height*.74), width//2, int(height*.35), 250)
+                start, end = (.35, .74) if scroll == 'up' else (.74, .35)
+                self.shell('input', 'swipe', width//2, int(height*start), width//2, int(height*end), 250)
             time.sleep(.3)
         raise RuntimeError(f'Expected visible UI label: {label}')
 
@@ -78,6 +80,10 @@ class Device:
 
     def click(self, resource, **kwargs):
         return self.find(self.labels.get(resource, resource), click=True, **kwargs)
+
+    def navigate(self, resource):
+        self.click('app_navigation_open', description_only=True)
+        return self.click(resource)
 
     def text(self, resource, value, scroll=False):
         self.click(resource, scroll=scroll)
@@ -110,6 +116,63 @@ def failure_status(error):
     return status
 
 
+def apk_edition(apk):
+    with zipfile.ZipFile(apk) as archive:
+        marker = json.loads(archive.read('assets/distribution.json'))
+    edition = marker.get('edition')
+    if edition not in ('lite', 'full'):
+        raise ValueError('Missing distribution edition')
+    return edition
+
+
+def prepare_full_environment(device, edition, report):
+    if edition != 'full':
+        return
+    device.navigate('nav_environment')
+    device.find(device.labels['bundle_ready'], scroll='up', timeout=180)
+    report['checks'].append('full-bundled-ubuntu-ready-through-real-ui')
+    device.shot('environment-ready')
+    device.navigate('nav_workspace')
+
+
+def validate_edition_switch(original, alternate, aapt):
+    from distribution import inspect
+    first, second = inspect_apk(original, aapt), inspect_apk(alternate, aapt)
+    if any(first.get(key) != second.get(key) for key in ('package', 'versionName', 'versionCode', 'nativeAbis')):
+        raise ValueError('Edition switch must preserve package, version and ABI')
+    if len(first['nativeAbis']) != 1 or apk_edition(original) == apk_edition(alternate):
+        raise ValueError('Edition switch requires opposite editions with one matching ABI')
+    abi = first['nativeAbis'][0]
+    signer = aapt.with_name('apksigner')
+    inspections = [inspect(apk, apk_edition(apk), abi, aapt, signer) for apk in (original, alternate)]
+    if inspections[0]['certificateSha256'] != inspections[1]['certificateSha256']:
+        raise ValueError('Edition switch certificates differ')
+    return inspections[1]
+
+
+def verify_edition_switch(device, apk, project, marker, profile, report):
+    edition = apk_edition(apk)
+    report['stage'] = f'install-switch-{edition}'
+    device.shell('am', 'force-stop', PACKAGE)
+    if 'Success' not in device.adb('install', '-r', '--no-incremental', str(apk)):
+        raise ValueError('Edition switch installation did not report success')
+    device.launch()
+    prepare_full_environment(device, edition, report)
+    device.navigate('nav_settings')
+    device.click('ai_settings', scroll=True)
+    device.saved_model_card(profile)
+    device.click('ai_models_back')
+    device.navigate('nav_workspace')
+    device.find(project)
+    device.click('browse_files')
+    device.click('main.py')
+    device.dump()
+    if marker not in device.last_xml:
+        raise RuntimeError('Saved project source did not survive the edition switch')
+    report['checks'].append(f'switch-to-{edition}-project-source-and-model-configuration-retained')
+    device.shot(f'edition-switch-{edition}')
+
+
 def run(args):
     args.output.mkdir(parents=True, exist_ok=True)
     if (args.output / 'report.json').exists():
@@ -124,6 +187,9 @@ def run(args):
     old_ime = None
     try:
         report['apkInspection'] = inspect_apk(args.apk, args.aapt)
+        switch_apk = getattr(args, 'edition_switch_apk', None)
+        if switch_apk is not None:
+            report['editionSwitchInspection'] = validate_edition_switch(args.apk, switch_apk, args.aapt)
         apksigner = args.aapt.with_name('apksigner')
         report['certificateSha256'] = certificate_digest(apksigner, args.apk)
         if args.comparison_apk:
@@ -132,7 +198,7 @@ def run(args):
             for field in ('package', 'versionName', 'versionCode'):
                 if report['apkInspection'][field] != report['comparisonApkInspection'][field]:
                     raise ValueError('Validation and public APK identity/version differs')
-            report['comparisonCodeIdentity'] = compare_code_identity(args.apk, args.comparison_apk)
+            report['comparisonCodeIdentity'] = compare_code_identity(args.apk, args.comparison_apk, distribution=getattr(args, "distribution", False))
             if certificate_digest(apksigner, args.comparison_apk) != report['certificateSha256']:
                 raise ValueError('Validation and public APK certificates differ')
         if not args.serial.startswith('emulator-') or device.shell('getprop', 'ro.kernel.qemu').strip() != '1':
@@ -159,6 +225,8 @@ def run(args):
             raise ValueError('APK installation did not report success')
         installed = True
         device.launch()
+        if getattr(args, 'distribution', False):
+            prepare_full_environment(device, apk_edition(args.apk), report)
         device.click('mobile_add_project')
         device.click('mobile_create_empty')
         name = 'beta-smoke-' + uuid.uuid4().hex[:10]
@@ -186,7 +254,7 @@ def run(args):
         device.shot('editor-night')
         device.click('editor_back')
         device.click('back_to_library')
-        device.click('nav_settings')
+        device.navigate('nav_settings')
         device.click('ai_settings', scroll=True)
         report['stage'] = 'model-configuration-edit'
         device.click('ai_models_add_first')
@@ -201,7 +269,7 @@ def run(args):
         device.shot('models-saved-before-restart')
         device.restart()
         report['stage'] = 'model-restart-completed'
-        device.click('nav_settings')
+        device.navigate('nav_settings')
         device.click('ai_settings', scroll=True)
         device.saved_model_card(profile)
         report['stage'] = 'model-saved-card-visible-after-restart'
@@ -211,7 +279,7 @@ def run(args):
         time.sleep(1)
         device.shot('models-day')
         device.click('ai_models_back')
-        device.click('nav_workspace')
+        device.navigate('nav_workspace')
         device.find(name)
         device.click('browse_files')
         device.click('main.py')
@@ -219,6 +287,9 @@ def run(args):
         if marker not in device.last_xml:
             raise RuntimeError('Saved source did not survive process restart')
         report['checks'].append('project-and-saved-file-retained-after-real-force-stop')
+        if switch_apk is not None:
+            verify_edition_switch(device, switch_apk, name, marker, profile, report)
+            verify_edition_switch(device, args.apk, name, marker, profile, report)
         report['status'] = 'passed'
     except Exception as error:
         report['error'] = str(error)
@@ -259,6 +330,8 @@ def main():
     for name in ('serial', 'apk', 'aapt', 'output'):
         parser.add_argument('--' + name, required=True, type=str if name == 'serial' else Path)
     parser.add_argument('--comparison-apk', type=Path)
+    parser.add_argument('--distribution', action='store_true')
+    parser.add_argument('--edition-switch-apk', type=Path)
     args = parser.parse_args()
     try:
         run(args)

@@ -16,7 +16,14 @@ import java.io.File
 /** Owns update IO, while Compose only renders state and dispatches explicit actions. */
 class AppUpdates internal constructor(private val context: Context, private val scope: CoroutineScope,
     private val client: ReleaseClient, preferencesName: String) {
-    constructor(context: Context, scope: CoroutineScope) : this(context, scope, ReleaseClient(), "app_updates")
+    constructor(context: Context, scope: CoroutineScope) : this(context, scope, ReleaseClient(abi = {
+        // Invoked by releases() on IO, and identifies the installed package rather than just the device.
+        val values = context.assets.open("distribution.json").bufferedReader().use {
+            org.json.JSONObject(it.readText()).getJSONArray("abis")
+        }
+        val packaged = (0 until values.length()).map { values.getString(it) }
+        Build.SUPPORTED_ABIS.firstOrNull { it in packaged }.orEmpty()
+    }), "app_updates")
     private val mutable = MutableStateFlow(UpdateState())
     val state = mutable.asStateFlow()
     private val preferences = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
@@ -116,7 +123,7 @@ class AppUpdates internal constructor(private val context: Context, private val 
         work = scope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    kotlin.check(Build.SUPPORTED_ABIS.contains("arm64-v8a"))
+                    kotlin.check(Build.SUPPORTED_ABIS.any { it in setOf("arm64-v8a", "x86_64") })
                     apk.parentFile!!.mkdirs()
                     client.download(release, apk) { received, total -> mutable.update { it.copy(received = received, total = total) } }
                     verifiedHash = updateSha256(apk)

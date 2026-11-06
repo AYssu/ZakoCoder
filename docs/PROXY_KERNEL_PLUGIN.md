@@ -1,6 +1,6 @@
 # 代理内核插件
 
-ZakoCoder 使用独立、可选的 Xray 内核插件。主 APK 不包含 Xray 二进制，也不要求 Go 工具链；直连和手动 HTTP／SOCKS5 代理不需要插件。需要内核节点时，用户另行安装与主应用同证书签名的插件 APK。
+本文的插件安装、激活、跨应用连接与隔离验证步骤仅适用于 Lite。Lite 主 APK 不包含 Xray，需要内核节点时另行安装与主应用同证书签名的可选插件；直连和手动 HTTP／SOCKS5 代理不需要插件。Full 将同一内核服务与固定 Xray 集成在主 APK，随主应用更新，不提供插件安装、更新或移除操作；版别与构建入口见[运行环境](RUNTIME.md)及[开发与测试](DEVELOPMENT.md)。
 
 ## 支持范围
 
@@ -52,7 +52,7 @@ VLESS 的支持范围限定在本表所列组合，不表示已覆盖 Xray 的�
 
 ## 构建与发布
 
-主应用按[开发与测试](DEVELOPMENT.md)构建，无需安装 Go。插件模块为 `:kernel-plugin`，工具链版本固定在 `native-kernel/go.version`；`:kernel-plugin:prepareProxyKernel` 自编译 Xray，并按 `native-kernel/artifacts.lock.json` 校验产物。
+主应用按[开发与测试](DEVELOPMENT.md)构建。普通 Lite／Full 主应用与独立插件 `:kernel-plugin` 打包均由 JVM 校验仓库固定预编译制品，无需 Python 或 Go。Xray 制品缺失或主动源码重建时，才调用 Python 构建脚本并要求固定 Go 1.27.3（见 `native-kernel/go.version`）及可访问的 Go 模块代理；产物按 `native-kernel/artifacts.lock.json` 校验。CI 仍独立从源码重建并校验两个 ABI，不能仅因已有预编译制品就跳过源码验证。
 
 ```sh
 ./gradlew :kernel-plugin:assembleDebug
@@ -68,6 +68,6 @@ VLESS 的支持范围限定在本表所列组合，不表示已覆盖 Xray 的�
 
 安装时必须同时安装本次生成的主应用、匹配签名的插件和按需使用的测试 APK；不能把正式插件与隔离主应用混用。真机验收仍以实际联网转发为准，本地 SOCKS 就绪或配置加载成功不能代替远端连通。
 
-插件默认构建 ARM64，实验性 x86_64 通过兼容性构建属性启用。插件发布工作流为 `.github/workflows/release-kernel-plugin.yml`，校验所关联主应用的版本、签名和发布材料。插件与主应用可独立构建，但签名及接口必须兼容。
+插件默认构建 ARM64，x86_64 通过 `-PcompatibilityAbis=x86_64` 显式启用；插件与主应用应选择相同 ABI。插件发布工作流为 `.github/workflows/release-kernel-plugin.yml`，校验所关联主应用的版本、签名和发布材料。插件与主应用可独立构建，但签名及接口必须兼容。
 
 Xray 及传递依赖的准确来源、版本、许可证与分发材料见 [THIRD_PARTY.md](../THIRD_PARTY.md) 和 [native-kernel](../native-kernel/)。发布验证应分别记录本地内核就绪、真实代理转发、安装／更新及受影响厂商设备的结果；未执行项目不得记为通过。

@@ -16,12 +16,12 @@ ZakoCoder 是处于 `0.1.0-dev` 阶段的独立 Android 原生 AI 编码工作�
 | 文件 | 新建、单文件导入、重命名、复制、删除和目录导航；同名拒绝覆盖，删除需确认。 |
 | 编辑器 | Sora 原生编辑、常见语言基础语法着色、Markdown 编辑／预览切换、查找替换、撤销重做、最多 8 个缓冲区及显式保存；支持文件／选区引用到 AI；可选实验性 Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart LSP 补全与诊断，默认关闭，需主动开启及安装本机语言服务，暂不含完整重构。 |
 | 草稿与冲突 | Activity 重建保留编辑状态；停止输入约 500ms 保存私有草稿，冷启动恢复文本与光标。保存比较磁盘基线，外部变化不覆盖缓冲；最后约半秒输入可能丢失。 |
-| 环境 | 校验安装固定 Ubuntu ARM64 基础系统，独立工具包选择、真实探测和确认安装；Android 工具包支持基础 Java/Kotlin Debug 构建及调起系统 APK 安装器，可选 NDK 支持 arm64-v8a 的 CMake/JNI 模板；可选 Flutter 3.47.9 工具包与模板支持 Dart 项目起步、分析、Widget 测试及 Web 构建；Android APK 的当前验收状态和额外依赖见 [Flutter 开发](FLUTTER.md)。其他工程与插件需按实际依赖验证。 |
+| 环境 | 按设备 ABI 校验安装固定 Ubuntu ARM64／x86_64 基础系统；Lite 在线下载或导入，Full 首次在本地初始化内置包，独立工具包选择、真实探测和确认安装；Android 工具包支持基础 Java/Kotlin Debug 构建及调起系统 APK 安装器，可选 NDK 支持 arm64-v8a 的 CMake/JNI 模板；可选 Flutter 3.47.9 工具包与模板支持 Dart 项目起步、分析、Widget 测试及 Web 构建；Android APK 的当前验收状态和额外依赖见 [Flutter 开发](FLUTTER.md)。其他工程与插件需按实际依赖验证。 |
 | 项目依赖 | 根据根清单生成 npm、Python venv/pip、Go、Cargo、Gradle 计划，展示工作目录和命令，确认后安装并记录结果。嵌套工程及其他依赖需手动处理。 |
 | 终端 | 默认空的会话卡片列表，最多 4 个真实 PTY；直接输入、辅助键、会话切换、Bash／可选 Zsh。返回列表保留进程，关闭会话终止所属进程。 |
 | 预览 | 从终端输出选择或手填本机 HTTP(S) 地址，在系统浏览器打开；不扫描端口、不内嵌浏览器，地址出现不代表服务就绪。 |
 | Git | 公开／私有 HTTPS 克隆，按项目及仓库来源加密保存访问令牌；状态、领先／落后数量、获取、快进拉取、显式推送、分支新建／切换／合并，以及冲突列表、编辑、确认暂存解决和中止合并。无强推、rebase 或 Git 专用 SSH 密钥管理；详见 [Git 工作流](GIT.md)。 |
-| 设置 | 软件源、终端字体与默认 Shell、DNS、PATH、HTTP／SOCKS5 代理、下载缓存清理、通知状态及第三方许可。SOCKS5 支持可选用户名/密码（`socks5://用户:密码@主机:端口`），凭据用 Android Keystore 加密保存、界面打码，但配置认证后 guest 的 `ALL_PROXY` 会携带该凭据（对 guest 进程可见）。代理作用于环境镜像下载、AI 请求与新建 guest 进程。应用自身请求（镜像下载、AI 请求）经 SOCKS5 时把目标域名交给代理侧解析（SOCKS5 ATYP=3）；guest 只导出 `socks5://` 形式的 `ALL_PROXY`，curl／git 等工具在该 scheme 下本机解析，仅 `socks5h://` 才由代理解析（本项目不导出 socks5h）。apt 等仅识别 HTTP 代理的工具不会走 SOCKS5。支持粘贴机场订阅链接（仅 HTTPS）：先识别为单节点或机场订阅并列出节点；HTTP／SOCKS5 节点直连，VMess／VLESS／SS／Trojan 节点需要安装可选的内核插件（应用内在线下载或本地导入，校验发布签名后经系统安装器确认）；插件经本地 SOCKS5 回环端口随节点启停，主 APK 不含 Xray，其余协议标注暂不支持。VLESS 支持 none／TLS／REALITY 与 TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 `xtls-rprx-vision`；订阅链接、节点凭据与节点列表用 Android Keystore 加密保存，识别与刷新需显式点击，响应上限 2 MiB、最多展示 512 个节点，不自动更新或测速。 |
+| 设置 | 软件源、终端字体与默认 Shell、DNS、PATH、HTTP／SOCKS5 代理、下载缓存清理、通知状态及第三方许可。SOCKS5 支持可选用户名/密码（`socks5://用户:密码@主机:端口`），凭据用 Android Keystore 加密保存、界面打码，但配置认证后 guest 的 `ALL_PROXY` 会携带该凭据（对 guest 进程可见）。代理作用于环境镜像下载、AI 请求与新建 guest 进程。应用自身请求（镜像下载、AI 请求）经 SOCKS5 时把目标域名交给代理侧解析（SOCKS5 ATYP=3）；guest 只导出 `socks5://` 形式的 `ALL_PROXY`，curl／git 等工具在该 scheme 下本机解析，仅 `socks5h://` 才由代理解析（本项目不导出 socks5h）。apt 等仅识别 HTTP 代理的工具不会走 SOCKS5。支持粘贴机场订阅链接（仅 HTTPS）：先识别为单节点或机场订阅并列出节点；HTTP／SOCKS5 节点直连，VMess／VLESS／SS／Trojan 节点由 Xray 提供：Lite 需要安装可选内核插件（应用内在线下载或本地导入，校验发布签名后经系统安装器确认），Full 直接内置并随主应用更新；两版均经本地 SOCKS5 回环端口随节点启停，其余协议标注暂不支持。VLESS 支持 none／TLS／REALITY 与 TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 `xtls-rprx-vision`；订阅链接、节点凭据与节点列表用 Android Keystore 加密保存，识别与刷新需显式点击，响应上限 2 MiB、最多展示 512 个节点，不自动更新或测速。 |
 
 首次启动没有预置项目、会话、基础系统或模型密钥，不自动下载资源或请求模型。
 
@@ -89,6 +89,6 @@ Android 工程需先在统一能力包入口为当前项目开启“Android 屏�
 
 ## 已知范围
 
-当前面向 ARM64 真机，minSdk 26 不代表最低版本与全部厂商设备已完成验证；x86_64 模拟器尚未适配。系统回收应用后不保证进程继续运行，也不自动重放任务。语言工具链、模型供应商、无障碍及新版 Android 生命周期需要持续补齐覆盖。
+Lite／Full 均提供 ARM64 与 x86_64 单 ABI 包，ARM64 面向手机，x86_64 可用于对应设备和模拟器；minSdk 26 不代表最低版本与全部厂商设备已完成验证，实际覆盖见[兼容性结果](ANDROID_COMPATIBILITY_RESULTS.md)。托管 Android SDK／NDK、Flutter 与 Kotlin LSP 仍有 ARM64 限制，不能从 APK 架构推断全部工具链均已兼容。系统回收应用后不保证进程继续运行，也不自动重放任务。语言工具链、模型供应商、无障碍及新版 Android 生命周期需要持续补齐覆盖。
 
 不包含通用手机自动化、模型本地推理、多任务调度、插件市场或后端。SSH 是按需连接用户已有服务器的开发能力，不提供托管远程工作机。后续方向见[路线图](ROADMAP.md)，运行与发布限制见[运行环境](RUNTIME.md)和[发布流程](RELEASING.md)。
