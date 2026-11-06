@@ -47,7 +47,7 @@ class AiLiveUiDeviceTest {
         return instrumentation.uiAutomation.windows.mapNotNull { it.root }.filter { it.packageName?.toString() == context.packageName }.mapNotNull(::walk).firstOrNull()
     }
     private suspend fun click(label: String, long: Boolean = false) {
-        val tabLabels = listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_changes_title))
+        val tabLabels = listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_file_changes_title))
         if (label in tabLabels && find(label) == null) {
             repeat(3) {
                 if (find(label) == null) {
@@ -250,7 +250,7 @@ class AiLiveUiDeviceTest {
                 assertTrue("Actual test result visible", visibleText(context.getString(R.string.project_check_passed)))
                 screenshot("live-ui-validation")
                 click(context.getString(R.string.close))
-                click(context.getString(R.string.ai_changes_title))
+                click(context.getString(R.string.ai_file_changes_title))
                 val changes = withContext(Dispatchers.IO) { w.ai.checkpointChanges(w.ai.state.value.checkpointId!!) }
                 assertEquals(setOf("src/cart.py", "src/view.py"), changes.map { it.path }.toSet())
                 for (path in listOf("src/cart.py", "src/view.py")) {

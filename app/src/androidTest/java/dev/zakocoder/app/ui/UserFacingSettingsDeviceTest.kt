@@ -67,7 +67,8 @@ class UserFacingSettingsDeviceTest {
                     }
                     }
                 }
-                await("App navigation ready") { shown(base.getString(R.string.nav_settings)) }
+                click(base.getString(R.string.app_navigation_open))
+                await("Settings destination visible in navigation drawer") { shown(base.getString(R.string.nav_settings)) }
                 click(base.getString(R.string.nav_settings))
                 await("Production settings ready") { shown(base.getString(R.string.ai_settings)) }
                 capture(dark, "settings")
@@ -95,14 +96,19 @@ class UserFacingSettingsDeviceTest {
                 click(base.getString(R.string.close))
                 val proxy = base.getString(R.string.proxy_short)
                 scrollUntil(proxy, -500f)
+                val originalProxy = workbench.state.value.settings.proxy
                 click(proxy)
-                await("Proxy concise help") { shown(base.getString(R.string.about_proxy_details_title)) }
-                assertTrue(shown(base.getString(R.string.proxy_help)))
-                assertFalse(shown(base.getString(R.string.about_proxy_details)))
-                capture(dark, "proxy-summary")
-                click(base.getString(R.string.about_proxy_details_title))
-                await("Proxy credential risk available") { nodes { all -> all.any { label(it).contains("ALL_PROXY") && label(it).contains("明文凭据") } } }
-                capture(dark, "proxy-security")
+                await("Independent proxy page ready") { shown(base.getString(R.string.proxy_page_title)) }
+                await("All proxy connection modes visible") {
+                    listOf(R.string.proxy_mode_direct, R.string.proxy_mode_manual, R.string.proxy_mode_airport)
+                        .all { shown(base.getString(it)) }
+                }
+                capture(dark, "proxy-modes")
+                click(base.getString(R.string.proxy_mode_manual))
+                scrollUntil(base.getString(R.string.proxy_mode_manual_hint), 400f)
+                assertTrue(shown(base.getString(R.string.proxy_manual_help)))
+                assertEquals("Opening manual mode must not save a proxy", originalProxy, workbench.state.value.settings.proxy)
+                capture(dark, "proxy-manual-help")
 
             }
         } finally {
@@ -129,11 +135,22 @@ class UserFacingSettingsDeviceTest {
         return result.get()
     }
     private fun label(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
-    private fun shown(text: String) = nodes { all -> all.any { label(it) == text && it.boundsInWindow.height > 0 } }
-    private fun click(text: String) = nodes { all ->
-        var node: SemanticsNode? = all.last { label(it) == text || text in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
-        while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
-        assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+    private fun matches(node: SemanticsNode, text: String) = label(node) == text ||
+        text in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+    private fun visible(node: SemanticsNode): Boolean {
+        val bounds = node.boundsInWindow
+        val display = base.resources.displayMetrics
+        return bounds.width > 0 && bounds.height > 0 && bounds.right > 0 && bounds.bottom > 0 &&
+            bounds.left < display.widthPixels && bounds.top < display.heightPixels
+    }
+    private fun shown(text: String) = nodes { all -> all.any { matches(it, text) && visible(it) } }
+    private fun click(text: String) {
+        await("Visible action: $text") { shown(text) }
+        nodes { all ->
+            var node: SemanticsNode? = all.last { matches(it, text) && visible(it) }
+            while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
+            assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+        }
     }
     private fun scrollUntil(text: String, amount: Float) {
         repeat(16) {
@@ -143,7 +160,7 @@ class UserFacingSettingsDeviceTest {
         assertTrue("Visible text: $text", shown(text))
     }
     private fun scroll(amount: Float) {
-        nodes { all -> all.lastOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+        nodes { all -> all.lastOrNull { visible(it) && it.config.getOrNull(SemanticsActions.ScrollBy) != null }
             ?.config?.getOrNull(SemanticsActions.ScrollBy)?.action?.invoke(0f, amount) }
         Thread.sleep(150)
     }

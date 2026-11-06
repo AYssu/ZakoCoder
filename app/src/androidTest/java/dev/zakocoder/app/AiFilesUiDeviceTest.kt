@@ -55,7 +55,7 @@ class AiFilesUiDeviceTest {
     }
     private suspend fun click(label: String, long: Boolean = false) {
         val details = listOf(R.string.ai_requests, R.string.project_validation).map(context::getString)
-        val rootTargets = listOf(R.string.ai_conversation, R.string.ai_changes_title, R.string.ai_more, R.string.ai_new_conversation,
+        val rootTargets = listOf(R.string.ai_conversation, R.string.ai_file_changes_title, R.string.ai_more, R.string.ai_new_conversation,
             R.string.nav_workspace, R.string.nav_environment, R.string.nav_terminal, R.string.nav_settings, R.string.nav_ai).map(context::getString)
         if (label == context.getString(R.string.ai_skills)) {
             if (!visibleText(context.getString(R.string.ai_extensions))) {
@@ -77,7 +77,7 @@ class AiFilesUiDeviceTest {
         var node = find(label)!!
         if (long) { while (!node.isLongClickable && node.parent != null) node = node.parent }
         else { while (!node.isClickable && !node.isSelected && node.parent != null) node = node.parent }
-        if (!long && node.isSelected && label in listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_changes_title))) return
+        if (!long && node.isSelected && label in listOf(context.getString(R.string.ai_conversation), context.getString(R.string.ai_file_changes_title))) return
         assertTrue(label, node.performAction(if (long) AccessibilityNodeInfo.ACTION_LONG_CLICK else AccessibilityNodeInfo.ACTION_CLICK)); delay(300)
     }
     private fun visibleText(label: String): Boolean {
@@ -1489,7 +1489,7 @@ class AiFilesUiDeviceTest {
                     assertEquals(AiPhase.Completed, w.ai.state.value.phase)
                     click("请求"); screenshot("ai-request-list")
                     click("第 1 轮 · 请求 3"); screenshot("ai-request-details")
-                    click("关闭"); click(context.getString(R.string.ai_changes_title)); click("review.py")
+                    click("关闭"); click(context.getString(R.string.ai_file_changes_title)); click("review.py")
                     screenshot("ai-review-saved-diff"); click("原文"); screenshot("ai-review-saved-before")
                     click("修改后"); screenshot("ai-review-saved-after"); click("关闭")
                     assertEquals("print('after')\n", File(root, "review.py").readText())
@@ -1901,7 +1901,7 @@ class AiFilesUiDeviceTest {
                     screenshot("ai-execution-finished")
                     click("展开工具详情"); screenshot("ai-expanded-tool-result")
                     scrollProcess(); await { visibleText("已写入 review.txt") }; screenshot("ai-expanded-tool-output")
-                    click(context.getString(R.string.ai_changes_title)); screenshot("ai-file-changes")
+                    click(context.getString(R.string.ai_file_changes_title)); screenshot("ai-file-changes")
                     click(context.getString(R.string.ai_more)); click("工具权限"); click("设置写入文件权限"); click("允许")
                     screenshot("ai-auto-allow-confirm"); click("取消")
                     assertEquals(AiPermission.Ask, testWorkbench.ai.state.value.policy.permission(AiTool.WriteFile))
