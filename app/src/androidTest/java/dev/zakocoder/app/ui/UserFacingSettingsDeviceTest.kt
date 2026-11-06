@@ -80,7 +80,7 @@ class UserFacingSettingsDeviceTest {
                 nodes { all -> assertFalse(all.any { label(it).contains("维护者审查") }) }
                 capture(dark, "about-version")
                 click(base.getString(R.string.about_license_summary))
-                await("Updated component versions are available") { nodes { all -> all.any { label(it).contains("CommonMark Java 0.31.0") && label(it).contains("OkHttp 5.5.1 / Okio 3.18.1") } } }
+                await("Updated component versions are available") { nodes { all -> all.any { label(it).contains("CommonMark Java 0.32.0") && label(it).contains("OkHttp 5.5.1 / Okio 3.18.1") } } }
                 capture(dark, "about-components")
                 click(base.getString(R.string.about_license_summary))
                 scrollUntil(base.getString(R.string.about_license_originals), 400f)
