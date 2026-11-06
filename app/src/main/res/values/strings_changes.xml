@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ai_changes_title">文件变更</string>
     <string name="ai_changes_no_task">当前会话尚无可审阅任务。</string>
     <string name="ai_changes_missing_checkpoint">此轮没有保留检查点，可能尚未建立或已被淘汰；不能据此判断没有修改。</string>
     <string name="ai_changes_read_failed">无法读取此轮变更，请重试；当前不能确认变更范围。</string>
