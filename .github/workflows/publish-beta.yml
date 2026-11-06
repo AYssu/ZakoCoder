@@ -94,7 +94,7 @@ jobs:
           set -euo pipefail
           python3 scripts/check_repository.py
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
-          ./gradlew :app:assembleRelease :app:lintRelease :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest \
+          ./gradlew -PrebuildRuntime=true :app:assembleRelease :app:lintRelease :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest \
             -PbetaRelease=true -PbetaVersion="$BETA_VERSION" -PbetaVersionCode="$BETA_VERSION_CODE" \
             -PcompatibilityAbis=arm64-v8a,x86_64 --stacktrace
           mkdir -p out/candidate out/qa out/r8-symbols/multiabi out/runtime-evidence

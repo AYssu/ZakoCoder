@@ -49,7 +49,7 @@ jobs:
       - name: Check repository and build test APK
         run: |
           python3 scripts/check_repository.py
-          ./gradlew :app:assembleDebug :app:lintDebug :kernel-plugin:assembleDebug :kernel-plugin:lintDebug --stacktrace
+          ./gradlew -PrebuildRuntime=true :app:assembleDebug :app:lintDebug :kernel-plugin:assembleDebug :kernel-plugin:lintDebug --stacktrace
       - name: Verify and collect APK
         shell: bash
         run: |

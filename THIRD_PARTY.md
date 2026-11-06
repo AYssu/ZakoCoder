@@ -63,6 +63,8 @@ APT 的 clangd、gopls、Go、Rust、JDK 和构建依赖不固定整个依赖树
 
 ## PRoot 与 loader：仓库内源码自行编译
 
+`native-runtime/prebuilt/<ABI>/` 同时保留本项目从下述固定源码自行编译的 ARM64 与 x86_64 产物，方便本地直接打包；原始许可和对应源码保持完整，CI 继续从源码重建并校验固定摘要。
+
 `native-runtime/` 是独立构建子项目，包含完整未修改的源码归档、固定工具链清单、独立补丁、构建脚本、产物锁及测试；无需从 OperitTerminalCore 下载二进制。来源、准确摘要和分发要求见 [子项目说明](native-runtime/README.md)、[工具链锁](native-runtime/toolchain.lock.json) 和 [验证记录](native-runtime/VALIDATION.md)。
 
 - termux/proot 提交 `b27d81a68d765f3462e807f4a14e01a03f8e89ea`：同一源码树编译 PRoot 与 `src/loader`，源文件为 GPL-2.0-or-later，原始 COPYING 保留。
