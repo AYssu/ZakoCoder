@@ -150,7 +150,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     var capabilityPackagesOpen by remember { mutableStateOf(false) }
     if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.selectedId, state.project?.name.orEmpty()) { capabilityPackagesOpen = false }
     var aiPermissions by remember { mutableStateOf(false) }
-    if (aiPermissions) AiPermissionsSheet(workbench, state.projects.find { it.id == workbench.ai.state.value.projectId }?.name.orEmpty(), { aiPermissions = false })
+    if (aiPermissions) AiPermissionsSheet(workbench, state.projects.find { it.id == ai.projectId }?.name.orEmpty(), { aiPermissions = false })
     var appPermissionsOpen by rememberSaveable { mutableStateOf(false) }
     var rootRequestBusy by remember { mutableStateOf(false) }
     var rootRequestError by remember { mutableStateOf("") }
