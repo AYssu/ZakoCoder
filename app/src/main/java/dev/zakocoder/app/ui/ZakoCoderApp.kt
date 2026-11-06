@@ -121,11 +121,6 @@ fun ZakoCoderApp(workbench: Workbench) {
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
-                    Spacer(Modifier.weight(1f))
-                    Surface(color = MaterialTheme.colorScheme.surface, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-                        Text(updateInfo.currentVersion.ifBlank { stringResource(R.string.loading) }, Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            fontSize = 10.5.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
                 if (state.loading) { WorkbenchLoading(); return@Column }
                 if (state.busy && state.showProgress) Surface(color = MaterialTheme.colorScheme.primaryContainer) {
