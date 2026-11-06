@@ -17,10 +17,11 @@ internal class AiToolDefinition internal constructor(val tool: AiTool, private v
     fun permissionSource(policy: AiPolicy): Int = policy.source(tool)
     fun target(args: JSONObject, planTitle: String): String = AiToolRegistry.target(tool, args, planTitle)
     fun validate(args: JSONObject, target: String) = AiToolRegistry.validateArguments(tool, args, target)
-    fun available(screen: Boolean, ssh: Boolean, skills: Boolean): Boolean = when (tool) {
+    fun available(screen: Boolean, ssh: Boolean, skills: Boolean, delegation: Boolean = false): Boolean = when (tool) {
         AiTool.AndroidTest -> screen
         AiTool.SshRemote -> ssh
         AiTool.LoadSkill -> skills
+        AiTool.DelegateReadOnly -> delegation
         else -> true
     }
 }
@@ -39,12 +40,12 @@ internal object AiToolRegistry {
         }
         result
     }
-    fun definitions(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false): List<AiToolDefinition> =
-        catalog.filter { it.available(screen, ssh, skills) }
+    fun definitions(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false): List<AiToolDefinition> =
+        catalog.filter { it.available(screen, ssh, skills, delegation) }
     fun definition(tool: AiTool): AiToolDefinition = catalog.single { it.tool == tool }
     fun named(name: String): AiToolDefinition? = catalog.singleOrNull { it.wire == name }
-    fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false): JSONArray = JSONArray().also { result ->
-        definitions(screen, ssh, skills).forEach { result.put(it.schema) }
+    fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false): JSONArray = JSONArray().also { result ->
+        definitions(screen, ssh, skills, delegation).forEach { result.put(it.schema) }
     }
 
     val SCREEN_TEST_ACTIONS = listOf("status", "prepare", "install", "launch", "observe", "click", "long_click", "swipe", "input_text", "back", "assert_text", "screenshot", "finish")
@@ -55,6 +56,7 @@ internal object AiToolRegistry {
         AiTool.RunCommand, AiTool.StartTerminal -> args.optString("command")
         AiTool.ReadTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal -> args.optString("terminal_id")
         AiTool.LoadSkill -> args.optString("skill") + " · " + args.optString("resource", "SKILL.md")
+        AiTool.DelegateReadOnly -> "Read-only assistants"
         AiTool.SearchFiles -> args.optString("query")
         AiTool.ReadCommandLog -> args.optString("run_id")
         AiTool.UseMcp -> args.optString("server_id") + " · " + args.optString("method") + " · " +
@@ -69,6 +71,7 @@ internal object AiToolRegistry {
     fun validateArguments(tool: AiTool, args: JSONObject, target: String): List<AiTextEdit>? {
         if (tool == AiTool.EditFile) return AiTextEdits.parse(args)
         when (tool) {
+            AiTool.DelegateReadOnly -> { AiSubagents.tasks(args) }
             AiTool.LoadSkill -> {
                 require(args.keys().asSequence().all { it in setOf("skill", "resource", "reason") })
                 val skill = args.get("skill")
@@ -191,7 +194,13 @@ internal object AiToolRegistry {
         val loader = tool("load_skill", "Load instructions or a referenced text resource from a user-selected skill. skill must be an exact catalog source; resource defaults to SKILL.md and is relative to that skill. Instructions must be loaded first. Uses read_file permission. Never executes scripts. Repeated loads are not duplicated; loaded content is retained across compression.", "skill")
         loader.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
             .put("resource", JSONObject().put("type", "string").put("maxLength", 400))
-        val optional = JSONArray().put(plan).put(askUser).put(listing).put(mcp).put(loader)
+        val delegate = tool("delegate_readonly", "Delegate complex code discovery or review to 1-2 read-only assistants with isolated context. Use only when splitting independent work helps; handle simple tasks directly. Parent remains the sole writer. Child findings are advisory, not proof of correctness or tests. Only tools with current Allow permission are available to children; they cannot ask for permission, run commands or spawn children.", "tasks")
+        delegate.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties").put("tasks",
+            JSONObject().put("type", "array").put("minItems", 1).put("maxItems", 2).put("items", JSONObject().put("type", "object")
+                .put("properties", JSONObject().put("role", JSONObject().put("type", "string").put("enum", JSONArray(listOf("scout", "reviewer"))))
+                    .put("task", JSONObject().put("type", "string").put("minLength", 1).put("maxLength", 6000)))
+                .put("required", JSONArray(listOf("role", "task"))).put("additionalProperties", false)))
+        val optional = JSONArray().put(plan).put(askUser).put(listing).put(mcp).put(loader).put(delegate)
         optional.put(screenTest).put(remote)
         return optional
             .put(read)

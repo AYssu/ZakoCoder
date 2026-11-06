@@ -37,6 +37,13 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
         selectedModel = normalized
         windowTokens = AiModelContextWindows.defaultTokens(model).toString()
     }
+    fun applyProtocol(value: AiParameters, protocol: AiApiProtocol): AiParameters {
+        val next = AiProtocolDefaults.parameters(value, protocol)
+        service = next.service; thinking = next.thinking; effort = next.reasoningEffort
+        frequency = next.frequencyPenalty?.toString().orEmpty(); presence = next.presencePenalty?.toString().orEmpty()
+        seed = next.seed?.toString().orEmpty()
+        return next
+    }
     fun parameters(base: AiParameters) = base.copy(thinking = thinking, reasoningEffort = effort,
         frequencyPenalty = frequency.takeIf(String::isNotBlank)?.toDouble(), presencePenalty = presence.takeIf(String::isNotBlank)?.toDouble(), seed = seed.takeIf(String::isNotBlank)?.toInt(), service = service)
     fun context() = AiContextOptions(legacyContextChars, automatic, threshold.toInt(), summaryChars.toInt(), windowTokens.toInt()).also { it.validate() }

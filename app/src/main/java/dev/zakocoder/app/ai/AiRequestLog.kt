@@ -24,7 +24,7 @@ data class AiRequestLog(
     val compaction: Boolean = false, val request: String = "", val response: String = "", val truncated: Boolean = false, val points: List<AiStreamPoint> = emptyList(),
     val estimatedContextTokens: Long = 0, val contextWindowTokens: Int = 128000, val contextOutputReserveTokens: Int = 8192,
     val retryGroup: String = "", val attempt: Int = 1, val maxAttempts: Int = 1, val retryDelayMs: Long = 0, val retryReason: String = "",
-    val apiProtocol: String = "ChatCompletions"
+    val apiProtocol: String = "ChatCompletions", val agent: String = ""
 ) {
     fun encode(): JSONObject = JSONObject().put("id", id).put("turn", turn).put("round", round).put("started", started)
         .put("elapsed", elapsed).put("firstEvent", firstEvent).put("firstText", firstText).put("status", status)
@@ -35,7 +35,7 @@ data class AiRequestLog(
         .put("response", response).put("truncated", truncated)
         .put("estimatedContextTokens", estimatedContextTokens).put("contextWindowTokens", contextWindowTokens).put("contextOutputReserveTokens", contextOutputReserveTokens)
         .put("retryGroup", retryGroup).put("attempt", attempt).put("maxAttempts", maxAttempts).put("retryDelayMs", retryDelayMs).put("retryReason", retryReason)
-        .put("apiProtocol", apiProtocol)
+        .put("apiProtocol", apiProtocol).put("agent", agent)
         .put("points", JSONArray(points.map { JSONArray(listOf(it.ms, it.events, it.chars, it.bytes)) }))
     companion object {
         fun decode(j: JSONObject): AiRequestLog {
@@ -53,7 +53,7 @@ data class AiRequestLog(
                     AiStreamPoint(it.getLong(0), it.getInt(1), it.getInt(2), it.getLong(3))
                 } }, j.optLong("estimatedContextTokens", 0), j.optInt("contextWindowTokens", 128000), j.optInt("contextOutputReserveTokens", 8192),
                 j.optString("retryGroup").take(64), j.optInt("attempt", 1).coerceIn(1, 3), j.optInt("maxAttempts", 1).coerceIn(1, 3),
-                j.optLong("retryDelayMs", 0).coerceIn(0, 30000), j.optString("retryReason").take(100), j.optString("apiProtocol", "ChatCompletions").take(32))
+                j.optLong("retryDelayMs", 0).coerceIn(0, 30000), j.optString("retryReason").take(100), j.optString("apiProtocol", "ChatCompletions").take(32), j.optString("agent").take(64))
         }
     }
 }

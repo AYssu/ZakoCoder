@@ -22,6 +22,7 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     AndroidTest("android_test", R.string.ai_screen_test_tool, R.string.ai_screen_test_tool_desc, true),
     UseMcp("use_mcp", R.string.ai_tool_mcp, R.string.ai_tool_mcp_desc, true),
     AskUser("ask_user", R.string.ai_tool_ask_user, R.string.ai_tool_ask_user_desc),
+    DelegateReadOnly("delegate_readonly", R.string.ai_tool_delegate, R.string.ai_tool_delegate_desc),
     UpdatePlan("update_plan", R.string.ai_tool_plan, R.string.ai_tool_plan_desc);
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }

@@ -135,6 +135,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                         onClick = { more = false; history = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_file_changes_title)) },
                         onClick = { more = false; detailPanel = "changes" })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_agent_settings)) },
+                        onClick = { more = false; detailPanel = "agents" })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_current_plan)) }, enabled = state.plan.isNotEmpty(),
                         onClick = { more = false; planDetails = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_requests)) }, leadingIcon = { WorkbenchIcon(Glyph.Info) },
@@ -157,6 +159,9 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         if (messageActionError) Text(stringResource(R.string.ai_message_retry_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        if (!state.active && state.taskDiagnostic.startsWith("task_budget:")) TextButton(onClick = { workbench.ai.continueBudget() }, enabled = !state.historyError) {
+            Text(stringResource(R.string.ai_budget_continue))
+        }
         if (state.active) AiRetryStatus(state.retryNotice)
         if (state.historyError && workbench.ai.canRetryHistorySave) TextButton(onClick = { workbench.ai.retryHistorySave() }) {
             Text(stringResource(R.string.ai_history_retry_save))
@@ -304,6 +309,9 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 else if (workbench.ai.state.value.let { it.projectId == ownerProject && it.conversationId == ownerConversation }) messageActionError = true
             }
         })
+    }
+    if (detailPanel == "agents") WorkbenchSheet(stringResource(R.string.ai_agent_settings), { detailPanel = null }) {
+        AiAgentSettings(state, workbench.ai)
     }
     if (planDetails) WorkbenchSheet(stringResource(R.string.ai_current_plan), { planDetails = false }) {
         Text(stringResource(state.phase.label), style = MaterialTheme.typography.bodyMedium)

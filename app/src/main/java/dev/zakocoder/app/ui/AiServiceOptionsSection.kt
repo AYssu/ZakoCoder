@@ -33,6 +33,8 @@ internal fun AiServiceOptionsSection(protocol: AiApiProtocol, value: AiServiceOp
     }
     if (!open) return
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.ai_protocol_auto_defaults), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(stringResource(R.string.ai_service_hint), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         ServiceToggle(R.string.ai_service_preset, value.usePreset, editable) { automatic ->

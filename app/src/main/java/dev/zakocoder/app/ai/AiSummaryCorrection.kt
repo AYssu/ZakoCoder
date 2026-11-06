@@ -12,6 +12,7 @@ internal suspend fun correctOversizedSummary(initial: AiReply, maxChars: Int,
     if (initial.text.length <= maxChars) return initial
     val replacement = try { correct(initial.text) }
     catch (cancelled: CancellationException) { throw cancelled }
+    catch (limit: AiTaskLimit) { throw limit }
     catch (transport: AiTransportException) { throw transport }
     catch (_: Exception) {
         currentCoroutineContext().ensureActive()

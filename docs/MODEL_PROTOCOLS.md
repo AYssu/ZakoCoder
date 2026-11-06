@@ -68,3 +68,5 @@ Responses 使用 `store: false` 和完整本机历史，不依赖 `previous_resp
 - [Gemini GenerateContent](https://ai.google.dev/api/generate-content)、[函数调用](https://ai.google.dev/gemini-api/docs/function-calling)、[thought signatures](https://ai.google.dev/gemini-api/docs/thought-signatures)。
 
 各供应商地址依据在 `AiProviderPresets.kt` 逐项记录。设备回归使用本地 HTTPS 协议夹具，覆盖四类协议、失败用量记录和历史续接。当前设备保存的 Responses 服务已通过流式与非流式连接及工具探针测试；其他真实商业服务、视觉理解与不同模型的参数支持仍需对应账号验收，不能由夹具结果替代。
+
+明确切换协议或服务预设时会自动恢复兼容预设并清理冲突参数；直接打开旧配置保留手动覆盖。详细行为见[Agent 优化与验证](AGENT_OPTIMIZATIONS.md#模型配置默认值)。

@@ -206,6 +206,9 @@ open class AiHistoryStore(private val directory: File) {
         .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("round", state.round).put("toolCount", state.toolCount)
+        .put("automaticDelegation", state.automaticDelegation)
+        .put("taskUsage", JSONObject().put("requests", state.taskUsage.requests).put("tools", state.taskUsage.tools)
+            .put("tokens", state.taskUsage.tokens).put("estimatedRequests", state.taskUsage.estimatedRequests).put("elapsedMs", state.taskUsage.elapsedMs))
         .put("queuedMessages", AiTaskQueue.encode(state.queuedMessages))
         .put("questions", JSONArray(state.questions.map { it.encode() }))
         .put("questionContinuation", state.questionContinuation?.encode())
@@ -374,7 +377,12 @@ open class AiHistoryStore(private val directory: File) {
         val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
             AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
         } }
-        val state = AiState(queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
+        val taskUsage = json.optJSONObject("taskUsage")?.let {
+            AiTaskUsage(it.getInt("requests"), it.getInt("tools"), it.getLong("tokens"), it.getInt("estimatedRequests"), it.getLong("elapsedMs")).also { usage ->
+                require(usage.requests >= 0 && usage.tools >= 0 && usage.tokens >= 0 && usage.estimatedRequests in 0..usage.requests && usage.elapsedMs >= 0)
+            }
+        } ?: AiTaskUsage()
+        val state = AiState(automaticDelegation = json.optBoolean("automaticDelegation", false), taskUsage = taskUsage, queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
             round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
             toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,

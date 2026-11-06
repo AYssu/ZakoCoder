@@ -33,6 +33,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
     var selected by remember(state.conversationId) { mutableStateOf<String?>(null) }
     var limits by remember { mutableStateOf(false) }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+        item { AiTaskUsageContent(state) }
         item { AiSessionUsageSummary(usageState, state.projectId, state.conversationId, onRefreshUsage) }
         item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_request_retained, state.requests.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -51,6 +52,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
                         Text(stringResource(R.string.ai_request_row, request.turn, request.round), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), description = stringResource(R.string.ai_request_details))
                     }
+                    if (request.agent.isNotBlank()) Text(stringResource(R.string.ai_request_agent, request.agent), style = MaterialTheme.typography.labelSmall)
                     if (request.compaction) Text(stringResource(R.string.ai_phase_compacting), style = MaterialTheme.typography.labelSmall)
                     if (request.attempt > 1) Text(stringResource(R.string.ai_request_retry_badge, request.attempt, request.maxAttempts), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                     val elapsed = requestElapsed(request)
