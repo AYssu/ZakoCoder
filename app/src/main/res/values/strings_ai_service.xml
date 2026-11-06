@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="ai_service_title">高级兼容设置</string>
-    <string name="ai_service_hint">仅在连接异常或服务商要求时调整。修改后请重新测试；切换协议会保留手动设置。</string>
+    <string name="ai_service_hint">仅在连接异常或服务商要求时调整。修改后请重新测试；重新选择协议或服务预设会恢复默认兼容配置。</string>
     <string name="ai_service_preset">按服务预设配置</string>
     <string name="ai_service_custom">使用手动兼容配置</string>
     <string name="ai_service_existing_hint">已保留原配置。正常使用时无需调整，也可以在高级兼容设置中切换为服务预设。</string>
