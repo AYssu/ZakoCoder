@@ -143,12 +143,12 @@ Chat Completions 请求、SSE delta 和工具关联按公开协议独立实现�
 
 ## Markdown
 
-CommonMark Java `org.commonmark:commonmark:0.31.0` 与 `commonmark-ext-gfm-tables:0.31.0`，官方来源 https://github.com/commonmark/commonmark-java/tree/commonmark-parent-0.31.0 ，标签提交 `210a18286b023ab0e18e62c0fbec86690a9f57cd`，未修改上游。BSD-2-Clause，原有源码版权及许可 `assets/licenses/CommonMark-BSD-2-Clause.txt` 保留；0.31.0 两个 Maven JAR 的 `META-INF/LICENSE.txt` 声明 Atlassian Pty Ltd，原文另附 `assets/licenses/CommonMark-Maven-BSD-2-Clause.txt`，不以旧声明替换制品通知。Maven JAR 上游声明保留。只解析 AST，Compose 渲染由本项目实现，不引入 WebView 或网络图片加载。
+CommonMark Java `org.commonmark:commonmark:0.32.0` 与 `commonmark-ext-gfm-tables:0.32.0`，官方来源 https://github.com/commonmark/commonmark-java/tree/commonmark-parent-0.32.0 ，标签提交 `e68f0313173a93bed91df680faab42c1ffb9f5cf`，未修改上游。BSD-2-Clause，原有源码版权及许可 `assets/licenses/CommonMark-BSD-2-Clause.txt` 保留；0.32.0 两个 Maven JAR 的 `META-INF/LICENSE.txt` 声明 Atlassian Pty Ltd，原文另附 `assets/licenses/CommonMark-Maven-BSD-2-Clause.txt`，不以旧声明替换制品通知。Maven JAR 上游声明保留。只解析 AST，Compose 渲染由本项目实现，不引入 WebView 或网络图片加载。
 
 | Markdown 制品 | SHA-256 |
 | --- | --- |
-| commonmark-0.31.0.jar | `11d5996813f4d6525a134b906844d87112c6acb6fdd306ad5755ef5df9b26281` |
-| commonmark-ext-gfm-tables-0.31.0.jar | `d2b3e19fc2a55ca1274ef067c583b85abf8635f6dccd1f935cd36ffe8a186706` |
+| commonmark-0.32.0.jar | `a7075291a1ff852df6e185963a0016d24913abf689f4f913d017d9ff19a14ac2` |
+| commonmark-ext-gfm-tables-0.32.0.jar | `511b9a282c991560acab6ab087a7f25e4ce94747aa3bfa6e08be32d9adc77be0` |
 
 ## 内置手机 Skill 指令
 
