@@ -159,7 +159,7 @@ python3 scripts/check_repository.py
 ./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 使用仓库内源码和固定 NDK 离线编译；不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 默认使用仓库随附并校验的预编译产物，无需额外安装 Make 等原生构建工具；完整源码仍保留，CI 从源码重建验证，不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
 
 </details>
 

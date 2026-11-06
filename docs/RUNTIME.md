@@ -4,7 +4,7 @@
 
 ## 安装与发行限制
 
-`runtime/artifacts.json` 固定自编译原生制品提交及 Ubuntu 镜像版本、大小、SHA-256 与解包前缀。构建脚本 `scripts/prepare_runtime.py` 调用独立 `native-runtime/` 子项目，从仓库内固定源码编译 PRoot／loader，校验产物锁与 ELF 后复制到忽略目录 `runtime-artifacts/`；不下载第三方预编译 PRoot，不依赖本地参考源码。
+`runtime/artifacts.json` 固定自编译原生制品提交及 Ubuntu 镜像版本、大小、SHA-256 与解包前缀。本地 Gradle 构建默认校验并使用 `native-runtime/prebuilt/<ABI>/` 的 PRoot／loader，复制到忽略目录 `runtime-artifacts/`，不调用 Python 或原生编译工具。显式重建、缺失产物或 CI 源码验收通过 `scripts/prepare_runtime.py` 调用独立 `native-runtime/` 子项目，从仓库内固定源码构建并校验产物锁与 ELF；不下载第三方预编译 PRoot，不依赖本地参考源码。
 
 PRoot／loader 已使用固定 NDK 自编译，完整输入与测试见[独立子项目](../native-runtime/README.md)。Release 打包仍等待维护者审查分发材料和设备覆盖；准确来源和许可见[第三方说明](../THIRD_PARTY.md)。
 

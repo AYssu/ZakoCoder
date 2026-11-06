@@ -4,7 +4,7 @@
 
 ## 工具链与依赖
 
-使用 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358、Python 3.12+，Gradle Wrapper 固定 9.8.2；依赖版本集中在 `gradle/libs.versions.toml`。首次构建需要下载 Maven 依赖；运行时使用仓库内源码离线编译，需 Linux x86_64、GNU Make、patch 和 readelf。
+使用 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，Gradle Wrapper 固定 9.8.2；依赖版本集中在 `gradle/libs.versions.toml`。首次构建需要下载 Maven 依赖；默认使用仓库内已校验的 PRoot／loader 产物，不需要 Python、GNU Make、patch 或 readelf。只有重新编译原生运行时才需要 Python 3.12+、Linux x86_64 及这些工具。
 
 AGP 9.5.0、Gradle 9.8.2 与 OkHttp 5.5.1 作为一组升级：AGP 使用内置 Kotlin，Compose 编译插件固定 Kotlin 2.4.21；SDK 安装包名为 `platforms;android-37.0`。主应用与两个终端库的编译 SDK 统一为 37，最低版本 26、目标版本 36、NDK 与运行时摘要保持原值。本次不迁移用户数据；如需回退，应整组撤销构建配置与依赖升级，避免单独回退造成版本不兼容。Lifecycle 从 2.8.7 更新到 2.10.0，以保持新 Lint 下的生命周期检查可用；不关闭这些正确性检查。Release 资源压缩策略保持原值，新 Lint 的体积优化建议仅记录为提示。CI 同时编译测试 APK，防止只构建产品时漏掉测试 API 变化。
 
@@ -18,7 +18,7 @@ AGP 9.5.0、Gradle 9.8.2 与 OkHttp 5.5.1 作为一组升级：AGP 使用内置 
 ./gradlew :app:assembleDebug
 ```
 
-产物为 `app/build/outputs/apk/debug/app-debug.apk`，目前面向 ARM64 真机。Ubuntu 基础系统不内置 APK，用户在环境页另行安装；PRoot／loader 由独立 `native-runtime/` 子项目从仓库内固定源码编译并校验，不下载第三方预编译文件，不依赖本地参考工程。构建需要 Linux x86_64、Python 3.12+、GNU Make、patch、binutils 与固定 NDK，详见[子项目说明](../native-runtime/README.md)。正式 Release 仍受[发布流程](RELEASING.md)中的来源材料门禁约束。
+产物为 `app/build/outputs/apk/debug/app-debug.apk`，目前面向 ARM64 真机。Ubuntu 基础系统不内置 APK，用户在环境页另行安装；PRoot／loader 由独立 `native-runtime/` 子项目从仓库内固定源码编译并校验，不下载第三方预编译文件，不依赖本地参考工程。本地默认直接校验并使用 `native-runtime/prebuilt/<ABI>/` 的两个 `.so`；缺失时回退源码构建，摘要校验不通过则停止。需要重建时使用 `./gradlew -PrebuildRuntime=true :app:assembleDebug`，这条路径需要 Python 3.12+、Linux x86_64、GNU Make、patch、binutils 与固定 NDK。CI 显式从源码重建 ARM64 与 x86_64 并验证固定摘要。详见[子项目说明](../native-runtime/README.md)。正式 Release 仍受[发布流程](RELEASING.md)中的来源材料门禁约束。
 
 首次安装可通过 Android 系统安装器或明确指定设备的 `adb install`。不同调试签名可能无法覆盖安装；先核对[测试包签名说明](RELEASING.md#手动打包测试-apk)，不要为绕过签名冲突直接卸载并丢弃用户数据。
 

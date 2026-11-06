@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -78,12 +80,39 @@ android {
 
 val prepareRuntime = tasks.register("prepareRuntime")
 compatibilityAbis.forEach { abi ->
-    val prepareAbi = tasks.register<Exec>("prepareRuntime" + abi.replace("-", "_").replaceFirstChar { it.uppercase() }) {
-        workingDir(rootProject.projectDir)
-        commandLine("python3", "scripts/prepare_runtime.py", "--ndk", androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath, "--abi", abi)
-        inputs.file(rootProject.file("runtime/artifacts.json"))
-        inputs.file(rootProject.file("scripts/prepare_runtime.py"))
-        // Verify cached artifacts on every invocation.
+    val prepareAbi = tasks.register("prepareRuntime" + abi.replace("-", "_").replaceFirstChar { it.uppercase() }) {
+        // Always verify; locally this path needs only the JVM supplied by Android Studio.
+        doLast {
+            val manifest = groovy.json.JsonSlurper().parse(rootProject.file("runtime/artifacts.json")) as Map<*, *>
+            val target = if (abi == "arm64-v8a") manifest else
+                (manifest["architectures"] as Map<*, *>)[abi] as Map<*, *>
+            val expected = (target["nativeArtifacts"] as List<*>).associate { item ->
+                val artifact = item as Map<*, *>
+                artifact["name"] as String to artifact["sha256"] as String
+            }
+            val lock = groovy.json.JsonSlurper().parse(rootProject.file("native-runtime/artifacts.lock.json")) as Map<*, *>
+            val locked = if (abi == "arm64-v8a") lock else
+                (lock["architectures"] as Map<*, *>)[abi] as Map<*, *>
+            check(expected == locked["artifacts"]) { "Runtime manifest differs from the native artifact lock" }
+            val source = rootProject.file("native-runtime/prebuilt/$abi")
+            val rebuild = providers.gradleProperty("rebuildRuntime").orNull == "true"
+            if (!rebuild && expected.keys.all { source.resolve(it).isFile }) {
+                // A pinned digest authenticates the same ELF contract checked in source-build CI.
+                expected.forEach { (name, digest) ->
+                    val actual = MessageDigest.getInstance("SHA-256")
+                        .digest(source.resolve(name).readBytes()).joinToString("") { "%02x".format(it) }
+                    check(actual == digest) { "Pinned runtime checksum mismatch: $abi/$name" }
+                }
+                val output = rootProject.file("runtime-artifacts/jniLibs/$abi").apply { mkdirs() }
+                expected.keys.forEach { source.resolve(it).copyTo(output.resolve(it), overwrite = true) }
+                logger.lifecycle("Repository PRoot and loader verified and prepared ($abi); no native compiler or Python needed")
+            } else {
+                val command = mutableListOf("python3", "scripts/prepare_runtime.py", "--ndk",
+                    androidComponents.sdkComponents.ndkDirectory.get().asFile.absolutePath, "--abi", abi)
+                if (rebuild) command += "--build-from-source"
+                providers.exec { workingDir(rootProject.projectDir); commandLine(command) }.result.get().assertNormalExitValue()
+            }
+        }
     }
     prepareRuntime.configure { dependsOn(prepareAbi) }
 }
