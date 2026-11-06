@@ -10,6 +10,10 @@ val compatibilityAbis = providers.gradleProperty("compatibilityAbis").orElse("ar
 val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCode").orNull?.let {
     it.toInt().also { code -> require(code > 0) }
 } ?: 1
+val runtimeVerification = providers.gradleProperty("runtimeVerification").orNull == "true"
+val appApplicationId = if (runtimeVerification) "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
+val kernelPluginPackage = "$appApplicationId.kernel"
+val kernelPermission = "$appApplicationId.permission.KERNEL"
 
 // Distribution builds opt in with an explicit immutable version; legacy property names remain compatible.
 val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
@@ -31,13 +35,16 @@ android {
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = if (providers.gradleProperty("runtimeVerification").orNull == "true")
-            "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
+        applicationId = appApplicationId
         minSdk = 26
         targetSdk = 36
         versionCode = if (betaRelease) requireNotNull(betaVersionCode) else compatibilityVersionCode
         versionName = if (betaRelease) requireNotNull(betaVersion) else "0.1.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["kernelPluginPackage"] = kernelPluginPackage
+        manifestPlaceholders["kernelPermission"] = kernelPermission
+        buildConfigField("String", "KERNEL_PLUGIN_PACKAGE", "\"$kernelPluginPackage\"")
+        buildConfigField("String", "KERNEL_PERMISSION", "\"$kernelPermission\"")
     }
     ndkVersion = "28.2.13676358"
     defaultConfig { ndk { abiFilters += compatibilityAbis } }

@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <permission
-        android:name="dev.zakocoder.app.permission.KERNEL"
+        android:name="${kernelPermission}"
         android:protectionLevel="signature" />
 
     <application
@@ -28,7 +28,7 @@
         <service
             android:name=".KernelService"
             android:exported="true"
-            android:permission="dev.zakocoder.app.permission.KERNEL" />
+            android:permission="${kernelPermission}" />
 
         <meta-data android:name="dev.zakocoder.app.kernel.MIN_MAIN_VERSION" android:value="${minMainVersion}" />
         <meta-data android:name="dev.zakocoder.app.kernel.CONTRACT_VERSION" android:value="1" />

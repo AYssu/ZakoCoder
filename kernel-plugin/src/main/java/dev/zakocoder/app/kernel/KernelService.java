@@ -15,7 +15,7 @@ package dev.zakocoder.app.kernel;
  * - failures return a stable category, never the config, credentials or raw log lines.
  */
 public final class KernelService extends android.app.Service {
-    private static final String PERMISSION = "dev.zakocoder.app.permission.KERNEL";
+    private static final String PERMISSION = BuildConfig.KERNEL_PERMISSION;
     private static final long READY_TIMEOUT_MS = 10_000L;
     private static final long READY_POLL_MS = 100L;
     private static final int CONNECT_TIMEOUT_MS = 300;

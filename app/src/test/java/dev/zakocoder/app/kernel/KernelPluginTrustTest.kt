@@ -1,5 +1,6 @@
 package dev.zakocoder.app.kernel
 
+import dev.zakocoder.app.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -106,8 +107,8 @@ class KernelPluginTrustTest {
             KernelPluginFailure.entries.map { it.name },
         )
         assertEquals(1, KernelPluginTrust.CONTRACT_VERSION)
-        assertEquals("dev.zakocoder.app.kernel", KernelPluginTrust.PLUGIN_PACKAGE)
+        assertEquals("${BuildConfig.APPLICATION_ID}.kernel", KernelPluginTrust.PLUGIN_PACKAGE)
         assertEquals("dev.zakocoder.app.kernel.KernelService", KernelPluginTrust.SERVICE_CLASS)
-        assertEquals("dev.zakocoder.app.permission.KERNEL", KernelPluginTrust.PERMISSION)
+        assertEquals("${BuildConfig.APPLICATION_ID}.permission.KERNEL", KernelPluginTrust.PERMISSION)
     }
 }

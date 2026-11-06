@@ -15,13 +15,14 @@ data class AiServiceOptions(
     val responsesEncryptedReasoning: Boolean = true,
     val chatThinking: AiChatThinkingFormat = AiChatThinkingFormat.ThinkingObject,
     val chatTokenLimit: AiChatTokenLimit = AiChatTokenLimit.MaxTokens,
-    val responsesCacheKey: Boolean = false,
+    // Session routing hint, not permission to store conversations or a cache-hit guarantee.
+    val responsesCacheKey: Boolean = true,
     val anthropicCache: AiAnthropicCache = AiAnthropicCache.Disabled,
     // Old profiles remain explicit; only new editor drafts opt into presets.
     val usePreset: Boolean = false,
 )
 
-/** Additive profile field: missing fields preserve the behavior of configurations saved before it. */
+/** Missing cache-key choices use the default; an explicitly saved false remains an opt-out. */
 internal object AiServiceOptionsJson {
     fun decode(json: JSONObject?): AiServiceOptions {
         if (json == null) return AiServiceOptions()
