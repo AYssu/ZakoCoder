@@ -11,6 +11,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
 
 internal enum class AppDestination(val label: Int, val glyph: Glyph) {
     Project(R.string.nav_workspace, Glyph.Projects),
@@ -39,13 +40,13 @@ internal fun AppNavigation(
                     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Surface(Modifier.size(36.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                            color = androidx.compose.ui.graphics.Color(0xFF2563EB)) {
+                            color = LocalWorkbenchPalette.current.primaryFill) {
                             Box(contentAlignment = Alignment.Center) { WorkbenchBrandMark(Modifier.size(24.dp)) }
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
+                                fontWeight = FontWeight.Medium)
                             Text(version.ifBlank { stringResource(R.string.loading) },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)

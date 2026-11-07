@@ -537,7 +537,6 @@ private fun ProxyStatusCard(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -801,7 +800,6 @@ private fun ProxySingleResult(node: ProxyNode, pluginReady: Boolean) {
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             border = cardBorder(),
-            shadowElevation = cardElevation(),
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -977,7 +975,7 @@ internal fun KernelPluginCard(
 ) {
     if (bundled) {
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface, border = cardBorder(), shadowElevation = cardElevation()) {
+            color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.proxy_bundled_kernel_title), style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.proxy_bundled_kernel_version, BuildConfig.KERNEL_VERSION),
@@ -999,7 +997,6 @@ internal fun KernelPluginCard(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1110,7 +1107,6 @@ private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRet
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

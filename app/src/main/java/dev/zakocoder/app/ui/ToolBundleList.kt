@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.runtime.*
@@ -50,7 +51,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(stringResource(R.string.filter_all), stringResource(R.string.filter_ready, ready), stringResource(R.string.filter_pending, pending)).forEachIndexed { index, title ->
                 Box(Modifier.weight(1f).heightIn(min = 48.dp).background(if (filter == index) {
-                    if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF2E3A49) else MaterialTheme.colorScheme.surface
+                    LocalWorkbenchPalette.current.surface
                 } else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(8.dp))
                     .selectable(selected = filter == index, role = androidx.compose.ui.semantics.Role.Tab) { filter = index }
                     .padding(horizontal = 8.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
@@ -68,7 +69,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
             val status = ToolBundles.status(bundle, checks)
             filter == 0 || filter == 1 && status == BundleStatus.Ready || filter == 2 && status in setOf(BundleStatus.Missing, BundleStatus.Broken)
         }
-        Surface(shape = RoundedCornerShape(18.dp), border = cardBorder(), shadowElevation = cardElevation()) {
+        Surface(shape = RoundedCornerShape(18.dp), border = cardBorder()) {
             Column {
                 if (bundles.isEmpty()) Text(stringResource(R.string.no_matching_tools), Modifier.padding(18.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 bundles.forEachIndexed { index, bundle ->

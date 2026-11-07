@@ -2,9 +2,6 @@ package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -13,34 +10,24 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.DarkColorScheme
+import dev.zakocoder.app.ui.theme.IconSize
+import dev.zakocoder.app.ui.theme.LightColorScheme
+import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
 
-internal val WorkbenchColors = lightColorScheme(
-    primary = Color(0xFF2563EB), onPrimary = Color.White,
-    primaryContainer = Color(0xFFEEF3FF), onPrimaryContainer = Color(0xFF1D4ED8),
-    secondary = Color(0xFF5B6B82), secondaryContainer = Color(0xFFF1F5FB), onSecondaryContainer = Color(0xFF5B6B82),
-    background = Color(0xFFF5F7FA), onBackground = Color(0xFF0F172A),
-    surface = Color.White, onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFEDF0F6), onSurfaceVariant = Color(0xFF5B6B82),
-    outline = Color(0xFF8995A8), outlineVariant = Color(0xFFE8EDF4),
-    surfaceContainerLow = Color(0xFFF8F9FC), surfaceContainer = Color(0xFFF0F3F8),
-    surfaceContainerHigh = Color(0xFFF1F5FB), surfaceContainerHighest = Color(0xFFE7EBF2),
-)
-
-internal val WorkbenchDarkColors = darkColorScheme(
-    primary = Color(0xFF4C8DFF), onPrimary = Color.White,
-    primaryContainer = Color(0xFF142137), onPrimaryContainer = Color(0xFF8FBAFF),
-    secondary = Color(0xFF9BA7B4), secondaryContainer = Color(0xFF1B232D), onSecondaryContainer = Color(0xFFB7C2CE),
-    background = Color(0xFF0B0F14), onBackground = Color(0xFFE6EDF3),
-    surface = Color(0xFF151B23), onSurface = Color(0xFFE6EDF3),
-    surfaceVariant = Color(0xFF1E2733), onSurfaceVariant = Color(0xFF9BA7B4),
-    outline = Color(0xFF4A5563), outlineVariant = Color(0xFF232B36),
-    surfaceContainerLow = Color(0xFF161D26), surfaceContainer = Color(0xFF0B1016),
-    surfaceContainerHigh = Color(0xFF1B232D), surfaceContainerHighest = Color(0xFF1E2733),
-    error = Color(0xFFFF7B72), onError = Color(0xFF0B0F14),
-)
+/**
+ * M3 ColorScheme 现在完全由 `ui/theme/Palette.kt` 的语义 token 派生。
+ *
+ * 保留这两个名字而不是让调用方直接引用 `LightColorScheme` / `DarkColorScheme`，
+ * 是因为 `ZakoCoderApp.kt` 和 `ScreenTestOverlayContent.kt` 已经在用它们；
+ * 换名字换不来任何收益，只会多两处 diff。
+ */
+internal val WorkbenchColors = LightColorScheme
+internal val WorkbenchDarkColors = DarkColorScheme
 
 /** Small, locally drawn line icons; no product assets imported from references. */
 internal enum class Glyph(private val drawing: String) {
@@ -92,14 +79,24 @@ internal enum class Glyph(private val drawing: String) {
     }
 }
 
+/**
+ * 默认 [IconSize.md] 20dp（原 22dp，tokens.md §6.3）。
+ *
+ * 尺寸由 `modifier` 决定：Compose 里 `Modifier.size(17.dp).size(20.dp)` 取外层的 17dp，
+ * 所以调用方传进来的尺寸永远优先，这里的 20dp 只是"没指定时"的默认值。
+ * 这也是为什么降 2dp 不会影响任何显式指定了尺寸的调用点。
+ *
+ * 图标尺寸用 dp 固定、不参与字体缩放（tokens.md §3.4 R3）：图标是识别符号不是阅读内容。
+ */
 @Composable
 internal fun WorkbenchIcon(glyph: Glyph, modifier: Modifier = Modifier, description: String? = null,
-                           tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    Icon(glyph.vector, description, modifier.size(22.dp), tint = tint)
+                           tint: Color = LocalWorkbenchPalette.current.textSecondary,
+                           size: Dp = IconSize.md) {
+    Icon(glyph.vector, description, modifier.size(size), tint = tint)
 }
 
 /** Original Z and code cursor, shared with launcher foreground geometry. */
 @Composable
 internal fun WorkbenchBrandMark(modifier: Modifier = Modifier) {
-    Icon(painterResource(R.drawable.ic_brand_mark), contentDescription = null, modifier = modifier.size(24.dp), tint = Color.Unspecified)
+    Icon(painterResource(R.drawable.ic_brand_mark), contentDescription = null, modifier = modifier.size(IconSize.lg), tint = Color.Unspecified)
 }

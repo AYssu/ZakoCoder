@@ -341,16 +341,13 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                 }
             }
             items(files, key = { it.relative }) { file ->
-                val first = file == files.first()
-                val last = file == files.last()
-                Surface(color = if (file.relative == referencedPath) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, border = cardBorder(), shape = RoundedCornerShape(
-                    topStart = if (first) 18.dp else 0.dp, topEnd = if (first) 18.dp else 0.dp,
-                    bottomStart = if (last) 18.dp else 0.dp, bottomEnd = if (last) 18.dp else 0.dp)) {
+                // 文件是连续滚动列表：只画行间分隔线，避免每行边框叠成粗线。
+                Surface(color = if (file.relative == referencedPath) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
                     Row(Modifier.fillMaxWidth().combinedClickable(onClick = { openFile(file) }, onLongClick = { fileActions = file })
-                        .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically,
+                        .heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         IconTile(if (file.directory) Glyph.Projects else Glyph.File, Modifier.size(36.dp))
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (file.relative == referencedPath) Text(stringResource(R.string.ai_linked_file), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(if (file.modifiedAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(file.modifiedAt))

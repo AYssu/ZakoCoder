@@ -41,6 +41,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
+import dev.zakocoder.app.ui.theme.Radius
+import dev.zakocoder.app.ui.theme.Space
+import dev.zakocoder.app.ui.theme.Type
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.runtime.StorageUsage
@@ -48,10 +52,10 @@ import dev.zakocoder.app.settings.AptSource
 
 @Composable
 internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, Modifier.padding(start = 2.dp), style = MaterialTheme.typography.titleSmall,
+    Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
+        Text(title, style = Type.bodyStrong,
             color = MaterialTheme.colorScheme.onSurface)
-        Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface, border = cardBorder(), shadowElevation = cardElevation()) {
+        Surface(shape = Radius.mdShape, color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
             Column(Modifier.fillMaxWidth(), content = content)
         }
     }
@@ -60,9 +64,9 @@ internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> U
 @Composable
 internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: (() -> Unit)? = null) {
     Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick).heightIn(min = 48.dp) else Modifier)
-        .padding(horizontal = 15.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically,
+        .padding(horizontal = Space.lg, vertical = Space.md), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(title, Modifier.weight(1f), style = Type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (value.isNotEmpty()) Text(value, Modifier.widthIn(max = 160.dp), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(17.dp), tint = TertiaryText)
@@ -70,14 +74,14 @@ internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-internal fun GroupDivider() { HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF222A34) else androidx.compose.ui.graphics.Color(0xFFF1F5F9)) }
+internal fun GroupDivider() { HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = LocalWorkbenchPalette.current.divider) }
 
 @Composable
 private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, Modifier.padding(start = 4.dp).semantics { heading() }, fontSize = 12.sp, lineHeight = 16.sp,
-            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+        Text(title, Modifier.padding(start = Space.xs).semantics { heading() }, style = Type.metaStrong,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(shape = Radius.mdShape, color = MaterialTheme.colorScheme.surface,
             border = cardBorder()) {
             Column(Modifier.fillMaxWidth(), content = content)
         }
@@ -88,7 +92,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
     val tone = if (enabled) 1f else .45f
     Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else Modifier)
-        .heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
+        .heightIn(min = 64.dp).padding(horizontal = Space.lg, vertical = Space.md), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
@@ -96,9 +100,9 @@ private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Setti
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium,
+            Text(title, style = Type.body,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = tone))
-            if (value.isNotEmpty()) Text(value, fontSize = 12.sp, lineHeight = 18.sp,
+            if (value.isNotEmpty()) Text(value, style = Type.meta,
                 fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -209,7 +213,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Keyboard, Modifier.size(20.dp)) }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.terminal_font), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.terminal_font), style = Type.body)
                     Text(stringResource(R.string.terminal_output_font), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -217,7 +221,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 10) {
                             WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(16.dp), description = stringResource(R.string.decrease_font))
                         }
-                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 32.dp), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 32.dp), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp + 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp < 28) {
                             WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp), description = stringResource(R.string.increase_font))
                         }
@@ -242,8 +246,8 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Storage, Modifier.size(20.dp)) }
                     }
-                    Text(stringResource(R.string.storage_used), Modifier.weight(1f), fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium)
-                    Text(state.usedBytes?.let(StorageUsage::format) ?: unavailable, fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(stringResource(R.string.storage_used), Modifier.weight(1f), style = Type.body)
+                    Text(state.usedBytes?.let(StorageUsage::format) ?: unavailable, style = Type.section, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val cacheScope = stringResource(R.string.cache_scope)
@@ -252,7 +256,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                             colors = ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                             modifier = Modifier.semantics { stateDescription = cacheScope }.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.cache_compact_action), fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.cache_compact_action), style = Type.metaStrong)
                         }
                     }
                     Spacer(Modifier.weight(1f))

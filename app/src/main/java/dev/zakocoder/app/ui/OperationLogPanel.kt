@@ -90,11 +90,11 @@ internal fun OperationLogPanel(
                 }
                 val description = stringResource(R.string.operation_log_output)
                 SelectionContainer {
-                    Box(Modifier.fillMaxWidth().height(200.dp).background(Color(0xFF0D1117))
+                    Box(Modifier.fillMaxWidth().height(200.dp).background(TerminalBackground)
                         .nestedScroll(userScroll).verticalScroll(scroll).padding(12.dp)
                         .semantics { contentDescription = description }) {
                         Text(output.ifEmpty { stringResource(if (running) R.string.operation_log_waiting else R.string.operation_log_empty) },
-                            color = Color(0xFFC9D1D9), fontFamily = FontFamily.Monospace,
+                            color = TerminalForeground, fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }

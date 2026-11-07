@@ -28,11 +28,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.view.TerminalView
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.DarkPalette
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.terminal.TerminalItem
 
-private val TerminalChrome: Color @Composable get() = if (LocalWorkbenchDark.current) Color(0xFF0B1016) else Color(0xFF11161D)
+private val TerminalChrome: Color @Composable get() = DarkPalette.surfaceSunken
 private val TerminalText = TerminalForeground
 private val TerminalMuted = TerminalSecondary
 
@@ -159,8 +160,8 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
 private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
     Box(modifier.height(48.dp).semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = if (selected) BrandFill else if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F),
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Color(0xFF31383F))) {
+            color = if (selected) BrandFill else DarkPalette.surfaceRaised,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else DarkPalette.borderHairline)) {
             Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) {
                 Text(label, color = TerminalText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1)
             }
@@ -172,7 +173,7 @@ private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = f
 private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.height(48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF31383F))) {
+            color = DarkPalette.surfaceRaised, border = androidx.compose.foundation.BorderStroke(1.dp, DarkPalette.borderHairline)) {
             Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(glyph, Modifier.size(16.dp), description = label, tint = TerminalText) }
         }
     }

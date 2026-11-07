@@ -3,7 +3,7 @@ package dev.zakocoder.app.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.unit.sp
+import dev.zakocoder.app.ui.theme.Type
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -21,6 +21,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.projects.ProjectKind
@@ -62,8 +63,8 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     Column(Modifier.fillMaxSize()) {
         PageHeading(stringResource(R.string.environment_title))
     LazyColumn(Modifier.weight(1f), state = environmentScroll, verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
-        item { Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer,
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF1E3450) else androidx.compose.ui.graphics.Color(0xFFE3EAFB))) {
+        item { Surface(shape = dev.zakocoder.app.ui.theme.Radius.mdShape, color = MaterialTheme.colorScheme.primaryContainer,
+            border = androidx.compose.foundation.BorderStroke(1.dp, LocalWorkbenchPalette.current.borderHairline)) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
@@ -81,10 +82,10 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(if (state.checkingTools) R.string.checking_tools else if (state.bundleTools.isEmpty()) R.string.bundle_unknown else R.string.tools_check_complete),
-                        Modifier.weight(1f), fontSize = 11.5.sp, color = TertiaryText)
+                        Modifier.weight(1f), style = Type.meta, color = TertiaryText)
                     val maintenanceDescription = stringResource(R.string.environment_maintenance)
                     TextButton(onClick = { maintenance = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = maintenanceDescription }) {
-                        Text(stringResource(R.string.maintenance_short), fontSize = 12.5.sp)
+                        Text(stringResource(R.string.maintenance_short), style = Type.meta)
                         Spacer(Modifier.width(4.dp))
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                     }

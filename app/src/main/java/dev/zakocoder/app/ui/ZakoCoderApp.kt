@@ -94,7 +94,7 @@ fun ZakoCoderApp(workbench: Workbench) {
         }
     }
     CompositionLocalProvider(LocalWorkbenchDark provides dark, LocalMinimumInteractiveComponentSize provides 48.dp) {
-    MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography, shapes = Shapes(extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), medium = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), large = androidx.compose.foundation.shape.RoundedCornerShape(18.dp))) {
+    MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography, shapes = dev.zakocoder.app.ui.theme.WorkbenchShapes) {
         UpdateBindings(workbench.updates) { updatesOpen = true }
         if (updatesOpen) UpdatePage(workbench.updates) { updatesOpen = false }
         if (proxyOpen) ProxySettingsPage(workbench, state) { proxyOpen = false }
@@ -156,7 +156,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                 }
             }
             if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(start = 20.dp, end = 20.dp, top = 12.dp),
-                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shadowElevation = cardElevation()) {
+                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Row(Modifier.padding(start = 14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(state.message, Modifier.weight(1f).heightIn(max = 96.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = if (state.messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                         IconButton(onClick = workbench::dismissMessage) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.dismiss)) }

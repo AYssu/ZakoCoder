@@ -34,7 +34,7 @@ internal fun MessageCopyPopup(onDismiss: () -> Unit, onCopy: () -> Unit, onEdit:
         }
     }, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
         Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), shadowElevation = 4.dp) {
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column(Modifier.widthIn(min = 152.dp, max = 240.dp).padding(vertical = 4.dp)) {
                 MessageAction(R.string.ai_copy_user, Glyph.Copy, onCopy)
                 onEdit?.let { MessageAction(R.string.ai_message_edit, Glyph.File, it) }

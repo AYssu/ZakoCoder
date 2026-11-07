@@ -13,17 +13,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.terminal.TerminalItem
+import dev.zakocoder.app.ui.theme.Radius
+import dev.zakocoder.app.ui.theme.Space
+import dev.zakocoder.app.ui.theme.Type
 
 @Composable
 internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, onOpen: (String) -> Unit, onEnvironment: () -> Unit, onProjects: () -> Unit) {
@@ -32,13 +32,13 @@ internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, on
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
 
             PageHeading(stringResource(R.string.nav_terminal)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.xs), verticalAlignment = Alignment.CenterVertically) {
                     repeat(4) { index -> Box(Modifier.size(8.dp).background(if (index < state.sessions.size) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape)) }
                     Text(stringResource(R.string.terminal_quota, state.sessions.size), Modifier.padding(start = 3.dp), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp),
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.lg),
         contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
         if (state.sessions.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally,
@@ -53,24 +53,24 @@ internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, on
         items(state.sessions, key = { it.id }) { item ->
             val enterLabel = stringResource(R.string.enter_terminal_number, item.number)
             Surface(onClick = { onOpen(item.id) }, modifier = Modifier.semantics { contentDescription = enterLabel },
-                shape = RoundedCornerShape(18.dp), shadowElevation = cardElevation(), border = cardBorder()) {
+                shape = Radius.mdShape, border = cardBorder()) {
                 Column(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 15.dp, end = 15.dp, top = 13.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically,
+                    Row(Modifier.padding(start = Space.lg, end = Space.lg, top = Space.md, bottom = Space.sm), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatusDot(terminalStatusColor(item))
-                        Text(stringResource(R.string.terminal_number, item.number), fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.terminal_number, item.number), style = Type.bodyStrong)
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Text(item.projectName, Modifier.weight(1f), textAlign = TextAlign.End,
-                                fontSize = 11.5.sp, lineHeight = 16.sp, color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(" · " + terminalStatusLabel(item), fontSize = 11.5.sp, lineHeight = 16.sp, color = TertiaryText)
+                                style = Type.meta, color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(" · " + terminalStatusLabel(item), style = Type.meta, color = TertiaryText)
                         }
                     }
-                    Surface(Modifier.fillMaxWidth().padding(horizontal = 14.dp), color = TerminalBackground, shape = RoundedCornerShape(11.dp)) {
+                    Surface(Modifier.fillMaxWidth().padding(horizontal = Space.md), color = TerminalBackground, shape = Radius.smShape) {
                         Text(previews[item.id].orEmpty().ifBlank { stringResource(R.string.terminal_waiting_output) },
-                            Modifier.heightIn(min = 86.dp).padding(horizontal = 13.dp, vertical = 11.dp), fontFamily = FontFamily.Monospace,
-                            fontSize = 11.5.sp, lineHeight = 20.7.sp, color = TerminalForeground, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                            Modifier.heightIn(min = 88.dp).padding(Space.md), style = Type.terminal,
+                            color = TerminalForeground, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = Space.lg, vertical = Space.sm), horizontalArrangement = Arrangement.End) {
                         WorkbenchIcon(Glyph.Next, tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -91,7 +91,7 @@ internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, on
 internal fun terminalStatusColor(item: TerminalItem) = when {
     item.session.isRunning -> ReadyGreen
     item.session.exitStatus != 0 -> FailureRed
-    else -> androidx.compose.ui.graphics.Color(0xFF9AA7B8)
+    else -> TertiaryText
 }
 
 @Composable

@@ -45,6 +45,8 @@ __pycache__/
 
 # Local development notes and assistant settings
 /.local/
+/.Trash-0/
+/.workbuddy/
 /outputs/
 /AGENTS.md
 /AGENT.md
