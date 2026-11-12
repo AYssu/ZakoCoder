@@ -28,6 +28,7 @@ class AiMultimodalControllerDeviceTest {
         val context = object : ContextWrapper(base) {
             override fun getFilesDir() = File(f.root, "controller-files").apply { mkdirs() }
             override fun getNoBackupFilesDir() = File(f.root, "controller-private").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("${f.token}-$name", mode)
         }
         return AiController(context, { id -> File(f.root, "project-$id").apply { mkdirs() } }, { _, _ -> false },
             { _, _ -> error("No shell expected") }, {}, {}, f.transport, f.config, history = history)
@@ -277,7 +278,13 @@ class AiMultimodalControllerDeviceTest {
                 profile.parameters, AiContextOptions(contextWindowTokens = 48000, compressionThresholdPercent = 70, summaryMaxChars = 2000)))
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("compressed-image") }; ready(ai)
-            for (skill in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(skill, false) }
+            main { ai.refreshGlobalSkills() }
+            await { ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading }
+            for (skill in ai.globalSkills.value.enabledSkills.toList()) {
+                main { ai.enableGlobalSkill(skill, false) }
+                await { !ai.globalSkills.value.active }
+            }
+            assertTrue(ai.globalSkills.value.enabledSkills.isEmpty())
             attach(ai, uri)
             val image = ai.state.value.pendingImages.single()
             f.enqueue("Large image review " + "x".repeat(60000))

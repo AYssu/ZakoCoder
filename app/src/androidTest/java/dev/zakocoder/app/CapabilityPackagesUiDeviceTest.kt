@@ -132,7 +132,10 @@ class CapabilityPackagesUiDeviceTest {
     @Test(timeout = 120000) fun lightCapabilityPackagesAndSsh() = review(false)
     @Test(timeout = 120000) fun darkCapabilityPackagesAndSsh() = review(true)
 
-    private fun review(dark: Boolean) {
+    @Test(timeout = 120000) fun lightGlobalDeviceScreenWithoutWorkspace() = review(false, screenOnly = true)
+    @Test(timeout = 120000) fun darkGlobalDeviceScreenWithoutWorkspace() = review(true, screenOnly = true)
+
+    private fun review(dark: Boolean, screenOnly: Boolean = false) {
         val screen = AtomicBoolean()
         val ssh = AtomicBoolean()
         val details = AtomicBoolean()
@@ -154,8 +157,8 @@ class CapabilityPackagesUiDeviceTest {
                             if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                     } }
                     CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark,
-                        LocalDensity provides Density(widthPx.coerceAtLeast(1) / 360f, 1.3f)) {
-                        MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                        LocalDensity provides Density(widthPx.coerceAtLeast(1) / 393f, 1f)) {
+                        WorkbenchMiuixTheme(dark) {
                             // Each unrelated fixture must have its own draft state. Revisions inside
                             // a fixture still recompose normally, exercising real successful-save cleanup.
                             key(generation) {
@@ -178,8 +181,14 @@ class CapabilityPackagesUiDeviceTest {
                     { trusted.set(true) }, { forgotten.set(true) }, {}) }
             }
             packages(CapabilityPackagesUiModel())
-            await("No selected project") { has(context.getString(R.string.capability_packages_no_project)) }
-            assertFalse(has(context.getString(R.string.capability_screen_title)))
+            await("Global screen available without workspace") { has(context.getString(R.string.capability_screen_title)) }
+            assertFalse(has(context.getString(R.string.capability_packages_no_project)))
+            nodes { all ->
+                val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                assertEquals(2, switches.size)
+                assertNull(switches.first().config.getOrNull(SemanticsProperties.Disabled))
+                assertNotNull(switches.last().config.getOrNull(SemanticsProperties.Disabled))
+            }
             capture(dark, "no-project")
             packages(CapabilityPackagesUiModel(projectName = "Screen test fixture", hasProject = true))
             await("Both packages default off") { has(context.getString(R.string.capability_screen_title)) }
@@ -199,6 +208,7 @@ class CapabilityPackagesUiDeviceTest {
             capture(dark, "screen-enabled")
             val sshConfigure = context.getString(R.string.capability_ssh_configure)
             reveal(sshConfigure); capture(dark, "ssh-enabled")
+            if (screenOnly) return
             sshPanel(SshPackageUiModel())
             await("Connection form") { has(context.getString(R.string.ssh_package_host)) }
             assertFalse(has(context.getString(R.string.ssh_package_secret_saved)))

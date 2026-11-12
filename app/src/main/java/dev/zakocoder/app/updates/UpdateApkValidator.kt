@@ -51,6 +51,7 @@ internal fun validateUpdateApk(context: Context, file: File, release: AppRelease
         val candidateCode = if (Build.VERSION.SDK_INT >= 28) archive.longVersionCode else archive.versionCode.toLong()
         val installedCode = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
         check(candidateCode > installedCode)
+        check(release.versionCode == null || release.versionCode == candidateCode)
         // Conservative exact current signers: key rotation requires a separately audited migration.
         val a = if (Build.VERSION.SDK_INT >= 28) archive.signingInfo?.apkContentsSigners else archive.signatures
         val b = if (Build.VERSION.SDK_INT >= 28) installed.signingInfo?.apkContentsSigners else installed.signatures

@@ -60,8 +60,8 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         }
     }
     val windowDescription = stringResource(R.string.ai_options_context_tokens)
-    OutlinedTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth().semantics { contentDescription = windowDescription },
-        enabled = editable, singleLine = true, label = { Text(stringResource(R.string.ai_options_context_tokens)) },
+    WorkbenchTextField(draft.windowTokens, { draft.windowTokens = it; changed() }, Modifier.fillMaxWidth().semantics { contentDescription = windowDescription },
+        enabled = editable, singleLine = true, label = stringResource(R.string.ai_options_context_tokens),
         isError = !ModelInputValidation.window(draft.windowTokens),
         supportingText = { Text(stringResource(if (ModelInputValidation.window(draft.windowTokens)) R.string.ai_context_window_range else R.string.ai_reading_number_window)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
@@ -69,7 +69,7 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         color = MaterialTheme.colorScheme.onSurfaceVariant)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.ai_options_auto), Modifier.weight(1f))
-        Switch(draft.automatic, { draft.automatic = it; changed() }, enabled = editable)
+        WorkbenchSwitch(draft.automatic, { draft.automatic = it; changed() }, enabled = editable)
     }
     ContextIntegerField(draft.threshold, { draft.threshold = it; changed() }, R.string.ai_options_threshold, editable,
         !ModelInputValidation.threshold(draft.threshold), R.string.ai_reading_number_threshold)
@@ -84,9 +84,8 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
         CopyHelp(stringResource(R.string.copy_ai_presets_help_title), stringResource(R.string.copy_ai_presets_help))
         contextWindowPresets.groupBy { it.provider }.forEach { (provider, entries) ->
             Text(stringResource(provider), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall)
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+            WorkbenchCard(Modifier.fillMaxWidth(), cornerRadius = 12.dp,
+                color = MaterialTheme.colorScheme.surface) {
                 Column {
                     entries.forEachIndexed { index, preset ->
                         Row(Modifier.fillMaxWidth().clickable(enabled = editable, role = Role.Button) {
@@ -118,7 +117,7 @@ internal fun ContextBudgetOptions(draft: ModelOptionsDraft, editable: Boolean, c
 
 @Composable
 private fun ContextIntegerField(value: String, update: (String) -> Unit, label: Int, editable: Boolean, invalid: Boolean, hint: Int) {
-    OutlinedTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
-        label = { Text(stringResource(label)) }, isError = invalid, supportingText = { Text(stringResource(hint)) },
+    WorkbenchTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
+        label = stringResource(label), isError = invalid, supportingText = { Text(stringResource(hint)) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, autoCorrectEnabled = false))
 }

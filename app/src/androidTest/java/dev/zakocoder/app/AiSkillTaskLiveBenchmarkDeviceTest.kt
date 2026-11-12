@@ -76,6 +76,7 @@ class AiSkillTaskLiveBenchmarkDeviceTest {
                         { _, _ -> commands.incrementAndGet(); error("Commands forbidden in public fixture benchmark") }, {}, {},
                         transport = ChatTransport(), config = config, proxy = { proxy }, canStartTask = { idle() })
                     ai.select(PROJECT)
+                    ai.refreshGlobalSkills()
                 }
                 val collector = launch(Dispatchers.Main.immediate) { ai.state.collect { capture(it) } }
                 val record = JSONObject().put("mode", mode).put("repeat", index / 2 + 1)
@@ -84,10 +85,12 @@ class AiSkillTaskLiveBenchmarkDeviceTest {
                     val remaining = deadline - started
                     require(remaining > 0) { "Benchmark budget exhausted" }
                     withTimeout(minOf(180000L, remaining)) {
-                        await { ai.state.value.configured && !ai.state.value.restoring && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading }
+                        await { ai.state.value.configured && !ai.state.value.restoring && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading && ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading }
                         val policy = AiPolicy(AiPermission.Deny, ALLOWED.associateWith { AiPermission.Allow })
-                        main { ai.setPolicy(policy); ai.recommendedSkills(); ai.setSkillOnDemand(mode == "lazy") }
-                        await { !ai.state.value.permissionsSaving }
+                        main { ai.setPolicy(policy); ai.recommendedGlobalSkills() }
+                        await { !ai.state.value.permissionsSaving && !ai.globalSkills.value.active }
+                        main { ai.setGlobalSkillOnDemand(mode == "lazy") }
+                        await { !ai.globalSkills.value.active }
                         assertEquals(policy, ai.state.value.policy)
                         assertEquals(AiBuiltinSkills.defaults.sorted(), ai.state.value.enabledSkills.sorted())
                         assertEquals(mode == "lazy", ai.state.value.skillOnDemand)

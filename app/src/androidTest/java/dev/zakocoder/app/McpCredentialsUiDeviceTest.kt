@@ -46,7 +46,7 @@ class McpCredentialsUiDeviceTest {
         val alias = "mcp-credential-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = root }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val controller = McpController(isolated, scope, { _, _ -> error("Form must not launch a process") }, keyAlias = alias)
+        val controller = McpController(isolated, scope, keyAlias = alias)
         try {
             await { !controller.state.value.loading }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->

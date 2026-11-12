@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 /** UI delegates IO, permissions and network to the native controllers. */
 @Composable
-internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?, projectName: String, onDismiss: () -> Unit) {
+internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?, projectName: String, fullPage: Boolean = false, onDismiss: () -> Unit) {
     val packages by workbench.capabilityPackages.state.collectAsStateWithLifecycle()
     val ssh by workbench.ssh.state.collectAsStateWithLifecycle()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
@@ -88,10 +88,10 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
                 onDismiss = { details = null })
         }
         null -> CapabilityPackagesSheet(CapabilityPackagesUiModel(projectName, projectId != null, screenOn, sshOn,
-            !packages.loaded || packages.busy || projectId == null, packages.error),
-            onScreenEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Screen, enabled) } },
+            !packages.loaded || packages.busy, packages.error),
+            onScreenEnabled = workbench.capabilityPackages::setScreenEnabled,
             onSshEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Ssh, enabled) } },
             onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
-            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh }, onDismiss = onDismiss)
+            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh }, onDismiss = onDismiss, fullPage = fullPage)
     }
 }

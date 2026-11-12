@@ -55,6 +55,8 @@ class AiToolRegistryDeviceTest {
         rejects(AiTool.SendTerminalInput, JSONObject().put("terminal_id", "a").put("text", "\u0001"))
         rejects(AiTool.AndroidTest, JSONObject().put("action", "unsupported"))
         rejects(AiTool.AndroidTest, JSONObject().put("action", "prepare").put("path", ""))
+        rejects(AiTool.AndroidTest, JSONObject().put("action", "observe").put("package", "unapproved"))
+        rejects(AiTool.AndroidTest, JSONObject().put("action", "observe").put("path", "old.apk"))
         rejects(AiTool.SshRemote, JSONObject().put("action", "exec").put("password", "must-not-be-model-input"))
         rejects(AiTool.UseMcp, JSONObject().put("server_id", "x").put("method", "tools/list").put("params", JSONArray()))
         rejects(AiTool.ReadCommandLog, JSONObject().put("run_id", "not-a-uuid"))
@@ -89,6 +91,8 @@ class AiToolRegistryDeviceTest {
             return (0 until values.length()).map { values.getString(it) }
         }
         assertEquals(AiToolRegistry.SCREEN_TEST_ACTIONS, actions("android_test"))
+        assertTrue("authorize" in actions("android_test"))
+        assertTrue(actions("android_test").none { it in setOf("prepare", "install", "launch") })
         assertEquals(AiToolRegistry.SSH_ACTIONS, actions("ssh_remote"))
     }
 }

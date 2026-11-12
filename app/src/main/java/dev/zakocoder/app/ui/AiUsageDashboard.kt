@@ -1,9 +1,9 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -95,7 +95,7 @@ internal fun AiUsageDashboard(
         }
         if (!state.loading && !state.failed) {
             if (filtered.requests.isEmpty() && filtered.tools.isEmpty()) item {
-                Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = cardBorder()) {
+                WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(stringResource(R.string.ai_usage_empty), style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.ai_usage_empty_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -125,7 +125,7 @@ internal fun AiUsageDashboard(
 
 @Composable
 private fun UsageFilterRow(label: String, value: String, onClick: () -> Unit) {
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).heightIn(min = 56.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -142,8 +142,8 @@ private fun UsageChoiceSheet(title: String, all: String, entries: List<Pair<Stri
     var query by remember { mutableStateOf("") }
     val visible = remember(entries, query) { entries.filter { it.second.contains(query, ignoreCase = true) }.take(100) }
     WorkbenchSheet(title, dismiss) {
-        OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
-            label = { Text(stringResource(R.string.ai_usage_search)) })
+        WorkbenchTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            label = stringResource(R.string.ai_usage_search))
         UsageChoiceRow(all, selected == null) { choose(null) }
         visible.forEach { (id, label) -> UsageChoiceRow(label, selected == id) { choose(id) } }
         if (visible.isEmpty()) Text(stringResource(R.string.ai_usage_no_matches), style = MaterialTheme.typography.bodySmall)
@@ -188,7 +188,7 @@ private fun UsageLoadState(state: AiUsageState, onRefresh: () -> Unit) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }
     } else if (state.failed) {
-        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.errorContainer) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.ai_usage_load_failed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
                 TextButton(onClick = onRefresh) { Text(stringResource(R.string.ai_usage_retry)) }
@@ -200,7 +200,7 @@ private fun UsageLoadState(state: AiUsageState, onRefresh: () -> Unit) {
 @Composable
 internal fun AiUsageSummaryCard(summary: AiUsageSummary) {
     val unknown = stringResource(R.string.ai_usage_unknown)
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             UsageMetricRow(R.string.ai_usage_requests, summary.requestCount.toString(), R.string.ai_usage_tools, summary.toolCount.toString())
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

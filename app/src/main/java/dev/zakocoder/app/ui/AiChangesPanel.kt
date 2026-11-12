@@ -175,10 +175,7 @@ internal fun AiConversationChangeCard(
                 color = if (read.snapshot.status == AiChangesStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
-    Surface(onClick = { open = true }, modifier = modifier.fillMaxWidth(),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(onClick = { open = true }, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -207,18 +204,8 @@ internal fun AiConversationChangeCard(
 @Composable
 private fun ChangeReviewSheet(turn: Int, rows: List<AiReview>, summaries: Map<String, AiLineSummary>?,
     onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        properties = ModalBottomSheetProperties(isAppearanceLightStatusBars = !LocalWorkbenchDark.current,
-            isAppearanceLightNavigationBars = !LocalWorkbenchDark.current),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        dragHandle = {
-            Box(Modifier.padding(top = 8.dp, bottom = 4.dp).size(32.dp, 4.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .30f)))
-        }) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp)) {
+    WorkbenchPanelSheet(onDismiss = onDismiss, cornerRadius = 20.dp) { requestDismiss ->
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -233,7 +220,7 @@ private fun ChangeReviewSheet(turn: Int, rows: List<AiReview>, summaries: Map<St
                 }
                 summaries?.let { ChangeNumbers(AiLineSummary(it.values.sumOf { count -> count.added },
                     it.values.sumOf { count -> count.removed })) }
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = requestDismiss) {
                     WorkbenchIcon(Glyph.Close, Modifier.size(18.dp), description = stringResource(R.string.close))
                 }
             }

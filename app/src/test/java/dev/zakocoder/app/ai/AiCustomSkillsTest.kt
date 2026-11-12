@@ -56,6 +56,15 @@ class AiCustomSkillsTest {
         assertFalse(File(root, ".zakocoder").exists())
     }
 
+    @Test fun damagedImportedMetadataIsMarkedInvalidRatherThanLoadedAsInstructions() {
+        val root = temporary.newFolder("shared")
+        val skills = AiSkills(AiProjectFiles { root })
+        val imported = skills.create("", "shared", "Valid imported metadata", "Original instructions")
+        File(root, imported.path).writeText("---\nname: shared\n---\nDamaged metadata")
+        assertFalse(skills.scan("").single().valid)
+        assertTrue(runCatching { skills.content("", listOf(imported.path)) }.isFailure)
+    }
+
     @Test fun rejectsSymlinkedSkillRootWithoutTouchingExternalDirectory() {
         val root = temporary.newFolder("project")
         val external = temporary.newFolder("external")

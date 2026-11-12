@@ -90,7 +90,7 @@ class AiCapabilityPackagesDeviceTest {
             var executed = 0
             lateinit var ai: AiController
             main { ai = controller(f, { packages }) { executed++ }; ai.select("lease-${kind.wire}") }; ready(ai)
-            main { ai.setPolicy(AiPolicy(AiPermission.Allow, emptyMap())) }; await { !ai.state.value.permissionsSaving }
+            main { ai.setPolicy(AiPolicy(AiPermission.Ask, emptyMap())) }; await { !ai.state.value.permissionsSaving }
             f.enqueue(calls = listOf(call(kind))); f.enqueue("Old approval was rejected")
             main { assertTrue(ai.send("Read capability status")) }; await { ai.state.value.approval != null }
             assertEquals(0, executed)

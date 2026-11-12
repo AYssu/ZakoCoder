@@ -20,11 +20,11 @@ import dev.zakocoder.app.ai.AiState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** Project-scoped forms; opening/importing never enables a skill or contacts a model. */
+/** Device-wide forms; opening/importing never enables a skill or contacts a model. */
 @Composable
 internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
     val scope = rememberCoroutineScope()
-    val owner = "${state.projectId}:${state.conversationId}"
+    val owner = "global"
     val current by rememberUpdatedState(state)
     var opened by rememberSaveable(owner) { mutableStateOf(false) }
     var imported by rememberSaveable(owner) { mutableStateOf(false) }
@@ -43,12 +43,12 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
     var error by remember(owner) { mutableIntStateOf(0) }
     var saved by remember(owner) { mutableStateOf(false) }
     var importOwner by rememberSaveable(owner) { mutableStateOf<String?>(null) }
-    val editable = state.projectId != null && !state.active && !state.restoring && !state.permissionsLoading &&
-        !state.permissionsSaving && !state.skillsLoading && !state.historyError && !busy
+    val editable = !state.active && !state.restoring && !state.permissionsLoading &&
+        !state.permissionsSaving && !state.skillsLoading && !state.historyError && !state.skillError && !busy
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val requested = importOwner
         importOwner = null
-        if (uri != null && requested == "${current.projectId}:${current.conversationId}" && !current.active && !current.restoring) {
+        if (uri != null && requested == owner && !current.active && !current.restoring) {
             reading = true; error = 0; saved = false
             scope.launch {
                 try {
@@ -60,7 +60,7 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
                         require(bytes.size <= AiSkills.MAX_CUSTOM_BYTES)
                         AiSkillArchive.decode(bytes).removePrefix("\uFEFF").also { require(it.length <= AiSkills.MAX_CUSTOM_CHARS && '\u0000' !in it) }
                     }
-                    if (requested == "${current.projectId}:${current.conversationId}" && !current.active && !current.restoring) {
+                    if (requested == owner && !current.active && !current.restoring) {
                         body = raw; archive = if (zipped) bytes else null; archiveNames = names
                         if (!zipped || archiveDigest != digest) operationId = java.util.UUID.randomUUID().toString()
                         archiveUri = if (zipped) uri.toString() else ""
@@ -68,20 +68,19 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
                         importedZip = zipped; imported = true; opened = true
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) { if (requested == "${current.projectId}:${current.conversationId}") error = R.string.ai_skill_custom_read_error }
+                catch (_: Exception) { if (requested == owner) error = R.string.ai_skill_custom_read_error }
                 finally { reading = false }
             }
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { imported = false; importedZip = false; archive = null; opened = true; error = 0; saved = false }, enabled = editable, modifier = Modifier.fillMaxWidth()) {
+        WorkbenchPrimaryButton(onClick = { imported = false; importedZip = false; archive = null; opened = true; error = 0; saved = false }, enabled = editable, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.ai_skill_add_custom))
         }
         TextButton(onClick = {
             importOwner = owner
             launcher.launch(arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream", "application/zip", "application/x-zip-compressed"))
         }, enabled = editable) { Text(stringResource(R.string.ai_skill_import_custom)) }
-        if (state.projectId == null) Text(stringResource(R.string.ai_skill_custom_need_project), style = MaterialTheme.typography.bodySmall)
         if (busy && !opened) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (error != 0 && !opened) Text(stringResource(error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (saved) Text(stringResource(R.string.ai_skill_custom_saved), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
@@ -107,10 +106,8 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
     // retry idempotent even if the previous Activity stopped observing a successful save.
     LaunchedEffect(owner, saving, operationId, archive) {
         if (!saving || (importedZip && archive == null)) return@LaunchedEffect
-        val project = state.projectId
-        if (project == null) { saving = false; return@LaunchedEffect }
         try {
-            if (controller.saveProjectSkill(project, state.conversationId, name, description, body, imported, operationId, archive)) {
+            if (controller.saveGlobalSkill(name, description, body, imported, operationId, archive)) {
                 opened = false; saved = true; body = ""; name = ""; description = ""
                 archive = null; archiveNames = emptyList(); importedZip = false; archiveUri = ""; archiveDigest = ""
                 operationId = java.util.UUID.randomUUID().toString()
@@ -122,21 +119,19 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
     if (opened) AiFullScreen(stringResource(if (imported) R.string.ai_skill_import_custom else R.string.ai_skill_add_custom), { if (!busy) opened = false }) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(stringResource(R.string.ai_skill_custom_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ai_skill_global_custom_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (!imported) {
-                    OutlinedTextField(name, { if (it.length <= 100) name = it }, label = { Text(stringResource(R.string.ai_skill_custom_name)) }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(description, { if (it.length <= 500) description = it }, label = { Text(stringResource(R.string.ai_skill_custom_description)) }, minLines = 2, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    WorkbenchTextField(name, { if (it.length <= 100) name = it }, label = stringResource(R.string.ai_skill_custom_name), singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    WorkbenchTextField(description, { if (it.length <= 500) description = it }, label = stringResource(R.string.ai_skill_custom_description), minLines = 2, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 } else Text(stringResource(if (importedZip) R.string.ai_skill_custom_archive_hint else R.string.ai_skill_custom_import_hint), style = MaterialTheme.typography.bodySmall)
                 if (importedZip) {
                     Text(stringResource(R.string.ai_skill_custom_archive_count, archiveNames.size), style = MaterialTheme.typography.titleSmall)
                     archiveNames.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                } else OutlinedTextField(body, { if (it.length <= AiSkills.MAX_CUSTOM_CHARS) body = it }, label = {
-                    Text(stringResource(if (imported) R.string.ai_skill_custom_document else R.string.ai_skill_custom_body))
-                }, minLines = 8, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                } else WorkbenchTextField(body, { if (it.length <= AiSkills.MAX_CUSTOM_CHARS) body = it }, label = stringResource(if (imported) R.string.ai_skill_custom_document else R.string.ai_skill_custom_body), minLines = 8, enabled = !busy, modifier = Modifier.fillMaxWidth())
                 if (error != 0) Text(stringResource(error), color = MaterialTheme.colorScheme.error)
             }
             HorizontalDivider()
-            Button(onClick = {
+            WorkbenchPrimaryButton(onClick = {
                 saving = true; error = 0
             }, enabled = editable && (if (importedZip) archive != null else body.isNotBlank() && (imported || (name.isNotBlank() && description.isNotBlank()))), modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Text(stringResource(if (busy) R.string.editor_saving else R.string.editor_save))

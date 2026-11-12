@@ -1,0 +1,10 @@
+<resources>
+    <string name="extensions_global_scope">全局配置，所有工作区和对话共用。修改将在下一次任务中生效。</string>
+    <string name="ai_skills_global_custom">自定义 Skill</string>
+    <string name="ai_skills_global_hint">导入后保存在应用中，可在所有工作区使用。</string>
+    <string name="ai_skill_global_source">全局自定义 Skill</string>
+    <string name="ai_skill_global_custom_hint">保存到应用的 Skill 库，不写入工作区。导入不会自动启用或执行脚本。</string>
+    <string name="ai_skills_global_error">无法读取全局 Skill 配置，请刷新重试。若仍失败，可恢复推荐配置；自定义 Skill 文件会保留。</string>
+    <string name="ai_skills_reset_configuration">恢复推荐配置</string>
+    <string name="ai_skills_reset_explanation">恢复推荐 Skill，并关闭按需读取。自定义 Skill 文件和会话记录会保留，之后可重新选择启用。</string>
+</resources>

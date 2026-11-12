@@ -11,8 +11,6 @@ import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import okio.BufferedSource
-import okio.buffer
-import okio.source
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -24,7 +22,6 @@ import kotlin.coroutines.resumeWithException
 /** Implements MCP 2025-06-18 / 2025-03-26 and legacy 2024-11-05 SSE; no OAuth or server requests. */
 internal class McpSession(
     private val server: McpServer, private val scope: CoroutineScope,
-    private val start: suspend () -> Process,
     private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).callTimeout(65, TimeUnit.SECONDS).build(),
 ) {
@@ -36,7 +33,6 @@ internal class McpSession(
     private val calls = ConcurrentHashMap.newKeySet<Call>()
     private val responses = ConcurrentHashMap.newKeySet<Response>()
     private val readers = java.util.concurrent.CopyOnWriteArrayList<Job>()
-    @Volatile private var process: Process? = null
     private val endpoint = CompletableDeferred<String>()
     private var sessionId: String? = null
     private var initialized = false
@@ -74,26 +70,6 @@ internal class McpSession(
     }
     private suspend fun initialize() {
         when (server.transport) {
-            McpTransport.Stdio -> {
-                val launched = withContext(Dispatchers.IO) { start().also { process = it; if (closed.get()) it.destroyForcibly() } }
-                if (closed.get()) { withContext(Dispatchers.IO) { launched.destroyForcibly() }; checkOpen() }
-                launchReader {
-                    try {
-                        val source = launched.inputStream.source().buffer()
-                        while (isActive && !closed.get()) {
-                            val line = source.readUtf8LineStrict(MAX_MESSAGE)
-                            if (line.isNotBlank()) publish(parseMessage(line))
-                        }
-                    } catch (cancelled: CancellationException) { throw cancelled }
-                    catch (failure: Exception) { messages.close(failure as? McpException ?: McpException(McpProblem.Unavailable)) }
-                }
-                launchReader {
-                    // Drain stderr without retaining or logging environment, tokens, or server errors.
-                    try { val buffer = ByteArray(4096); while (isActive && launched.errorStream.read(buffer) >= 0) Unit }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { /* close terminates the owned pipe */ }
-                }
-            }
             McpTransport.Sse -> {
                 launchReader {
                     try {
@@ -139,10 +115,6 @@ internal class McpSession(
         val text = message.toString()
         val expectsResponse = message.has("id") && message.has("method")
         if (text.toByteArray().size > MAX_MESSAGE) throw McpException(McpProblem.Limit)
-        if (server.transport == McpTransport.Stdio) {
-            io { process!!.outputStream.apply { write((text + "\n").toByteArray()); flush() } }
-            return
-        }
         val target = if (server.transport == McpTransport.Sse) endpoint.await() else server.url
         val response = executeAsync(request(target).post(text.toRequestBody("application/json".toMediaType())).build())
         try {
@@ -288,10 +260,6 @@ internal class McpSession(
         withContext(NonCancellable + Dispatchers.IO) {
             calls.forEach { it.cancel() }
             responses.forEach { it.close() }; responses.clear()
-            process?.let { child ->
-                child.destroy(); if (child.isAlive) child.destroyForcibly()
-                runCatching { child.outputStream.close() }; runCatching { child.inputStream.close() }; runCatching { child.errorStream.close() }
-            }
             readers.forEach { it.cancel() }
             endpoint.cancel(); messages.close(McpException(McpProblem.Closed))
         }

@@ -14,7 +14,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Entire configuration is encrypted, including URLs, arguments, headers and environment. IO only. */
+/** Entire configuration is encrypted, including URLs and headers. IO only. */
 internal class McpStore(context: Context, private val alias: String = "zakocoder-mcp-v1") {
     private val file = AtomicFile(File(context.noBackupFilesDir, "mcp-servers-v1.json"))
     private fun key(): SecretKey {
@@ -38,8 +38,10 @@ internal class McpStore(context: Context, private val alias: String = "zakocoder
         cipher.updateAAD("zakocoder-mcp-v1".toByteArray())
         val clear = cipher.doFinal(Base64.decode(envelope.getString("data"), Base64.NO_WRAP))
         val entries = JSONArray(clear.toString(Charsets.UTF_8)); require(entries.length() <= 32)
-        val result = (0 until entries.length()).map { index ->
+        val result = (0 until entries.length()).mapNotNull { index ->
             val item = entries.getJSONObject(index)
+            val config = item.getJSONObject("config")
+            if (config.optString("type").equals("stdio", true) || config.optString("transport").equals("stdio", true) || config.has("command")) return@mapNotNull null
             val parsed = McpConfigParser.parse(JSONObject().put("mcpServers", JSONObject().put(item.getString("name"), item.getJSONObject("config"))).toString()).single()
             parsed.copy(id = item.getString("id"), enabled = item.getBoolean("enabled")).also(McpConfigParser::validate)
         }
@@ -51,9 +53,8 @@ internal class McpStore(context: Context, private val alias: String = "zakocoder
         val array = JSONArray()
         servers.forEach { server ->
             McpConfigParser.validate(server)
-            val config = JSONObject().put("type", when (server.transport) { McpTransport.Stdio -> "stdio"; McpTransport.StreamableHttp -> "streamable_http"; McpTransport.Sse -> "sse" })
-            if (server.transport == McpTransport.Stdio) config.put("command", server.command).put("args", JSONArray(server.args)).put("env", JSONObject(server.env))
-            else config.put("url", server.url).put("headers", JSONObject(server.headers))
+            val config = JSONObject().put("type", when (server.transport) { McpTransport.StreamableHttp -> "streamable_http"; McpTransport.Sse -> "sse" })
+            config.put("url", server.url).put("headers", JSONObject(server.headers))
             array.put(JSONObject().put("id", server.id).put("name", server.name).put("enabled", server.enabled).put("config", config))
         }
         val clear = array.toString().toByteArray(); require(clear.size <= 512 * 1024)

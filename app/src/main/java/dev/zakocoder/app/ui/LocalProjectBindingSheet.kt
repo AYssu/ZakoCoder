@@ -42,7 +42,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
     LaunchedEffect(authorized, permissionRevision) { if (authorized) browser.open(initialDirectory) }
     WorkbenchSheet(stringResource(R.string.local_browser_title), onDismiss, stringResource(R.string.local_browser_description)) {
         if (!authorized) {
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     WorkbenchIcon(Glyph.Projects, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
                     Text(stringResource(R.string.local_browser_permission_title), style = MaterialTheme.typography.titleSmall)
@@ -50,7 +50,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Button(onClick = {
+            WorkbenchPrimaryButton(onClick = {
                 permissionError = false
                 if (Build.VERSION.SDK_INT >= 30) {
                     try { settings.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, "package:${context.packageName}".toUri())) }
@@ -66,12 +66,12 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
         } else {
             if (state.roots.size > 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.roots.forEach { root ->
-                    OutlinedButton(onClick = { browser.open(root.path) }, enabled = enabled && !state.loading) {
+                    WorkbenchSecondaryButton(onClick = { browser.open(root.path) }, enabled = enabled && !state.loading) {
                         Text(stringResource(R.string.local_browser_storage, root.name), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.local_browser_current), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -109,7 +109,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
             if (state.truncated) TextButton(onClick = browser::more, enabled = enabled && !state.loading) { Text(stringResource(R.string.local_browser_more)) }
             Text(stringResource(if (state.selectable) R.string.local_browser_original_notice else R.string.local_browser_choose_project),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Button(onClick = { state.current?.path?.let(onBind); onDismiss() },
+            WorkbenchPrimaryButton(onClick = { state.current?.path?.let(onBind); onDismiss() },
                 enabled = enabled && !state.loading && state.selectable, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.local_browser_use)) }
         }

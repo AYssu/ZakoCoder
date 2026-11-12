@@ -24,7 +24,7 @@ internal fun AiHistoryRecoveryActions(problem: AiHistoryProblem?, enabled: Boole
             Text(stringResource(R.string.ai_history_remove_unreadable), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
         }
     }
-    if (confirming && problem?.conversationId != null) AlertDialog(
+    if (confirming && problem?.conversationId != null) WorkbenchAlertDialog(
         onDismissRequest = { confirming = false },
         title = { Text(stringResource(R.string.ai_history_remove_unreadable_title), fontSize = 16.sp) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -42,11 +42,11 @@ P0 是正确性和数据一致性的前置条件；P1 是现有能力的可用�
 
 初始实现中，`ProjectRepository.import()` 经 DocumentsContract 将树复制到私有 `workspaces/<UUID>`，`directory()` 只返回此根，原磁盘目录不会改变。现有实现保留显式导入副本，另外使用独立持久映射记录本地绑定，`directory()` 按项目解析真实根；不是把 SAF URI 转成路径。以下链路是本地身份必须覆盖的检查范围。
 
-文件操作已有集中根解析接缝：`EditorFileStore`、`AiProjectFiles`、`AiSkills`、检查点和项目命令配置接收 `(String) -> File`。应由单一项目根解析器提供身份，避免每个模块分别解释来源。需要同时检查以下执行链：
+文件操作已有集中根解析接缝：`EditorFileStore`、`AiProjectFiles`、检查点和项目命令配置接收 `(String) -> File`。应由单一项目根解析器提供身份，避免每个模块分别解释来源。需要同时检查以下执行链：
 
 - `Workbench` 创建 `ProjectRepository(context, runtime.workspaces)`，向编辑器、AI 与项目任务传入目录解析。
 - `LinuxRuntime.command()` 保留私有 workspaces 的 `/workspace` 映射，并将当前项目解析出的真实根绑定为 `/workspace/<UUID>`；`execute()` 也检查相同项目解析结果。验收需防止“编辑的是外部、构建的是内部”的分裂。
-- 终端、有限命令、MCP stdio 与 Git 均须从同一解析结果建立 guest 绑定。项目名称用于显示，UUID 用于稳定挂载；含空格或中文的实际路径始终是 argv 数据，不拼进宿主 Shell。
+- 终端、有限命令与 Git 均须从同一解析结果建立 guest 绑定。项目名称用于显示，UUID 用于稳定挂载；含空格或中文的实际路径始终是 argv 数据，不拼进宿主 Shell。
 - `Workbench` 区分托管项目删除与绑定项目解除：后者只移除登记，失败恢复元数据，绝不能沿 `PrivateFiles.deleteTree` 递归删除用户源码。创建失败回收也只能清理应用自己创建的临时根。
 - 项目库的容量、安装 APK、依赖检测、项目规则发现、变更导航与草稿恢复，都需要按来源解析，不能仍写死私有根。
 
@@ -72,7 +72,7 @@ Android all-files access 也是单独的系统授权。即使获准，也不等�
 - 解除绑定不删除任何源码；失败回滚、删除操作、导出和清理缓存均不递归清理外部根。
 - 外部编辑与脏缓冲、检查点恢复冲突时拒绝无提示覆盖；链接逃逸、重复目录绑定、只读目录、授权拒绝／撤销有可复现结果。
 - `content://` 文档树不经字符串推断为路径；仅提供副本时页面明确说“导入副本”。
-- PRoot 的终端、有限命令与 MCP stdio 均实际验证 cwd 与读写目标，不只测试文件列表。
+- PRoot 的终端与有限命令 均实际验证 cwd 与读写目标，不只测试文件列表。
 
 ## 工具权限：两个入口，保留逐工具细则
 
@@ -127,7 +127,7 @@ SSH 服务端不自动启用，不默认为局域网开放端口，更不和 AI 
 Android UI 自动化需要区分：
 
 - 项目的应用测试：优先构建可安装 APK、运行项目自身单元测试／仪器测试，保留报告。Instrumentation/UI Automator 是测试执行工具，并不赋予普通生产 APK 控制全部应用的能力。
-- 手机宿主控制：无障碍、ADB／无线调试、root 等是另一种系统授权与攻击面。连接状态、目标包、截图隐私、逐任务同意、随时停止必须独立设计；通用手机控制不在范围；当前独立的[Android 屏幕测试模块](SCREEN_TESTING.md)仅针对用户为项目选择的 Debug APK，提供普通、无障碍和 Root 方式，不常驻读取未授权应用。
+- 手机宿主控制：无障碍、ADB／无线调试、root 等是另一种系统授权与攻击面。连接状态、目标包、截图隐私、逐任务同意、随时停止必须独立设计；当前独立的[屏幕操作模块](SCREEN_TESTING.md)面向当前设备，提供无障碍和 Root 方式；每次任务单独授权，不要求选择 APK 或创建工作区。未授权时不读取其他应用，系统授权页面由用户处理。
 
 前台服务只能帮助表达持续任务，不能承诺不被系统或厂商结束。现有 DevelopmentService 使用 `specialUse`，不能把 Android 15 的 dataSync／mediaProcessing 六小时限制直接套到它；仍须按应用 target SDK、实际服务类型和分发要求验证。后台自动拉起界面还受 Android 的独立限制。
 

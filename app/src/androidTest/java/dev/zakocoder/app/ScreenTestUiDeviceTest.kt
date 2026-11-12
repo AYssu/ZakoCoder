@@ -51,6 +51,14 @@ class ScreenTestUiDeviceTest {
         }
         return result.get()
     }
+    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode {
+        val labelled = all.single { label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+        fun find(node: SemanticsNode): SemanticsNode? {
+            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) return node
+            return node.children.firstNotNullOfOrNull(::find)
+        }
+        return requireNotNull(find(labelled)) { "Switch semantics for $label" }
+    }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
     private fun has(label: String) = nodes { all -> all.any { text(it) == label } }
     private fun await(label: String, predicate: () -> Boolean) {
@@ -134,8 +142,8 @@ No test result was invented; this is UI-only fixture content."""
                             if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                     } }
                     CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark,
-                        LocalDensity provides Density(widthPx.coerceAtLeast(1) / 360f, 1.3f)) {
-                        MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                        LocalDensity provides Density(widthPx.coerceAtLeast(1) / 393f, 1f)) {
+                        WorkbenchMiuixTheme(dark) {
                             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
                         }
                     }
@@ -143,49 +151,26 @@ No test result was invented; this is UI-only fixture content."""
             }
             fun panel(model: ScreenTestUiModel, failure: String? = null) {
                 show { WorkbenchSheet(context.getString(R.string.screen_test_title), {}) {
-                    ScreenTestPanel(model, error = failure, onChoose = { choose.set(true) }, onEnable = { enable.set(true) },
+                    ScreenTestPanel(model, error = failure, onEnable = { enable.set(true) },
                         onStop = { stopped.set(true) }, onReport = { openedReport.set(true) }, onAccess = { access.set(it) },
-                        onRoot = { root.set(true) }, onShare = { shared.set(it) }, onInstallPermission = { installPermission.set(true) },
+                        onRoot = { root.set(true) }, onShare = { shared.set(it) },
                         onOverlayEnabled = { overlayEnabled.set(it) }, onOverlaySettings = { overlaySettings.set(true) })
                 } }
             }
             panel(ScreenTestUiModel())
-            await("No project") { has(context.getString(R.string.screen_test_no_project)) }
+            await("Global screen scope without a workspace") { has(context.getString(R.string.screen_device_current)) }
+            assertFalse(has(context.getString(R.string.screen_test_no_project)))
             assertFalse(has(context.getString(R.string.screen_test_choose_apk)))
-            capture(dark, "no-project")
-
-            panel(ScreenTestUiModel(projectName = "Screen test fixture", hasProject = true))
-            click(context.getString(R.string.screen_test_choose_apk)); assertTrue(choose.get())
-            click(context.getString(R.string.screen_test_allow_install)); assertTrue(installPermission.get())
-            assertFalse(has(context.getString(R.string.screen_test_enable_service)))
-            click(context.getString(R.string.screen_test_access_accessibility)); assertEquals(ScreenTestAccess.Accessibility, access.get())
-            capture(dark, "normal-360-font130")
-            panel(ScreenTestUiModel(projectName = "Screen test fixture", hasProject = true, installAllowed = true))
-            await("Installation source permission refreshed") { has(context.getString(R.string.screen_test_install_allowed)) }
             assertFalse(has(context.getString(R.string.screen_test_allow_install)))
-            reveal(context.getString(R.string.screen_test_install_allowed))
-            capture(dark, "normal-install-allowed")
+            click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
+            click(context.getString(R.string.screen_test_access_root)); assertEquals(ScreenTestAccess.Root, access.get())
+            capture(dark, "global-no-workspace")
 
-            show { WorkbenchSheet(context.getString(R.string.screen_test_apk_heading), {}) {
-                ScreenTestApkPicker(emptyList(), false, false, null, {}, {})
-            } }
-            await("Empty APK list") { has(context.getString(R.string.screen_test_apk_empty)) }
-            capture(dark, "apk-empty")
-
-            val chosen = AtomicReference<ScreenTestApkUi>()
-            val apk = ScreenTestApkUi("app/build/outputs/apk/debug/app-debug.apk", "dev.zakocoder.fixture", "Screen test fixture", true)
-            show { WorkbenchSheet(context.getString(R.string.screen_test_apk_heading), {}) {
-                ScreenTestApkPicker(listOf(apk), false, false, null, {}, { chosen.set(it) })
-            } }
-            click(context.getString(R.string.screen_test_apk_authorize)); assertEquals(apk, chosen.get())
-            capture(dark, "apk-selection")
-
-            val selected = ScreenTestUiModel(projectName = "Screen test fixture", hasProject = true, packageName = apk.packageName,
-                apkPath = apk.path, active = true, summary = "assert_text: failed — expected 保存成功", hasReport = true,
-                access = ScreenTestAccess.Accessibility, installAllowed = true)
+            val selected = ScreenTestUiModel(packageName = "dev.zakocoder.fixture", active = true, summary = "assert_text: failed — expected 保存成功", hasReport = true,
+                access = ScreenTestAccess.Accessibility)
             val failure = "SCREEN_TEST_DISCONNECTED: 请开启屏幕交互后重试。"
             panel(selected, failure)
-            await("Chosen target") { has(apk.packageName) }
+            await("Chosen target") { has(context.getString(R.string.screen_device_foreground, "dev.zakocoder.fixture")) }
             click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
             capture(dark, "accessibility-target")
             click(context.getString(R.string.screen_test_stop)); assertTrue(stopped.get())
@@ -197,7 +182,7 @@ No test result was invented; this is UI-only fixture content."""
             click(context.getString(R.string.screen_test_root_request)); assertTrue(root.get())
             await("Root granted") { has(context.getString(R.string.screen_test_root_granted)) }
             nodes { all ->
-                val switch = all.single { context.getString(R.string.screen_test_share_label) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                val switch = switchControl(all, context.getString(R.string.screen_test_share_label))
                 assertTrue(switch.config[SemanticsActions.OnClick].action?.invoke() == true)
             }
             assertTrue(shared.get())
@@ -223,7 +208,7 @@ No test result was invented; this is UI-only fixture content."""
             panel(selected.copy(overlayEnabled = true, overlayGranted = false))
             reveal(context.getString(R.string.screen_overlay_open_settings))
             nodes { all ->
-                val control = all.single { context.getString(R.string.screen_overlay_switch) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                val control = switchControl(all, context.getString(R.string.screen_overlay_switch))
                 assertNotNull(control.config.getOrNull(SemanticsProperties.Disabled))
                 assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
             }
@@ -234,7 +219,7 @@ No test result was invented; this is UI-only fixture content."""
             panel(selected.copy(overlayGranted = true))
             reveal(context.getString(R.string.screen_overlay_off))
             nodes { all ->
-                val control = all.single { context.getString(R.string.screen_overlay_switch) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() && it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
+                val control = switchControl(all, context.getString(R.string.screen_overlay_switch))
                 assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
                 assertTrue(control.config[SemanticsActions.OnClick].action?.invoke() == true)
             }

@@ -22,7 +22,7 @@ internal fun GitBranchesSheet(state: GitState, actions: GitWorkflowActions, dism
     var name by rememberSaveable { mutableStateOf("") }
     WorkbenchSheet(stringResource(R.string.git_workflow_branches), dismiss) {
         val nameLabel = stringResource(R.string.git_workflow_branch_name)
-        OutlinedTextField(name, { if (it.length <= 200 && it.none(Char::isISOControl)) name = it }, label = { Text(nameLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true)
+        WorkbenchTextField(name, { if (it.length <= 200 && it.none(Char::isISOControl)) name = it }, label = nameLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true)
         GitAction(stringResource(R.string.git_workflow_create), name.isNotBlank() && !state.busy && !state.merging, Modifier.fillMaxWidth()) { actions.createBranch(name.trim()); dismiss() }
         HorizontalDivider()
         state.branches.forEach { branch ->
@@ -49,10 +49,10 @@ internal fun GitCommitSheet(dismiss: () -> Unit, commit: (String, String, String
     val nameLabel = stringResource(R.string.git_name)
     val emailLabel = stringResource(R.string.git_email)
     WorkbenchSheet(stringResource(R.string.git_commit), dismiss, stringResource(R.string.git_commit_help)) {
-        OutlinedTextField(message, { if (it.length <= 2000) message = it }, label = { Text(messageLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = messageLabel }, minLines = 2, maxLines = 4)
-        OutlinedTextField(name, { if (it.length <= 100) name = it }, label = { Text(nameLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-        OutlinedTextField(email, { if (it.length <= 200) email = it }, label = { Text(emailLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = emailLabel }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
-        Button(onClick = { commit(message, name, email) }, enabled = message.isNotBlank() && name.isNotBlank() && '@' in email,
+        WorkbenchTextField(message, { if (it.length <= 2000) message = it }, label = messageLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = messageLabel }, minLines = 2, maxLines = 4)
+        WorkbenchTextField(name, { if (it.length <= 100) name = it }, label = nameLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
+        WorkbenchTextField(email, { if (it.length <= 200) email = it }, label = emailLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = emailLabel }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
+        WorkbenchPrimaryButton(onClick = { commit(message, name, email) }, enabled = message.isNotBlank() && name.isNotBlank() && '@' in email,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) { Text(stringResource(R.string.git_commit)) }
     }
 }
@@ -65,8 +65,8 @@ internal fun GitMergeSheet(branch: String, dismiss: () -> Unit, merge: (String, 
     val emailLabel = stringResource(R.string.git_email)
     WorkbenchSheet(stringResource(R.string.git_workflow_merge_title), dismiss, stringResource(R.string.git_workflow_merge_help, branch)) {
         Text(stringResource(R.string.git_commit_help), style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(name, { if (it.length <= 100) name = it }, label = { Text(nameLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true)
-        OutlinedTextField(email, { if (it.length <= 200) email = it }, label = { Text(emailLabel) }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = emailLabel }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
+        WorkbenchTextField(name, { if (it.length <= 100) name = it }, label = nameLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = nameLabel }, singleLine = true)
+        WorkbenchTextField(email, { if (it.length <= 200) email = it }, label = emailLabel, modifier = Modifier.fillMaxWidth().semantics { contentDescription = emailLabel }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done))
         GitAction(stringResource(R.string.git_workflow_merge), name.isNotBlank() && '@' in email, Modifier.fillMaxWidth()) { merge(name, email) }
     }
 }

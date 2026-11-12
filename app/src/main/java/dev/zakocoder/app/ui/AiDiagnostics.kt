@@ -45,9 +45,8 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
         }
         if (state.requests.isEmpty()) item { Text(stringResource(R.string.ai_requests_empty)) }
         items(state.requests.asReversed(), key = { it.id }) { request ->
-            Surface(color = MaterialTheme.colorScheme.surface, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth().clickable { selected = request.id }) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            WorkbenchCard(modifier = Modifier.fillMaxWidth(), onClick = { selected = request.id }) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.ai_request_row, request.turn, request.round), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), description = stringResource(R.string.ai_request_details))
@@ -73,7 +72,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
             }
         }
     }
-    if (limits) AlertDialog(onDismissRequest = { limits = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = { Text(stringResource(R.string.ai_log_limits)) }, confirmButton = { TextButton(onClick = { limits = false }) { Text(stringResource(R.string.close)) } })
+    if (limits) WorkbenchAlertDialog(onDismissRequest = { limits = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = { Text(stringResource(R.string.ai_log_limits)) }, confirmButton = { TextButton(onClick = { limits = false }) { Text(stringResource(R.string.close)) } })
     state.requests.find { it.id == selected }?.let { request ->
         AiFullScreen(stringResource(R.string.ai_request_details), { selected = null }) {
             val clipboard = LocalClipboardManager.current
@@ -103,7 +102,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
                 DiagnosticCode(request.response)
                 if (request.truncated) Text(stringResource(R.string.ai_log_truncated), color = MaterialTheme.colorScheme.error)
                 Text(stringResource(R.string.ai_log_limits), style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(request.encode().toString(2))) }) { Text(stringResource(R.string.ai_log_copy)) }
+                WorkbenchSecondaryButton(onClick = { clipboard.setText(AnnotatedString(request.encode().toString(2))) }) { Text(stringResource(R.string.ai_log_copy)) }
             }
         }
     }
@@ -137,16 +136,18 @@ private fun DiagnosticCode(text: String) {
 }
 @Composable
 internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: Modifier = Modifier) {
-    var query by remember(state.conversationId) { mutableStateOf("") }
-    var viewing by remember(state.conversationId) { mutableStateOf<AiSkill?>(null) }
-    val editable = !state.active && !state.permissionsLoading && !state.skillsLoading && !state.historyError
+    var query by remember { mutableStateOf("") }
+    var viewing by remember { mutableStateOf<AiSkill?>(null) }
+    var confirmingReset by remember { mutableStateOf(false) }
+    val canRetry = !state.active && !state.permissionsLoading && !state.skillsLoading
+    val editable = canRetry && !state.historyError && !state.skillError
     val filtered = state.skills.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_skills_selected, state.enabledSkills.size, AiSkills.MAX_ENABLED), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = controller::recommendedSkills, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
+                    TextButton(onClick = { controller.recommendedGlobalSkills() }, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
                 }
                 Text(stringResource(R.string.ai_skills_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val onDemandLabel = stringResource(R.string.ai_skill_on_demand)
@@ -155,22 +156,28 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                         Text(onDemandLabel, style = MaterialTheme.typography.bodyMedium)
                         Text(stringResource(R.string.ai_skill_on_demand_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = state.skillOnDemand, onCheckedChange = controller::setSkillOnDemand, enabled = editable,
+                    WorkbenchSwitch(checked = state.skillOnDemand, onCheckedChange = { controller.setGlobalSkillOnDemand(it) }, enabled = editable,
                         modifier = Modifier.semantics { contentDescription = onDemandLabel })
                 }
                 AiCustomSkillActions(state, controller)
                 val searchLabel = stringResource(R.string.ai_skills_search)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text(searchLabel) }, singleLine = true,
+                    WorkbenchTextField(value = query, onValueChange = { query = it }, label = searchLabel, singleLine = true,
                         modifier = Modifier.weight(1f).semantics { contentDescription = searchLabel })
-                    IconButton(onClick = controller::refreshSkills, enabled = editable) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.ai_skills_refresh)) }
+                    IconButton(onClick = { controller.refreshGlobalSkills() }, enabled = canRetry) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.ai_skills_refresh)) }
                 }
                 if (state.skillsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (state.skillError) Text(stringResource(R.string.ai_skills_error), color = MaterialTheme.colorScheme.error)
+                if (state.skillError) {
+                    Text(stringResource(R.string.ai_skills_global_error), color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = { confirmingReset = true }, enabled = canRetry) {
+                        Text(stringResource(R.string.ai_skills_reset_configuration))
+                    }
+                }
                 if (!state.skillsLoading && filtered.isEmpty()) Text(stringResource(R.string.ai_skills_empty))
                 state.enabledSkills.filter { path -> state.skills.none { it.path == path && it.valid } }.forEach { path ->
                     Text(stringResource(R.string.ai_skill_missing, path), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                    TextButton(onClick = { controller.enableSkill(path, false) }, enabled = editable) { Text(stringResource(R.string.remove)) }
+                    TextButton(onClick = { controller.enableGlobalSkill(path, false) }, enabled = editable) { Text(stringResource(R.string.remove)) }
                 }
             }
         }
@@ -178,20 +185,22 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             val skills = filtered.filter { it.category == category }
             if (skills.isNotEmpty()) {
                 item(key = category.name) {
-                    Text(stringResource(when (category) {
-                        AiSkillCategory.Coding -> R.string.ai_skills_coding
-                        AiSkillCategory.Expression -> R.string.ai_skills_expression
-                        AiSkillCategory.Project -> R.string.ai_skills_project
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(when (category) {
+                            AiSkillCategory.Coding -> R.string.ai_skills_coding
+                            AiSkillCategory.Expression -> R.string.ai_skills_expression
+                            AiSkillCategory.Project -> R.string.ai_skills_global_custom
                     }), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    if (category == AiSkillCategory.Project) Text(stringResource(R.string.ai_skills_project_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (category == AiSkillCategory.Project) Text(stringResource(R.string.ai_skills_global_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 items(skills, key = { it.path }) { skill ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.Top) {
                         val maySelect = skill.path in state.enabledSkills || state.enabledSkills.size < AiSkills.MAX_ENABLED ||
                             (skill.path in AiBuiltinSkills.expressionStyles && state.enabledSkills.any { it in AiBuiltinSkills.expressionStyles })
                         val toggleLabel = stringResource(R.string.ai_skill_toggle, skill.name)
-                        Checkbox(modifier = Modifier.semantics { contentDescription = toggleLabel }, checked = skill.path in state.enabledSkills, onCheckedChange = { controller.enableSkill(skill.path, it) }, enabled = skill.valid && editable && maySelect)
-                        Column(Modifier.weight(1f).padding(top = 9.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        WorkbenchCheckbox(modifier = Modifier.semantics { contentDescription = toggleLabel }, checked = skill.path in state.enabledSkills, onCheckedChange = { controller.enableGlobalSkill(skill.path, it) }, enabled = skill.valid && editable && maySelect)
+                        Column(Modifier.weight(1f).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(skill.name, style = MaterialTheme.typography.titleSmall)
                             if (skill.recommended) Text(stringResource(R.string.ai_skill_recommended), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(if (skill.valid) skill.description else stringResource(R.string.ai_skill_invalid), style = MaterialTheme.typography.bodySmall, color = if (skill.valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
@@ -201,22 +210,30 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                             WorkbenchIcon(Glyph.Info, Modifier.size(18.dp), description = stringResource(R.string.ai_skill_view, skill.name))
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider(Modifier.padding(start = 48.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
         }
     }
+    if (confirmingReset) WorkbenchAlertDialog(onDismissRequest = { confirmingReset = false },
+        title = { Text(stringResource(R.string.ai_skills_reset_configuration)) },
+        text = { Text(stringResource(R.string.ai_skills_reset_explanation)) },
+        confirmButton = { TextButton(onClick = {
+            confirmingReset = false
+            controller.resetGlobalSkillSelection()
+        }, enabled = canRetry) { Text(stringResource(R.string.ai_skills_recommended)) } },
+        dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text(stringResource(R.string.cancel)) } })
     viewing?.let { skill ->
         var text by remember(skill.path) { mutableStateOf<String?>(null) }
         var failed by remember(skill.path) { mutableStateOf(false) }
         LaunchedEffect(skill.path) {
-            try { text = controller.skillText(skill.path) }
+            try { text = controller.globalSkillText(skill.path) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { failed = true }
         }
         AiFullScreen(skill.name, { viewing = null }) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(stringResource(if (skill.builtIn) R.string.ai_skill_builtin_source else R.string.ai_skill_project_source), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(if (skill.builtIn) R.string.ai_skill_builtin_source else R.string.ai_skill_global_source), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(skill.description, style = MaterialTheme.typography.bodyMedium)
                 HorizontalDivider()
                 if (failed) Text(stringResource(R.string.ai_skill_invalid), color = MaterialTheme.colorScheme.error)
@@ -239,10 +256,11 @@ internal fun AiFullScreen(title: String, close: () -> Unit, content: @Composable
                 }
             }
         }
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        val back = rememberWorkbenchBackMotion(onBack = close)
+        Surface(Modifier.fillMaxSize().then(back.modifier), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
+                    IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                     Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

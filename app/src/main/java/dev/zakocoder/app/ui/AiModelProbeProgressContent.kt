@@ -1,9 +1,7 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -35,8 +33,7 @@ internal fun AiModelProbeProgressContent(state: AiModelsState) {
         progress.status != null -> R.string.ai_probe_waiting
         else -> R.string.ai_probe_connecting
     }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.ai_probe_live_title), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             Text(stringResource(stage), style = MaterialTheme.typography.bodySmall,

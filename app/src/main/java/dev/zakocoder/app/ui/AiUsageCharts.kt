@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,7 +49,7 @@ internal fun UsageTrendCard(buckets: List<AiUsageBucket>, daily: Boolean, zone: 
     val primary = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.primary.copy(alpha = .75f)
     val grid = MaterialTheme.colorScheme.outlineVariant
-    Surface(shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.usage_chart_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -108,7 +107,7 @@ internal fun UsageTrendCard(buckets: List<AiUsageBucket>, daily: Boolean, zone: 
 @Composable
 internal fun UsageModelDistribution(models: List<AiUsageModelCount>) {
     val total = models.sumOf { it.requests.toLong() }.coerceAtLeast(1L)
-    Surface(shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(stringResource(R.string.usage_chart_model_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
             models.take(5).forEach { entry ->

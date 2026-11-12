@@ -38,4 +38,12 @@ class AiScreenTestPolicyTest {
             assertEquals(AiPermission.Ask, AiPermissionPresets.apply(AiPolicy(), preset).permission(AiTool.AndroidTest))
         }
     }
+    @Test fun deviceScopeConsentCannotBeSkippedByYoloAllowOrOldTaskGrant() {
+        listOf(AiPolicy(AiPermission.Allow, emptyMap()), AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Yolo)).forEach { policy ->
+            assertFalse(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = true))
+            assertFalse(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = true, forceConfirmation = true))
+            assertTrue(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = false))
+        }
+        assertFalse(AiPolicy(AiPermission.Deny, emptyMap()).skipsToolApproval(AiTool.AndroidTest, true, false))
+    }
 }

@@ -1,0 +1,13 @@
+<resources>
+    <string name="screen_test_device_task_required">请先允许本次任务操作当前设备屏幕。</string>
+    <string name="screen_test_device_ready">本次任务已获授权</string>
+    <string name="screen_test_device_launch_unsupported">设备屏幕操作不会启动指定应用，请在手机上打开需要操作的页面。</string>
+    <string name="screen_device_scope_title">操作范围</string>
+    <string name="screen_device_current">当前设备屏幕</string>
+    <string name="screen_device_scope_hint">不绑定 APK 或工作区。助手首次操作时会请求本次任务授权，可在不同应用间操作；任务结束或停止后立即失效。</string>
+    <string name="screen_device_task_pending">尚无任务授权 · 开关和系统权限不会自动授权任务</string>
+    <string name="screen_device_foreground">最近观察的应用 · %1$s</string>
+    <string name="capability_screen_global">所有工作区共用</string>
+    <string name="capability_ssh_workspace_required">选择工作区后可配置 SSH 连接。</string>
+    <string name="screen_test_device_open_target">请先切换到需要操作的应用页面；助手不能操作自己的授权界面。</string>
+</resources>

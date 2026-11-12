@@ -2,6 +2,12 @@ name: Build Debug APK
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Base version (for example 0.1.2; Beijing MMddHH and -dev are added automatically)
+        required: true
+        default: 0.1.2
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +21,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Resolve build version
+        id: version
+        env:
+          BASE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/build_version.py --base-version "$BASE_VERSION" --channel dev --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -47,6 +58,9 @@ jobs:
         with:
           cache-provider: basic
       - name: Build four Debug distributions and optional Lite plugin
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         shell: bash
         run: |
           set -euo pipefail
@@ -57,10 +71,11 @@ jobs:
           python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a x86_64 --force --strict-hash
           ./gradlew :app:lintDebug --stacktrace
           mkdir -p apk-output
-          version="debug-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          version="$BUILD_VERSION"
           for edition in lite full; do
             for abi in arm64-v8a x86_64; do
-              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" --stacktrace
+              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" \
+                -PbuildVersion="$BUILD_VERSION" -PbuildVersionCode="$BUILD_VERSION_CODE" --stacktrace
               name="ZakoCoder-$version-$edition-$abi.apk"
               "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" \
                 --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
@@ -68,16 +83,18 @@ jobs:
               rm -f "apk-output/$name.idsig"
             done
           done
-          python3 scripts/distribution.py --directory apk-output --version "$version" --debug \
+          python3 scripts/distribution.py --directory apk-output --version "$version" --expected-version-code "$BUILD_VERSION_CODE" --debug \
             --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner"
           mkdir -p plugin-output
           for abi in arm64-v8a x86_64; do
-            ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug -PcompatibilityAbis="$abi" --stacktrace
+            ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug -PcompatibilityAbis="$abi" \
+              -PkernelPluginVersionName="$BUILD_VERSION" -PkernelPluginVersionCode="$BUILD_VERSION_CODE" --stacktrace
             cp kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk "plugin-output/ZakoCoder-kernel-plugin-debug-$abi.apk"
           done
           (cd plugin-output && sha256sum *.apk > SHA256SUMS.txt)
           printf '%s\n' \
             'ZakoCoder Lite/Full ARM64/x86_64 Debug test builds; not production releases.' \
+            "Version: $BUILD_VERSION (versionCode $BUILD_VERSION_CODE)" \
             "Commit: $GITHUB_SHA" \
             "Ref: $GITHUB_REF" \
             "Run: $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
@@ -86,29 +103,121 @@ jobs:
             'Upgrading does not automatically replace the installed Ubuntu environment.' \
             > apk-output/BUILD.txt
           python3 native-runtime/bundle_sources.py --output apk-output/native-runtime-sources.tar.gz
-      - name: Upload optional Lite plugin
+      - name: Prepare individual downloads
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$BUILD_VERSION"
+          package_apk() {
+            local source="$1" target="$2" description="$3"
+            mkdir -p "$target"
+            cp "$source" "$target/"
+            cp apk-output/BUILD.txt "$target/BUILD.txt"
+            printf 'Artifact: %s\n' "$description" >> "$target/BUILD.txt"
+            (cd "$target" && sha256sum *.apk > SHA256SUMS.txt)
+          }
+          for edition in lite full; do
+            for abi in arm64-v8a x86_64; do
+              package_apk "apk-output/ZakoCoder-$version-$edition-$abi.apk" \
+                "artifact-output/debug-$edition-$abi" "$edition / $abi"
+            done
+          done
+          for abi in arm64-v8a x86_64; do
+            package_apk "plugin-output/ZakoCoder-kernel-plugin-debug-$abi.apk" \
+              "artifact-output/kernel-plugin-$abi" "Optional Lite kernel plugin / $abi"
+          done
+          mkdir -p artifact-output/support
+          find apk-output -maxdepth 1 -type f ! -name '*.apk' -exec cp '{}' artifact-output/support/ \;
+          cp plugin-output/SHA256SUMS.txt artifact-output/support/kernel-plugin-SHA256SUMS.txt
+      - name: Upload debug-lite-arm64-v8a
+        id: debug_lite_arm64_v8a
         uses: actions/upload-artifact@v7
         with:
-          name: ZakoCoder-optional-kernel-plugin-${{ github.run_number }}-${{ github.run_attempt }}
-          path: plugin-output/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload test APK
-        id: upload
-        uses: actions/upload-artifact@v7
-        with:
-          name: ZakoCoder-debug-four-distributions-${{ github.run_number }}-${{ github.run_attempt }}
-          path: apk-output/
+          name: ZakoCoder-debug-lite-arm64-v8a-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/debug-lite-arm64-v8a/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-      - name: Show download link
+      - name: Upload debug-lite-x86_64
+        id: debug_lite_x86_64
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-debug-lite-x86_64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/debug-lite-x86_64/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload debug-full-arm64-v8a
+        id: debug_full_arm64_v8a
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-debug-full-arm64-v8a-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/debug-full-arm64-v8a/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload debug-full-x86_64
+        id: debug_full_x86_64
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-debug-full-x86_64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/debug-full-x86_64/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload kernel-plugin-arm64-v8a
+        id: kernel_plugin_arm64_v8a
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-kernel-plugin-arm64-v8a-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/kernel-plugin-arm64-v8a/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload kernel-plugin-x86_64
+        id: kernel_plugin_x86_64
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-kernel-plugin-x86_64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/kernel-plugin-x86_64/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload support
+        id: support
+        uses: actions/upload-artifact@v7
+        with:
+          name: ZakoCoder-support-${{ github.run_number }}-${{ github.run_attempt }}
+          path: artifact-output/support/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Show download links
         env:
-          APK_ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          LITE_ARM64_URL: ${{ steps.debug_lite_arm64_v8a.outputs.artifact-url }}
+          LITE_X86_64_URL: ${{ steps.debug_lite_x86_64.outputs.artifact-url }}
+          FULL_ARM64_URL: ${{ steps.debug_full_arm64_v8a.outputs.artifact-url }}
+          FULL_X86_64_URL: ${{ steps.debug_full_x86_64.outputs.artifact-url }}
+          PLUGIN_ARM64_URL: ${{ steps.kernel_plugin_arm64_v8a.outputs.artifact-url }}
+          PLUGIN_X86_64_URL: ${{ steps.kernel_plugin_x86_64.outputs.artifact-url }}
+          SUPPORT_URL: ${{ steps.support.outputs.artifact-url }}
         shell: bash
         run: |
-          printf '## Lite / Full · ARM64 / x86_64 Debug 测试包\n\n[下载四个 APK、SHA-256 和包体检查记录](%s)\n\n' "$APK_ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' '保存 14 天，需要登录 GitHub 下载。这是测试包，不是正式 Release；PRoot 发行门槛保持不变。' >> "$GITHUB_STEP_SUMMARY"
+          {
+            printf '## Debug 测试包：按需下载\n\n'
+            printf '版本：`%s` · versionCode：`%s`\n\n' "$BUILD_VERSION" "$BUILD_VERSION_CODE"
+            printf '主流手机推荐 Lite ARM64；希望内置 Ubuntu 和代理内核可选 Full ARM64。电脑 Android 模拟器通常选择 x86_64。每份安装包单独下载，包含一个 APK、对应 SHA-256 和构建信息。\n\n'
+            printf '| 版本 | ARM64 手机 | x86_64 模拟器 |\n| --- | --- | --- |\n'
+            printf '| Lite 轻量版 | [下载](%s) | [下载](%s) |\n' "$LITE_ARM64_URL" "$LITE_X86_64_URL"
+            printf '| Full 完整版 | [下载](%s) | [下载](%s) |\n' "$FULL_ARM64_URL" "$FULL_X86_64_URL"
+            printf '| Lite 可选内核插件 | [下载](%s) | [下载](%s) |\n\n' "$PLUGIN_ARM64_URL" "$PLUGIN_X86_64_URL"
+            printf 'Full 已内置内核，无需另下插件。[源码、许可证与完整校验材料](%s)单独提供，不含 APK。\n\n' "$SUPPORT_URL"
+            printf '保存 14 天，需要登录 GitHub 下载。这是测试包，不是正式 Release；PRoot 发行门槛保持不变。\n'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Remove signing material
         if: always()
         shell: bash

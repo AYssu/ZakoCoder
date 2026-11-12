@@ -1,8 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -72,8 +71,8 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
         Text(stringResource(R.string.ai_permission_running_note), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = dismiss) { Text(stringResource(R.string.close)) }
     }
-    confirming?.let { policy -> AlertDialog(onDismissRequest = { confirming = null }, title = { Text(stringResource(if (confirmingPreset == AiPermissionPreset.Yolo) R.string.ai_permission_yolo_confirm_title else R.string.ai_auto_allow_title)) },
-        text = { Text(modifier = Modifier.verticalScroll(rememberScrollState()), text = when (confirmingPreset) {
+    confirming?.let { policy -> WorkbenchAlertDialog(onDismissRequest = { confirming = null }, title = { Text(stringResource(if (confirmingPreset == AiPermissionPreset.Yolo) R.string.ai_permission_yolo_confirm_title else R.string.ai_auto_allow_title)) },
+        text = { Text(text = when (confirmingPreset) {
             AiPermissionPreset.Yolo -> stringResource(R.string.ai_permission_yolo_warning, projectName)
             AiPermissionPreset.Elevated -> stringResource(R.string.ai_permission_preset_warning, projectName)
             else -> stringResource(R.string.ai_auto_allow_warning)
@@ -84,9 +83,9 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
 
 @Composable
 private fun PermissionPresetRow(preset: AiPermissionPreset, selected: Boolean, enabled: Boolean, choose: () -> Unit) {
-    Surface(onClick = choose, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).semantics { this.selected = selected; role = Role.RadioButton }, shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    WorkbenchCard(onClick = choose, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp).semantics { this.selected = selected; role = Role.RadioButton }, cornerRadius = 12.dp,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             RadioButton(selected = selected, onClick = null, enabled = enabled)

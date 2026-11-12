@@ -1,7 +1,6 @@
 package dev.zakocoder.app.ui
 
 import android.view.KeyEvent
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.unit.sp
@@ -28,11 +27,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.view.TerminalView
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.theme.DarkPalette
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.terminal.TerminalItem
 
-private val TerminalChrome: Color @Composable get() = if (LocalWorkbenchDark.current) Color(0xFF0B1016) else Color(0xFF11161D)
+private val TerminalChrome: Color @Composable get() = DarkPalette.surfaceSunken
 private val TerminalText = TerminalForeground
 private val TerminalMuted = TerminalSecondary
 
@@ -51,11 +51,11 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
     val modifiers by workbench.terminal.modifiers.collectAsStateWithLifecycle()
     val leaveTerminal = { view?.let(workbench.terminal::hideKeyboard); onBack() }
     if (previewing && current != null) TerminalPreviewSheet(current, { workbench.terminal.previewAddresses(current.id) }, { previewing = false; view?.requestFocus() })
-    BackHandler { leaveTerminal() }
-    Column(Modifier.fillMaxSize().background(TerminalBackground)) {
+    val back = rememberWorkbenchBackMotion(onBack = leaveTerminal)
+    Column(Modifier.fillMaxSize().then(back.modifier).background(TerminalBackground)) {
         Surface(color = TerminalChrome, contentColor = TerminalText) {
             Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = leaveTerminal) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_terminals), tint = TerminalText) }
+                IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_terminals), tint = TerminalText) }
                 Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
                     Text(if (current == null) stringResource(R.string.nav_terminal) else stringResource(R.string.terminal_number, current.number),
                         fontSize = 14.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
@@ -122,13 +122,12 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
     if (switching) WorkbenchSheet(stringResource(R.string.switch_terminals), { switching = false },
         stringResource(R.string.terminal_session_count, state.sessions.size), darkBackdrop = true) {
             state.sessions.forEach { item ->
-                Surface(shape = RoundedCornerShape(14.dp), border = androidx.compose.foundation.BorderStroke(1.dp,
-                    if (item.id == current?.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                WorkbenchCard(border = if (item.id == current?.id) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                     color = if (item.id == current?.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         val closeLabel = stringResource(R.string.close_terminal_number, item.number)
                         Row(Modifier.weight(1f).combinedClickable(onClick = { onSelect(item.id); switching = false },
-                            onLongClickLabel = closeLabel, onLongClick = { closing = item }).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            onLongClickLabel = closeLabel, onLongClick = { closing = item }).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             StatusDot(terminalStatusColor(item))
                             Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(stringResource(R.string.terminal_number, item.number), style = MaterialTheme.typography.titleSmall)
@@ -136,11 +135,11 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
                                     style = MaterialTheme.typography.bodySmall, color = TertiaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        Box(Modifier.padding(end = 14.dp)) { SelectionCheck(item.id == current?.id) }
+                        Box(Modifier.padding(end = 16.dp)) { SelectionCheck(item.id == current?.id) }
                     }
                 }
             }
-            OutlinedButton(onClick = { switching = false; workbench.startTerminal(current?.projectId) }, enabled = state.installed && state.project != null && !state.busy && state.sessions.size < 4,
+            WorkbenchSecondaryButton(onClick = { switching = false; workbench.startTerminal(current?.projectId) }, enabled = state.installed && state.project != null && !state.busy && state.sessions.size < 4,
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 WorkbenchIcon(Glyph.Add, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.new_terminal))
@@ -149,7 +148,7 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
             Text(if (state.sessions.size >= 4) stringResource(R.string.terminal_limit) else current?.let { stringResource(R.string.new_terminal_project, it.projectName) } ?: stringResource(R.string.select_project_first),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    closing?.let { item -> AlertDialog(onDismissRequest = { closing = null }, title = { Text(stringResource(R.string.close_terminal_number, item.number)) },
+    closing?.let { item -> WorkbenchAlertDialog(onDismissRequest = { closing = null }, title = { Text(stringResource(R.string.close_terminal_number, item.number)) },
         text = { Text(stringResource(R.string.close_terminal_confirmation)) },
         confirmButton = { TextButton(onClick = { closing = null; if (state.sessions.size == 1) view?.let(workbench.terminal::hideKeyboard); workbench.closeTerminal(item.id) }) { Text(stringResource(R.string.close_terminal)) } },
         dismissButton = { TextButton(onClick = { closing = null }) { Text(stringResource(R.string.cancel)) } }) }
@@ -159,8 +158,8 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
 private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
     Box(modifier.height(48.dp).semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = if (selected) BrandFill else if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F),
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Color(0xFF31383F))) {
+            color = if (selected) BrandFill else DarkPalette.surfaceRaised,
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else DarkPalette.borderHairline)) {
             Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) {
                 Text(label, color = TerminalText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1)
             }
@@ -172,7 +171,7 @@ private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = f
 private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.height(48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = if (LocalWorkbenchDark.current) Color(0xFF1A2129) else Color(0xFF22282F), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF31383F))) {
+            color = DarkPalette.surfaceRaised, border = androidx.compose.foundation.BorderStroke(1.dp, DarkPalette.borderHairline)) {
             Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(glyph, Modifier.size(16.dp), description = label, tint = TerminalText) }
         }
     }

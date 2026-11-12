@@ -14,7 +14,7 @@
 
 RC 是准备转正式版的候选版本，必须标记 Pre-release，不设为 Latest。本阶段原则上不新增功能，主要进行问题修复、设备和工程适配、性能与交互优化，以及最终签名包的安装、升级和数据保留验收。有变更则递增 RC 序号与 versionCode，不覆盖既有标签和附件；验收通过后再决定正式版，不按时间自动转正。
 
-发布入口接受正式版 `MAJOR.MINOR.PATCH`、`MAJOR.MINOR.PATCH-beta.N` 与 `MAJOR.MINOR.PATCH-rc.N`；沿用既有 `betaRelease/betaVersion/betaVersionCode` 构建参数名以保持兼容。根据版本后缀决定正式版或预发布，构建与制品门槛均检查实际版本。RC 使用现有签名选择规则，不自动生成或更换证书；沿用 CI Debug 证书时仍须明确标注，正式发布前明确签名选择与升级限制。
+发布入口填写基础版本 `MAJOR.MINOR.PATCH`、`MAJOR.MINOR.PATCH-beta.N` 或 `MAJOR.MINOR.PATCH-rc.N`，默认 `0.1.2`。工作流在 patch 后直接拼接北京时间 `MMddHH`，再保留预发布后缀，例如 11 月 12 日 16 时生成 `0.1.2111216`、`0.1.2111216-beta.1` 或 `0.1.2111216-rc.1`；沿用既有 `betaRelease/betaVersion/betaVersionCode` 构建参数名以保持兼容。根据版本后缀决定正式版或预发布，构建与制品门槛均检查实际版本。RC 使用现有签名选择规则，不自动生成或更换证书；沿用 CI Debug 证书时仍须明确标注，正式发布前明确签名选择与升级限制。
 
 RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留，环境安装与终端服务，AI 长任务/取消/恢复，文件审阅与恢复，Git 和按需 LSP，以及后台权限和不同厂商适配。缺陷通过 Issues 模板反馈，附版本、机型、复现和脱敏日志，不发送密钥或私人源码。
 
@@ -22,7 +22,7 @@ RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留
 
 1. 选择已完成审查和相关 CI 的提交，核对 [CHANGELOG](../CHANGELOG.md)、[Beta 测试说明](BETA_TESTING.md)及[兼容性结果](ANDROID_COMPATIBILITY_RESULTS.md)。
 2. 确认已有 Actions Secret `ZAKOCODER_DEBUG_KEYSTORE_BASE64` 可用。默认沿用它签署发布包，无需新增 Secret；也可完整配置下方可选签名。所选密钥缺失或无效时失败，不临时生成替代密钥。
-3. 在 `main` 上打开 **Actions → Publish Release → Run workflow**：`version` 填 `0.1.0`，`version_code` 本次为 `1005`，后续严格递增；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
+3. 在 `main` 上打开 **Actions → Publish Release → Run workflow**：`version` 填基础版本（例如 `0.1.2`），工作流自动拼接构建时间；`version_code` 留空自动生成，也可显式填写大于历史全部发布版本的值；`target_ref` 为 `main` 或其祖先的完整提交 SHA。只有来自 `main` 的可信工作流可发布；历史 SHA 还必须保持 `.github/workflows/` 树与当前 `main` 完全一致，才允许自动创建标签。已有标签或 Release 会被拒绝，不覆盖历史附件。
 4. 工作流校验仓库、执行 Release 构建及相关检查，先生成未签名 APK，再使用所选密钥签名。QA 通过后创建草稿 Release，上传并逐项下载回读校验 SHA-256，最后按版本后缀发布：正式版标为 Latest，Beta／RC 设为预发布且不标为 Latest。
 5. 工作流完成签名 R8 QA 的设备检查和制品一致性校验后，下载实际发布的 APK 与摘要复核。发布页面列出实际通过项、已知限制和未验证项，不能把 Debug 矩阵或 x86 QA 写成公开 ARM64 APK 真机验收。
 
@@ -114,9 +114,17 @@ Android 15 / API 35、官方 x86_64 模拟器，使用最终 ARM64 + x86_64 Rele
 
 CI 的每次候选会生成自己的截图及绑定制品摘要的报告；本地证据不替代上游工作流成功记录，也不代表 ARM64 Release 已通过真机完整验收。
 
+## 构建版本规则
+
+Debug 和 Release 的 Action 均接受基础 `version`，默认 `0.1.2`，每轮只解析一次版本，四种主 APK 共用版本身份。Debug 额外添加 `-dev`，如 `0.1.2111216-dev`；对应 Lite 插件也使用同轮的版本名和 versionCode。Debug 始终保留 `-dev` 标记，需要发布 Beta／RC 时使用发布入口。
+
+`versionCode` 默认取自 2020-01-01 00:00:00 UTC 起的完整秒数，与展示的 `MMddHH` 分开，跨年仍递增，且校验不超过 Android 的 2,100,000,000 上限。同一秒发起的构建可能共用 code；同一小时、同一基础版本生成的展示名称相同，正式发布会拒绝已存在的标签，需等下一小时或调整基础版本。版本时间属于构建开始时刻，不是完成时刻。拼接后的 patch 按数字规范去掉前导零，例如基础 `0.2.0` 在上述时刻生成 `0.2.111216`。自定义 code 过大可能阻止以后自动版本覆盖，非必要请留空。应用内更新优先比较发布记录的 versionCode，安装前仍校验实际 APK 版本、摘要和证书。
+
+本地 Gradle 默认从 `gradle.properties` 的 `baseVersion` 及当前时间生成开发版本，无需 Python。需要复现固定 Debug 身份时，传 `-PbuildVersion=0.1.2111216-dev -PbuildVersionCode=<正整数>`；兼容性验证仍可显式指定 `compatibilityVersionCode`。发布参数 `betaVersion` 填工作流已解析的完整版本，不会二次拼接时间。
+
 ## 手动打包测试 APK
 
-**Actions → Build Debug APK → Run workflow** 保留原入口。成功后在 Artifacts 下载 Lite／Full × ARM64／x86_64 四个 Debug APK、`SHA256SUMS.txt`、`BUILD.txt`、自编译运行时及对应源码包；保留 14 天，需登录 GitHub。在解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
+**Actions → Build Debug APK → Run workflow** 保留原入口。成功后，运行摘要提供 Lite／Full × ARM64／x86_64 四个安装包的独立下载链接；每份 Artifact 只含一个对应 APK、`SHA256SUMS.txt` 和 `BUILD.txt`，无需下载其他版本。Lite 可选内核插件也按 ARM64／x86_64 独立下载，Full 无需插件。源码、许可证及完整校验材料另存 `ZakoCoder-support-<run>-<attempt>`，不重复包含 APK。所有 Artifact 保留 14 天，需登录 GitHub。在所选安装包的解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
 
 该入口与默认 Beta 签名共用 `ZAKOCODER_DEBUG_KEYSTORE_BASE64` Secret：CI 专用 Debug keystore、`androiddebugkey` 别名及 Android 默认 Debug 口令。缺失时失败，不生成替代签名；它不得指向正式发布密钥。CI 在临时 runner 恢复并删除，不上传或缓存 keystore。
 

@@ -1,7 +1,6 @@
 package dev.zakocoder.app.mcp
 
 import android.content.Context
-import dev.zakocoder.app.R
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +13,6 @@ import org.json.JSONObject
 /** Configuration does not grant tool approval. Callers must approve every external operation. */
 class McpController(
     private val context: Context, private val scope: CoroutineScope,
-    private val startProcess: suspend (projectId: String, server: McpServer) -> Process,
     private val canModify: () -> Boolean = { true },
     keyAlias: String = "zakocoder-mcp-v1",
 ) {
@@ -111,13 +109,13 @@ class McpController(
     fun preview(id: String, method: String, params: JSONObject): String {
         validateRequest(id, method, params)
         val server = mutable.value.servers.single { it.id == id }
-        val destination = if (server.transport == McpTransport.Stdio) "${server.command}\n${context.getString(R.string.mcp_guest_process)}" else server.url
+        val destination = server.url
         return redact("${server.transport}\n$destination\n$method\n${params.toString(2)}").take(24000)
     }
     /** Exact configured secret values are removed from display/output; no logging occurs here. */
     fun redact(text: String): String {
         val values = mutable.value.servers.flatMap { server ->
-            server.args + server.env.values + server.headers.values + server.headers.filterKeys { it.equals("Authorization", true) || it.equals("Proxy-Authorization", true) }
+            server.headers.values + server.headers.filterKeys { it.equals("Authorization", true) || it.equals("Proxy-Authorization", true) }
                 .values.mapNotNull { it.substringAfter(' ', "").takeIf(String::isNotBlank) }
         }.filter(String::isNotEmpty).distinct().sortedByDescending(String::length)
         if (values.isEmpty()) return text
@@ -205,7 +203,7 @@ class McpController(
     }
     private fun session(project: String, server: McpServer, owner: Long, expected: Long): McpSession = synchronized(monitor) {
         checkIdentity(project, owner, expected)
-        sessions.getOrPut(project to server.id) { McpSession(server, scope, { startProcess(project, server) }) }
+        sessions.getOrPut(project to server.id) { McpSession(server, scope) }
     }
     private suspend fun discard(project: String, id: String, session: McpSession) {
         synchronized(monitor) { if (sessions[project to id] === session) sessions.remove(project to id) }
@@ -230,7 +228,7 @@ class McpController(
     private fun checkIdentity(project: String, owner: Long, expected: Long) {
         synchronized(monitor) { if ((epochs[project] ?: 0) != owner || revision != expected) throw McpException(McpProblem.Closed) }
     }
-    private fun snapshot(server: McpServer) = server.copy(args = server.args.toList(), env = server.env.toMap(), headers = server.headers.toMap())
+    private fun snapshot(server: McpServer) = server.copy(headers = server.headers.toMap())
     private fun redactJson(value: Any, depth: Int = 0): Any = when (value) {
         is JSONObject -> JSONObject().apply { value.keys().forEach { key ->
             val envelope = depth == 0 && key in setOf("isError", "content", "structuredContent", "tools", "resources", "resourceTemplates", "prompts", "contents", "messages", "protocolVersion", "capabilities", "untrusted", "truncated", "nextCursor")

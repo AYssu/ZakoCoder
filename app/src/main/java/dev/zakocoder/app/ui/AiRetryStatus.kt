@@ -1,10 +1,8 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,8 +16,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun AiRetryStatus(notice: String) {
     if (notice.isBlank()) return
-    Surface(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
-        color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(12.dp)) {
+    WorkbenchCard(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+        color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)

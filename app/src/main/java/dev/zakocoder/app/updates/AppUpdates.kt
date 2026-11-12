@@ -36,10 +36,14 @@ class AppUpdates internal constructor(private val context: Context, private val 
     init {
         scope.launch {
             val initial = withContext(Dispatchers.IO) {
-                val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
-                val defaultChannel = if (ReleaseVersion.parse(version)?.preview != null) UpdateChannel.Beta else UpdateChannel.Stable
+                val installed = context.packageManager.getPackageInfo(context.packageName, 0)
+                val version = installed.versionName.orEmpty()
+                @Suppress("DEPRECATION")
+                val versionCode = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+                val defaultChannel = if (ReleaseVersion.parse(version.removeSuffix("-dev"))?.preview != null) UpdateChannel.Beta else UpdateChannel.Stable
                 val channel = runCatching { UpdateChannel.valueOf(preferences.getString("channel", defaultChannel.name)!!) }.getOrDefault(defaultChannel)
-                UpdateState(initialized = true, currentVersion = version, channel = channel, automatic = preferences.getBoolean("automatic", true))
+                UpdateState(initialized = true, currentVersion = version, currentVersionCode = versionCode,
+                    channel = channel, automatic = preferences.getBoolean("automatic", true))
             }
             val recovered = withContext(Dispatchers.IO) { restore(initial) }
             mutable.value = recovered
@@ -78,7 +82,7 @@ class AppUpdates internal constructor(private val context: Context, private val 
     /** Called on foreground/network recovery; failed attempts back off and never display an error popup. */
     fun check(manual: Boolean = true) {
         if (!state.value.initialized || work?.isActive == true || state.value.phase == UpdatePhase.Downloading) return
-        if (ReleaseVersion.parse(state.value.currentVersion) == null) {
+        if (ReleaseVersion.parse(state.value.currentVersion.removeSuffix("-dev")) == null) {
             if (manual) mutable.update { it.copy(phase = UpdatePhase.Failed, error = R.string.update_dev_version, release = null, prompt = false) }
             return
         }
@@ -96,7 +100,7 @@ class AppUpdates internal constructor(private val context: Context, private val 
                 nextAttempt = System.currentTimeMillis() + 5 * 60 * 1000L
                 val releases = withContext(Dispatchers.IO) { client.releases() }
                 withContext(Dispatchers.IO) { persist { putLong("last_attempt", System.currentTimeMillis()) } }
-                val candidate = selectRelease(releases, state.value.currentVersion, channel)
+                val candidate = selectRelease(releases, state.value.currentVersion, channel, state.value.currentVersionCode)
                 val remind = candidate != null && withContext(Dispatchers.IO) {
                     manual || preferences.getString("dismissed", "") != candidate.tag ||
                         System.currentTimeMillis() - preferences.getLong("dismissed_at", 0) > 7 * 24 * 60 * 60 * 1000L
@@ -182,6 +186,7 @@ class AppUpdates internal constructor(private val context: Context, private val 
         val json = org.json.JSONObject().put("tag", release.tag).put("notes", release.notes).put("preview", release.prerelease)
             .put("name", release.apk.name).put("url", release.apk.url).put("size", release.apk.size).put("hash", verifiedHash)
             .put("sums_url", release.sums.url).put("sums_size", release.sums.size)
+            .put("version_code", release.versionCode)
         persist { putString("ready", json.toString()) }
     }
     private fun restore(initial: UpdateState): UpdateState {
@@ -189,7 +194,8 @@ class AppUpdates internal constructor(private val context: Context, private val 
             val json = org.json.JSONObject(preferences.getString("ready", null) ?: return initial)
             val release = AppRelease(json.getString("tag"), json.getString("notes"), json.getBoolean("preview"),
                 ReleaseAsset(json.getString("name"), json.getString("url"), json.getLong("size")),
-                ReleaseAsset("SHA256SUMS.txt", json.getString("sums_url"), json.getLong("sums_size")))
+                ReleaseAsset("SHA256SUMS.txt", json.getString("sums_url"), json.getLong("sums_size")),
+                if (json.has("version_code")) json.getLong("version_code") else null)
             verifiedHash = json.getString("hash").also { kotlin.check(it.matches(Regex("[0-9a-f]{64}"))) }
             validateApk(apk, release)
             initial.copy(phase = UpdatePhase.Ready, release = release, pendingInstall = preferences.getBoolean("pending_install", false))

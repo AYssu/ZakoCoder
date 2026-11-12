@@ -59,7 +59,7 @@ internal fun KernelRecoveryActions(
         activationFeedback?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (status is KernelPluginStatus.Installed) {
-                OutlinedButton(onClick = onActivate, enabled = enabled, shape = RoundedCornerShape(10.dp),
+                WorkbenchSecondaryButton(onClick = onActivate, enabled = enabled, shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.proxy_plugin_activate))
                 }
@@ -107,8 +107,8 @@ internal fun KernelDiagnosticsSheet(report: String, onDismiss: () -> Unit) {
             finally { exporting = false }
         }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp),
+    WorkbenchPanelSheet(onDismiss = onDismiss) { _ ->
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.proxy_plugin_diagnostics), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.proxy_plugin_diagnostics_hint), style = MaterialTheme.typography.bodySmall)
@@ -118,7 +118,7 @@ internal fun KernelDiagnosticsSheet(report: String, onDismiss: () -> Unit) {
             }
             feedback?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
+                WorkbenchSecondaryButton(onClick = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     clipboard.setPrimaryClip(ClipData.newPlainText(diagnosticTitle, report))
                     feedback = R.string.proxy_plugin_diagnostics_copied

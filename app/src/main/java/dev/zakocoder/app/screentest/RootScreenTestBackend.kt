@@ -71,22 +71,26 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             currentCheck(generation)
         }
         valid()
-        foreground(packageName)
+        val (actualWindow, actualPackage) = currentForegroundWindow()
+        if (packageName.isNotBlank() && actualPackage != packageName) fail(R.string.screen_test_wrong_foreground)
+        if (actualPackage == context.packageName) fail(R.string.screen_test_device_open_target)
+        val permissionController = resolvedPermissionController(context)
+        if (protectedDeviceScreenPackage(actualPackage, context.packageName, permissionController)) fail(R.string.screen_test_sensitive)
         val action = args.getString("action")
         val coordinateAction = action in setOf("click", "long_click", "input_text", "swipe")
         // Coordinate actions build fixed argv from the last approved observation. A single
         // fresh hierarchy is compared immediately before input, rather than dumping twice.
-        val nodes = if (coordinateAction) snapshot?.nodes.orEmpty() else readNodes(packageName)
+        val nodes = if (coordinateAction) snapshot?.nodes.orEmpty() else readNodes(actualPackage)
         valid()
-        if (!coordinateAction) foreground(packageName)
+        if (!coordinateAction) foreground(actualPackage, actualWindow)
         when (action) {
             "observe" -> {
                 val token = UUID.randomUUID().toString()
-                val bounded = boundedScreenObservation(packageName, token,
+                val bounded = boundedScreenObservation(actualPackage, token,
                     nodes.mapIndexed { index, node -> node.json("n${index + 1}") })
                 synchronized(processLock) {
                     valid()
-                    snapshot = Snapshot(token, android.os.SystemClock.elapsedRealtime(), nodes, bounded.exposedCount)
+                    snapshot = Snapshot(token, android.os.SystemClock.elapsedRealtime(), actualPackage, actualWindow, nodes, bounded.exposedCount)
                 }
                 ScreenTestResult(bounded.output)
             }
@@ -102,7 +106,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             "back" -> {
                 snapshot = null
                 valid()
-                foreground(packageName)
+                foreground(actualPackage, actualWindow)
                 // BACK is dispatched to the focused window, not a screen coordinate. System
                 // bars outside the app must not prevent it; coordinate actions keep overlay checks.
                 command(listOf("input", "keyevent", "4"), stage = "input")
@@ -110,7 +114,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
             }
             "click", "long_click", "input_text", "swipe" -> {
                 val old = snapshot ?: fail(R.string.screen_test_stale_snapshot)
-                if (old.token != args.optString("snapshot") || android.os.SystemClock.elapsedRealtime() - old.time > 60_000 || old.nodes != nodes)
+                if (old.packageName != actualPackage || old.windowId != actualWindow || old.token != args.optString("snapshot") || android.os.SystemClock.elapsedRealtime() - old.time > 60_000 || old.nodes != nodes)
                     fail(R.string.screen_test_stale_snapshot)
                 snapshot = null
                 val index = parseNodeIndex(args.getString("node"))
@@ -145,10 +149,10 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                     }
                 }
                 valid()
-                if (readNodes(packageName) != old.nodes || android.os.SystemClock.elapsedRealtime() - old.time > 60_000)
+                if (readNodes(actualPackage) != old.nodes || android.os.SystemClock.elapsedRealtime() - old.time > 60_000)
                     fail(R.string.screen_test_stale_snapshot)
                 valid()
-                requireUncovered(packageName, node.bounds)
+                requireUncovered(actualPackage, actualWindow, node.bounds)
                 valid()
                 if (android.os.SystemClock.elapsedRealtime() - old.time > 60_000)
                     fail(R.string.screen_test_stale_snapshot)
@@ -157,7 +161,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 requested(action)
             }
             else -> fail(R.string.screen_test_action_failed)
-        }
+        }.copy(packageName = actualPackage)
         }
         }
     }
@@ -166,16 +170,19 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
         if (generation != epoch.get()) fail(R.string.screen_test_stopped)
     }
 
-    private suspend fun foreground(packageName: String) {
+    private suspend fun currentForegroundWindow(): Pair<String, String> {
         val windows = command(listOf("dumpsys", "window", "-a"), stage = "foreground")
-        val focus = focusedWindow(windows)?.second
-        if (focus != packageName) fail(R.string.screen_test_wrong_foreground)
+        return focusedWindow(windows) ?: fail(R.string.screen_test_wrong_foreground)
     }
 
-    private suspend fun requireUncovered(packageName: String, bounds: Rect) {
+    private suspend fun foreground(packageName: String, windowId: String) {
+        if (currentForegroundWindow() != (windowId to packageName)) fail(R.string.screen_test_wrong_foreground)
+    }
+
+    private suspend fun requireUncovered(packageName: String, windowId: String, bounds: Rect) {
         val dump = command(listOf("dumpsys", "window", "-a"), stage = "overlay")
         // This one fresh window dump verifies both current focus and coordinate isolation.
-        if (focusedWindow(dump)?.second != packageName) fail(R.string.screen_test_wrong_foreground)
+        if (focusedWindow(dump) != (windowId to packageName)) fail(R.string.screen_test_wrong_foreground)
         if (!isUncoveredWindowRegion(dump, packageName, bounds.left, bounds.top, bounds.right, bounds.bottom))
             fail(R.string.screen_test_root_window_not_isolated)
     }
@@ -269,7 +276,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
 
     private fun requested(action: String) = ScreenTestResult(JSONObject().put("requested", action).put("verified", false).put("next", "observe").toString())
     private fun fail(id: Int): Nothing = throw ScreenTestException(context.getString(id))
-    private data class Snapshot(val token: String, val time: Long, val nodes: List<Node>, val exposedCount: Int)
+    private data class Snapshot(val token: String, val time: Long, val packageName: String, val windowId: String, val nodes: List<Node>, val exposedCount: Int)
     private data class Node(val text: String, val description: String, val className: String, val resource: String,
         val bounds: Rect, val sensitive: Boolean, val enabled: Boolean, val clickable: Boolean,
         val longClickable: Boolean, val editable: Boolean, val focused: Boolean) {

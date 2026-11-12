@@ -19,9 +19,9 @@ internal fun AiProviderPromptField(value: String, changed: (String) -> Unit, edi
     val description = stringResource(R.string.ai_provider_prompt_field)
     Text(stringResource(R.string.ai_provider_prompt_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedTextField(value, changed, modifier = Modifier.fillMaxWidth().semantics { contentDescription = description }, enabled = editable,
+    WorkbenchTextField(value, changed, modifier = Modifier.fillMaxWidth().semantics { contentDescription = description }, enabled = editable,
         textStyle = LocalTextStyle.current.copy(fontSize = 13.sp),
-        label = { Text(stringResource(R.string.ai_provider_prompt_field)) }, minLines = 3, maxLines = 7,
+        label = stringResource(R.string.ai_provider_prompt_field), minLines = 3, maxLines = 7,
         isError = invalid, supportingText = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(if (invalid) R.string.ai_provider_prompt_too_long else R.string.ai_provider_prompt_privacy))

@@ -19,11 +19,14 @@ class AiDiagnosticsDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(condition: () -> Boolean) = withTimeout(25000) { while (!condition()) delay(30) }
-    private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading }
+    private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading && ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading }
     private fun controller(f: AiDeviceTest.Fixture, command: suspend (String, String) -> CommandResult = { _, _ -> error("Unexpected command") }): AiController {
-        val isolated = object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }
+        val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = File(f.root, "control").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences("${f.token}-$name", mode)
+        }
         val project = File(f.root, "project").apply { mkdirs() }
-        return AiController(isolated, { project }, { _, _ -> false }, command, {}, {}, f.transport, f.config, history = f.history)
+        return AiController(isolated, { project }, { _, _ -> false }, command, {}, {}, f.transport, f.config, history = f.history).also { it.refreshGlobalSkills() }
     }
     private fun request(f: AiDeviceTest.Fixture) = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8())
 
@@ -134,33 +137,35 @@ class AiDiagnosticsDeviceTest {
     }
 
     @Test(timeout = 120000) fun skillsAreExplicitBoundedPersistedAndUseExistingCommandTools() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
-                val directory = File(f.root, "project/.zakocoder/skills/python-care").apply { mkdirs() }
+                val directory = File(f.root, "control/shared-skills/.zakocoder/skills/python-care").apply { mkdirs() }
                 File(directory, "SKILL.md").writeText("---\nname: Python care\ndescription: >\n  Precise edits\n  and checks\n---\nUse sed or Python and verify actual files. SKILL_MARKER_42")
-                File(f.root, "project/.zakocoder/skills/broken").mkdirs()
+                File(f.root, "control/shared-skills/.zakocoder/skills/broken").mkdirs()
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("skills") }; ready(ai)
-                assertEquals(2, ai.state.value.skills.count { !it.builtIn }); assertEquals(AiBuiltinSkills.defaults, ai.state.value.enabledSkills)
+                assertEquals(2, ai.state.value.skills.count { !it.builtIn }); assertEquals(AiBuiltinSkills.defaults.sorted(), ai.state.value.enabledSkills.sorted())
                 val skill = ai.state.value.skills.single { it.valid && !it.builtIn }
                 assertTrue(skill.description.contains("and checks"))
-                main { ai.enableSkill(skill.path, true) }; delay(200)
+                main { ai.enableGlobalSkill(skill.path, true) }; await { !ai.globalSkills.value.active && skill.path in ai.globalSkills.value.enabledSkills }
                 f.enqueue("遵循已启用的技能。")
                 main { ai.send("修改前先说明") }; await { !ai.state.value.active }
                 val body = request(f)
                 assertTrue(body.getJSONArray("messages").toString().contains("SKILL_MARKER_42"))
                 val names = body.getJSONArray("tools").let { tools -> (0 until tools.length()).map { tools.getJSONObject(it).getJSONObject("function").getString("name") } }
-                assertTrue("run_command" in names); assertFalse("edit_file" in names)
-                val loaded = f.history.load("skills").state!!; assertEquals(AiBuiltinSkills.defaults + skill.path, loaded.enabledSkills)
-                assertFalse(loaded.contextTurns.single().contains("SKILL_MARKER_42"))
+                assertTrue("run_command" in names); assertTrue("edit_file" in names)
+                val loaded = f.history.load("skills").state!!; assertEquals((AiBuiltinSkills.defaults + skill.path).sorted(), loaded.enabledSkills.sorted())
+                assertTrue("Prior task preserves the literal sent Skill snapshot", loaded.contextTurns.single().contains("SKILL_MARKER_42"))
                 File(directory, "SKILL.md").delete()
-                main { ai.refreshSkills() }; await { !ai.state.value.skillsLoading }
-                main { ai.enableSkill(skill.path, false) }; await { skill.path !in ai.state.value.enabledSkills }
+                main { ai.refreshGlobalSkills() }; await { !ai.globalSkills.value.skillsLoading }
+                main { ai.enableGlobalSkill(skill.path, false) }; await { skill.path !in ai.state.value.enabledSkills }
                 f.enqueue("继续使用当前任务规则。")
                 main { ai.send("继续") }; await { !ai.state.value.active }
-                assertFalse(request(f).getJSONArray("messages").toString().contains("SKILL_MARKER_42"))
+                val snapshots = request(f).getJSONArray("messages").let { messages ->
+                    (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
+                        .filter { it.startsWith("User-selected skills for this task.") }
+                }
+                assertFalse("Current task no longer selects the removed Skill", snapshots.last().contains("SKILL_MARKER_42"))
             }
-        }
     }
 
     @Test(timeout = 120000) fun nestedCommandTimeoutRemainsAnAuditedToolFailureAndReachesTheModel() = runBlocking {
@@ -239,7 +244,10 @@ class AiDiagnosticsDeviceTest {
                         File(root, "original.py").writeText("print('before')\n")
                         File(root, "obsolete.txt").writeText("remove this")
                     }
-                    val isolated = object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }
+                    val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = File(f.root, "control").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences("${f.token}-$name", mode)
+        }
                     main { ai = AiController(isolated, w.projects::directory, { _, _ -> false }, { _, _ -> error("streaming seam") }, {}, {}, f.transport, f.config,
                         streamingCommand = { id, script, output -> w.runtime.execute(script, id, w.state.value.settings, timeoutMillis = 120000, output = output) }, history = f.history); ai.select(project.id) }
                     ready(ai)

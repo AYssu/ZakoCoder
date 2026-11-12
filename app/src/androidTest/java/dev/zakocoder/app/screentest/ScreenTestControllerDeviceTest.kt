@@ -31,10 +31,10 @@ class ScreenTestControllerDeviceTest {
     @Test fun noSelectionCannotControlForegroundAndStatusDoesNotClaimInstallation() = runBlocking {
         withController { controller, _ ->
             val output = JSONObject(controller.execute("project", JSONObject().put("action", "status")).output)
-            assertTrue(output.getBoolean("targetSelectionRequired"))
-            assertEquals(0, output.getJSONArray("candidates").length())
-            assertFalse(output.getBoolean("selected"))
-            assertFalse(output.getBoolean("installed"))
+            assertTrue(output.getBoolean("taskAuthorizationRequired"))
+            assertEquals("current_device", output.getString("scope"))
+            assertFalse(output.has("candidates"))
+            assertFalse(output.getBoolean("active"))
             assertFalse(controller.state.value.active)
             val error = runCatching { controller.execute("project", JSONObject().put("action", "back")) }.exceptionOrNull()
             assertTrue(error is ScreenTestException)
@@ -54,7 +54,7 @@ class ScreenTestControllerDeviceTest {
 
     @Test fun modeChangeAndStopDoNotGrantRootOrScreenshotSharing() = runBlocking {
         withController { controller, _ ->
-            assertEquals(ScreenTestAccess.Normal, controller.state.value.access)
+            assertEquals(ScreenTestAccess.Accessibility, controller.state.value.access)
             controller.setAccess(ScreenTestAccess.Root)
             assertEquals(ScreenTestAccess.Root, controller.state.value.access)
             assertFalse(controller.state.value.rootGranted)
@@ -94,79 +94,76 @@ class ScreenTestControllerDeviceTest {
         assertTrue(result.exposedCount in 1..79)
     }
 
-    /** Requires the owner-installed disposable debug fixture, but no accessibility/root grants. */
-    @Test fun statusStoppedDuringArtifactReadCannotReturnAnActiveSelection() = runBlocking {
-        withFixtureController { controller, _, gate, _ ->
-            assertTrue(JSONObject(controller.execute("project", JSONObject().put("action", "status")).output).getBoolean("installed"))
-            coroutineScope {
-                gate.armed.set(true)
-                val pending = async(Dispatchers.IO) {
-                    runCatching { controller.execute("project", JSONObject().put("action", "status")) }.exceptionOrNull()
-                }
-                try {
-                    withContext(Dispatchers.IO) { assertTrue("status never reached artifact read", gate.entered.await(5, TimeUnit.SECONDS)) }
-                    controller.stop()
-                } finally { gate.release.countDown() }
-                assertTrue("stale status must fail after stop", withTimeout(10_000) { pending.await() } is ScreenTestException)
-                assertFalse(controller.state.value.active)
-            }
+    @Test fun currentDeviceAuthorizationNeverReadsAProjectOrAnApk() = runBlocking {
+        val directory = File(context.cacheDir, "device-screen-${UUID.randomUUID()}").apply { mkdirs() }
+        val isolated = object : ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getFilesDir(): File = directory
+        }
+        val controller = ScreenTestController(isolated) { error("Device screen must not resolve a workspace directory") }
+        try {
+            val initial = JSONObject(controller.execute(ScreenTestController.DEVICE_TASK_OWNER, JSONObject().put("action", "status")).output)
+            assertTrue(initial.getBoolean("taskAuthorizationRequired"))
+            val lease = controller.authorizeDeviceTask(ScreenTestController.DEVICE_TASK_OWNER, "task-one")
+            assertEquals(lease, controller.taskLease(ScreenTestController.DEVICE_TASK_OWNER))
+            assertEquals("task-one", controller.state.value.taskId)
+            assertEquals(null, controller.state.value.apkPath)
+            assertEquals(null, controller.state.value.packageName)
+            assertTrue(controller.state.value.active)
+            val status = JSONObject(controller.execute(ScreenTestController.DEVICE_TASK_OWNER, JSONObject().put("action", "status")).output)
+            assertFalse(status.getBoolean("taskAuthorizationRequired"))
+            assertFalse(status.has("package")) // Status does not read a screen before an observation.
+            controller.finishTask(ScreenTestController.DEVICE_TASK_OWNER, lease)
+            assertFalse(controller.state.value.active)
+            val audit = controller.readReport(ScreenTestController.DEVICE_TASK_OWNER)
+            assertTrue(audit.contains("current_device_task_authorized"))
+            assertFalse(audit.contains("selected_debug_apk"))
+        } finally {
+            controller.stop()
+            runCatching { controller.readReport(ScreenTestController.DEVICE_TASK_OWNER) }
+            directory.deleteRecursively()
         }
     }
 
-    @Test fun normalReadFailureHasActionProgressAndStopRevokesItsLease() = runBlocking {
-        withFixtureController { controller, _, _, _ ->
-            val lease = requireNotNull(controller.taskLease("project"))
-            controller.setAccess(ScreenTestAccess.Normal)
-            val error = runCatching {
-                controller.execute("project", JSONObject().put("action", "observe"), lease)
-            }.exceptionOrNull()
-            assertTrue("Normal mode must not read another application's screen", error is ScreenTestException)
-            val failed = controller.state.value
-            assertEquals(ScreenOverlayPhase.Failed, failed.overlayProgress.phase)
-            assertEquals("observe", failed.overlayProgress.action)
-            assertTrue(failed.overlayProgress.title.isNotBlank())
-            assertFalse(failed.busy)
-            assertFalse(failed.overlaySuppressed)
-            controller.stop()
-            controller.updateOverlayConversation("project", lease, "revoked task must not return")
-            val stale = runCatching {
-                controller.execute("project", JSONObject().put("action", "observe"), lease)
-            }.exceptionOrNull()
+    @Test fun reauthorizationRevokesPreviousTaskAndCannotLeakAcrossOwners() = runBlocking {
+        withController { controller, _ ->
+            val first = controller.authorizeDeviceTask("owner", "task-one")
+            controller.setScreenshotSharing("owner", true)
+            val second = controller.authorizeDeviceTask("owner", "task-two")
+            assertTrue(first != second)
+            assertFalse(controller.state.value.shareScreenshots)
+            assertTrue(runCatching { controller.setScreenshotSharing("owner", true, first) }.isFailure)
+            assertFalse(controller.state.value.shareScreenshots)
+            controller.setScreenshotSharing("owner", true, second)
+            assertTrue(controller.state.value.shareScreenshots)
+            assertEquals(null, controller.taskLease("different-owner"))
+            controller.finishTask("owner", first)
+            assertEquals(second, controller.taskLease("owner"))
+            val stale = runCatching { controller.execute("owner", JSONObject().put("action", "back"), first) }.exceptionOrNull()
             assertTrue(stale is ScreenTestException)
+            val foreign = runCatching { controller.execute("different-owner", JSONObject().put("action", "back"), second) }.exceptionOrNull()
+            assertTrue(foreign is ScreenTestException)
+            controller.finishTask("owner", second)
+            assertEquals(null, controller.taskLease("owner"))
             assertFalse(controller.state.value.active)
+        }
+    }
+
+    @Test fun operationFailureRecordsProgressAndStopRevokesItsLease() = runBlocking {
+        withController { controller, _ ->
+            controller.setAccess(ScreenTestAccess.Normal) // Legacy mode can never inspect a screen.
+            val lease = controller.authorizeDeviceTask("project", "failure-task")
+            val error = runCatching { controller.execute("project", JSONObject().put("action", "observe"), lease) }.exceptionOrNull()
+            assertTrue(error is ScreenTestException)
+            assertEquals(ScreenOverlayPhase.Failed, controller.state.value.overlayProgress.phase)
+            assertEquals("observe", controller.state.value.overlayProgress.action)
             assertFalse(controller.state.value.busy)
             assertFalse(controller.state.value.overlaySuppressed)
-            assertEquals(ScreenOverlayPhase.Cancelled, controller.state.value.overlayProgress.phase)
+            controller.stop()
+            controller.updateOverlayConversation("project", lease, "revoked")
             assertEquals("", controller.state.value.overlayConversation)
             assertEquals(null, controller.taskLease("project"))
-        }
-    }
-
-    @Test fun cancellationRemainsCancellationWhenItsAuditCannotBeWritten() = runBlocking {
-        withFixtureController { controller, directory, gate, reportDirectory ->
-            coroutineScope {
-                gate.armed.set(true)
-                val pending = async(Dispatchers.IO) {
-                    runCatching { controller.execute("project", JSONObject().put("action", "observe")) }.exceptionOrNull()
-                }
-                try {
-                    withContext(Dispatchers.IO) { assertTrue("observe never reached artifact read", gate.entered.await(5, TimeUnit.SECONDS)) }
-                    assertTrue(controller.state.value.busy)
-                    assertFalse("Artifact verification must not suppress the overlay", controller.state.value.overlaySuppressed)
-                    assertEquals(ScreenOverlayPhase.Verifying, controller.state.value.overlayProgress.phase)
-                    assertEquals("observe", controller.state.value.overlayProgress.action)
-                    reportDirectory.set(File(directory, "not-a-directory").apply { writeText("blocked") })
-                    controller.stop()
-                } finally { gate.release.countDown() }
-                val error = withTimeout(10_000) { pending.await() }
-                assertTrue("audit failure must preserve cancellation", error is CancellationException)
-                assertTrue("audit failure should be retained as suppressed evidence",
-                    generateSequence(error) { it.cause }.any { it.suppressed.isNotEmpty() })
-                assertFalse(controller.state.value.active)
-                assertFalse(controller.state.value.busy)
-                assertFalse(controller.state.value.overlaySuppressed)
-                assertEquals(ScreenOverlayPhase.Cancelled, controller.state.value.overlayProgress.phase)
-            }
+            assertFalse(controller.state.value.active)
         }
     }
 
@@ -182,13 +179,14 @@ class ScreenTestControllerDeviceTest {
             assertTrue(rejected is ScreenTestException)
             assertFalse(controller.state.value.active)
             controller.selectApk("project", proposal.apk.relativePath, proposal.sha256)
-            assertTrue(controller.state.value.active)
+            assertFalse(controller.state.value.active)
+            assertEquals(null, controller.taskLease("project"))
         }
     }
 
     @Test fun overlayConversationRejectsOtherProjectsAndRevokedLeases() = runBlocking {
-        withFixtureController { controller, _, _, _ ->
-            val lease = requireNotNull(controller.taskLease("project"))
+        withController { controller, _ ->
+            val lease = controller.authorizeDeviceTask("project", "overlay-task")
             controller.updateOverlayConversation("project", lease, "正在检查构建后的页面")
             assertEquals("正在检查构建后的页面", controller.state.value.overlayConversation)
             controller.updateOverlayConversation("other-project", lease, "不能跨项目")
@@ -200,16 +198,12 @@ class ScreenTestControllerDeviceTest {
         }
     }
 
-    @Test fun statusDiscoversCurrentDebugArtifactsWithoutSelectingOrGranting() = runBlocking {
-        withFixtureController { controller, _, _, _ ->
-            controller.stop()
-            val output = JSONObject(controller.execute("project", JSONObject().put("action", "status")).output)
-            assertTrue(output.getBoolean("targetSelectionRequired"))
-            assertFalse(output.getBoolean("selected"))
-            val candidate = output.getJSONArray("candidates").getJSONObject(0)
-            assertEquals("app-debug.apk", candidate.getString("path"))
-            assertTrue(candidate.getBoolean("debuggable"))
-            assertFalse(controller.state.value.active)
+    @Test fun statusNeedsNeitherWorkspaceNorTargetSelection() = runBlocking {
+        withController { controller, _ ->
+            val output = JSONObject(controller.execute("nonexistent-workspace", JSONObject().put("action", "status")).output)
+            assertTrue(output.getBoolean("taskAuthorizationRequired"))
+            assertFalse(output.getBoolean("active"))
+            assertFalse(output.has("candidates"))
             assertFalse(controller.state.value.shareScreenshots)
         }
     }
@@ -261,8 +255,17 @@ class ScreenTestControllerDeviceTest {
 
     private suspend fun withController(block: suspend (ScreenTestController, File) -> Unit) {
         val directory = File(context.cacheDir, "screen-controller-${UUID.randomUUID()}").apply { mkdirs() }
-        val controller = ScreenTestController(context) { directory }
+        val isolated = object : ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getFilesDir(): File = File(directory, "files").apply { mkdirs() }
+        }
+        val controller = ScreenTestController(isolated) { directory }
         try { block(controller, directory) }
-        finally { controller.stop(); directory.deleteRecursively() }
+        finally {
+            controller.stop()
+            runCatching { controller.readReport("project") }
+            runCatching { controller.readReport("owner") }
+            directory.deleteRecursively()
+        }
     }
 }

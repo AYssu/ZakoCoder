@@ -31,29 +31,29 @@ internal fun GitCloneSheet(enabled: Boolean, close: () -> Unit,
     WorkbenchSheet(stringResource(R.string.git_clone), {
         token = ""; username = ""; close()
     }, stringResource(R.string.git_clone_credentials_help)) {
-        OutlinedTextField(name, { if (it.length <= 80) name = it }, modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.project_name)) }, singleLine = true, enabled = enabled,
+        WorkbenchTextField(name, { if (it.length <= 80) name = it }, modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.project_name), singleLine = true, enabled = enabled,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), shape = RoundedCornerShape(12.dp))
-        OutlinedTextField(url, { if (it.length <= 1000) url = it }, modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.git_url)) }, singleLine = true, enabled = enabled,
+        WorkbenchTextField(url, { if (it.length <= 1000) url = it }, modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.git_url), singleLine = true, enabled = enabled,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next), shape = RoundedCornerShape(12.dp),
             supportingText = { if (url.isNotBlank() && !validUrl) Text(stringResource(R.string.git_clone_url_error)) }, isError = url.isNotBlank() && !validUrl)
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(stringResource(R.string.git_clone_private), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            Switch(privateRepository, { privateRepository = it; if (!it) { username = ""; token = "" } }, enabled = enabled)
+            WorkbenchSwitch(privateRepository, { privateRepository = it; if (!it) { username = ""; token = "" } }, enabled = enabled)
         }
         if (privateRepository) {
             Text(stringResource(R.string.git_clone_private_help), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(username, { if (it.length <= 128) username = it }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
-                label = { Text(stringResource(R.string.git_credentials_username)) }, singleLine = true,
+            WorkbenchTextField(username, { if (it.length <= 128) username = it }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
+                label = stringResource(R.string.git_credentials_username), singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), shape = RoundedCornerShape(12.dp))
-            OutlinedTextField(token, { if (it.length <= 8192) token = it }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
-                label = { Text(stringResource(R.string.git_credentials_token)) }, singleLine = true, visualTransformation = PasswordVisualTransformation(),
+            WorkbenchTextField(token, { if (it.length <= 8192) token = it }, modifier = Modifier.fillMaxWidth(), enabled = enabled,
+                label = stringResource(R.string.git_credentials_token), singleLine = true, visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done), shape = RoundedCornerShape(12.dp))
         }
-        Button(onClick = {
+        WorkbenchPrimaryButton(onClick = {
             val user = if (privateRepository) username else ""
             val credential = if (privateRepository) token else ""
             try { onClone(name.trim(), publicCloneUrl(url), user, credential) }

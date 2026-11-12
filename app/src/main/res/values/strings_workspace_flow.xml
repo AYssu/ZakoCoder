@@ -1,0 +1,18 @@
+<resources>
+    <string name="workspace_flow_list">全部工作区</string>
+    <string name="workspace_flow_list_hint">进入工作区查看对话，长按管理工作区</string>
+    <string name="workspace_flow_add">添加工作区</string>
+    <string name="workspace_flow_open">查看对话</string>
+    <string name="workspace_flow_choose_mode">选择工作区模式</string>
+    <string name="workspace_flow_work">Work · 应用内副本</string>
+    <string name="workspace_flow_local">本地 · 直接访问目录</string>
+    <string name="workspace_flow_work_hint">创建、导入或克隆到应用私有目录。导入后的修改不会同步到原目录；同一工作区内的对话共用这份源码。</string>
+    <string name="workspace_flow_local_hint">选择手机上的真实目录，编辑器、助手和终端直接修改原文件。同一工作区内的对话共用此目录。</string>
+    <string name="workspace_flow_empty">还没有工作区</string>
+    <string name="workspace_flow_empty_hint">添加源码目录，再在工作区内创建对话。可选择应用内副本或直接绑定本地目录。</string>
+    <string name="workspace_flow_search">搜索工作区名称</string>
+    <string name="workspace_flow_search_empty">没有匹配的工作区，试试其他名称。</string>
+    <string name="workspace_flow_source">选择源码来源</string>
+    <string name="workspace_flow_change_mode">更换工作区模式</string>
+    <string name="workspace_open">进入工作区</string>
+</resources>

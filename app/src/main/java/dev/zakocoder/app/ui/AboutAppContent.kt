@@ -69,7 +69,7 @@ private fun LicenseOriginalsEntry() {
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: java.io.IOException) { LicenseListing(failed = true) }
         }
-        AlertDialog(onDismissRequest = { choosing = false },
+        WorkbenchAlertDialog(onDismissRequest = { choosing = false },
             title = { Text(stringResource(R.string.about_license_originals_title)) },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {

@@ -15,6 +15,26 @@ import java.io.File
 import java.util.UUID
 
 class RuntimeShellDeviceTest {
+    @Test fun newShellReceivesCurrentSocksProxyAndCredentials(): Unit = runBlocking {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = File(base.cacheDir, "proxy-command-${UUID.randomUUID()}")
+        val context = object : ContextWrapper(base) { override fun getFilesDir() = directory }
+        val runtime = LinuxRuntime(context) {
+            dev.zakocoder.app.settings.NetworkProxy.Credentials("fixture-user", "fixture-pass")
+        }
+        try {
+            runtime.root.mkdirs()
+            for (shell in TerminalShell.entries) {
+                val command = runtime.command(null, AppSettings(proxy = "socks5://127.0.0.1:45669", terminalShell = shell), null)
+                assertTrue(command.arguments.contains("ALL_PROXY=socks5://fixture-user:fixture-pass@127.0.0.1:45669"))
+                assertTrue(command.arguments.contains("all_proxy=socks5://fixture-user:fixture-pass@127.0.0.1:45669"))
+                assertFalse(command.arguments.any { it.startsWith("http_proxy=") })
+            }
+            val direct = runtime.command(null, AppSettings(proxy = ""), null)
+            assertFalse(direct.arguments.any { it.startsWith("ALL_PROXY=") })
+        } finally { withContext(Dispatchers.IO) { PrivateFiles.deleteTree(directory) } }
+    }
+
     @Test fun linkDepotIsCanonicalPersistentAndRefusesExistingSymlink(): Unit = runBlocking {
         withContext(Dispatchers.IO) {
             val base = InstrumentationRegistry.getInstrumentation().targetContext

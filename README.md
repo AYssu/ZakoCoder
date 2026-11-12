@@ -33,14 +33,14 @@ ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项�
 
 | 工作场景 | 你可以做什么 |
 | --- | --- |
-| **组织项目** | 创建模板项目、导入目录副本、绑定真实本地目录，或克隆公开／私有 HTTPS 仓库；搜索与切换项目。 |
+| **组织工作区** | 按工作区管理源码和对话。Work 使用应用内副本，本地模式绑定真实目录；进入工作区可新建、切换对话，并访问文件与终端。同一工作区内的对话共用源码。 |
 | **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart 可选实验性本机语言服务。 |
 | **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
 | **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／VLESS／SS／Trojan 节点由自编译 Xray 内核启用，Lite 使用可选插件，Full 直接内置。VLESS 支持 REALITY、TLS、TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 XTLS Vision。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
 | **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情，按日／月、项目和模型筛选本机用量，查看请求、Token、工具调用趋势及模型分布；在任务内选择或填写回答，重启后继续待答任务。 |
-| **扩展能力** | 按会话启用内置或自定义 Skill，导入 Markdown / ZIP；配置 stdio、Streamable HTTP 或旧 SSE MCP 服务；按项目开启屏幕操作、SSH 远程开发能力包。 |
+| **扩展能力** | 全局管理内置或自定义 Skill，导入 Markdown / ZIP，所有工作区共用；配置 Streamable HTTP 或 SSE MCP 服务，无工作区也可测试连接；屏幕操作为全局能力，按任务授权当前设备；SSH 按工作区配置。 |
 | **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
-| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；选择项目 Debug APK，通过系统安装及受限屏幕测试验证界面；查看 Git 状态、获取／拉取／推送、管理分支与冲突，选择暂存并创建提交。 |
+| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；通过系统安装项目 APK，按任务授权助手观察和操作当前设备界面；查看 Git 状态、获取／拉取／推送、管理分支与冲突，选择暂存并创建提交。 |
 
 请求与用量的范围、缓存口径及消息重试行为见[请求与用量](docs/AI_USAGE.md)。系统权限可从设置中的「权限管理」集中查看和调整。MCP 网络服务支持独立填写凭证并自动组成 Bearer 请求头，同时保留高级请求头配置。设置中的「应用更新」支持正式／Beta 渠道检查、下载校验和调用系统安装，详见[应用内更新](docs/UPDATES.md)。
 
@@ -54,7 +54,7 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 选择与设备及需求对应的 APK，并下载 `SHA256SUMS.txt` 校验文件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
-开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 按 Lite／Full 和 ARM64／x86_64 区分 Debug APK，并提供运行时来源、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行后可按 Lite／Full 和 ARM64／x86_64 单独下载所需 Debug APK，每份附对应摘要与构建信息；Lite 可选插件按架构另行下载，运行时来源及完整校验材料独立归档，保留 14 天。下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
 Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
 
@@ -65,14 +65,16 @@ Release 构建、签名、源码与许可证分发要求见[发布流程](docs/R
 | 版本 | ARM64 / x86_64 | 首次使用 |
 | --- | --- | --- |
 | Lite 轻量版 | 各一个 APK | Ubuntu 在线安装或手动导入；需要代理内核时另行安装可选插件。 |
-| Full 完整版 | 各一个 APK | 内置基础 Ubuntu 和代理内核；首次打开自动在本机准备 Ubuntu，显示进度，可取消或失败后在环境页重试，无需另装内核插件。 |
+| Full 完整版 | 各一个 APK | 内置基础 Ubuntu 和代理内核；首次配置中确认后在本机准备 Ubuntu，显示进度，可取消或失败后在环境页重试，无需另装内核插件。跳过配置不会静默安装。 |
 
 Full 不包含所有开发工具，Node.js、Java、Android SDK／NDK 等仍需按需安装，模型服务也需自行配置。x86_64 的基础 Ubuntu／终端支持不代表 ARM64 专属 Android／Flutter 工具链均可使用。Lite 与 Full 使用相同包名和存储位置；同签名且系统允许的版本升级可覆盖切换，保留项目、配置及已有环境。已有环境不会因切换或更新而重新解包覆盖，不要通过卸载来切换版本。
 
 ### 完成第一个项目
 
+首次安装会引导你选择用途，并依次配置 Ubuntu 软件源、AI 服务、默认 Skill、工具包和系统权限；各项可稍后设置，不自动授权或安装。应用默认进入助手，原项目管理入口统一称为「工作区」，「对话记录」查看当前工作区的历史。已有用户的项目、环境与模型配置会保留，不强制重走引导；需要调整时可从「设置 → 初始化配置」重新进入。
+
 1. **添加项目**：创建项目、导入副本、绑定本地目录或克隆 HTTPS 仓库。私有仓库需填写具有对应权限的用户名和访问令牌。导入副本与原目录独立；绑定本地目录直接修改原文件。
-2. **准备环境**：Lite 从环境页安装或导入 Ubuntu；Full 等待首次本地初始化，失败可在环境页重试。再按项目需要选择工具包，工具检测不会自动安装依赖。
+2. **准备环境**：Lite 从环境页安装或导入 Ubuntu；Full 在首次配置中确认本地初始化，跳过或失败后可从环境页安装。再按项目需要选择工具包，工具检测不会自动安装依赖。
 3. **开始编辑**：点击文件打开编辑器；Markdown 可切换预览，修改后显式保存。
 4. **配置助手**：在设置中填写模型地址、模型和密钥，手动测试连接；高级设置可调整生成参数、思考模式、上下文和压缩策略、请求头；服务是否支持这些参数需实际测试。也可以独立使用编辑器和终端。
 5. **运行并核对**：通过终端或项目命令构建、测试、启动服务；使用 AI 时，核对审批、变更和实际验证结果。
@@ -103,7 +105,7 @@ Git 与语言服务均使用同一项目及手机上的 Ubuntu 环境。Git 拉�
 
 语言服务默认关闭，需从编辑器底部 LSP 入口主动开启；工具包按需联网安装，仅为当前可见文件建立连接。按文件类型连接对应服务，提供实验性补全和诊断，不能代替项目构建；Java／Kotlin 需要 JVM，Dart 复用 Flutter 工具包。新增语言已有最小工程的单台真机验证，复杂工程仍需单独验收；依赖解析和设备适用性见[语言服务说明](docs/LSP.md)。
 
-「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包，按项目启用且默认关闭。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；普通、无障碍和 Root 方式的权限分别授权，截图分享默认关闭，目标仍限用户选择的项目调试 APK。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
+「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包且默认关闭。屏幕操作配置全局共用，不要求创建工作区；SSH 连接继续按工作区管理。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；无障碍和 Root 方式的权限分别授权，截图分享默认关闭。每次任务首次操作均需明确授权当前设备屏幕，不绑定 APK，可在应用之间切换；任务结束或停止后立即撤销。系统安装和权限确认仍由用户处理。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
 
 SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文件操作及可选 tmux 长任务。首次连接需确认主机指纹，认证凭据由设备 Keystore 加密保存，不回填或发给模型。远程项目目录只是工作目录，不限制获批 Shell 命令的访问范围；取消连接不保证远程后台进程退出，tmux 任务可以保留并重新接管。算法兼容性、并发写入等限制见[产品范围](docs/PRODUCT.md#可选能力包)。
 
@@ -181,6 +183,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需�
 | 项目 | 在 ZakoCoder 中的用途 |
 | --- | --- |
 | [Sora Editor](https://github.com/Rosemoe/sora-editor) | 原生代码编辑器、TextMate 与实验性 LSP 接入。 |
+| [Miuix](https://github.com/compose-miuix-ui/miuix) | 原生主题、交互控件和面板。 |
 | [Termux](https://github.com/termux/termux-app) | 终端模拟与视图基础库。 |
 | [PRoot](https://github.com/proot-me/PRoot) · [proot-distro](https://github.com/termux/proot-distro) · [Ubuntu](https://ubuntu.com/) | Linux 用户空间运行基础。 |
 | [termux/proot](https://github.com/termux/proot) · [talloc](https://talloc.samba.org/) · [libandroid-shmem](https://github.com/termux/libandroid-shmem) | 仓库内保留源码，自行编译 PRoot 与 loader；见 [独立子项目](native-runtime/README.md)。 |

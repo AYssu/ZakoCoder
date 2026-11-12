@@ -35,12 +35,12 @@ class ScreenTestAccessibilityDeviceTest {
     private val automation: UiAutomation
         get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
 
-    @Test fun selectedDebugProjectSupportsLiveChineseUiActionsEvidenceAndStop() = runBlocking {
+    @Test fun authorizedDeviceTaskSupportsLiveChineseUiActionsEvidenceAndStop() = runBlocking {
         withFixture { controller, _ ->
             val status = json(controller, "status")
-            assertTrue(status.getBoolean("selected"))
-            assertTrue(status.getBoolean("installed"))
-            assertTrue(status.getBoolean("identityMatches"))
+            assertTrue(status.getBoolean("active"))
+            assertEquals("current_device", status.getString("scope"))
+            assertFalse(status.getBoolean("taskAuthorizationRequired"))
             assertEquals("Accessibility", status.getString("access"))
             assertTrue(status.getBoolean("accessibilityEnabled"))
 
@@ -79,7 +79,8 @@ class ScreenTestAccessibilityDeviceTest {
                 withContext(Dispatchers.IO) { File(context.filesDir, "screen-test/evidence/${uri.lastPathSegment}").delete() }
             }
 
-            shell("input keyevent KEYCODE_HOME")
+            // The host's own approval controls stay outside agent control, even in device scope.
+            shell("am start -W -n ${context.packageName}/dev.zakocoder.app.MainActivity")
             delay(500)
             assertTrue(runCatching { json(controller, "observe") }.exceptionOrNull() is ScreenTestException)
             controller.stop()
@@ -129,11 +130,10 @@ class ScreenTestAccessibilityDeviceTest {
         }
     }
 
-    @Test fun staleLeaseCannotStopReplacementAndHashRejectsChangedProjectBytes() = runBlocking {
+    @Test fun staleLeaseCannotStopReplacementAndProjectApkChangesDoNotAffectScreenTask() = runBlocking {
         withFixture { controller, project ->
             val firstLease = requireNotNull(controller.taskLease(projectId))
-            controller.selectApk(projectId, "app-debug.apk")
-            val secondLease = requireNotNull(controller.taskLease(projectId))
+            val secondLease = controller.authorizeDeviceTask(projectId, UUID.randomUUID().toString())
             assertNotEquals(firstLease, secondLease)
             controller.finishTask(projectId, firstLease)
             controller.finishTask(projectId, null)
@@ -142,81 +142,41 @@ class ScreenTestAccessibilityDeviceTest {
             assertTrue(runCatching {
                 controller.execute(projectId, JSONObject().put("action", "observe"), firstLease)
             }.exceptionOrNull() is ScreenTestException)
-            assertTrue(json(controller, "status").getBoolean("artifactMatches"))
-            val artifact = File(project, "app-debug.apk")
-            val originalSize = artifact.length()
-            try {
-                withContext(Dispatchers.IO) { artifact.appendBytes(byteArrayOf(0)) }
-                val changed = json(controller, "status")
-                assertTrue(changed.getBoolean("identityMatches"))
-                assertFalse(changed.getBoolean("artifactMatches"))
-                assertNotEquals(changed.getString("projectApkSha256"), changed.getString("installedApkSha256"))
-                assertTrue(runCatching { json(controller, "observe") }.exceptionOrNull() is ScreenTestException)
-            } finally {
-                withContext(Dispatchers.IO) { java.io.RandomAccessFile(artifact, "rw").use { it.setLength(originalSize) } }
-            }
-            assertTrue(json(controller, "status").getBoolean("artifactMatches"))
-            val copiesBeforeReselect = withContext(Dispatchers.IO) { installCopies() }
-            controller.selectApk(projectId, "app-debug.apk")
-            val copiesAfterReselect = withContext(Dispatchers.IO) { installCopies() }
-            assertTrue("Selection validation must not retain new copies", (copiesAfterReselect - copiesBeforeReselect).isEmpty())
+            // Screen authority no longer derives from APK bytes, presence, or debug flags.
+            withContext(Dispatchers.IO) { File(project, "app-debug.apk").delete() }
+            val observed = json(controller, "observe")
+            assertEquals(TARGET, observed.getString("package"))
+            assertFalse(json(controller, "status").has("artifactMatches"))
             controller.stop()
             val report = controller.readReport(projectId)
             assertTrue(report.contains("\"action\":\"stop\""))
-            assertTrue(report.contains("\"detail\":\"user_stop\""))
-            assertTrue(report.contains("\"apkSha256\""))
+            assertTrue(report.contains("current_device_task_authorized"))
         }
     }
 
-    /** Test owner supplies v2 signed by the same key and the same versionCode, then permits the isolated host's install source. */
-    @Test fun rebuiltSameVersionCannotTestOldInstallAndPendingUpdateBindsNewDigest() = runBlocking {
-        assertTrue("Enable install-source permission only for the isolated test host", context.packageManager.canRequestPackageInstalls())
-        withFixture { controller, project ->
-            val original = json(controller, "status")
-            assertTrue(original.getBoolean("artifactMatches"))
-            val originalDigest = original.getString("installedApkSha256")
+    /** Optional second disposable install; never substitute a user's personal application. */
+    @Test fun taskCanSwitchBetweenDisposableAppsButCannotReuseAnotherAppsSnapshot() = runBlocking {
+        val other = "dev.zakocoder.screentest.fixture.secondary"
+        org.junit.Assume.assumeTrue("Install the optional secondary disposable fixture", shell("pm path $other").contains("package:"))
+        withFixture { controller, _ ->
+            val first = observeUntil(controller, "Counter: 0")
+            val oldButton = node(first) { it.optString("text") == "Increment" }
+            shell("am force-stop $other")
+            shell("am start -W -n $other/dev.zakocoder.screentest.fixture.MainActivity")
+            delay(600)
             try {
-                withContext(Dispatchers.IO) {
-                    automation.executeShellCommand("cat /data/local/tmp/fixture-v2.apk").use { descriptor ->
-                        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
-                            File(project, "app-debug.apk").outputStream().use { output -> input.copyTo(output) }
-                        }
-                    }
-                    @Suppress("DEPRECATION")
-                    val rebuilt = context.packageManager.getPackageArchiveInfo(File(project, "app-debug.apk").absolutePath, 0)
-                    @Suppress("DEPRECATION")
-                    val installed = context.packageManager.getPackageInfo(TARGET, 0)
-                    assertNotNull(rebuilt)
-                    @Suppress("DEPRECATION")
-                    val sameVersion = installed.versionCode == requireNotNull(rebuilt).versionCode
-                    assertTrue(sameVersion)
-                }
-                assertTrue(runCatching { json(controller, "observe") }.exceptionOrNull() is ScreenTestException)
-                val beforeInstall = withContext(Dispatchers.IO) { installCopies() }
-                val pending = try {
-                    controller.execute(projectId, JSONObject().put("action", "install"))
-                } finally {
-                    // Instrumentation runs these cases serially; record only this handoff's new copies.
-                    withContext(Dispatchers.IO) { ownedInstallCopies.addAll(installCopies() - beforeInstall) }
-                }
-                assertTrue(pending.output.contains("尚未确认安装结果"))
-                val beforeConfirmation = json(controller, "status")
-                assertEquals(originalDigest, beforeConfirmation.getString("installedApkSha256"))
-                assertNotEquals(originalDigest, beforeConfirmation.getString("selectedApkSha256"))
-                assertFalse(beforeConfirmation.getBoolean("artifactMatches"))
-                assertTrue(runCatching { json(controller, "launch") }.exceptionOrNull() is ScreenTestException)
-                // Harness-only fixture installation simulates the user's system confirmation; product tools never do this.
-                val install = shell("pm install -r -t /data/local/tmp/fixture-v2.apk")
-                assertTrue(install, install.contains("Success"))
-                assertTrue(json(controller, "status").getBoolean("artifactMatches"))
-                val report = controller.readReport(projectId)
-                assertTrue(report.contains("awaiting_user_install_confirmation"))
-                assertTrue(report.contains(beforeConfirmation.getString("selectedApkSha256")))
-            } finally {
-                shell("am force-stop $TARGET")
-                val restored = shell("pm install -r -t /data/local/tmp/fixture.apk")
-                assertTrue(restored, restored.contains("Success"))
-            }
+                assertTrue(runCatching { action(controller, "click", first, oldButton) }.exceptionOrNull() is ScreenTestException)
+                val fresh = observeUntil(controller, "Counter: 0")
+                assertEquals(other, fresh.getString("package"))
+                val freshButton = node(fresh) { it.optString("text") == "Increment" }
+                action(controller, "click", fresh, freshButton)
+                observeUntil(controller, "Counter: 1")
+                shell("am start -W -n $TARGET/.MainActivity")
+                delay(600)
+                val returned = observeUntil(controller, "Counter: 0")
+                assertEquals(TARGET, returned.getString("package"))
+                assertTrue(controller.state.value.active)
+            } finally { shell("am force-stop $other") }
         }
     }
 
@@ -284,9 +244,7 @@ class ScreenTestAccessibilityDeviceTest {
                 }
             }
             controller.setAccess(ScreenTestAccess.Accessibility)
-            val selected = controller.selectApk(projectId, "app-debug.apk")
-            assertEquals(TARGET, selected.packageName)
-            assertTrue(selected.debuggable)
+            controller.authorizeDeviceTask(projectId, UUID.randomUUID().toString())
             assertTrue(controller.state.value.enabled)
             assertTrue(controller.state.value.connected)
             shell("am force-stop $TARGET")

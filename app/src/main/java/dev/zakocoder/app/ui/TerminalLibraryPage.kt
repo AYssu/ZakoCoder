@@ -1,8 +1,11 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,85 +16,107 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.terminal.TerminalItem
+import dev.zakocoder.app.ui.theme.Type
 
 @Composable
 internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, onOpen: (String) -> Unit, onEnvironment: () -> Unit, onProjects: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     val previews by workbench.terminal.previews.collectAsStateWithLifecycle()
+    val canCreate = state.installed && state.projects.isNotEmpty() && !state.busy && state.sessions.size < 4
+    val groups = state.sessions.groupBy { it.projectId }.entries.sortedBy { if (it.key == state.selectedId) 0 else 1 }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-
-            PageHeading(stringResource(R.string.nav_terminal)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    repeat(4) { index -> Box(Modifier.size(8.dp).background(if (index < state.sessions.size) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape)) }
-                    Text(stringResource(R.string.terminal_quota, state.sessions.size), Modifier.padding(start = 3.dp), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+        PageHeading(stringResource(R.string.nav_terminal)) {
+            if (state.sessions.isNotEmpty()) TextButton(onClick = { creating = true }, enabled = canCreate) {
+                WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.new_terminal), style = Type.body)
+            } else Text(stringResource(R.string.terminal_quota, 0), style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (state.sessions.isNotEmpty()) Text(
+            stringResource(R.string.terminal_library_summary, state.sessions.size, state.sessions.count { it.session.isRunning }),
+            Modifier.padding(top = 4.dp, bottom = 16.dp), style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.sessions.isEmpty()) item {
+                WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        IconTile(Glyph.Terminal, Modifier.size(40.dp))
+                        Text(stringResource(R.string.terminal_library_empty), style = Type.item)
+                        Text(stringResource(R.string.terminal_library_help), style = Type.meta,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        WorkbenchPrimaryButton(modifier = Modifier.fillMaxWidth(), enabled = !state.busy, onClick = {
+                            when {
+                                !state.installed -> onEnvironment()
+                                state.projects.isEmpty() -> onProjects()
+                                else -> creating = true
+                            }
+                        }) { Text(stringResource(when {
+                            !state.installed -> R.string.install_runtime
+                            state.projects.isEmpty() -> R.string.drawer_manage_workspaces
+                            else -> R.string.new_terminal
+                        })) }
+                    }
                 }
             }
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
-        if (state.sessions.isEmpty()) item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                EmptyArtwork(Glyph.Terminal)
-                Text(stringResource(R.string.terminal_library_empty), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.terminal_library_help), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center)
-                if (!state.installed) OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = onEnvironment) { Text(stringResource(R.string.install_runtime)) }
-                else if (state.projects.isEmpty()) OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = onProjects) { Text(stringResource(R.string.select_project_first)) }
-            }
-        }
-        items(state.sessions, key = { it.id }) { item ->
-            val enterLabel = stringResource(R.string.enter_terminal_number, item.number)
-            Surface(onClick = { onOpen(item.id) }, modifier = Modifier.semantics { contentDescription = enterLabel },
-                shape = RoundedCornerShape(18.dp), shadowElevation = cardElevation(), border = cardBorder()) {
-                Column(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 15.dp, end = 15.dp, top = 13.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically,
+            groups.forEach { (projectId, sessions) ->
+                item(key = "workspace-$projectId") {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatusDot(terminalStatusColor(item))
-                        Text(stringResource(R.string.terminal_number, item.number), fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            Text(item.projectName, Modifier.weight(1f), textAlign = TextAlign.End,
-                                fontSize = 11.5.sp, lineHeight = 16.sp, color = TertiaryText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(" · " + terminalStatusLabel(item), fontSize = 11.5.sp, lineHeight = 16.sp, color = TertiaryText)
-                        }
-                    }
-                    Surface(Modifier.fillMaxWidth().padding(horizontal = 14.dp), color = TerminalBackground, shape = RoundedCornerShape(11.dp)) {
-                        Text(previews[item.id].orEmpty().ifBlank { stringResource(R.string.terminal_waiting_output) },
-                            Modifier.heightIn(min = 86.dp).padding(horizontal = 13.dp, vertical = 11.dp), fontFamily = FontFamily.Monospace,
-                            fontSize = 11.5.sp, lineHeight = 20.7.sp, color = TerminalForeground, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
-                        WorkbenchIcon(Glyph.Next, tint = MaterialTheme.colorScheme.primary)
+                        WorkbenchIcon(Glyph.Projects, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(sessions.first().projectName, Modifier.weight(1f), style = Type.metaStrong,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (projectId == state.selectedId) Text(stringResource(R.string.home_current_project), style = Type.label,
+                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
+                items(sessions, key = { it.id }) { item ->
+                    TerminalSessionCard(item, previews[item.id].orEmpty()) { onOpen(item.id) }
+                }
+            }
+            item {
+                Text(stringResource(if (state.sessions.size >= 4) R.string.terminal_limit else R.string.terminal_local_lifecycle),
+                    Modifier.padding(horizontal = 4.dp, vertical = 4.dp), style = Type.meta,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        item {
-            DashedTerminalAction(stringResource(if (state.sessions.size >= 4) R.string.terminal_limit else R.string.new_terminal),
-                state.installed && state.projects.isNotEmpty() && !state.busy && state.sessions.size < 4) { creating = true }
-        }
-        item { Text(stringResource(if (state.sessions.size >= 4) R.string.terminal_limit else R.string.terminal_local_lifecycle),
-            modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center) }
-    }
     }
     if (creating) NewTerminalSheet(workbench, state) { creating = false }
+}
+
+@Composable
+private fun TerminalSessionCard(item: TerminalItem, preview: String, onOpen: () -> Unit) {
+    val enterLabel = stringResource(R.string.enter_terminal_number, item.number)
+    WorkbenchCard(onClick = onOpen, modifier = Modifier.fillMaxWidth().semantics { contentDescription = enterLabel }) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WorkbenchIcon(Glyph.Terminal, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.terminal_number, item.number), Modifier.weight(1f), style = Type.body)
+                StatusDot(terminalStatusColor(item))
+                Text(terminalStatusLabel(item), style = Type.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                WorkbenchIcon(Glyph.Next, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Surface(Modifier.fillMaxWidth(), color = TerminalBackground, shape = RoundedCornerShape(8.dp)) {
+                Text(preview.ifBlank { stringResource(R.string.terminal_waiting_output) },
+                    Modifier.heightIn(min = 80.dp).padding(12.dp), style = Type.terminal,
+                    color = TerminalForeground, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
 }
 
 @Composable
 internal fun terminalStatusColor(item: TerminalItem) = when {
     item.session.isRunning -> ReadyGreen
     item.session.exitStatus != 0 -> FailureRed
-    else -> androidx.compose.ui.graphics.Color(0xFF9AA7B8)
+    else -> TertiaryText
 }
 
 @Composable
@@ -104,21 +129,38 @@ internal fun terminalStatusLabel(item: TerminalItem): String = stringResource(wh
 @Composable
 internal fun NewTerminalSheet(workbench: Workbench, state: WorkbenchState, onDismiss: () -> Unit) {
     var projectId by remember(state.selectedId) { mutableStateOf(state.selectedId ?: state.projects.firstOrNull()?.id) }
-    WorkbenchSheet(stringResource(R.string.new_terminal), onDismiss, stringResource(R.string.terminal_choose_project)) {
-        state.projects.forEach { project ->
-            SelectablePanel(projectId == project.id, { projectId = project.id }) {
-                IconTile(Glyph.Projects, Modifier.size(34.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(project.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(project.kinds.map { stringResource(it.label) }.joinToString(stringResource(R.string.type_separator)).ifEmpty { stringResource(R.string.project_type_unset) } +
-                        " · " + stringResource(R.string.project_session_count, state.sessions.count { it.projectId == project.id }),
-                        style = MaterialTheme.typography.bodySmall, color = TertiaryText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    val maxHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() * .85f }
+    WorkbenchPanelSheet(onDismiss = onDismiss) { requestDismiss ->
+        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.new_terminal), Modifier.weight(1f), style = Type.section)
+                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+            }
+            Text(stringResource(R.string.terminal_choose_project), Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.projects.forEach { project ->
+                    SelectablePanel(projectId == project.id, { projectId = project.id }) {
+                        IconTile(Glyph.Projects, Modifier.size(34.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(project.name, style = Type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(project.kinds.map { stringResource(it.label) }.joinToString(stringResource(R.string.type_separator)).ifEmpty { stringResource(R.string.project_type_unset) } +
+                                " · " + stringResource(R.string.project_session_count, state.sessions.count { it.projectId == project.id }),
+                                style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        SelectionCheck(projectId == project.id)
+                    }
                 }
-                SelectionCheck(projectId == project.id)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.terminal_shell_help), style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                WorkbenchPrimaryButton(onClick = { onDismiss(); workbench.startTerminal(projectId) }, modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.busy && state.installed && state.sessions.size < 4 && state.projects.any { it.id == projectId }) {
+                    Text(stringResource(R.string.create_terminal))
+                }
             }
         }
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { onDismiss(); workbench.startTerminal(projectId) }, modifier = Modifier.fillMaxWidth(),
-            enabled = !state.busy && state.installed && state.sessions.size < 4 && state.projects.any { it.id == projectId }) { Text(stringResource(R.string.create_terminal)) }
-        Text(stringResource(R.string.terminal_shell_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

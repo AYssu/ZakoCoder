@@ -20,7 +20,6 @@ import org.junit.Test
 import java.io.File
 import java.security.KeyStore
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
 
 /** Exercises real org.json and encrypted isolated storage; never uses a user's MCP configuration. */
 class McpImportDeviceTest {
@@ -72,7 +71,7 @@ class McpImportDeviceTest {
             val client = OkHttpClient.Builder()
                 .proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", http.port)))
                 .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build()
-            val session = McpSession(McpConfigParser.parse(source).single(), scope, { error("No process expected") }, client)
+            val session = McpSession(McpConfigParser.parse(source).single(), scope, client)
             try {
                 val result = session.exchange("tools/list", JSONObject())
                 assertEquals(0, result.getJSONArray("tools").length())
@@ -86,22 +85,25 @@ class McpImportDeviceTest {
         val named = http.dropLast(1) + ",\"name\":\"JSON service\"}"
         assertEquals("JSON service", McpConfigParser.parse(named).single().name)
         assertEquals("My server", McpConfigParser.parse(named, "  My server  ").single().name)
-        val wrapped = """{"mcpServers":{"first":{"command":"python3"},"second":{"type":"sse","url":"https://example.invalid/sse"}}}"""
+        val wrapped = """{"mcpServers":{"first":{"type":"http","url":"http://localhost:8080/mcp"},"second":{"type":"sse","url":"https://example.invalid/sse"}}}"""
         assertEquals(setOf("first", "second"), McpConfigParser.parse(wrapped, "ignored single name").map { it.name }.toSet())
         assertTrue(McpConfigParser.parse(wrapped).all { !it.enabled })
     }
 
-    @Test fun singleStdioAndHttpTransportAliasesUseExistingValidation() {
-        val stdio = McpConfigParser.parse("""{"command":"python3","args":["-u","server.py"],"env":{"MODE":"fixture"}}""").single()
-        assertEquals(McpTransport.Stdio, stdio.transport)
-        assertEquals(listOf("-u", "server.py"), stdio.args)
+    @Test fun networkTransportAliasesAndRetiredStdioValidation() {
+        try { McpConfigParser.parse("""{"command":"python3"}"""); fail("stdio accepted") }
+        catch (failure: McpException) { assertEquals(McpFailureReason.UnknownField, failure.reason) }
+        try { McpConfigParser.parse("""{"type":"stdio","url":"http://localhost:1234/mcp"}"""); fail("Retired transport accepted") }
+        catch (failure: McpException) { assertEquals(McpFailureReason.Transport, failure.reason) }
+        assertEquals(McpTransport.StreamableHttp,
+            McpConfigParser.parse("""{"url":"http://localhost:1234/mcp"}""").single().transport)
         for (type in listOf("http", "streamable_http", "streamable-http", "streamablehttp")) {
             assertEquals(McpTransport.StreamableHttp, McpConfigParser.parse("""{"transport":"$type","url":"https://example.invalid/mcp"}""").single().transport)
         }
     }
 
     @Test fun publicAndPrivateHttpDomainsAndIpsImportWithoutConnecting() {
-        for (url in listOf("http://example.invalid/mcp", "http://gateway.lan:9127/mcp", "http://8.8.8.8/mcp",
+        for (url in listOf("http://localhost:9127/mcp", "http://127.0.0.1:9127/mcp", "http://example.invalid/mcp", "http://gateway.lan:9127/mcp", "http://8.8.8.8/mcp",
             "http://10.0.0.2:9127/mcp", "http://127.0.0.1.evil.invalid/mcp", "http://[2001:db8::1]:9127/mcp")) {
             for (type in listOf("http", "sse")) {
                 val source = """{"type":"$type","url":"$url"}"""
@@ -144,8 +146,7 @@ class McpImportDeviceTest {
         val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = root }
         val alias = "mcp-import-${UUID.randomUUID()}"
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val starts = AtomicInteger()
-        val controller = McpController(isolated, scope, { _, _ -> starts.incrementAndGet(); error("Import cannot start a process") }, keyAlias = alias)
+        val controller = McpController(isolated, scope, keyAlias = alias)
         try {
             withTimeout(10000) { while (controller.state.value.loading || controller.state.value.busy) delay(10) }
             controller.importJson(http, "Phone service").join()
@@ -153,7 +154,7 @@ class McpImportDeviceTest {
             val server = controller.state.value.servers.single()
             assertEquals("Phone service", server.name)
             assertFalse(server.enabled)
-            assertEquals(0, starts.get())
+
             val stored = withContext(Dispatchers.IO) { File(root, "mcp-servers-v1.json").readText() }
             assertFalse(stored.contains("import-test-placeholder"))
             controller.importJson(http, "Phone service").join()
@@ -163,7 +164,7 @@ class McpImportDeviceTest {
             assertEquals("", controller.state.value.error)
             assertEquals(2, controller.state.value.servers.size)
             assertTrue(controller.state.value.servers.all { !it.enabled })
-            assertEquals(0, starts.get())
+
             controller.load().join()
             assertEquals(2, controller.state.value.servers.size)
             assertTrue(controller.state.value.servers.all { !it.enabled })

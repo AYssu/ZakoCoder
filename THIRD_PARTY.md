@@ -198,3 +198,12 @@ SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源
 - 来源：<https://github.com/XTLS/Xray-core>，Go 模块 `github.com/xtls/xray-core`，固定上游发布 `v26.10.31`（Go 伪版本 `v1.260327.1-0.20261031132019-a4a3dff5b20c`）；许可证 MPL-2.0，完整文本随 APK 保存在 `assets/licenses/Xray-MPL-2.0.txt`。未修改上游源码，仅用于转发现有订阅节点。
 - 构建：本仓库以固定 Go 工具链（`native-kernel/go.version`）执行 `go build -trimpath -ldflags "-s -w"`，`GOOS=linux`、`CGO_ENABLED=0`，交叉编译 arm64 与 amd64，作为插件或 Full 主 APK 的 jniLib 资产 `libzakocoder_xray.so` 打包。`native-kernel/prebuilt/` 保存与 `native-kernel/artifacts.lock.json` SHA-256 完全一致的 ARM64／x86_64 二进制及来源记录，供本地校验后复用，无需为普通本地打包另行安装 Go；源码重建使用 `scripts/prepare_proxy_kernel.py`。CI 仍使用固定工具链从源码重建、校验模块版本与 SHA-256，不因仓库已有二进制而跳过构建验证。
 - 对应源码可从上述固定标签获取；本项目自有代码的 Apache-2.0 不适用于该内核。内核只接受应用生成的单节点配置（SOCKS inbound + 单 outbound），不读取订阅链接，日志不输出配置与凭据。Xray-core 的 Go 传递依赖（MIT/BSD/Apache 等）尚未逐项列入本文件；发布材料需补齐依赖许可证清单或在源码包中提供，见 `docs/RELEASING.md` 的发行检查。
+
+## Miuix
+
+Miuix UI 0.9.4 (`top.yukonga.miuix.kmp:miuix-ui`), upstream https://github.com/compose-miuix-ui/miuix/tree/v0.9.4 , commit `39c40f99844227b853f0049a0933b1f3ae6c00ba`. Copyright 2025, compose-miuix-ui contributors. Apache-2.0. Includes its same-version miuix-core and miuix-squircle modules. Unmodified Maven Central artifacts; original license is bundled as `assets/licenses/Miuix-Apache-2.0.txt`. Used for native theme, controls and grouped surfaces.
+
+
+## 侧栏快捷图标
+
+Lucide 0.468.0，来源 https://github.com/lucide-icons/lucide/tree/0.468.0/icons 。使用 book-open-check、plug、blocks、container、square-terminal、settings-2，SVG 转换为 Android VectorDrawable，路径几何保持原意；无运行时网络或新增库依赖。ISC 许可证及上游版权声明保存在 `app/src/main/assets/licenses/Lucide-ISC.txt`。

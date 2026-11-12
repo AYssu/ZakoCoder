@@ -25,6 +25,21 @@ class DistributionTest(unittest.TestCase):
                                        'https://github.com/AYssu/ZakoCoder/actions/runs/123')
         return metadata, reports
 
+    def test_cli_rejects_old_apk_identity_even_when_all_four_agree(self):
+        import sys
+        reports = [{'package': beta.PACKAGE, 'versionName': '0.1.0-dev',
+                    'versionCode': 1, 'certificateSha256': 'b' * 64}] * 4
+        args = ['distribution.py', '--directory', 'fixture', '--version', '0.1.2111216-dev',
+                '--expected-version-code', '216000000', '--debug', '--aapt', 'aapt', '--apksigner', 'signer']
+        with patch.object(sys, 'argv', args), patch.object(dist, 'inspect', side_effect=reports):
+            with self.assertRaisesRegex(ValueError, 'versionName'):
+                dist.main()
+        for report in reports:
+            report['versionName'] = '0.1.2111216-dev'
+        with patch.object(sys, 'argv', args), patch.object(dist, 'inspect', side_effect=reports):
+            with self.assertRaisesRegex(ValueError, 'versionCode'):
+                dist.main()
+
     def test_four_package_checksums_cover_only_main_apks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -79,7 +79,7 @@ internal fun AiMarkdown(
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
             Text(stringResource(R.string.ai_markdown_partial, AiTextPages.MARKDOWN_LIMIT, text.length),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { onReadingInteraction(); fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
+            WorkbenchSecondaryButton(onClick = { onReadingInteraction(); fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
         }
         SelectionContainer {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {

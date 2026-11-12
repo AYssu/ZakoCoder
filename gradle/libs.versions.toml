@@ -2,7 +2,7 @@
 agp = "9.5.0"
 kotlin = "2.4.21"
 compose-bom = "2026.09.00"
-activity = "1.10.1"
+activity = "1.13.0"
 core = "1.19.1"
 coroutines = "1.10.2"
 
@@ -19,6 +19,8 @@ okhttp = "5.5.1"
 jsch = "2.28.8"
 
 [libraries]
+navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.1.2" }
+miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version = "0.9.4" }
 lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "0.24.0" }
 jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }

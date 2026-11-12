@@ -76,6 +76,9 @@ open class AiHistoryStore(private val directory: File) {
             AiConversation(item.getString("id"), item.getString("title").take(80), item.getLong("updated"), item.getInt("turn"))
         }
     }.sortedByDescending { it.updated }
+    /** Read-only drawer summaries; never changes the selected conversation. */
+    open fun listConversations(projectId: String): List<AiConversation> = summaries(records(projectId))
+
     open fun load(projectId: String, conversation: String? = null): Loaded {
         val records = records(projectId)
         val pointer = File(project(projectId), "selected.json")
@@ -362,7 +365,7 @@ open class AiHistoryStore(private val directory: File) {
         val taskPrompt = json.optString("taskPrompt"); require(taskPrompt.length <= 16000)
         val skillArray = json.optJSONArray("enabledSkills") ?: JSONArray(); require(skillArray.length() <= AiSkills.MAX_ENABLED)
         val enabledSkills = (0 until skillArray.length()).map { skillArray.getString(it).also { path ->
-            require((AiBuiltinSkills.contains(path) || Regex("\\.zakocoder/skills/[^/\\\\]+/SKILL\\.md").matches(path)) && path.length <= 300)
+            require((AiBuiltinSkills.contains(path) || Regex("\\.zakocoder/skills/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)?/SKILL\\.md").matches(path)) && path.length <= 300)
         } }
         require(enabledSkills.distinct().size == enabledSkills.size && enabledSkills.count { it in AiBuiltinSkills.expressionStyles } <= 1)
         val changeArray = json.optJSONArray("commandChanges") ?: JSONArray(); require(changeArray.length() <= 32)

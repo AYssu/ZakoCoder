@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version (MAJOR.MINOR.PATCH, optionally -beta.N or -rc.N)
+        description: Base version (e.g. 0.1.2, 0.1.2-beta.1 or 0.1.2-rc.1); Beijing MMddHH is appended
         required: true
-        default: 0.1.0
+        default: 0.1.2
         type: string
       version_code:
-        description: Android versionCode (strictly greater than every published build)
-        required: true
-        default: '1005'
+        description: Optional Android versionCode override; blank generates an increasing time-based code
+        required: false
+        default: ''
         type: string
       target_ref:
         description: main or a full commit SHA already merged into main
@@ -57,7 +57,7 @@ jobs:
           TARGET_REF: ${{ inputs.target_ref }}
         run: |
           python3 scripts/beta_release.py resolve --target-ref "$TARGET_REF" \
-            --version "$BETA_VERSION" --version-code "$BETA_VERSION_CODE" \
+            --version "$BETA_VERSION" --version-code "$BETA_VERSION_CODE" --stamp-version \
             --repository "$GITHUB_REPOSITORY" --github-output "$GITHUB_OUTPUT"
 
   build:

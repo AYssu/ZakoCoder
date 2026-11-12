@@ -13,9 +13,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
  data class WorkbenchState(
     val loading: Boolean = true,
+    val onboarding: OnboardingProgress = OnboardingProgress(),
     val projects: List<Project> = emptyList(), val selectedId: String? = null,
     val installed: Boolean = false, val usedBytes: Long? = null, val downloadCacheBytes: Long? = null, val fileRevision: Int = 0,
     val busy: Boolean = false, val showProgress: Boolean = true, val operation: String = "", val log: String = "", val message: String = "", val messageIsError: Boolean = false,
@@ -30,7 +33,7 @@ import kotlinx.coroutines.flow.update
 data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
     val requestId: String = java.util.UUID.randomUUID().toString())
 
-private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean)
+private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean, val onboarding: OnboardingProgress)
 
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
@@ -45,6 +48,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }, lsp = dev.zakocoder.app.editor.lsp.EditorLspController(context, runtime,
         { mutable.value.settings }, { mutable.value.installed && !mutable.value.busy }))
     private val settingsRepository = SettingsRepository(context)
+    private val onboardingRepository = OnboardingRepository(context)
+    private val onboardingMutex = Mutex()
     private val kernelProxyPreferences = context.getSharedPreferences(KERNEL_PROXY_PREFERENCES, Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
@@ -102,16 +107,13 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         finally { mutable.update { it.copy(busy = false) }; releaseService() }
     }
     val mcp = dev.zakocoder.app.mcp.McpController(context, scope,
-        startProcess = { projectId, server ->
-            withContext(Dispatchers.IO) { projects.directory(projectId) }
-            runtime.startMcpProcess(context, projectId, mutable.value.settings, server)
-        }, canModify = { !aiActive() && !aiRestoring() && !mutable.value.busy && !projectTasksActive() })
+        canModify = { !aiActive() && !aiRestoring() && !mutable.value.busy && !projectTasksActive() })
     val capabilityPackages = dev.zakocoder.app.capabilities.CapabilityPackages(context, ::capabilityChanged)
     val ssh = dev.zakocoder.app.ssh.SshController(context)
     private fun capabilityChanged(id: String, kind: dev.zakocoder.app.capabilities.CapabilityPackage) {
-        if (ai.state.value.projectId == id && ai.state.value.active) ai.stop()
+        if (ai.state.value.active && (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Screen || ai.state.value.projectId == id)) ai.stop()
         when (kind) {
-            dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> if (screenTests.state.value.projectId == id) screenTests.stop()
+            dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> screenTests.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> ssh.stop()
         }
     }
@@ -160,21 +162,14 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             check(mutable.value.projects.any { it.id == id })
             screenTests.execute(id, args, expectedSession = lease)
         }, screenTestLease = screenTests::taskLease,
-        screenTestPreview = { id, path ->
+        screenTestAuthorize = { id, taskId ->
             check(ai.state.value.active && ai.state.value.projectId == id)
             check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
-            screenTests.previewApk(id, path)
-        }, screenTestSelect = { id, path, digest ->
-            check(ai.state.value.active && ai.state.value.projectId == id)
-            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
-            screenTests.selectApk(id, path, digest)
-            Unit
+            screenTests.authorizeDeviceTask(id, taskId)
         },
-        screenTestDescription = { id ->
+        screenTestDescription = { _ ->
             val current = screenTests.state.value
-            val project = mutable.value.projects.singleOrNull { it.id == id }
-            context.getString(R.string.ai_screen_test_target_description, project?.name ?: id,
-                current.packageName?.takeIf { current.projectId == id } ?: context.getString(R.string.screen_test_target_none),
+            context.getString(R.string.ai_screen_test_target_description,
                 context.getString(when (current.access) {
                     dev.zakocoder.app.screentest.ScreenTestAccess.Normal -> R.string.screen_test_access_normal
                     dev.zakocoder.app.screentest.ScreenTestAccess.Accessibility -> R.string.screen_test_access_accessibility
@@ -308,7 +303,14 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     // Migrate old authentication leases before the first guest process can run.
                     if (runtime.isInstalled()) dev.zakocoder.app.git.GitCredentialAccess.prepareRuntime(runtime.root)
                     runtime.workspaces.mkdirs(); terminal.prepareTypeface()
-                    WorkbenchInitial(projects.load(), settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay(), runtime.hasEnvironmentDirectory()) }
+                    val initialProjects = projects.load()
+                    val environmentPresent = runtime.hasEnvironmentDirectory()
+                    // Only catalog metadata is needed; never load/decrypt credentials for migration.
+                    val existingProfiles = try { aiConfig.catalog().profiles.isNotEmpty() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { true } // A broken existing catalog must not trigger fresh-install setup.
+                    val onboarding = onboardingRepository.load(initialProjects.isNotEmpty() || environmentPresent || existingProfiles)
+                    WorkbenchInitial(initialProjects, settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay(), environmentPresent, onboarding) }
                 bundledEnvironmentPresent = data.environmentPresent
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
                 // A kernel-backed proxy points at a loopback port owned by this process; after a
@@ -321,7 +323,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 val staleKernelProxy = kernelPort > 0 && parsedProxy?.host == "127.0.0.1" && parsedProxy.port == kernelPort
                 if (kernelPort > 0) kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
                 if (staleKernelProxy) withContext(Dispatchers.IO) { settingsRepository.save(data.settings.copy(proxy = "")) }
-                mutable.update { it.copy(loading = false, projects = data.projects,
+                mutable.update { it.copy(loading = false, onboarding = data.onboarding, projects = data.projects,
                     settings = if (staleKernelProxy) data.settings.copy(proxy = "") else data.settings,
                     proxyDisplay = if (staleKernelProxy) "" else data.proxyDisplay, installed = data.installed,
                     selectedId = selected?.takeIf { id -> data.projects.any { it.id == id } } ?: data.projects.firstOrNull()?.id) }
@@ -346,13 +348,48 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
 
     private fun initializeBundledRuntimeIfNeeded() {
         if (!runtime.hasBundledImage || bundledEnvironmentPresent || !activityVisible || bundledInitializationAttempted ||
-            mutable.value.loading || mutable.value.installed || mutable.value.busy ||
+            mutable.value.loading || !mutable.value.onboarding.allowsBundledInitialization ||
+            mutable.value.installed || mutable.value.busy ||
             projectTasksActive() || git.state.value.busy) return
         bundledInitializationAttempted = true
         // installRuntime performs IO and refuses any existing rootfs, including unknown/old ones.
         // A failed/cancelled attempt remains a visible, manually retryable operation this session.
         installRuntime()
     }
+
+    /** Persist setup before publishing it, so process death cannot skip unfinished choices. */
+    private fun updateOnboarding(onSaved: () -> Unit = {}, transform: (OnboardingProgress) -> OnboardingProgress) {
+        scope.launch {
+            onboardingMutex.withLock {
+                if (mutable.value.loading) return@withLock
+                try {
+                    val progress = transform(mutable.value.onboarding)
+                    withContext(Dispatchers.IO) { onboardingRepository.save(progress) }
+                    mutable.update { it.copy(onboarding = progress) }
+                    onSaved()
+                    initializeBundledRuntimeIfNeeded()
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    mutable.update { it.copy(message = error.message.orEmpty(), messageIsError = true) }
+                }
+            }
+        }
+    }
+
+    fun saveOnboardingStep(step: Int) = updateOnboarding { it.copy(step = step.coerceIn(0, OnboardingRepository.LAST_STEP)) }
+
+    fun saveOnboardingRecommendations(purpose: String, bundleIds: Set<String>, skillIds: Set<String>) = updateOnboarding {
+        it.copy(purpose = purpose.take(256), selectedBundleIds = bundleIds.toSet(), selectedSkillIds = skillIds.toSet())
+    }
+
+    /** Explicit user confirmation is required before a new Full installation starts installing. */
+    fun confirmOnboardingEnvironment() = updateOnboarding { it.copy(environmentConfirmed = true) }
+
+    fun setOnboardingSkillDefaults(ids: List<String>) = updateOnboarding {
+        it.copy(selectedSkillIds = ids.filter(dev.zakocoder.app.ai.AiBuiltinSkills::contains).toSet())
+    }
+
+    fun completeOnboarding(onSaved: () -> Unit = {}) = updateOnboarding(onSaved) { it.copy(completed = true, step = OnboardingRepository.LAST_STEP) }
 
     private var storageJob: Job? = null
     fun validateSettings(settings: AppSettings) = settingsRepository.validate(settings)
@@ -483,6 +520,38 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         }
     }
     fun select(id: String) = run(R.string.select_project) { persist(mutable.value.projects, id) }
+
+    /**
+     * Accept a workspace navigation transaction, not a completed history load. UI must await
+     * selectedId and ai.projectId matching [id], then permissionsLoading/historyError before
+     * opening or creating a conversation. Browsing the already active workspace is harmless.
+     */
+    @androidx.annotation.MainThread
+    fun openWorkspace(id: String): Boolean {
+        val current = mutable.value
+        if (current.loading || current.busy || projectTasksActive() || git.state.value.busy ||
+            current.projects.none { it.id == id }) return false
+        val assistant = ai.state.value
+        if (current.selectedId == id && assistant.projectId == id) return true
+        if (assistant.projectId != id && (assistant.active || assistant.restoring ||
+                assistant.permissionsLoading || assistant.permissionsSaving)) return false
+        run(R.string.select_project, showProgress = false) {
+            check(mutable.value.projects.any { it.id == id })
+            // persist performs IO; busy reserves the transaction and blocks new AI sends.
+            persist(mutable.value.projects, id)
+            val latest = ai.state.value
+            if (latest.projectId != id) {
+                check(!latest.active && !latest.restoring && !latest.permissionsLoading && !latest.permissionsSaving) {
+                    context.getString(R.string.ai_project_busy)
+                }
+                ai.select(id)
+            }
+            // select may reject a busy identity; never let the caller mistake it for readiness.
+            check(ai.state.value.projectId == id) { context.getString(R.string.ai_project_busy) }
+        }
+        return true
+    }
+
     fun removeProject(id: String) = run(R.string.remove_project) {
         check((!aiActive() && !aiRestoring() && !ai.state.value.permissionsLoading) || ai.state.value.projectId != id) { context.getString(R.string.ai_project_busy) }
         check(editor.state.value.tabs.none { it.projectId == id }) { context.getString(R.string.editor_open_blocks_action) }

@@ -4,8 +4,6 @@ import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
 import dev.zakocoder.app.capabilities.CapabilityPackage
-import dev.zakocoder.app.screentest.ScreenTestApk
-import dev.zakocoder.app.screentest.ScreenTestApkProposal
 import dev.zakocoder.app.screentest.ScreenTestResult
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -16,7 +14,6 @@ import java.io.File
 /** Real controller gates and local TLS; fake executors never operate another app or remote host. */
 class AiYoloPermissionDeviceTest {
     private val base = InstrumentationRegistry.getInstrumentation().targetContext
-    private val apk = "app/build/outputs/apk/debug/app-debug.apk"
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(label: String, condition: () -> Boolean) = withTimeout(45000) {
         while (!condition()) delay(10)
@@ -34,7 +31,7 @@ class AiYoloPermissionDeviceTest {
             when (tool) {
                 "use_mcp" -> put("server_id", "fixture").put("method", "tools/list").put("params", JSONObject())
                 "write_file" -> put("path", "second.txt").put("content", "must be approved")
-                else -> { put("action", action); if (action == "prepare") put("path", apk) }
+                else -> put("action", action)
             }
         }.toString())
     private fun context(f: AiDeviceTest.Fixture) = object : ContextWrapper(base) {
@@ -44,7 +41,7 @@ class AiYoloPermissionDeviceTest {
     private fun controller(f: AiDeviceTest.Fixture, packages: () -> Map<CapabilityPackage, String> = {
         mapOf(CapabilityPackage.Screen to "screen-generation", CapabilityPackage.Ssh to "ssh-generation")
     }, mcp: suspend () -> Unit = {}, screen: () -> Unit = {}, ssh: () -> Unit = {},
-        lease: () -> String? = { "selected-debug-target" }, preview: suspend () -> Unit = {}, select: () -> Unit = {}) =
+        lease: () -> String? = { "device-task-lease" }, authorize: () -> String = { "device-task-lease" }) =
         AiController(context(f), { File(f.root, "project-$it").apply { mkdirs() } }, { _, _ -> false },
             { _, _ -> error("This test never runs shell commands") }, {}, {}, f.transport, f.config, history = f.history,
             capabilitySnapshot = { packages() },
@@ -52,11 +49,7 @@ class AiYoloPermissionDeviceTest {
             mcpTool = { _, _ -> mcp(); "{}" },
             screenTestTool = { _, _, _ -> screen(); ScreenTestResult("Screen fixture observed") },
             screenTestLease = { lease() },
-            screenTestPreview = { _, path ->
-                assertEquals(apk, path); preview()
-                ScreenTestApkProposal(ScreenTestApk(path, "dev.zakocoder.fixture", "Fixture", "1", true), "a".repeat(64))
-            },
-            screenTestSelect = { _, path, digest -> assertEquals(apk, path); assertEquals("a".repeat(64), digest); select() },
+            screenTestAuthorize = { _, _ -> authorize() },
             sshTool = { _, _, _ -> ssh(); JSONObject().put("fixture", true) })
     private suspend fun done(ai: AiController) {
         await("task finished without pending tool approval") { !ai.state.value.active || ai.state.value.approval != null }
@@ -71,7 +64,7 @@ class AiYoloPermissionDeviceTest {
             lateinit var ai: AiController
             main { ai = controller(f, mcp = { mcp++ }, screen = { screen++ }, ssh = { ssh++ }); ai.select("yolo-tools") }
             ready(ai); preset(ai, AiPermissionPreset.Yolo)
-            f.enqueue(calls = listOf(call("use_mcp"), call("android_test", "observe"), call("ssh_remote")))
+            f.enqueue(calls = listOf(call("use_mcp"), call("android_test", "status"), call("ssh_remote")))
             f.enqueue("All three configured fixture tools executed")
             main { assertTrue(ai.send("Exercise configured tools")) }; done(ai)
             assertEquals(1, mcp); assertEquals(1, screen); assertEquals(1, ssh)
@@ -87,20 +80,25 @@ class AiYoloPermissionDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun yoloCanPrepareCurrentProjectDebugArtifactWithoutAnotherToolApproval() = runBlocking {
+    @Test(timeout = 120000) fun yoloStillRequiresExplicitCurrentTaskDeviceScopeConsent() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
             var selectedLease: String? = null
-            var selections = 0; var operations = 0
+            var authorizations = 0; var operations = 0
             lateinit var ai: AiController
             main {
-                ai = controller(f, lease = { selectedLease }, select = { selections++; selectedLease = "prepared-debug" }, screen = { operations++ })
-                ai.select("yolo-prepare")
+                ai = controller(f, lease = { selectedLease }, authorize = { authorizations++; "device-approved".also { selectedLease = it } }, screen = { operations++ })
+                ai.select("yolo-device-scope")
             }; ready(ai); preset(ai, AiPermissionPreset.Yolo)
-            f.enqueue(calls = listOf(call("android_test", "prepare"), call("android_test", "launch")))
-            f.enqueue("Project artifact prepared, launch requested; not a UI assertion")
-            main { assertTrue(ai.send("Prepare selected project's APK")) }; done(ai)
-            assertEquals(1, selections); assertEquals(1, operations)
-            assertTrue(ai.state.value.events.all { it.status == AiToolStatus.Succeeded })
+            f.enqueue(calls = listOf(call("android_test", "observe"), call("android_test", "back")))
+            f.enqueue("Device operation approved for this task")
+            try {
+                main { assertTrue(ai.send("Observe the current screen")) }
+                await("YOLO device consent") { ai.state.value.approval != null }
+                assertEquals(0, authorizations); assertEquals(0, operations)
+                main { ai.approve(AiDecision.Once) }
+                await("device consent handled") { ai.state.value.approval == null || !ai.state.value.active }; done(ai)
+                assertEquals(1, authorizations); assertEquals(2, operations)
+            } finally { main { ai.stop() }; await("cleanup") { !ai.state.value.active } }
         }
     }
 
@@ -146,17 +144,21 @@ class AiYoloPermissionDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun yoloCannotFollowAReplacementScreenTargetAfterPreview() = runBlocking {
+    @Test(timeout = 120000) fun yoloCannotFollowReplacementLeaseDuringDeviceScopeConsent() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
-            var lease: String? = null; var selections = 0
+            var lease: String? = null; var authorizations = 0
             lateinit var ai: AiController
-            main { ai = controller(f, lease = { lease }, preview = { lease = "user-replacement" }, select = { selections++ }); ai.select("yolo-target-race") }
+            main { ai = controller(f, lease = { lease }, authorize = { authorizations++; "new-lease" }); ai.select("yolo-device-race") }
             ready(ai); preset(ai, AiPermissionPreset.Yolo)
-            f.enqueue(calls = listOf(call("android_test", "prepare")))
-            f.enqueue("User replacement was preserved")
-            main { assertTrue(ai.send("Prepare current artifact")) }; done(ai)
-            assertEquals(0, selections); assertEquals("user-replacement", lease)
-            assertEquals(AiToolStatus.Failed, ai.state.value.events.single().status)
+            f.enqueue(calls = listOf(call("android_test", "observe")))
+            f.enqueue("Replacement preserved")
+            try {
+                main { assertTrue(ai.send("Observe current screen")) }
+                await("device consent") { ai.state.value.approval != null }
+                main { lease = "manual-task"; ai.approve(AiDecision.Once) }; done(ai)
+                assertEquals(0, authorizations); assertEquals("manual-task", lease)
+                assertEquals(AiToolStatus.Failed, ai.state.value.events.single().status)
+            } finally { main { ai.stop() }; await("cleanup") { !ai.state.value.active } }
         }
     }
 

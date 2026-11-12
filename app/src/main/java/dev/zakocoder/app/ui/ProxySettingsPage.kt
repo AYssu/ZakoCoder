@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -386,11 +387,11 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
                     }
                     ProxyMode.Manual -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.proxy_section_manual), style = MaterialTheme.typography.titleSmall)
-                        OutlinedTextField(
+                        WorkbenchTextField(
                             value = manualDraft,
                             onValueChange = { manualDraft = it; formError = null },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text(stringResource(R.string.proxy_manual_label)) },
+                            label = stringResource(R.string.proxy_manual_label),
                             placeholder = { Text(stringResource(R.string.proxy_manual_placeholder)) },
                             singleLine = true,
                             isError = formError != null,
@@ -498,7 +499,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
 
     diagnostic?.let { KernelDiagnosticsSheet(it) { diagnostic = null } }
 
-    if (removing) AlertDialog(
+    if (removing) WorkbenchAlertDialog(
         onDismissRequest = { removing = false },
         title = { Text(stringResource(R.string.proxy_remove_title)) },
         text = { Text(stringResource(R.string.proxy_remove_message)) },
@@ -532,12 +533,10 @@ private fun ProxyStatusCard(
     copied: Boolean,
     onCopy: () -> Unit,
 ) {
-    Surface(
+    WorkbenchCard(
         modifier = Modifier.fillMaxWidth().clickable(enabled = hasProxy, role = Role.Button, onClick = onCopy),
-        shape = RoundedCornerShape(12.dp),
+        cornerRadius = 12.dp,
         color = MaterialTheme.colorScheme.surface,
-        border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -578,12 +577,12 @@ private fun ProxyModeSelector(mode: ProxyMode, onSelect: (ProxyMode) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ProxyMode.entries.forEach { option ->
             val selected = option == mode
-            Surface(
+            WorkbenchCard(
                 modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                     .selectable(selected = selected, role = Role.RadioButton, onClick = { onSelect(option) }),
-                shape = RoundedCornerShape(12.dp),
+                cornerRadius = 12.dp,
                 color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
             ) {
                 Box(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
                     Text(
@@ -625,16 +624,16 @@ private fun AirportSection(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+            WorkbenchTextField(
                 value = linkDraft,
                 onValueChange = onLinkChange,
                 modifier = Modifier.weight(1f).onFocusChanged { linkFocused = it.isFocused },
-                label = { Text(stringResource(R.string.proxy_airport_link_label)) },
+                label = stringResource(R.string.proxy_airport_link_label),
                 placeholder = if (linkFocused) null else ({ Text(stringResource(R.string.proxy_airport_link_placeholder)) }),
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
             )
-            OutlinedButton(
+            WorkbenchSecondaryButton(
                 onClick = onPaste,
                 enabled = !busy,
                 shape = RoundedCornerShape(10.dp),
@@ -642,7 +641,7 @@ private fun AirportSection(
             ) { Text(stringResource(R.string.proxy_airport_paste)) }
         }
         Text(stringResource(R.string.proxy_airport_link_help), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
-        OutlinedButton(
+        WorkbenchSecondaryButton(
             onClick = onIdentify,
             enabled = linkDraft.isNotBlank() && !busy && !savingBusy,
             shape = RoundedCornerShape(10.dp),
@@ -796,12 +795,10 @@ private fun ProxySingleResult(node: ProxyNode, pluginReady: Boolean) {
     val needsPlugin = node.supported && node.viaKernel && !pluginReady
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ProxyBadge(stringResource(R.string.proxy_badge_single), MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(
+        WorkbenchCard(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            cornerRadius = 12.dp,
             color = MaterialTheme.colorScheme.surface,
-            border = cardBorder(),
-            shadowElevation = cardElevation(),
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -922,16 +919,16 @@ private fun ProxyEmptyState() {
 
 @Composable
 private fun ProxyErrorBlock(error: ProxySubscriptionError, retryLabelRes: Int, enabled: Boolean, onRetry: () -> Unit) {
-    Surface(
+    WorkbenchCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        cornerRadius = 12.dp,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = .45f)),
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(error.labelRes()), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = onRetry, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+            WorkbenchSecondaryButton(onClick = onRetry, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(stringResource(retryLabelRes))
             }
         }
@@ -976,8 +973,8 @@ internal fun KernelPluginCard(
     bundled: Boolean = BuildConfig.BUNDLED_KERNEL,
 ) {
     if (bundled) {
-        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface, border = cardBorder(), shadowElevation = cardElevation()) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp,
+            color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.proxy_bundled_kernel_title), style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.proxy_bundled_kernel_version, BuildConfig.KERNEL_VERSION),
@@ -994,12 +991,10 @@ internal fun KernelPluginCard(
         }
         return
     }
-    Surface(
+    WorkbenchCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        cornerRadius = 12.dp,
         color = MaterialTheme.colorScheme.surface,
-        border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1065,11 +1060,11 @@ internal fun KernelPluginCard(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
+                        WorkbenchSecondaryButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_install_online))
                         }
-                        OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
+                        WorkbenchSecondaryButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.proxy_plugin_install_local))
                         }
@@ -1080,12 +1075,12 @@ internal fun KernelPluginCard(
                     ) {
                         // Updating must not require uninstalling first: a failed install keeps the old version.
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
+                            WorkbenchSecondaryButton(onClick = onDownload, shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                                 Text(stringResource(R.string.proxy_plugin_update_online), textAlign = TextAlign.Center)
                             }
-                            OutlinedButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
+                            WorkbenchSecondaryButton(onClick = onPickLocal, shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                                 Text(stringResource(R.string.proxy_plugin_update_local), textAlign = TextAlign.Center)
@@ -1105,12 +1100,10 @@ internal fun KernelPluginCard(
 /** Local Xray kernel status for the current airport subscription (airport mode only). */
 @Composable
 private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRetry: (() -> Unit)?) {
-    Surface(
+    WorkbenchCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        cornerRadius = 12.dp,
         color = MaterialTheme.colorScheme.surface,
-        border = cardBorder(),
-        shadowElevation = cardElevation(),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1146,7 +1139,7 @@ private fun KernelStatusCard(kernel: ProxyKernelState, onStop: () -> Unit, onRet
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                     if (failed != null) {
                         onRetry?.let {
-                            OutlinedButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) {
+                            WorkbenchSecondaryButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) {
                                 Text(stringResource(R.string.proxy_kernel_retry))
                             }
                         }

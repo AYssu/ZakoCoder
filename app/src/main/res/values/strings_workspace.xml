@@ -1,0 +1,13 @@
+<resources>
+    <string name="workspace_threads_back">返回工作区列表</string>
+    <string name="workspace_threads_files">文件</string>
+    <string name="workspace_threads_terminal">终端</string>
+    <string name="workspace_threads_new">新增对话</string>
+    <string name="workspace_threads_heading">对话记录</string>
+    <string name="workspace_threads_current">当前对话</string>
+    <string name="workspace_threads_empty">还没有对话，开始一个新任务。</string>
+    <string name="workspace_threads_loading">正在准备此工作区的对话记录…</string>
+    <string name="workspace_threads_blocked">另一个工作区的任务正在运行。请先返回助手处理或停止任务，再切换工作区。</string>
+    <string name="workspace_threads_retry">重新加载工作区</string>
+    <string name="workspace_threads_failed">无法打开对话。请检查上方错误后重试，对话尚未切换。</string>
+</resources>

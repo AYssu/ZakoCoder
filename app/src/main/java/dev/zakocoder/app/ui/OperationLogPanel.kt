@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -63,8 +62,7 @@ internal fun OperationLogPanel(
     }
     val output = remember(log) { log.takeLast(24000) }
     val expansion = stringResource(if (expanded) R.string.mobile_expanded else R.string.mobile_collapsed)
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .semantics { stateDescription = expansion }
@@ -90,11 +88,11 @@ internal fun OperationLogPanel(
                 }
                 val description = stringResource(R.string.operation_log_output)
                 SelectionContainer {
-                    Box(Modifier.fillMaxWidth().height(200.dp).background(Color(0xFF0D1117))
+                    Box(Modifier.fillMaxWidth().height(200.dp).background(TerminalBackground)
                         .nestedScroll(userScroll).verticalScroll(scroll).padding(12.dp)
                         .semantics { contentDescription = description }) {
                         Text(output.ifEmpty { stringResource(if (running) R.string.operation_log_waiting else R.string.operation_log_empty) },
-                            color = Color(0xFFC9D1D9), fontFamily = FontFamily.Monospace,
+                            color = TerminalForeground, fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp, lineHeight = 16.sp)
                     }
                 }

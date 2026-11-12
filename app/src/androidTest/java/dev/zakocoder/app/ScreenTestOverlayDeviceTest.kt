@@ -48,7 +48,7 @@ class ScreenTestOverlayDeviceTest {
             withContext(Dispatchers.Main) { controller.setAccess(ScreenTestAccess.Root) }
             check(controller.requestRootAccess())
             val apk = controller.selectApk(project, "app/build/outputs/apk/debug/app-debug.apk")
-            val firstLease = requireNotNull(controller.taskLease(project))
+            val firstLease = controller.authorizeDeviceTask(project, UUID.randomUUID().toString())
             withContext(Dispatchers.Main) { controller.setOverlayEnabled(true) }
             withTimeout(10000) { while (!controller.state.value.overlayVisible) delay(50) }
             // Foreground assistance is test orchestration, not proof of unattended OEM launch.
@@ -118,8 +118,7 @@ class ScreenTestOverlayDeviceTest {
                 withContext(Dispatchers.Main) { controller.setOverlayEnabled(true) }
                 withTimeout(10000) { while (!controller.state.value.overlayVisible) delay(50) }
             } finally { automation.serviceInfo = originalInfo }
-            controller.selectApk(project, "app/build/outputs/apk/debug/app-debug.apk")
-            val secondLease = requireNotNull(controller.taskLease(project))
+            val secondLease = controller.authorizeDeviceTask(project, UUID.randomUUID().toString())
             assertNotEquals(firstLease, secondLease)
             assertFalse(controller.stopOverlayTask(project, firstLease))
             assertEquals(secondLease, controller.taskLease(project))

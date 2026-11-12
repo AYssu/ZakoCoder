@@ -57,15 +57,15 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
         if (tab == 1) {
             Text(stringResource(R.string.ai_attachment_log_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(errorText, { if (it.length <= 6000) errorText = it },
-                label = { Text(stringResource(R.string.ai_reference_error_log)) },
+            WorkbenchTextField(errorText, { if (it.length <= 6000) errorText = it },
+                label = stringResource(R.string.ai_reference_error_log),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 128.dp, max = 224.dp),
                 shape = RoundedCornerShape(12.dp), minLines = 4)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.ai_attachment_log_length, errorText.length),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { ai.addReference(AiReference("build-output", errorText, "error")); close() },
+                WorkbenchPrimaryButton(onClick = { ai.addReference(AiReference("build-output", errorText, "error")); close() },
                     enabled = errorText.isNotBlank() && canReference, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.ai_context_add))
                 }
@@ -82,7 +82,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
                 Text(stringResource(R.string.ai_attachment_reference_count, state.references.size),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 when {
                     listing.loading -> Column(Modifier.fillMaxWidth().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -156,8 +156,8 @@ private fun AttachmentAction(label: String, glyph: Glyph?, selected: Boolean, en
                              modifier: Modifier, click: () -> Unit) {
     val foreground = (if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
         .copy(alpha = if (enabled) 1f else .38f)
-    Surface(onClick = click, enabled = enabled, modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+    WorkbenchCard(onClick = click, enabled = enabled, modifier = modifier,
+        cornerRadius = 12.dp,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = foreground) {
         Column(Modifier.heightIn(min = 88.dp).padding(horizontal = 8.dp, vertical = 12.dp),

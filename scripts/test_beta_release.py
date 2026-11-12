@@ -2,7 +2,10 @@
 """Offline tests for Beta validation and immutable public asset preparation."""
 import json
 import copy
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -83,6 +86,90 @@ class BetaReleaseTest(unittest.TestCase):
             with self.assertRaises(beta.subprocess.CalledProcessError):
                 beta.require_publishable_target(commit, latest)
             self.assertEqual(1, run.call_count)
+
+    def resolve_cli(self, arguments, automatic, directory):
+        output = directory / "github-output"
+        arguments = ["beta_release.py", "resolve", "--version", arguments[0],
+                     "--repository", "AYssu/ZakoCoder", "--github-output", str(output), *arguments[1:]]
+        stream = io.StringIO()
+        with patch.object(sys, "argv", arguments), redirect_stdout(stream), \
+                patch("build_version.resolve_version", return_value=automatic) as resolver, \
+                patch.object(beta.subprocess, "check_output", return_value="a" * 40 + "\n"), \
+                patch.object(beta, "require_publishable_target") as target, \
+                patch.object(beta, "preflight") as preflight:
+            beta.main()
+        return json.loads(stream.getvalue()), output.read_text(), resolver, target, preflight
+
+    def test_stamped_release_is_resolved_once_before_preflight_and_shared_as_outputs(self):
+        for suffix in ("", "-beta.1", "-rc.2"):
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory() as temporary:
+                actual = {"version": "0.1.2111216" + suffix, "version_code": 216806400}
+                result, output, resolver, target, preflight = self.resolve_cli(
+                    ["0.1.2" + suffix, "--stamp-version", "--version-code", ""], actual, Path(temporary))
+                resolver.assert_called_once_with("0.1.2" + suffix, "release")
+                target.assert_called_once_with("a" * 40, "a" * 40)
+                preflight.assert_called_once_with("AYssu/ZakoCoder", actual["version"], actual["version_code"])
+                self.assertEqual({"commit": "a" * 40, "version": actual["version"],
+                                  "versionCode": actual["version_code"]}, result)
+                self.assertEqual(f"commit={'a' * 40}\nversion={actual['version']}\nversion_code={actual['version_code']}\n", output)
+
+    def test_stamped_release_keeps_valid_explicit_code_override(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, _, _, _, preflight = self.resolve_cli(["0.1.2", "--stamp-version", "--version-code", "216806500"],
+                {"version": "0.1.2111216", "version_code": 216806400}, Path(temporary))
+            self.assertEqual(216806500, result["versionCode"])
+            preflight.assert_called_once_with("AYssu/ZakoCoder", "0.1.2111216", 216806500)
+
+    def test_direct_resolve_retains_explicit_version_without_stamping(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, _, resolver, _, preflight = self.resolve_cli(["0.1.2-rc.1", "--version-code", "1008"], {}, Path(temporary))
+            resolver.assert_not_called()
+            self.assertEqual("0.1.2-rc.1", result["version"])
+            preflight.assert_called_once_with("AYssu/ZakoCoder", "0.1.2-rc.1", 1008)
+
+    def test_direct_resolve_can_generate_code_without_changing_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, _, resolver, _, preflight = self.resolve_cli(["0.1.2"],
+                {"version": "0.1.2111216", "version_code": 216806400}, Path(temporary))
+            resolver.assert_called_once_with("0.1.2", "release")
+            self.assertEqual("0.1.2", result["version"])
+            preflight.assert_called_once_with("AYssu/ZakoCoder", "0.1.2", 216806400)
+
+    def test_resolve_rejects_invalid_code_before_publishing_checks_or_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "github-output"
+            args = ["beta_release.py", "resolve", "--version", "0.1.2", "--stamp-version",
+                    "--version-code", "2100000001", "--repository", "AYssu/ZakoCoder", "--github-output", str(output)]
+            with patch.object(sys, "argv", args), \
+                    patch("build_version.resolve_version", return_value={"version": "0.1.2111216", "version_code": 216806400}), \
+                    patch.object(beta, "preflight") as preflight, self.assertRaises(ValueError):
+                beta.main()
+            preflight.assert_not_called()
+            self.assertFalse(output.exists())
+
+    def test_resolve_does_not_write_outputs_when_new_tag_or_code_checks_fail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "github-output"
+            args = ["beta_release.py", "resolve", "--version", "0.1.2", "--stamp-version",
+                    "--repository", "AYssu/ZakoCoder", "--github-output", str(output)]
+            with patch.object(sys, "argv", args), \
+                    patch("build_version.resolve_version", return_value={"version": "0.1.2111216", "version_code": 216806400}), \
+                    patch.object(beta.subprocess, "check_output", return_value="a" * 40 + "\n"), \
+                    patch.object(beta, "require_publishable_target"), \
+                    patch.object(beta, "preflight", side_effect=ValueError("Tag or code already published")), \
+                    self.assertRaises(ValueError):
+                beta.main()
+            self.assertFalse(output.exists())
+
+    def test_metadata_still_requires_explicit_version_code(self):
+        args = ["beta_release.py", "metadata", "--version", "0.1.2", "--directory", ".",
+                "--commit", "a" * 40, "--certificate", "b" * 64,
+                "--run-url", "https://github.com/AYssu/ZakoCoder/actions/runs/123"]
+        with patch.object(sys, "argv", args), \
+                patch("sys.stderr", new_callable=io.StringIO) as error, self.assertRaises(SystemExit) as exit:
+            beta.main()
+        self.assertEqual(2, exit.exception.code)
+        self.assertIn("--version-code", error.getvalue())
 
     def assets(self, root, version="0.1.0-beta.1"):
         directory = root / "public"

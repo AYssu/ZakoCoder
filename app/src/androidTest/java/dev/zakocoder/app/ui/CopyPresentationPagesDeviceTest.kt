@@ -56,7 +56,7 @@ class CopyPresentationPagesDeviceTest {
         val alias = "copy-page-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = temporary }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val mcp = McpController(isolated, scope, { _, _ -> error("Presentation must not execute processes") }, keyAlias = alias)
+        val mcp = McpController(isolated, scope, keyAlias = alias)
         try {
             await("Isolated MCP configuration loaded") { !mcp.state.value.loading }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->

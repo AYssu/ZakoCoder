@@ -76,7 +76,7 @@ class DevelopmentServiceDeviceTest {
         try {
             copyFixture(File(projectRoot, "fixture.apk"))
             main { screen.setOverlayEnabled(false); screen.setAccess(ScreenTestAccess.Normal) }
-            screen.selectApk(project.id, "fixture.apk")
+            screen.authorizeDeviceTask(project.id, UUID.randomUUID().toString())
             report = screen.state.value.reportPath?.let(::File)
             await("Selected screen target starts foreground service") { workbench.state.value.backgroundServiceRunning }
             assertFalse(workbench.state.value.backgroundServiceError)

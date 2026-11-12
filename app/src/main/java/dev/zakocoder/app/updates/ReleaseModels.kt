@@ -17,18 +17,34 @@ data class ReleaseVersion(val major: Int, val minor: Int, val patch: Int, val pr
 }
 enum class UpdateChannel { Stable, Beta }
 data class ReleaseAsset(val name: String, val url: String, val size: Long, val digest: String? = null)
-data class AppRelease(val tag: String, val notes: String, val prerelease: Boolean, val apk: ReleaseAsset, val sums: ReleaseAsset)
+data class AppRelease(val tag: String, val notes: String, val prerelease: Boolean, val apk: ReleaseAsset, val sums: ReleaseAsset,
+    val versionCode: Long? = null)
 enum class UpdatePhase { Idle, Checking, Current, Available, Downloading, Ready, Failed }
 data class UpdateState(val initialized: Boolean = false, val channel: UpdateChannel = UpdateChannel.Stable,
     val automatic: Boolean = true, val currentVersion: String = "", val phase: UpdatePhase = UpdatePhase.Idle,
     val release: AppRelease? = null, val received: Long = 0, val total: Long = 0, val error: Int? = null,
-    val prompt: Boolean = false, val pendingInstall: Boolean = false)
+    val prompt: Boolean = false, val pendingInstall: Boolean = false, val currentVersionCode: Long = 0)
 
-internal fun selectRelease(releases: List<AppRelease>, current: String, channel: UpdateChannel): AppRelease? {
-    val installed = ReleaseVersion.parse(current) ?: return null
-    return releases.filter { channel == UpdateChannel.Beta || (!it.prerelease && ReleaseVersion.parse(it.tag)?.preview == null) }
-        .filter { ReleaseVersion.parse(it.tag)?.let { version -> version > installed } == true }
-        .maxByOrNull { ReleaseVersion.parse(it.tag)!! }
+internal fun selectRelease(releases: List<AppRelease>, current: String, channel: UpdateChannel,
+    currentVersionCode: Long = 0): AppRelease? {
+    val installed = ReleaseVersion.parse(if (currentVersionCode > 0) current.removeSuffix("-dev") else current) ?: return null
+    val eligible = releases.filter { ReleaseVersion.parse(it.tag) != null &&
+        (channel == UpdateChannel.Beta || (!it.prerelease && ReleaseVersion.parse(it.tag)?.preview == null)) }
+    // Calendar display names omit the year. Android's increasing code remains authoritative
+    // across New Year and when upgrading a development build to a published release.
+    if (currentVersionCode > 0) {
+        eligible.filter { it.versionCode != null && it.versionCode > currentVersionCode }
+            .maxByOrNull { it.versionCode!! }?.let { return it }
+    }
+    return eligible.filter { (currentVersionCode <= 0 || it.versionCode == null) &&
+        ReleaseVersion.parse(it.tag)!! > installed }.maxByOrNull { ReleaseVersion.parse(it.tag)!! }
+}
+
+/** Values come only from the official GitHub release's schema-1 build record. */
+internal fun releaseBuildVersionCode(tag: String, schema: Any?, packageName: Any?, version: Any?, code: Any?): Long? {
+    if (schema != 1 || packageName != "dev.zakocoder.app" || version != tag.removePrefix("v")) return null
+    if (code !is Int && code !is Long) return null
+    return (code as Number).toLong().takeIf { it in 1..2_100_000_000L }
 }
 internal fun releaseChecksum(text: String, name: String): String? = text.lineSequence().mapNotNull { line ->
     val m = Regex("^([A-Fa-f0-9]{64})[ \\t]+\\*?(.+)$").matchEntire(line.trim())
