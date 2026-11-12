@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +27,7 @@ internal fun AiImageAttachments(images: List<AiImageAttachment>, load: suspend (
             val preview by produceState<Bitmap?>(null, image.id) {
                 value = try { load(image) } catch (cancelled: CancellationException) { throw cancelled } catch (_: Exception) { null }
             }
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val bitmap = preview
                     if (bitmap != null) Image(bitmap.asImageBitmap(), image.displayName, Modifier.size(56.dp), contentScale = ContentScale.Fit)

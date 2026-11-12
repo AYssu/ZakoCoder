@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -51,7 +50,7 @@ internal fun AiPlanPanel(plan: List<AiPlanStep>, active: Boolean, panel: Int) {
     val expanded = when (choices[panel]) { 1 -> true; 0 -> false; else -> active && panel == 0 }
     val action = stringResource(if (expanded) R.string.ai_plan_collapse else R.string.ai_plan_expand)
     val reported = stringResource(R.string.ai_plan_reported)
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .semantics { stateDescription = reported }

@@ -73,7 +73,7 @@ internal fun ProjectRunLog(workbench: Workbench, projectId: String, run: Project
             Text(runStatus(run.status) + " · " + (run.exit?.let { stringResource(R.string.project_exit_value, it) } ?: stringResource(R.string.project_exit_unknown)), style = MaterialTheme.typography.titleSmall)
             if (run.truncated) Text(stringResource(R.string.project_log_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                OutlinedTextField(query, { if (it.length <= 200) { query = it; matchAt = -1; tailReference = false; pendingTailJump = 0 }; missing = false }, label = { Text(stringResource(R.string.project_log_search)) }, singleLine = true, modifier = Modifier.weight(1f))
+                WorkbenchTextField(query, { if (it.length <= 200) { query = it; matchAt = -1; tailReference = false; pendingTailJump = 0 }; missing = false }, label = stringResource(R.string.project_log_search), singleLine = true, modifier = Modifier.weight(1f))
                 TextButton(onClick = {
                     tailReference = false; pendingTailJump = 0
                     var found = text.indexOf(query, startIndex = maxOf(0, matchAt + 1), ignoreCase = true)

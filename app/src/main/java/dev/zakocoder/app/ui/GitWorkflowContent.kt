@@ -1,6 +1,5 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -116,7 +115,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                 }
             }
             if (state.error.isNotBlank()) item {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.errorContainer) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.git_workflow_failed), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
                         SelectionContainer { Text(gitFailureMessage(state), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer) }
@@ -148,10 +147,10 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                 if (state.entries.isEmpty()) Text(stringResource(R.string.git_clean), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(state.entries.filterNot { it.path in state.conflicts }, key = { "file:${it.path}" }) { entry ->
-                Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
+                WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth().toggleable(entry.path in selected, enabled = ready && (entry.path in selected || selected.size < 100), role = Role.Checkbox,
                         onValueChange = { selected = if (it) selected + entry.path else selected - entry.path }).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(entry.path in selected, onCheckedChange = null)
+                        WorkbenchCheckbox(entry.path in selected, onCheckedChange = null)
                         Column(Modifier.weight(1f).padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(entry.path, style = MaterialTheme.typography.bodyMedium, fontFamily = FontFamily.Monospace)
                             Text(stringResource(entryStatus(entry)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -172,7 +171,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                 Text(stringResource(R.string.git_selection_count, selected.size, state.entries.count { it.index != ' ' && it.index != '?' }), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GitAction(stringResource(R.string.git_stage), ready && selected.isNotEmpty(), Modifier.weight(1f)) { actions.stage(selected); selected = emptySet() }
-                    Button(onClick = { dialog = "commit" }, enabled = ready && state.conflicts.isEmpty() && state.entries.any { it.index != ' ' && it.index != '?' }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { Text(stringResource(R.string.git_commit)) }
+                    WorkbenchPrimaryButton(onClick = { dialog = "commit" }, enabled = ready && state.conflicts.isEmpty() && state.entries.any { it.index != ' ' && it.index != '?' }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { Text(stringResource(R.string.git_commit)) }
                 }
                 if (selected.any { path -> state.entries.any { it.path == path && it.index != ' ' && it.index != '?' } }) TextButton(onClick = { actions.unstage(selected); selected = emptySet() }, enabled = ready) { Text(stringResource(R.string.git_workflow_unstage)) }
             }
@@ -196,12 +195,12 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
 }
 
 @Composable private fun GitPanel(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 @Composable internal fun GitAction(label: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    OutlinedButton(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { Text(label) }
+    WorkbenchSecondaryButton(onClick, modifier.heightIn(min = 48.dp), enabled = enabled, shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { Text(label) }
 }
 private fun entryStatus(entry: GitEntry) = when {
     entry.index == '?' -> R.string.git_untracked
@@ -211,7 +210,7 @@ private fun entryStatus(entry: GitEntry) = when {
     else -> R.string.git_modified
 }
 @Composable private fun GitConfirm(title: Int, message: String, dismiss: () -> Unit, confirm: () -> Unit) {
-    AlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(title)) }, text = { Text(message) },
+    WorkbenchAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(title)) }, text = { Text(message) },
         confirmButton = { TextButton(onClick = confirm) { Text(stringResource(R.string.git_workflow_confirm)) } }, dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } })
 }
 

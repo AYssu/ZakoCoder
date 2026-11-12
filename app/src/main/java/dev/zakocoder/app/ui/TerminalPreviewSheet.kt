@@ -34,14 +34,11 @@ internal fun TerminalPreviewSheet(item: TerminalItem, discover: () -> List<Strin
     var address by remember(item.id) { mutableStateOf(candidates.firstOrNull().orEmpty()) }
     var failed by remember(item.id) { mutableStateOf(false) }
     val normalized = LocalPreviewAddress.normalize(address)
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = close, sheetState = sheetState, modifier = Modifier.statusBarsPadding(),
-        properties = ModalBottomSheetProperties(isAppearanceLightStatusBars = false, isAppearanceLightNavigationBars = !LocalWorkbenchDark.current),
-        containerColor = MaterialTheme.colorScheme.surface) {
+    WorkbenchPanelSheet(onDismiss = close, darkBackdrop = true) { requestDismiss ->
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.terminal_preview), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = close) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
             }
             Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -58,8 +55,8 @@ internal fun TerminalPreviewSheet(item: TerminalItem, discover: () -> List<Strin
                         SelectionCheck(address == candidate)
                     }
                 }
-                OutlinedTextField(address, { address = it.take(2049); failed = false }, Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.terminal_preview_address)) },
+                WorkbenchTextField(address, { address = it.take(2049); failed = false }, Modifier.fillMaxWidth(),
+                    label = stringResource(R.string.terminal_preview_address),
                     placeholder = { Text(stringResource(R.string.terminal_preview_placeholder)) }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     isError = address.isNotBlank() && normalized == null,

@@ -43,7 +43,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
         subtitle = stringResource(R.string.git_credentials_subtitle)) {
         Column(Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+            WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.git_credentials_repository), style = MaterialTheme.typography.labelMedium)
                     Text(remoteUrl, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
@@ -53,17 +53,17 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
             }
             Text(stringResource(R.string.git_credentials_help), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(username, { if (it.length <= 128) username = it }, enabled = !busy,
-                label = { Text(stringResource(R.string.git_credentials_username)) }, singleLine = true,
+            WorkbenchTextField(username, { if (it.length <= 128) username = it }, enabled = !busy,
+                label = stringResource(R.string.git_credentials_username), singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-            OutlinedTextField(token, { if (it.length <= 8192) token = it }, enabled = !busy,
-                label = { Text(stringResource(if (saved) R.string.git_credentials_replace_token else R.string.git_credentials_token)) }, singleLine = true,
+            WorkbenchTextField(token, { if (it.length <= 8192) token = it }, enabled = !busy,
+                label = stringResource(if (saved) R.string.git_credentials_replace_token else R.string.git_credentials_token), singleLine = true,
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
             if (failed) Text(stringResource(R.string.git_credentials_error), color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall)
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Button(onClick = {
+            WorkbenchPrimaryButton(onClick = {
                 busy = true; failed = false
                 scope.launch {
                     try {
@@ -81,7 +81,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
             }
         }
     }
-    if (confirmingRemoval) AlertDialog(onDismissRequest = { confirmingRemoval = false },
+    if (confirmingRemoval) WorkbenchAlertDialog(onDismissRequest = { confirmingRemoval = false },
         title = { Text(stringResource(R.string.git_credentials_remove)) },
         text = { Text(stringResource(R.string.git_credentials_remove_help)) },
         confirmButton = { TextButton(onClick = {

@@ -1,0 +1,3 @@
+<resources>
+    <string name="terminal_library_summary">%1$d / 4 个会话 · %2$d 个运行中</string>
+</resources>

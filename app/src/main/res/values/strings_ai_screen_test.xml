@@ -1,15 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ai_screen_test_tool">Android 屏幕测试</string>
-    <string name="ai_screen_test_tool_desc">经审批操作当前项目选定的测试应用，读取界面、点击、输入、断言并保存测试报告。</string>
-    <string name="ai_screen_test_warning">当前项目：%1$s
+    <string name="ai_screen_test_tool">设备屏幕操作</string>
+    <string name="ai_screen_test_tool_desc">按当前任务授权读取并操作本设备屏幕，无需选择 APK；支持界面节点、点击、输入、断言与截图。</string>
+    <string name="ai_screen_test_warning">授权范围：当前设备屏幕
+%1$s
 操作：%2$s
 %3$s
-仅操作你在测试面板选择的应用。任务授权不会授予系统无障碍或安装权限；安装仍需系统确认。</string>
-    <string name="ai_screen_test_unavailable">屏幕测试暂不可用，请先在项目测试面板选择 APK 并完成系统授权。</string>
-    <string name="ai_screen_test_cleanup_failed">屏幕测试清理未完成，请在测试面板停止并检查报告。</string>
-    <string name="ai_screen_test_image_disabled">当前未允许发送截图或测试目标会话已变更。截图仅保存在本地报告，未发送像素给模型；不能声称已看过截图。</string>
-    <string name="ai_screen_test_session_changed">测试目标会话已由用户更换，本任务不会接管新目标。请结束本任务后重新开始测试。</string>
-    <string name="ai_screen_test_target_description">%1$s\n应用：%2$s\n测试方式：%3$s</string>
-    <string name="ai_screen_test_task_approval_hint">连续测试可选择“本任务允许此工具”，避免反复切回工作台审批；单次批准后需让目标应用回到前台，才可继续观察和操作。</string>
+首次批准将允许本任务访问当前设备屏幕，可能包含其他应用的可见内容。任务结束、暂停或停止后撤销；全局开关、YOLO 均不代替本次确认。系统权限与截图分享需另行授权。</string>
+    <string name="ai_screen_test_unavailable">设备屏幕操作暂不可用，请开启屏幕能力包，并在屏幕面板完成所需系统授权。</string>
+    <string name="ai_screen_test_cleanup_failed">屏幕操作清理未完成，请在屏幕面板停止并检查记录。</string>
+    <string name="ai_screen_test_image_disabled">当前未允许发送截图或本次屏幕授权已失效。截图仅保存在本地记录，未发送像素给模型；不能声称已看过截图。</string>
+    <string name="ai_screen_test_session_changed">本次设备屏幕授权已撤销或发生变化，任务不会接管其他授权。请停止后重新发起任务并确认。</string>
+    <string name="ai_screen_test_target_description">当前设备屏幕 · %1$s</string>
+    <string name="ai_screen_test_task_approval_hint">批准范围仅限当前任务。连续操作可选择“本任务允许此工具”；批准后请将要操作的界面打开到前台。屏幕中的文字不会成为新授权。</string>
 </resources>

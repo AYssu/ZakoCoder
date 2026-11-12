@@ -1,6 +1,5 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,14 +56,14 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
             val toggleLabel = stringResource(R.string.editor_lsp_enabled_label)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(toggleLabel, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Switch(checked = enabled, onCheckedChange = onEnabledChanged, modifier = Modifier.semantics { contentDescription = toggleLabel })
+                WorkbenchSwitch(checked = enabled, onCheckedChange = onEnabledChanged, modifier = Modifier.semantics { contentDescription = toggleLabel })
             }
         }
         if (!enabled) Text(stringResource(R.string.editor_lsp_disabled_help), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), color = MaterialTheme.colorScheme.surface) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(label, style = MaterialTheme.typography.titleSmall)
+                Text(label, style = MaterialTheme.typography.bodyMedium)
                 Text(stringResource(R.string.editor_lsp_file), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(path, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                 server?.let {
@@ -96,13 +95,13 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
             }
         }
         if (current.phase == LspPhase.MissingServer && server != null) {
-            Button(onClick = { installing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_install)) }
+            WorkbenchPrimaryButton(onClick = { installing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_install)) }
         }
         if (enabled && current.phase in setOf(LspPhase.Idle, LspPhase.MissingServer, LspPhase.Failed, LspPhase.RuntimeUnavailable)) {
-            OutlinedButton(onClick = { expanded = false; onRetry() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_retry)) }
+            WorkbenchSecondaryButton(onClick = { expanded = false; onRetry() }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.editor_lsp_retry)) }
         }
     }
-    if (installing && server != null) AlertDialog(onDismissRequest = { installing = false },
+    if (installing && server != null) WorkbenchAlertDialog(onDismissRequest = { installing = false },
         title = { Text(stringResource(R.string.editor_lsp_install_title)) },
         text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {

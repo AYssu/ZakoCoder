@@ -1,7 +1,6 @@
 package dev.zakocoder.app
 
 import android.content.ContextWrapper
-import android.os.Looper
 import dev.zakocoder.app.mcp.*
 import kotlinx.coroutines.*
 import okhttp3.mockwebserver.Dispatcher
@@ -23,7 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Isolated config/Keystore, loopback servers and pipe processes; no model or installed guest required. */
+/** Isolated config/Keystore and loopback servers; no model or installed guest required. */
 class McpDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private class Owned(val context: android.content.Context) {
@@ -33,8 +32,7 @@ class McpDeviceTest {
         val isolated = object : ContextWrapper(context) {
             override fun getNoBackupFilesDir() = root
         }
-        val starts = AtomicInteger()
-        fun controller(start: suspend (String, McpServer) -> Process = { _, _ -> starts.incrementAndGet(); error("No process expected") }) = McpController(isolated, scope, start, keyAlias = alias)
+        fun controller() = McpController(isolated, scope, keyAlias = alias)
         suspend fun ready(controller: McpController) { withTimeout(10000) { while (controller.state.value.loading || controller.state.value.busy) delay(10) }; assertEquals("", controller.state.value.error) }
         suspend fun close(controller: McpController) {
             controller.closeAll().join(); scope.cancel()
@@ -52,13 +50,13 @@ class McpDeviceTest {
         val own = Owned(context); val c = own.controller()
         try {
             own.ready(c)
-            val source = """{"mcpServers":{"fixture":{"command":"python3","args":["-u","service.py"],"env":{"TOKEN":"secret-env-fixture"},"enabled":true,"autoApprove":["*"]}}}"""
+            val source = """{"mcpServers":{"fixture":{"type":"http","url":"http://127.0.0.1:1234/mcp","headers":{"Authorization":"Bearer secret-env-fixture"},"enabled":true,"autoApprove":["*"]}}}"""
             c.importJson(source).join()
             assertEquals("", c.state.value.error)
             val server = c.state.value.servers.single()
             assertFalse(server.enabled)
             assertFalse(server.toString().contains("secret-env-fixture"))
-            assertEquals(0, own.starts.get())
+
             val disk = withContext(Dispatchers.IO) { File(own.root, "mcp-servers-v1.json").readText() }
             assertFalse(disk.contains("secret-env-fixture")); assertFalse(disk.contains("service.py"))
             c.importJson(source).join()
@@ -146,42 +144,59 @@ class McpDeviceTest {
         }
     }
 
-    @Test fun stdioUsesInjectedProjectProcessAndClosesItOnIo() = runBlocking {
-        val own = Owned(context); val processes = CopyOnWriteArrayList<PipeProcess>()
-        val c = own.controller { project, server ->
-            assertEquals("owned-project", project); assertEquals("fixture-command", server.command)
-            assertEquals(listOf("secret-arg-fixture"), server.args)
-            own.starts.incrementAndGet(); PipeProcess().also { processes += it }
-        }
+    @Test fun retiredStdioCannotBeImportedOrStarted() = runBlocking {
+        val own = Owned(context); val c = own.controller()
         try {
             own.ready(c)
-            val server = McpServer(name = "stdio", transport = McpTransport.Stdio, command = "fixture-command",
-                args = listOf("secret-arg-fixture"), env = mapOf("TOKEN" to "secret-env-fixture"), enabled = true)
-            saved(c, server)
-            c.probe("owned-project", server.id).join()
+            c.importJson("""{"command":"python3","args":["server.py"]}""").join()
+            assertTrue(c.state.value.error.isNotBlank())
+            assertTrue(c.state.value.servers.isEmpty())
+
+        } finally { own.close(c) }
+    }
+
+    @Test fun oldProcessEntriesAreIgnoredWithoutLosingGlobalNetworkConfiguration() = runBlocking {
+        val own = Owned(context); val c = own.controller()
+        try {
+            own.ready(c)
+            val network = McpServer(name = "network", transport = McpTransport.StreamableHttp,
+                url = "http://localhost:1234/mcp", headers = mapOf("X-Fixture" to "kept"), enabled = true)
+            saved(c, network)
+            withContext(Dispatchers.IO) {
+                val key = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.getKey(own.alias, null)
+                val file = File(own.root, "mcp-servers-v1.json")
+                val original = JSONObject(file.readText())
+                val decoder = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+                decoder.init(javax.crypto.Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128,
+                    android.util.Base64.decode(original.getString("iv"), android.util.Base64.NO_WRAP)))
+                decoder.updateAAD("zakocoder-mcp-v1".toByteArray())
+                val entries = JSONArray(String(decoder.doFinal(android.util.Base64.decode(original.getString("data"), android.util.Base64.NO_WRAP))))
+                entries.put(JSONObject().put("id", "retired").put("name", "old process").put("enabled", true)
+                    .put("config", JSONObject().put("type", "stdio").put("command", "never-run")))
+                val encoder = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+                encoder.init(javax.crypto.Cipher.ENCRYPT_MODE, key); encoder.updateAAD("zakocoder-mcp-v1".toByteArray())
+                file.writeText(JSONObject().put("schemaVersion", 1)
+                    .put("iv", android.util.Base64.encodeToString(encoder.iv, android.util.Base64.NO_WRAP))
+                    .put("data", android.util.Base64.encodeToString(encoder.doFinal(entries.toString().toByteArray()), android.util.Base64.NO_WRAP)).toString())
+            }
+            c.load().join()
             assertEquals("", c.state.value.error)
-            assertEquals(server.id, c.state.value.probeServerId)
-            assertEquals("owned-project", c.state.value.probeProjectId)
-            val discovered = JSONObject(c.state.value.probeResult).getJSONArray("tools").getJSONObject(0)
-            assertEquals("same-name", discovered.getString("name"))
-            assertFalse(discovered.getString("description").contains("secret-arg-fixture"))
-            assertFalse(c.state.value.probeResult.contains("secret-env-fixture"))
-            assertFalse(processes.single().isAlive); assertTrue(processes.single().closedOffMain)
-            val result = c.request("owned-project", server.id, "tools/call", JSONObject().put("name", "same-name"))
-            assertFalse(result.toString().contains("secret-env-fixture"))
-            assertFalse(result.toString().contains("secret-arg-fixture"))
-            assertEquals(2, own.starts.get()); assertTrue(processes.last().isAlive)
-            c.closeTask("owned-project")
-            assertTrue(processes.none { it.isAlive }); assertTrue(processes.all { it.closedOffMain })
-        } finally { own.close(c); withContext(Dispatchers.IO) { processes.forEach { it.destroy() } } }
+            assertEquals(listOf(network), c.state.value.servers)
+
+            c.save(network.copy(name = "still editable")).join()
+            assertEquals("", c.state.value.error)
+            val reloaded = own.controller(); own.ready(reloaded)
+            assertEquals(listOf(network.copy(name = "still editable")), reloaded.state.value.servers)
+            reloaded.closeAll().join()
+        } finally { own.close(c) }
     }
 
     @Test fun corruptedOwnStoreBlocksSaveUntilOriginalEncryptedBytesReload() = runBlocking {
         val own = Owned(context); val c = own.controller()
         try {
             own.ready(c)
-            val server = McpServer(name = "encrypted", transport = McpTransport.Stdio, command = "fixture-command",
-                args = listOf("secret-arg-fixture"), env = mapOf("TOKEN" to "secret-env-fixture"))
+            val server = McpServer(name = "encrypted", transport = McpTransport.StreamableHttp, url = "http://127.0.0.1:1234/mcp",
+                headers = mapOf("Authorization" to "Bearer secret-env-fixture"))
             saved(c, server)
             val file = File(own.root, "mcp-servers-v1.json")
             val original = withContext(Dispatchers.IO) { file.readBytes() }
@@ -196,7 +211,7 @@ class McpDeviceTest {
             c.load().join()
             assertEquals("", c.state.value.error); assertEquals(listOf(server), c.state.value.servers)
             assertArrayEquals(original, withContext(Dispatchers.IO) { file.readBytes() })
-            assertEquals(0, own.starts.get())
+
         } finally { own.close(c) }
     }
 
@@ -328,41 +343,4 @@ class McpDeviceTest {
         override fun close() { listener.close(); sockets.forEach { runCatching { it.close() } }; acceptor.join(1000) }
     }
 
-    private inner class PipeProcess : Process() {
-        private val input = PipedInputStream(8192)
-        private val serverOutput = PipedOutputStream(input)
-        private val serverInput = PipedInputStream(8192)
-        private val output = PipedOutputStream(serverInput)
-        @Volatile private var alive = true
-        @Volatile var closedOffMain = false
-        private val worker = Thread {
-            try {
-                serverInput.bufferedReader().useLines { lines -> lines.forEach { raw ->
-                    val message = JSONObject(raw)
-                    if (message.has("id")) {
-                        val result = when (message.optString("method")) {
-                            "initialize" -> initialized()
-                            "tools/list" -> JSONObject().put("tools", JSONArray().put(JSONObject().put("name", "same-name")
-                                .put("description", "secret-arg-fixture secret-env-fixture")))
-                            else -> JSONObject().put("content", JSONArray().put(JSONObject().put("type", "text")
-                                .put("text", "secret-env-fixture secret-arg-fixture")))
-                        }
-                        serverOutput.write((response(message.get("id"), result).toString() + "\n").toByteArray()); serverOutput.flush()
-                    }
-                } }
-            } catch (_: IOException) { /* owned pipe closes */ }
-        }.apply { isDaemon = true; start() }
-        override fun getOutputStream(): OutputStream = output
-        override fun getInputStream(): InputStream = input
-        override fun getErrorStream(): InputStream = ByteArrayInputStream(byteArrayOf())
-        override fun waitFor(): Int { worker.join(); return 0 }
-        override fun exitValue(): Int { if (alive) throw IllegalThreadStateException(); return 0 }
-        override fun isAlive(): Boolean = alive
-        override fun destroy() {
-            if (!alive) return
-            closedOffMain = Looper.myLooper() != Looper.getMainLooper(); alive = false
-            runCatching { output.close() }; runCatching { serverOutput.close() }; runCatching { input.close() }; runCatching { serverInput.close() }
-        }
-        override fun destroyForcibly(): Process { destroy(); return this }
-    }
 }

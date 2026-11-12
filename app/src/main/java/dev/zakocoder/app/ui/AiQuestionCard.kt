@@ -2,7 +2,6 @@ package dev.zakocoder.app.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,17 +9,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -37,7 +32,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,34 +53,22 @@ internal fun AiQuestionCard(
     var customExpanded by rememberSaveable(question.id) { mutableStateOf(false) }
     var receiptExpanded by rememberSaveable(question.id) { mutableStateOf(false) }
     val focus = LocalFocusManager.current
-    val dark = LocalWorkbenchDark.current
-    val cardColor = if (dark) Color(0xFF161C24) else MaterialTheme.colorScheme.surface
-    val cardBorder = if (dark) Color(0xFF242C36) else MaterialTheme.colorScheme.outlineVariant
-    val optionColor = if (dark) Color(0xFF121821) else MaterialTheme.colorScheme.surface
-    val optionBorder = if (dark) Color(0xFF2A3340) else MaterialTheme.colorScheme.outlineVariant
-    val selectedColor = if (dark) Color(0xFF16233B) else Color(0xFFEEF3FF)
-    val selectedBorder = if (dark) Color(0xFF5B8CFF) else MaterialTheme.colorScheme.primary
+    val selectedColor = MaterialTheme.colorScheme.primaryContainer
     val answer = question.answer
     val canReply = enabled && answer == null && !question.cancelled
     val draft = custom.trim().ifEmpty { choice.orEmpty() }
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = cardColor,
-        border = BorderStroke(1.dp, cardBorder),
-    ) {
+    WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.animateContentSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (answer != null) {
                 val receiptState = stringResource(if (receiptExpanded) R.string.ai_question_receipt_expanded else R.string.ai_question_receipt_collapsed)
-                Surface(
+                WorkbenchCard(
                     onClick = { receiptExpanded = !receiptExpanded },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
                         role = Role.Button
                         stateDescription = receiptState
                     },
                     color = MaterialTheme.colorScheme.surface,
-                    shape = RoundedCornerShape(8.dp),
                 ) {
                     Row(Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -107,7 +89,7 @@ internal fun AiQuestionCard(
                             Text(question.prompt, Modifier.fillMaxWidth().semantics { heading() },
                                 style = MaterialTheme.typography.bodyMedium)
                         }
-                        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(8.dp)) {
+                        WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(stringResource(R.string.ai_question_your_answer), style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -120,8 +102,8 @@ internal fun AiQuestionCard(
                     // A persisted answer may still need an explicit resume; keep that action visible even when collapsed.
                     Text(stringResource(R.string.ai_question_resume_note), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = onResume, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(8.dp)) {
+                    WorkbenchPrimaryButton(onClick = onResume, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp)) {
                         Text(stringResource(R.string.ai_question_resume))
                     }
                 }
@@ -135,10 +117,9 @@ internal fun AiQuestionCard(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.ai_question_confirmation_title), Modifier.weight(1f),
                         style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Surface(color = Color(0xFFFFF7E8), shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(1.dp, Color(0xFFF3E3C4))) {
+                    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(4.dp)) {
                         Text(stringResource(R.string.ai_question_confirmation_pending), Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall, color = Color(0xFFA95000), fontWeight = FontWeight.SemiBold)
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 SelectionContainer {
@@ -148,23 +129,16 @@ internal fun AiQuestionCard(
                     Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         question.options.forEach { option ->
                             val active = choice == option && custom.isBlank()
-                            Surface(
-                                onClick = { choice = option; custom = ""; customExpanded = false; focus.clearFocus() },
-                                enabled = canReply,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics {
-                                    selected = active
-                                    role = Role.RadioButton
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (active) selectedColor else optionColor,
-                                border = BorderStroke(if (active) 1.5.dp else 1.dp, if (active) selectedBorder else optionBorder),
+                            WorkbenchCard(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .selectable(selected = active, enabled = canReply, role = Role.RadioButton,
+                                        onClick = { choice = option; custom = ""; customExpanded = false; focus.clearFocus() }),
+                                color = if (active) selectedColor else MaterialTheme.colorScheme.surfaceContainerLow,
                             ) {
                                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = active, onClick = null, enabled = canReply,
-                                        modifier = Modifier.size(20.dp),
-                                        colors = RadioButtonDefaults.colors(selectedColor = selectedBorder,
-                                            unselectedColor = if (dark) Color(0xFF66758A) else Color(0xFF8B99AC)))
+                                    RadioButton(active, onClick = null, enabled = canReply,
+                                        modifier = Modifier.size(20.dp))
                                     Text(option, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
                                 }
@@ -176,7 +150,7 @@ internal fun AiQuestionCard(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(stringResource(R.string.ai_question_waiting_note),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedTextField(
+                        WorkbenchTextField(
                             value = custom,
                             onValueChange = { value ->
                                 if (value.length <= AiUserQuestion.MAX_ANSWER) {
@@ -186,7 +160,7 @@ internal fun AiQuestionCard(
                             },
                             enabled = canReply,
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text(stringResource(R.string.ai_question_custom)) },
+                            label = stringResource(R.string.ai_question_custom),
                             placeholder = { Text(stringResource(R.string.ai_question_custom_hint)) },
                             minLines = 1,
                             maxLines = 4,
@@ -201,7 +175,7 @@ internal fun AiQuestionCard(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             supportingText = if (custom.isNotEmpty()) ({
                                 Text(stringResource(R.string.ai_question_character_count, custom.length, AiUserQuestion.MAX_ANSWER))
                             }) else null,
@@ -217,15 +191,11 @@ internal fun AiQuestionCard(
                         fontSize = 12.sp, fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
-                Button(
+                WorkbenchPrimaryButton(
                     onClick = { if (draft.isNotBlank()) { focus.clearFocus(); onAnswer(draft) } },
                     enabled = canReply && draft.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (dark) Color(0xFF3F4855) else Color(0xFF101828),
-                        contentColor = Color.White,
-                    ),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
                     Text(stringResource(R.string.ai_question_submit), fontWeight = FontWeight.SemiBold)
                 }

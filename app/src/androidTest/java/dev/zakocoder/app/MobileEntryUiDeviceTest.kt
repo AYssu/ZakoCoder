@@ -111,6 +111,7 @@ class MobileEntryUiDeviceTest {
                 val importLabel = context.getString(R.string.mobile_import_source)
                 val createLabel = context.getString(R.string.mobile_create_empty)
                 val cloneLabel = context.getString(R.string.git_clone)
+                click(context.getString(R.string.workspace_flow_work))
                 await("three project choices") { find(importLabel) != null && find(createLabel) != null && find(cloneLabel) != null }
                 val labels = listOf(importLabel, createLabel, cloneLabel)
                 val rects = stableBounds(labels)

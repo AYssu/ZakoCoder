@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -63,15 +64,14 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     Column(Modifier.fillMaxSize()) {
         PageHeading(stringResource(R.string.environment_title))
     LazyColumn(Modifier.weight(1f), state = environmentScroll, verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 20.dp)) {
-        item { Surface(shape = dev.zakocoder.app.ui.theme.Radius.mdShape, color = MaterialTheme.colorScheme.primaryContainer,
-            border = androidx.compose.foundation.BorderStroke(1.dp, LocalWorkbenchPalette.current.borderHairline)) {
+        item { WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
                         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Environment, tint = MaterialTheme.colorScheme.primary) }
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.ubuntu_version), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text(stringResource(R.string.ubuntu_version), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text(stringResource(R.string.runtime_architecture, workbench.runtime.abiName ?: stringResource(R.string.runtime_architecture_unknown)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     StatusChip(stringResource(if (state.installed) R.string.bundle_ready else R.string.bundle_missing), if (state.installed) ReadyGreen else WaitingAmber)
@@ -105,7 +105,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                 .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 IconTile(Glyph.Projects, Modifier.size(38.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(project?.name ?: stringResource(R.string.select_project_first), style = MaterialTheme.typography.titleSmall)
+                    Text(project?.name ?: stringResource(R.string.select_project_first), style = MaterialTheme.typography.bodyMedium)
                     if (project != null) ProjectKindsText(project)
                 }
                 WorkbenchIcon(Glyph.Next, Modifier.size(17.dp), tint = TertiaryText)
@@ -144,7 +144,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         Text(stringResource(R.string.runtime_description), style = MaterialTheme.typography.bodyMedium)
         if (state.installed) WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { maintenance = false; repair = true }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.repair_packages)) }
         else {
-            OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { maintenance = false; resourcePicker.launch(arrayOf("*/*")) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.import_runtime)) }
+            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { maintenance = false; resourcePicker.launch(arrayOf("*/*")) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.import_runtime)) }
             Text(stringResource(R.string.offline_runtime_help), style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -152,18 +152,18 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         var kinds by remember(project.id, project.kinds) { mutableStateOf(project.kinds) }
         WorkbenchSheet(stringResource(R.string.configure_project), { profiles = false }, stringResource(R.string.profile_help)) {
             ProjectKind.entries.forEach { kind -> Row(Modifier.fillMaxWidth().clickable { kinds = if (kind in kinds) kinds - kind else kinds + kind }, verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(kind in kinds, onCheckedChange = { checked -> kinds = if (checked) kinds + kind else kinds - kind })
+                WorkbenchCheckbox(kind in kinds, onCheckedChange = { checked -> kinds = if (checked) kinds + kind else kinds - kind })
                 Text(stringResource(kind.label))
             } }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false; workbench.kinds(kinds) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save_settings)) }
-            OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }
-    if (repair) AlertDialog(onDismissRequest = { repair = false }, title = { Text(stringResource(R.string.repair_packages)) },
+    if (repair) WorkbenchAlertDialog(onDismissRequest = { repair = false }, title = { Text(stringResource(R.string.repair_packages)) },
         text = { Text(stringResource(R.string.repair_confirmation)) },
         confirmButton = { TextButton(onClick = { repair = false; workbench.repairPackages() }) { Text(stringResource(R.string.run)) } },
         dismissButton = { TextButton(onClick = { repair = false }) { Text(stringResource(R.string.cancel)) } })
-    dependency?.let { (id, plan) -> AlertDialog(onDismissRequest = { dependency = null }, title = { Text(stringResource(R.string.install_dependencies)) },
+    dependency?.let { (id, plan) -> WorkbenchAlertDialog(onDismissRequest = { dependency = null }, title = { Text(stringResource(R.string.install_dependencies)) },
         text = { Text(stringResource(R.string.dependency_confirmation, "/workspace/$id", plan.command)) },
         confirmButton = { TextButton(onClick = { dependency = null; workbench.installDependencies(id, plan) }) { Text(stringResource(R.string.run)) } },
         dismissButton = { TextButton(onClick = { dependency = null }) { Text(stringResource(R.string.cancel)) } }) }

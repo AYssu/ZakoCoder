@@ -27,7 +27,7 @@ class McpDiagnosticsDeviceTest {
             "{\"type\":\"http\",\"url\":\"https://example.invalid/mcp?token=$fixtureSecret\"}" to McpFailureReason.UrlSecrets,
             "{\"type\":\"http\",\"url\":\"not-an-address\"}" to McpFailureReason.Url,
             "{\"type\":\"http\",\"url\":\"https://example.invalid/mcp\",\"headers\":{\"Host\":\"$fixtureSecret\"}}" to McpFailureReason.Headers,
-            "{\"command\":\"python3\",\"args\":[42]}" to McpFailureReason.Fields,
+            "{\"type\":\"http\",\"url\":42}" to McpFailureReason.Fields,
         )
         cases.forEach { (source, reason) ->
             val failure = try { McpConfigParser.parse(source); error("Invalid fixture accepted") } catch (expected: McpException) { expected }
@@ -46,7 +46,7 @@ class McpDiagnosticsDeviceTest {
         MockWebServer().use { http ->
             http.enqueue(MockResponse().setResponseCode(401).setBody("fixture-only"))
             val session = McpSession(McpServer(name = "fixture", transport = McpTransport.StreamableHttp,
-                url = http.url("/mcp").toString()), scope, { error("No process") })
+                url = http.url("/mcp").toString()), scope)
             try {
                 session.probe(); fail("HTTP failure expected")
             } catch (failure: McpException) {
@@ -61,7 +61,7 @@ class McpDiagnosticsDeviceTest {
         val alias = "mcp-diagnostic-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = root }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val controller = McpController(isolated, scope, { _, _ -> error("No process") }, keyAlias = alias)
+        val controller = McpController(isolated, scope, keyAlias = alias)
         try {
             withTimeout(10000) { while (controller.state.value.loading || controller.state.value.busy) delay(10) }
             MockWebServer().use { http ->
@@ -78,10 +78,10 @@ class McpDiagnosticsDeviceTest {
                     assertFalse(controller.state.value.busy)
                 }
             }
-            controller.importJson("""{"mcpServers":{"diagnostic":{"command":"python3"}}}""").join()
+            controller.importJson("""{"mcpServers":{"diagnostic":{"type":"http","url":"http://localhost:1234/mcp"}}}""").join()
             assertTrue(controller.state.value.error.contains("MCP_DuplicateServer"))
             assertEquals(1, controller.state.value.servers.size)
-            controller.importJson("""{"command":"python3"}""", "another").join()
+            controller.importJson("""{"type":"http","url":"http://localhost:1234/mcp"}""", "another").join()
             assertEquals("", controller.state.value.error)
             assertEquals(2, controller.state.value.servers.size)
         } finally {

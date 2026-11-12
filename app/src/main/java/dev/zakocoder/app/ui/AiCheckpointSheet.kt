@@ -7,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,8 +92,8 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             if (selected == null) {
                 if (records.isEmpty() && !loading && !failed) item { Text(stringResource(R.string.ai_checkpoint_empty)) }
                 items(records, key = { it.id }) { item ->
-                    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier.fillMaxWidth().clickable(enabled = !loading && !failed) { selected = item }) {
+                    WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier.fillMaxWidth(), enabled = !loading && !failed, onClick = { selected = item }) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(ai.conversations.firstOrNull { it.id == item.conversation }?.title
                             ?: stringResource(R.string.ai_checkpoint_conversation, item.conversation.take(8)),
@@ -121,10 +120,11 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             enabled = !loading && !failed && !forking && !ai.active && !ai.restoring) {
             Text(stringResource(R.string.ai_checkpoint_fork))
         }
-        if (selected != null && (changes.isNotEmpty() || (recovery?.restoredCount ?: 0) > 0)) OutlinedButton(onClick = { confirm = true }, enabled = !loading && !failed && !restoreFailed && selected?.restored != true && !ai.active && !ai.restoring) { Text(stringResource(R.string.ai_checkpoint_restore)) }
+        if (selected != null && (changes.isNotEmpty() || (recovery?.restoredCount ?: 0) > 0)) WorkbenchSecondaryButton(onClick = { confirm = true }, enabled = !loading && !failed && !restoreFailed && selected?.restored != true && !ai.active && !ai.restoring) { Text(stringResource(R.string.ai_checkpoint_restore)) }
     }
     forkTarget?.let { target ->
-        AlertDialog(onDismissRequest = { if (!forking) forkTarget = null },
+        WorkbenchAlertDialog(onDismissRequest = { if (!forking) forkTarget = null },
+            dismissible = !forking,
             title = { Text(stringResource(R.string.ai_checkpoint_fork)) },
             text = { Text(stringResource(R.string.ai_checkpoint_fork_detail, target.turn)) },
             confirmButton = { TextButton(enabled = !forking && !ai.active && !ai.restoring, onClick = {
@@ -144,7 +144,7 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             dismissButton = { TextButton(enabled = !forking, onClick = { forkTarget = null }) { Text(stringResource(R.string.cancel)) } })
     }
     review?.let { AiCodeReview(it, workbench.editor.languages) { review = null } }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text(stringResource(R.string.ai_checkpoint_restore)) },
+    if (confirm) WorkbenchAlertDialog(onDismissRequest = { confirm = false }, title = { Text(stringResource(R.string.ai_checkpoint_restore)) },
         text = { Text(stringResource(if (recovery != null) R.string.ai_checkpoint_interrupted_confirm else R.string.ai_checkpoint_restore_detail)) }, confirmButton = { TextButton(onClick = {
             confirm = false; loading = true
             scope.launch { try {

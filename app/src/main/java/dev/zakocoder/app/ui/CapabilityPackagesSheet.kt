@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -13,7 +15,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
 
-/** Pure UI projection: enabling a package is a project preference, never a system permission grant. */
+/** Screen preferences are global; SSH configuration belongs to a workspace. Neither grants system access. */
 internal data class CapabilityPackagesUiModel(
     val projectName: String = "",
     val hasProject: Boolean = false,
@@ -26,7 +28,21 @@ internal data class CapabilityPackagesUiModel(
 @Composable
 internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
                                     onScreenEnabled: (Boolean) -> Unit, onSshEnabled: (Boolean) -> Unit,
-                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit, onDismiss: () -> Unit) {
+                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit, onDismiss: () -> Unit, fullPage: Boolean = false) {
+    if (fullPage) {
+        val back = rememberWorkbenchBackMotion(onBack = onDismiss)
+        Column(Modifier.fillMaxSize().then(back.modifier).padding(horizontal = 16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
+                Text(stringResource(R.string.capability_packages_title), style = MaterialTheme.typography.titleMedium)
+            }
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.capability_packages_subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails)
+            }
+        }
+        return
+    }
     WorkbenchSheet(stringResource(R.string.capability_packages_title), onDismiss,
         subtitle = stringResource(R.string.capability_packages_subtitle)) {
         CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails)
@@ -37,29 +53,24 @@ internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
 internal fun CapabilityPackagesPanel(model: CapabilityPackagesUiModel,
                                     onScreenEnabled: (Boolean) -> Unit, onSshEnabled: (Boolean) -> Unit,
                                     onScreenDetails: () -> Unit, onSshDetails: () -> Unit) {
-    if (!model.hasProject) {
-        CapabilityNotice(stringResource(R.string.capability_packages_no_project))
-        return
-    }
-    Text(stringResource(R.string.capability_packages_project, model.projectName),
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     CapabilityPackageCard(title = stringResource(R.string.capability_screen_title),
         description = stringResource(R.string.capability_screen_description),
         hint = stringResource(R.string.capability_screen_hint), configureLabel = stringResource(R.string.capability_screen_configure), glyph = Glyph.Environment,
-        enabled = model.screenEnabled, busy = model.busy, onEnabled = onScreenEnabled, onDetails = onScreenDetails)
+        scopeLabel = stringResource(R.string.capability_screen_global), enabled = model.screenEnabled, busy = model.busy, onEnabled = onScreenEnabled, onDetails = onScreenDetails)
     CapabilityPackageCard(title = stringResource(R.string.capability_ssh_title),
         description = stringResource(R.string.capability_ssh_description),
         hint = stringResource(R.string.capability_ssh_hint), configureLabel = stringResource(R.string.capability_ssh_configure), glyph = Glyph.Terminal,
-        enabled = model.sshEnabled, busy = model.busy, onEnabled = onSshEnabled, onDetails = onSshDetails)
+        scopeLabel = if (model.hasProject) stringResource(R.string.capability_packages_project, model.projectName) else stringResource(R.string.capability_ssh_workspace_required),
+        enabled = model.sshEnabled, busy = model.busy || !model.hasProject, onEnabled = onSshEnabled, onDetails = onSshDetails)
     CapabilityNotice(stringResource(R.string.capability_packages_loading_hint))
     model.error?.let { CapabilityNotice(it, error = true) }
 }
 
 @Composable
 private fun CapabilityPackageCard(title: String, description: String, hint: String, configureLabel: String, glyph: Glyph,
-                                  enabled: Boolean, busy: Boolean, onEnabled: (Boolean) -> Unit, onDetails: () -> Unit) {
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = .35f) else MaterialTheme.colorScheme.outlineVariant)) {
+                                  scopeLabel: String, enabled: Boolean, busy: Boolean, onEnabled: (Boolean) -> Unit, onDetails: () -> Unit) {
+    WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (enabled) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .35f)) else null) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
@@ -76,17 +87,16 @@ private fun CapabilityPackageCard(title: String, description: String, hint: Stri
                     Text(stringResource(if (enabled) R.string.capability_packages_enabled else R.string.capability_packages_disabled),
                         style = MaterialTheme.typography.labelLarge,
                         color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.capability_packages_project_only), style = MaterialTheme.typography.bodySmall,
+                    Text(scopeLabel, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = enabled, onCheckedChange = onEnabled, enabled = !busy,
-                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = title },
-                    thumbContent = null)
+                WorkbenchSwitch(checked = enabled, onCheckedChange = onEnabled, enabled = !busy,
+                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = title })
             }
             if (enabled) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = onDetails, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                WorkbenchSecondaryButton(onClick = onDetails, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(configureLabel)
                 }
             }
@@ -96,7 +106,7 @@ private fun CapabilityPackageCard(title: String, description: String, hint: Stri
 
 @Composable
 internal fun CapabilityNotice(text: String, error: Boolean = false) {
-    Surface(shape = RoundedCornerShape(12.dp), color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
+    WorkbenchCard(cornerRadius = 12.dp, color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
         Text(text, Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodySmall,
             color = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant)
     }

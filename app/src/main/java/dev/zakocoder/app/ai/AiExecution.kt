@@ -33,6 +33,10 @@ data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides:
     fun permission(tool: AiTool): AiPermission = if (tool == AiTool.LoadSkill) permission(AiTool.ReadFile) else if (yolo) AiPermission.Allow else overrides[tool] ?: (if (tool == AiTool.EditFile) overrides[AiTool.WriteFile] else null) ?: default
     fun source(tool: AiTool): Int = if (tool == AiTool.LoadSkill) source(AiTool.ReadFile) else if (yolo) R.string.ai_permission_yolo_rule else if (tool in overrides) R.string.ai_permission_tool_rule else if (tool == AiTool.EditFile && AiTool.WriteFile in overrides) R.string.ai_edit_inherited_permission else R.string.ai_permission_default_rule
 }
+/** Tool grants never replace an explicit task/device scope confirmation. */
+internal fun AiPolicy.skipsToolApproval(tool: AiTool, taskGranted: Boolean, forceConfirmation: Boolean): Boolean =
+    !forceConfirmation && permission(tool) != AiPermission.Deny && (yolo || permission(tool) == AiPermission.Allow || taskGranted)
+
 enum class AiToolStatus(val label: Int) {
     Queued(R.string.ai_status_queued), Waiting(R.string.ai_status_waiting), Running(R.string.ai_status_running),
     Succeeded(R.string.ai_status_succeeded), Failed(R.string.ai_status_failed), Denied(R.string.ai_status_denied), Cancelled(R.string.ai_status_cancelled), Incomplete(R.string.ai_status_incomplete);

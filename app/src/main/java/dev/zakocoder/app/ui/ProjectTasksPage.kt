@@ -67,8 +67,8 @@ import kotlinx.coroutines.CancellationException
 }
 
 @Composable private fun ConfirmProjectCommand(command: ProjectCommand, unsavedFiles: Int, execute: () -> Unit, close: () -> Unit) {
-    AlertDialog(onDismissRequest = close, title = { Text(stringResource(R.string.project_command_execute)) },
-        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    WorkbenchAlertDialog(onDismissRequest = close, title = { Text(stringResource(R.string.project_command_execute)) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             UnsavedValidationNotice(unsavedFiles)
             Text(command.shell() + "\n\n" + stringResource(R.string.project_command_effects))
         } },
@@ -77,7 +77,7 @@ import kotlinx.coroutines.CancellationException
 }
 
 @Composable
-internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (String) -> Unit, validationConversation: String? = null, validationTurn: Int = 0, close: () -> Unit) {
+internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (String) -> Unit, validationConversation: String? = null, validationTurn: Int = 0, initialKind: String? = null, close: () -> Unit) {
     val state by workbench.projectTasks.state.collectAsStateWithLifecycle()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val host by workbench.state.collectAsStateWithLifecycle()
@@ -85,6 +85,10 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
     val unsavedFiles = editor.tabs.count { it.projectId == projectId && it.dirty }
     val originMatches = validationConversation == null || (ai.projectId == projectId && ai.conversationId == validationConversation && validationTurn in 1..ai.turn)
     val canChange = originMatches && !state.busy && !state.loading && !state.saving && !ai.active && !ai.restoring && !host.busy
+    val commandKinds = remember(initialKind) {
+        val kinds = listOf("build", "test", "run")
+        if (initialKind in kinds) listOf(requireNotNull(initialKind)) + kinds.filterNot { it == initialKind } else kinds
+    }
     var editing by rememberSaveable(projectId) { mutableStateOf<String?>(null) }
     var script by rememberSaveable(projectId) { mutableStateOf("") }
     var cwd by rememberSaveable(projectId) { mutableStateOf("") }
@@ -103,8 +107,8 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.busy) item(key = "running-command") {
                 val run = state.runs.firstOrNull { it.status == "running" }
-                OutlinedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                WorkbenchCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(run?.let { commandKind(it.kind) + " · " + runStatus(it.status) }
                             ?: stringResource(R.string.ai_phase_executing), style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.project_run_output_preview), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -121,7 +125,7 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                             FilledTonalButton(onClick = { selected = run }, enabled = run != null, modifier = Modifier.weight(1f)) {
                                 Text(stringResource(R.string.project_validation_open_log))
                             }
-                            OutlinedButton(onClick = workbench.projectTasks::stop) { Text(stringResource(R.string.ai_stop)) }
+                            WorkbenchSecondaryButton(onClick = workbench.projectTasks::stop) { Text(stringResource(R.string.ai_stop)) }
                         }
                     }
                 }
@@ -132,10 +136,10 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                     Text(stringResource(R.string.project_validation_user_review), style = MaterialTheme.typography.bodySmall)
                 }
                 UnsavedValidationNotice(unsavedFiles) }
-            items(listOf("build", "test", "run")) { kind ->
+            items(commandKinds, key = { it }) { kind ->
                 val command = state.commands.firstOrNull { it.kind == kind }
-                OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(commandKind(kind), style = MaterialTheme.typography.titleSmall)
+                WorkbenchCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(commandKind(kind), style = MaterialTheme.typography.bodyMedium)
                     val preview = command?.script?.let(::commandScriptPreview)
                     Text(preview ?: stringResource(R.string.project_command_unset), fontFamily = FontFamily.Monospace,
                         style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
@@ -148,8 +152,8 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
             item { Text(stringResource(R.string.project_runs), style = MaterialTheme.typography.titleSmall)
                 SourceEvidenceControls(state, ai.active, workbench.projectTasks::refreshEvidence) }
             if (state.runs.isEmpty()) item { Text(stringResource(R.string.project_runs_empty), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            items(state.runs, key = { it.id }) { run -> OutlinedCard(onClick = { selected = run }, modifier = Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) { Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(commandKind(run.kind) + " · " + runStatus(run.status), color = if (run.status == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            items(state.runs, key = { it.id }) { run -> WorkbenchCard(onClick = { selected = run }, modifier = Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(commandKind(run.kind) + " · " + runStatus(run.status), style = MaterialTheme.typography.bodyMedium, color = if (run.status == "failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                 Text(run.exit?.let { stringResource(R.string.project_exit_value, it) } ?: stringResource(R.string.project_exit_unknown), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SourceVerification(run, state, ai.active)
                 Text(run.script.take(200), style = MaterialTheme.typography.bodySmall, maxLines = 2)
@@ -164,9 +168,9 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                         Text(commandKind(kind), style = MaterialTheme.typography.headlineSmall)
                         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (state.error.isNotBlank()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                            OutlinedTextField(script, { if (it.length <= 16000) script = it }, label = { Text(stringResource(R.string.project_command_script)) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6)
-                            OutlinedTextField(cwd, { cwd = it }, label = { Text(stringResource(R.string.project_command_cwd)) }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
-                            OutlinedTextField(timeout, { timeout = it }, label = { Text(stringResource(R.string.project_command_timeout)) }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+                            WorkbenchTextField(script, { if (it.length <= 16000) script = it }, label = stringResource(R.string.project_command_script), modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6)
+                            WorkbenchTextField(cwd, { cwd = it }, label = stringResource(R.string.project_command_cwd), modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next))
+                            WorkbenchTextField(timeout, { timeout = it }, label = stringResource(R.string.project_command_timeout), modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { editing = null }) { Text(stringResource(R.string.cancel)) }
@@ -246,7 +250,7 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
                     DropdownMenuItem(text = { Text(stringResource(R.string.project_validation_turn, turn)) }, onClick = { selectedTurn = turn; turnMenu = false })
                 } }
             }
-            OutlinedButton(onClick = { onCommands(selectedTurn) }, enabled = ai.projectId != null) { Text(stringResource(R.string.project_validation_commands)) }
+            WorkbenchSecondaryButton(onClick = { onCommands(selectedTurn) }, enabled = ai.projectId != null) { Text(stringResource(R.string.project_validation_commands)) }
             SourceEvidenceControls(tasks, ai.active, workbench.projectTasks::refreshEvidence)
         }
         items(listOf("build", "test", "run")) { kind ->
@@ -264,9 +268,9 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
             } })
         }
         items(runs, key = { it.id }) { run ->
-            OutlinedCard(onClick = { selectedRun = run }, modifier = Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(commandKind(run.kind) + " · " + runStatus(run.status), color = if (run.exit != null && run.exit != 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            WorkbenchCard(onClick = { selectedRun = run }, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(commandKind(run.kind) + " · " + runStatus(run.status), style = MaterialTheme.typography.bodyMedium, color = if (run.exit != null && run.exit != 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
                     if (run.source == "user") Text(stringResource(R.string.project_validation_user_review), style = MaterialTheme.typography.labelSmall)
                     SourceVerification(run, tasks, ai.active)
                     Text(run.script, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 3)

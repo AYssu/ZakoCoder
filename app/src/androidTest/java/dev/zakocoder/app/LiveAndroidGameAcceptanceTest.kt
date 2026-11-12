@@ -214,13 +214,11 @@ class LiveAndroidGameAcceptanceTest {
             await(30000) { !workbench.capabilityPackages.state.value.busy }
             check(workbench.capabilityPackages.enabled(projectId, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
             check(workbench.screenTests.requestRootAccess()) { "Root manager did not authorize the app; no permission bypass" }
-            workbench.screenTests.selectApk(projectId, "app/build/outputs/apk/debug/app-debug.apk")
         }
-        check(workbench.screenTests.taskLease(projectId) != null) { "Owner must select and authorize the built project APK first" }
+        check(arguments.getString("authorizeAcceptanceScreen") == "true") { "Owner must explicitly permit current-device screen testing; each task still asks for device consent" }
         main { workbench.ai.select(projectId) }
         aiReady(workbench, projectId)
         val recorder = Recorder("screen", projectId)
-        val screenLease = requireNotNull(workbench.screenTests.taskLease(projectId))
         val screenStarted = System.currentTimeMillis()
         try {
             runTask(workbench, projectId, SCREEN_PROMPT, recorder)
@@ -234,7 +232,7 @@ class LiveAndroidGameAcceptanceTest {
             check("assert_text" in actions) { "This turn has no successful explicit screen assertion" }
             val report = workbench.screenTests.readReport(projectId)
             val rows = report.lineSequence().mapNotNull { line -> runCatching { JSONObject(line) }.getOrNull() }
-                .filter { it.optString("session") == screenLease && it.optLong("time") >= screenStarted }.toList()
+                .filter { it.optLong("time") >= screenStarted }.toList()
             check(rows.any { it.optString("action") == "observe" && it.optBoolean("operationSucceeded") })
             check(rows.any { it.optString("action") in setOf("click", "swipe") && it.optBoolean("operationSucceeded") })
             check(rows.any { it.optString("action") == "assert_text" && it.optBoolean("assertionPassed") }) { "No actual passing screen assertion in persistent report" }
@@ -440,9 +438,9 @@ class LiveAndroidGameAcceptanceTest {
             如遇错误先定位修复继续执行，遇到无法解决的环境问题如实说明，不伪造完成。
         """.trimIndent()
         private val SCREEN_PROMPT = """
-            继续当前 2048 项目的验收。用户已明确授权当前项目APK作为屏幕测试目标。
-            先使用android_test的status核对安装及制品匹配；未安装或制品不匹配时用install请求系统安装，等待用户在系统界面确认，再用status核对。不操作安装器或更改系统权限。
-            安装确认后，请使用 android_test 工具启动、observe实际节点，操作方向按钮或滑动推进游戏，核对分数/棋盘变化，测试重新开始。
+            继续当前 2048 项目的验收。用户已经通过独立安装入口安装应用并打开游戏界面。
+            先使用android_test的authorize请求本次任务的当前设备屏幕授权；不尝试通过工具安装或启动APK，不操作安装器或更改系统权限。
+            授权后observe实际节点，操作方向按钮或滑动推进游戏，核对分数/棋盘变化，测试重新开始。
             每次关键操作后再次observe核对变化，至少用assert_text对实际节点中的分数或重新开始后的状态做一次通过断言。
             先读取已有验收记录，避免无目的重复整套测试；当前轮完成观察、一次实际交互及其后续状态断言，再核对重开流程即可汇总。已有失败照实保留，不为追求全绿无限重复点击。
             真实验证窄屏可用、按钮可点、数字清晰；可用时获取截图证据，未授予截图条件则明确未验证，不能停掉其他测试。依据实际节点决定动作，不猜node id。

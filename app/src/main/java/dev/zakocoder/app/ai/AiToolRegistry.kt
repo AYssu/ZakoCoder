@@ -48,7 +48,7 @@ internal object AiToolRegistry {
         definitions(screen, ssh, skills, delegation).forEach { result.put(it.schema) }
     }
 
-    val SCREEN_TEST_ACTIONS = listOf("status", "prepare", "install", "launch", "observe", "click", "long_click", "swipe", "input_text", "back", "assert_text", "screenshot", "finish")
+    val SCREEN_TEST_ACTIONS = listOf("status", "authorize", "observe", "click", "long_click", "swipe", "input_text", "back", "assert_text", "screenshot", "finish")
     val SSH_ACTIONS = listOf("status", "exec", "list_files", "read_file", "write_file", "edit_file", "tmux_run", "tmux_list", "tmux_capture", "tmux_input", "tmux_close")
     private val SSH_FIELDS = setOf("action", "reason", "command", "path", "content", "old_text", "new_text", "expected_sha256", "timeout_seconds", "task_id", "text", "key", "limit", "offset")
 
@@ -95,7 +95,7 @@ internal object AiToolRegistry {
             AiTool.AndroidTest -> {
                 require(args.getString("action") in SCREEN_TEST_ACTIONS)
                 require(args.toString().length <= 12000)
-                if (args.optString("action") == "prepare") require(args.getString("path").length in 1..1000)
+                require(args.keys().asSequence().all { it in setOf("action", "reason", "snapshot", "node", "text", "direction") })
             }
             AiTool.SshRemote -> {
                 require(args.getString("action") in SSH_ACTIONS && args.toString().length <= 64000)
@@ -175,11 +175,10 @@ internal object AiToolRegistry {
         mcpParameters.getJSONObject("properties").put("method", JSONObject().put("type", "string").put("enum", JSONArray(listOf("tools/list", "tools/call", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get"))))
         mcpParameters.getJSONObject("properties").put("params", JSONObject().put("type", "object").put("description", "Exact MCP JSON parameters, e.g. name and nested arguments for tools/call; empty object for discovery"))
         mcpParameters.put("required", JSONArray(listOf("server_id", "method", "params")))
-        val screenTest = tool("android_test", "Discover current-project debug APKs with status; prepare(path) confirms the exact package/artifact with the user, except in explicitly enabled YOLO mode. Test only the approved target. Follow the configured tool permission: Ask requires approval or a task grant; Allow permits execution without another tool prompt. Neither replaces target selection or system access. Build and unit-test first. User enables accessibility/root in UI; never enable permissions yourself. install requires system confirmation. Use launch → observe → node action → assert_text/screenshot → finish. A build or click is not proof of passing UI tests. Screenshots enter model image input only with explicit user model-image confirmation. Fix and reverify failures.", "action")
+        val screenTest = tool("android_test", "Operate the current device screen within the user requested task, without binding a project APK. status reports access only, never screen contents. authorize or the first screen operation requires explicit task-wide device consent even in YOLO; global enablement does not grant it. Then ordinary tool rules apply. Android accessibility/root and screenshot sharing are user-controlled. User opens the relevant app. Observe before node actions; use latest snapshot IDs. finish revokes this task lease. A build, click or launch is not proof of passing UI tests. Do not inspect unrelated apps or sensitive account information.", "action")
         val screenProperties = screenTest.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         screenProperties.put("action", JSONObject().put("type", "string").put("enum", JSONArray(SCREEN_TEST_ACTIONS)))
-        listOf("snapshot", "node", "text", "direction", "path").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }
-        screenProperties.getJSONObject("path").put("description", "Project-relative debug APK path from status candidates; required only for prepare. App asks the user to approve exact package and artifact before selecting, except in explicitly enabled YOLO mode.")
+        listOf("snapshot", "node", "text", "direction").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }
         screenProperties.getJSONObject("snapshot").put("description", "Latest observe snapshot ID; required for click, long_click, swipe and input_text")
         screenProperties.getJSONObject("node").put("description", "Node ID from that same snapshot; required for click, long_click, swipe and input_text; no raw screen coordinates")
         screenProperties.getJSONObject("text").put("maxLength", 2000).put("description", "Literal input_text content or expected assert_text text")

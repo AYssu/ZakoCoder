@@ -31,22 +31,17 @@ internal fun AiModelPicker(ai: AiController, close: () -> Unit, onAdd: () -> Uni
     val task by ai.state.collectAsStateWithLifecycle()
     val editable = !task.active && !task.restoring && !state.loading && !state.saving && state.error.isEmpty()
     var selecting by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(state.catalog.activeId, state.saving) {
-        if (selecting != null && !state.saving && state.catalog.activeId == selecting) close()
-    }
     val windowHeight = LocalWindowInfo.current.containerSize.height
     val maxHeight = with(LocalDensity.current) { windowHeight.toDp() * .8f }
-    ModalBottomSheet(onDismissRequest = close,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface,
-        properties = ModalBottomSheetProperties(isAppearanceLightStatusBars = !LocalWorkbenchDark.current,
-            isAppearanceLightNavigationBars = !LocalWorkbenchDark.current),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+    WorkbenchPanelSheet(onDismiss = close) { requestDismiss ->
+        LaunchedEffect(state.catalog.activeId, state.saving) {
+            if (selecting != null && !state.saving && state.catalog.activeId == selecting) requestDismiss()
+        }
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).imePadding().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.ai_choose_model), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = close) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
             }
             if (task.active || task.restoring) Text(stringResource(R.string.ai_models_task_locked),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -63,10 +58,10 @@ internal fun AiModelPicker(ai: AiController, close: () -> Unit, onAdd: () -> Uni
                 contentPadding = PaddingValues(bottom = 8.dp)) {
                 items(state.catalog.profiles, key = { it.id }) { profile ->
                     val active = profile.id == state.catalog.activeId
-                    Surface(onClick = { if (active) close() else { selecting = profile.id; ai.models.activate(profile.id) } },
+                    WorkbenchCard(onClick = { if (active) requestDismiss() else { selecting = profile.id; ai.models.activate(profile.id) } },
                         enabled = editable, modifier = Modifier.fillMaxWidth().semantics { role = Role.RadioButton; selected = active },
-                        shape = RoundedCornerShape(12.dp), color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+                        cornerRadius = 12.dp, color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                        border = if (active) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(profile.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)

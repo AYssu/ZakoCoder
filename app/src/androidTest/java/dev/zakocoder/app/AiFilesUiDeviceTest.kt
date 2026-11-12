@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -1417,39 +1419,75 @@ class AiFilesUiDeviceTest {
         }
     }
     @Test(timeout = 150000) fun builtInSkillsSearchToggleDetailsAndRecommendedSelection() = runBlocking {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            await { !workbench.state.value.loading && !workbench.state.value.busy }
-            val previous = workbench.state.value.selectedId
-            val name = "builtin-ui-${System.currentTimeMillis()}"; var owned: String? = null
+        suspend fun skillClick(label: String) {
+            fun actionable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+                if (node.isVisibleToUser && node.isEnabled && node.isClickable) return node
+                return (0 until node.childCount).firstNotNullOfOrNull { node.getChild(it)?.let(::actionable) }
+            }
+            fun locate(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+                if (node.isVisibleToUser && (node.text?.toString()?.lines()?.contains(label) == true ||
+                    node.contentDescription?.toString()?.lines()?.contains(label) == true)) {
+                    actionable(node)?.let { return it }
+                    var parent = node.parent
+                    while (parent != null) {
+                        if (parent.isClickable && parent.isEnabled) return parent
+                        parent = parent.parent
+                    }
+                }
+                return (0 until node.childCount).firstNotNullOfOrNull { node.getChild(it)?.let(::locate) }
+            }
+            var target: AccessibilityNodeInfo? = null
+            await { target = instrumentation.uiAutomation.windows.mapNotNull { it.root }
+                .filter { it.packageName?.toString() == context.packageName }.firstNotNullOfOrNull(::locate); target != null }
+            assertTrue(label, requireNotNull(target).performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            delay(200)
+        }
+        AiDeviceTest.Fixture(context).use { fixture ->
+            val isolated = object : ContextWrapper(context) {
+                override fun getFilesDir() = File(fixture.root, "files").apply { mkdirs() }
+                override fun getNoBackupFilesDir() = File(fixture.root, "private").apply { mkdirs() }
+                override fun getCacheDir() = File(fixture.root, "cache").apply { mkdirs() }
+                override fun getSharedPreferences(name: String, mode: Int) = context.getSharedPreferences("${fixture.token}-$name", mode)
+                override fun stopService(service: android.content.Intent) = false
+            }
             var injected: Workbench? = null
             try {
-                main { workbench.create(name) }; await { !workbench.state.value.busy && workbench.state.value.project?.name == name }
-                val id = workbench.state.value.selectedId!!; owned = id
-                AiDeviceTest.Fixture(context).use { fixture ->
-                    main { injected = Workbench(context, fixture.transport, fixture.config, aiHistory = fixture.history) }
-                    val w = injected!!
-                    await { !w.state.value.loading && w.ai.state.value.configured }
-                    scenario.onActivity { it.setContent { ZakoCoderApp(w) } }; click(context.getString(R.string.nav_ai))
-                    await { w.ai.state.value.projectId == id && !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
-                    assertEquals(AiBuiltinSkills.defaults, w.ai.state.value.enabledSkills)
-                    click("Skill"); await { visibleText("编码与质量") }; screenshot("ai-builtin-skills")
-                    click("切换 frontend-design"); await { "builtin:frontend-design" in w.ai.state.value.enabledSkills }
-                    click("查看 frontend-design"); await { visibleText(context.getString(R.string.ai_skill_builtin_source)) }; screenshot("ai-builtin-details")
-                    click("关闭")
-                    field("megacave", context.getString(R.string.ai_skills_search)); click("切换 megacave")
-                    await { "builtin:megacave" in w.ai.state.value.enabledSkills && "builtin:caveman" !in w.ai.state.value.enabledSkills }
-                    screenshot("ai-builtin-style")
-                    click("使用推荐项"); await { w.ai.state.value.enabledSkills == AiBuiltinSkills.defaults }
+                main { injected = Workbench(isolated, fixture.transport, fixture.config, aiHistory = fixture.history) }
+                val w = requireNotNull(injected)
+                await { !w.state.value.loading && !w.ai.models.state.value.loading }
+                main { w.ai.refreshGlobalSkills() }
+                await { !w.ai.globalSkills.value.skillsLoading && w.ai.globalSkills.value.skillsInitialized }
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    scenario.onActivity { activity -> activity.setContent {
+                        dev.zakocoder.app.ui.WorkbenchMiuixTheme(false) {
+                            androidx.compose.material3.Surface {
+                            val state by w.state.collectAsStateWithLifecycle()
+                            dev.zakocoder.app.ui.AiExtensionsPage(w, state, standalone = true, close = {})
+                            }
+                        }
+                    } }
+                    await { visibleText("编码与质量") }
+                    assertTrue(w.state.value.projects.isEmpty())
+                    assertEquals(AiBuiltinSkills.defaults.sorted(), w.ai.globalSkills.value.enabledSkills.sorted())
+                    field("frontend-design", context.getString(R.string.ai_skills_search))
+                    skillClick("切换 frontend-design")
+                    await { "builtin:frontend-design" in w.ai.globalSkills.value.enabledSkills && !w.ai.globalSkills.value.active }
+                    skillClick("查看 frontend-design")
+                    await { visibleText(context.getString(R.string.ai_skill_builtin_source)) }
+                    screenshot("ai-builtin-global-details")
+                    skillClick(context.getString(R.string.close))
+                    field("megacave", context.getString(R.string.ai_skills_search)); skillClick("切换 megacave")
+                    await { "builtin:megacave" in w.ai.globalSkills.value.enabledSkills && "builtin:caveman" !in w.ai.globalSkills.value.enabledSkills }
+                    skillClick(context.getString(R.string.ai_skills_recommended))
+                    await { !w.ai.globalSkills.value.active && w.ai.globalSkills.value.enabledSkills == AiBuiltinSkills.defaults }
                     field("", context.getString(R.string.ai_skills_search))
-                    scenario.recreate()
-                    await { !workbench.state.value.loading }
-                    assertEquals(AiBuiltinSkills.defaults, fixture.history.load(id).state!!.enabledSkills)
+                    withContext(Dispatchers.IO) {
+                        assertEquals(AiBuiltinSkills.defaults, AiGlobalSkills(isolated).load().enabled)
+                    }
                     assertEquals(0, fixture.server.requestCount)
                 }
             } finally {
-                main { injected?.ai?.stop() }; await { injected?.ai?.state?.value?.active != true }
-                owned?.let { id -> main { workbench.removeProject(id) }; await { !workbench.state.value.busy && workbench.state.value.projects.none { it.id == id } } }
-                if (previous != null) { main { workbench.select(previous) }; await { !workbench.state.value.busy } }
+                withContext(NonCancellable + Dispatchers.Main) { injected?.stopAll() }
             }
         }
     }

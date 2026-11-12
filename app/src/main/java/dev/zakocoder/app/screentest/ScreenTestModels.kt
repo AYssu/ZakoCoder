@@ -27,10 +27,12 @@ data class ScreenTestState(
     val projectId: String? = null,
     val packageName: String? = null,
     val apkPath: String? = null,
+    val taskId: String? = null,
+    val leaseId: String? = null,
     val enabled: Boolean = false,
     val connected: Boolean = false,
     val active: Boolean = false,
-    val access: ScreenTestAccess = ScreenTestAccess.Normal,
+    val access: ScreenTestAccess = ScreenTestAccess.Accessibility,
     val shareScreenshots: Boolean = false,
     val rootGranted: Boolean = false,
     val installAllowed: Boolean = false,
@@ -46,7 +48,7 @@ data class ScreenTestState(
     val overlayProgress: ScreenOverlayProgress = ScreenOverlayProgress(),
 )
 
-data class ScreenTestResult(val output: String, val imageUri: Uri? = null)
+data class ScreenTestResult(val output: String, val imageUri: Uri? = null, val packageName: String? = null)
 
 interface ScreenTestBackend {
     suspend fun execute(packageName: String, args: org.json.JSONObject): ScreenTestResult

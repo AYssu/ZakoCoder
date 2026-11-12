@@ -42,7 +42,7 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(access, revision) { states = access.snapshot() }
-    if (confirmRoot) AlertDialog(onDismissRequest = { confirmRoot = false },
+    if (confirmRoot) WorkbenchAlertDialog(onDismissRequest = { confirmRoot = false },
         title = { Text(stringResource(R.string.app_permissions_root)) },
         text = { Text(stringResource(R.string.app_permissions_root_confirm)) },
         confirmButton = { TextButton(onClick = { confirmRoot = false; onRequestRoot() }) { Text(stringResource(R.string.app_permissions_root_request)) } },
@@ -114,7 +114,7 @@ private fun PermissionGroup(title: String, content: @Composable ColumnScope.() -
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, Modifier.padding(start = 4.dp).semantics { heading() }, style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth(), content = content)
         }
     }
@@ -166,7 +166,7 @@ private fun PermissionContent(title: String, hint: String, status: String, grant
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(title, style = MaterialTheme.typography.bodyMedium)
                 if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall,
                     color = if (granted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }

@@ -104,11 +104,11 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
         CopyHelp(stringResource(R.string.copy_ai_headers_help_title), stringResource(R.string.copy_ai_headers_help))
         if (profile?.headerNames?.isNotEmpty() == true) Text(stringResource(R.string.ai_options_headers_saved, profile.headerNames.joinToString(", ")), style = MaterialTheme.typography.bodySmall)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ai_options_headers_replace), Modifier.weight(1f)); Switch(draft.replaceHeaders, { draft.replaceHeaders = it; changed() }, enabled = editable)
+            Text(stringResource(R.string.ai_options_headers_replace), Modifier.weight(1f)); WorkbenchSwitch(draft.replaceHeaders, { draft.replaceHeaders = it; changed() }, enabled = editable)
         }
         val headersInvalid = draft.replaceHeaders && runCatching { draft.headers() }.isFailure
-        if (draft.replaceHeaders) OutlinedTextField(draft.headersText, { draft.headersText = it.take(26000); changed() }, Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.ai_options_headers_lines)) }, minLines = 3, maxLines = 7, enabled = editable,
+        if (draft.replaceHeaders) WorkbenchTextField(draft.headersText, { draft.headersText = it.take(26000); changed() }, Modifier.fillMaxWidth(),
+            label = stringResource(R.string.ai_options_headers_lines), minLines = 3, maxLines = 7, enabled = editable,
             isError = headersInvalid,
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             supportingText = { Text(stringResource(if (headersInvalid) R.string.ai_reading_headers_invalid else R.string.ai_options_headers_empty)) })
@@ -119,8 +119,8 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
 @Composable
 private fun OptionField(value: String, update: (String) -> Unit, label: Int, editable: Boolean,
     invalid: Boolean, hint: Int, keyboard: KeyboardType = KeyboardType.Decimal) {
-    OutlinedTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
-        label = { Text(stringResource(label)) }, isError = invalid,
+    WorkbenchTextField(value, update, Modifier.fillMaxWidth(), enabled = editable, singleLine = true,
+        label = stringResource(label), isError = invalid,
         supportingText = if (invalid) { { Text(stringResource(hint)) } } else null,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrectEnabled = false))
 }

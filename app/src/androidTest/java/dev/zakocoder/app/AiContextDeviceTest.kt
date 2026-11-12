@@ -21,7 +21,10 @@ class AiContextDeviceTest {
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(condition: () -> Boolean) = withTimeout(45000) { while (!condition()) delay(20) }
     private fun controller(f: AiDeviceTest.Fixture) = AiController(
-        object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } },
+        object : ContextWrapper(context) {
+            override fun getFilesDir() = File(f.root, "control").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("${f.token}-$name", mode)
+        },
         { File(f.root, "project").apply { mkdirs() } }, { _, _ -> false }, { _, _ -> error("No shell expected") }, {}, {}, f.transport, f.config, history = f.history)
     private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.skillsLoading && !ai.state.value.permissionsLoading }
     private fun response(text: String, calls: List<AiCall> = emptyList()): MockResponse {
@@ -110,7 +113,7 @@ class AiContextDeviceTest {
                 }
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("long") }; ready(ai)
-                for (p in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(p, false) }
+                withoutSkills(ai)
                 main { ai.send(prompt) }; await { !ai.state.value.active }
                 assertEquals(AiPhase.Completed, ai.state.value.phase)
                 assertEquals(72, ai.state.value.toolCount); assertEquals(25, normal.get())
@@ -212,7 +215,13 @@ class AiContextDeviceTest {
         f.config.saveProfile(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null, profile.parameters, options))
     }
     private suspend fun withoutSkills(ai: AiController) {
-        for (skill in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(skill, false) }
+        main { ai.refreshGlobalSkills() }
+        await { ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading }
+        for (skill in ai.globalSkills.value.enabledSkills.toList()) {
+            main { ai.enableGlobalSkill(skill, false) }
+            await { !ai.globalSkills.value.active }
+        }
+        assertTrue(ai.globalSkills.value.enabledSkills.isEmpty())
     }
     @Test(timeout = 100000) fun disabledAutomaticCompressionStopsAtConfiguredBudgetWithoutSummaryRequest() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->

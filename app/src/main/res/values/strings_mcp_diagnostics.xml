@@ -5,9 +5,9 @@
     <string name="mcp_error_shape">配置结构不正确。请使用单个服务对象，或仅含 mcpServers 服务映射的对象；每个服务必须是对象。未保存。</string>
     <string name="mcp_error_size">配置超过 512 KiB。请拆分配置后重新导入。未保存。</string>
     <string name="mcp_error_count">一次导入需要包含 1–32 个服务。请检查 mcpServers 是否为空，或拆分配置。未保存。</string>
-    <string name="mcp_error_unknown_field">配置包含不支持的字段。支持 type、transport、url、command、args、env、headers、enabled、disabled 和 autoApprove；单服务还可包含 name。未保存。</string>
-    <string name="mcp_error_transport">连接方式缺失、冲突或不受支持。请使用 stdio、http（Streamable HTTP）或 sse；type 与 transport 同时填写时须一致。未保存。</string>
-    <string name="mcp_error_fields">配置字段类型、长度或组合不正确。args 应为字符串数组，env 与 headers 应为字符串映射；网络服务不能同时填写 command、args 或 env。未保存。</string>
+    <string name="mcp_error_unknown_field">配置包含不支持的字段。支持 type、transport、url、headers、enabled、disabled 和 autoApprove；单服务还可包含 name。未保存。</string>
+    <string name="mcp_error_transport">连接方式缺失、冲突或不受支持。请使用 http（Streamable HTTP）或 sse；本地服务请填写 localhost 或 127.0.0.1 的 HTTP 地址；type 与 transport 同时填写时须一致。未保存。</string>
+    <string name="mcp_error_fields">配置字段类型、长度或组合不正确。服务地址应为字符串，headers 应为名称和值都是字符串的 JSON 对象。未保存。</string>
     <string name="mcp_error_headers">请求头不合法。名称不能重复（忽略大小写），值不能包含换行；Host、Content-Type、Accept 等协议头由应用管理。未保存。</string>
     <string name="mcp_error_url">服务地址不合法。请填写完整的 http:// 或 https:// 域名或 IP 地址，并检查主机及端口（1–65535）。未保存。</string>
     <string name="mcp_error_url_secrets">服务地址不能包含用户名、密码、查询参数或片段。请将认证信息放在 headers 中。未保存。</string>
@@ -24,7 +24,7 @@
     <string name="mcp_error_redirect">MCP 服务返回重定向。应用不会携带认证头跟随跳转；请核实并直接配置最终 MCP 地址。</string>
     <string name="mcp_error_protocol">MCP 响应不符合协议。请核对连接方式、MCP 路径、协议版本和服务日志；返回网页或普通 API 不代表 MCP 连接成功。</string>
     <string name="mcp_error_limit">MCP 配置、响应或目录超过安全容量限制。请减少服务数量、缩小响应或分批操作；未自动重试。</string>
-    <string name="mcp_error_closed">当前 MCP 连接已结束或项目配置已变化。请回到当前项目重新连接；未重放之前的操作。</string>
+    <string name="mcp_error_closed">当前 MCP 连接已结束或服务配置已变化。请重新连接；未重放之前的操作。</string>
     <string name="mcp_error_code">错误代码：%1$s</string>
     <string name="mcp_error_title">操作未完成</string>
     <string name="mcp_error_copy">复制错误</string>

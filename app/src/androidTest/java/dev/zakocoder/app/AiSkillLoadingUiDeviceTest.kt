@@ -9,7 +9,13 @@ import androidx.activity.compose.setContent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
-import dev.zakocoder.app.ui.ZakoCoderApp
+import dev.zakocoder.app.ui.AiExtensionsPage
+import dev.zakocoder.app.ui.WorkbenchMiuixTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -45,7 +51,11 @@ class AiSkillLoadingUiDeviceTest {
                 node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_CLICK }
             // Text and Switch may share a label while remaining siblings. Prefer the
             // actionable match before climbing ancestors of any descriptive text.
-            matches.firstOrNull(::enabledClick)?.let { return it }
+            fun descendant(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+                if (enabledClick(node)) return node
+                return (0 until node.childCount).firstNotNullOfOrNull { node.getChild(it)?.let(::descendant) }
+            }
+            matches.firstNotNullOfOrNull(::descendant)?.let { return it }
             return matches.firstNotNullOfOrNull { match ->
                 var candidate = match.parent
                 while (candidate != null) {
@@ -82,11 +92,10 @@ class AiSkillLoadingUiDeviceTest {
         } } finally { bitmap.recycle() }
     }
 
-    @Test(timeout = 150000) fun daySkillModeAndSelectionRemainConversationScoped() = runBlocking { exercise(false) }
-    @Test(timeout = 150000) fun nightSkillModeAndSelectionRemainConversationScoped() = runBlocking { exercise(true) }
+    @Test(timeout = 150000) fun daySkillModeAndSelectionAreGlobalWithoutWorkspace() = runBlocking { exercise(false) }
+    @Test(timeout = 150000) fun nightSkillModeAndSelectionAreGlobalWithoutWorkspace() = runBlocking { exercise(true) }
 
     private suspend fun exercise(dark: Boolean) {
-        check(context.packageName.endsWith(".runtimecheck"))
         val automation = instrumentation.uiAutomation
         val flags = automation.serviceInfo.flags
         automation.serviceInfo = automation.serviceInfo.apply {
@@ -114,57 +123,78 @@ class AiSkillLoadingUiDeviceTest {
             main { owned = Workbench(isolated, fixture.transport, fixture.config, AiPermissionStore(isolated), fixture.history) }
             val workbench = requireNotNull(owned)
             await("Private workbench ready") { !workbench.state.value.loading && !workbench.ai.models.state.value.loading && !workbench.mcp.state.value.loading }
-            main { workbench.create("Skill 加载验收") }
-            await("Owned project ready") { !workbench.state.value.busy && workbench.state.value.projects.size == 1 }
-            val project = workbench.state.value.projects.single()
-            val first = UUID.randomUUID().toString(); val second = UUID.randomUUID().toString()
-            val firstTitle = "按需加载会话"; val secondTitle = "整篇加载会话"
-            withContext(Dispatchers.IO) {
-                fixture.history.save(project.id, AiState(projectId = project.id, conversationId = first, turn = 1,
-                    skillsInitialized = true, enabledSkills = emptyList(), timeline = listOf(AiEntry("first", firstTitle, role = AiRole.User))))
-                fixture.history.save(project.id, AiState(projectId = project.id, conversationId = second, turn = 1,
-                    skillsInitialized = true, enabledSkills = AiBuiltinSkills.defaults, timeline = listOf(AiEntry("second", secondTitle, role = AiRole.User))))
-                fixture.history.select(project.id, first)
+            withContext(Dispatchers.IO) { AiGlobalSkills(isolated).save(AiGlobalSkills.Selection(emptyList())) }
+            main { workbench.ai.refreshGlobalSkills() }
+            await("Global library ready without workspace") {
+                !workbench.ai.globalSkills.value.skillsLoading && workbench.ai.globalSkills.value.skillsInitialized
             }
-            main { workbench.ai.select(project.id) }
-            suspend fun ready(id: String) = await("Selected conversation ready") {
-                workbench.ai.state.value.conversationId == id && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading
-            }
-            ready(first)
+            assertTrue(workbench.state.value.projects.isEmpty())
+            assertNull(workbench.ai.state.value.projectId)
             withContext(Dispatchers.IO) { warmDeviceActivity() }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                scenario.onActivity { activity -> activity.setContent { ZakoCoderApp(workbench) } }
+                scenario.onActivity { activity -> activity.setContent {
+                    val state by workbench.state.collectAsStateWithLifecycle()
+                    WorkbenchMiuixTheme(dark) {
+                        Surface(Modifier.fillMaxSize().systemBarsPadding()) {
+                            AiExtensionsPage(workbench, state, initialTab = 0, standalone = true, close = {})
+                        }
+                    }
+                } }
                 instrumentation.waitForIdleSync()
-                if (find(context.getString(R.string.nav_ai)) == null) click(context.getString(R.string.app_navigation_open))
-                click(context.getString(R.string.nav_ai))
-                click(context.getString(R.string.ai_more)); click(context.getString(R.string.ai_extensions))
-                await("Skill panel identity") { find(firstTitle) != null }
-                assertFalse("Existing conversations default to eager bodies", workbench.ai.state.value.skillOnDemand)
-                screenshot("$theme-default-eager")
+                await("Global scope shown") { find(context.getString(R.string.extensions_global_scope)) != null }
+                assertFalse(workbench.ai.globalSkills.value.skillOnDemand)
+                assertTrue(workbench.ai.globalSkills.value.enabledSkills.isEmpty())
+                screenshot("$theme-global-empty")
                 search("frontend-design")
                 click(context.getString(R.string.ai_skill_toggle, "frontend-design"))
-                await("Selection applied") { workbench.ai.state.value.enabledSkills == listOf("builtin:frontend-design") }
+                await("Global selection applied") {
+                    workbench.ai.globalSkills.value.enabledSkills == listOf("builtin:frontend-design") &&
+                        !workbench.ai.globalSkills.value.active
+                }
                 click(context.getString(R.string.ai_skill_on_demand))
-                await("Lazy mode selected") { workbench.ai.state.value.skillOnDemand }
-                screenshot("$theme-on-demand-selected")
-                // Both switches below are actual UI conversation picker selections.
-                click(firstTitle); click(secondTitle); ready(second)
-                assertFalse("Other conversation retains eager mode", workbench.ai.state.value.skillOnDemand)
-                assertEquals(AiBuiltinSkills.defaults, workbench.ai.state.value.enabledSkills)
-                screenshot("$theme-second-eager")
-                click(secondTitle); click(firstTitle); ready(first)
-                assertTrue("First conversation restores lazy mode", workbench.ai.state.value.skillOnDemand)
-                assertEquals(listOf("builtin:frontend-design"), workbench.ai.state.value.enabledSkills)
-                screenshot("$theme-first-restored")
-                click(context.getString(R.string.ai_extensions_back))
+                await("Global lazy mode saved") {
+                    workbench.ai.globalSkills.value.skillOnDemand && !workbench.ai.globalSkills.value.active
+                }
+                screenshot("$theme-global-on-demand")
+                // Workspace and historical conversation snapshots cannot replace global configuration.
+                main { workbench.create("Skill 全局配置验证") }
+                await("First workspace created") { !workbench.state.value.busy && workbench.state.value.projects.size == 1 }
+                val project = workbench.state.value.projects.single()
+                val first = UUID.randomUUID().toString(); val second = UUID.randomUUID().toString()
+                withContext(Dispatchers.IO) {
+                    fixture.history.save(project.id, AiState(projectId = project.id, conversationId = first, turn = 1,
+                        skillsInitialized = true, enabledSkills = emptyList(), timeline = listOf(AiEntry("first", "旧空选择", role = AiRole.User))))
+                    fixture.history.save(project.id, AiState(projectId = project.id, conversationId = second, turn = 1,
+                        skillsInitialized = true, enabledSkills = AiBuiltinSkills.defaults, timeline = listOf(AiEntry("second", "旧推荐选择", role = AiRole.User))))
+                    fixture.history.select(project.id, first)
+                }
+                main { workbench.ai.select(project.id) }
+                suspend fun ready(id: String) = await("Historical conversation loaded: $id") {
+                    workbench.ai.state.value.conversationId == id && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading
+                }
+                ready(first)
+                for (conversation in listOf(second, first)) {
+                    main { workbench.ai.conversation(conversation) }
+                    ready(conversation)
+                    assertEquals(listOf("builtin:frontend-design"), workbench.ai.globalSkills.value.enabledSkills)
+                    assertTrue(workbench.ai.globalSkills.value.skillOnDemand)
+                }
+                main { workbench.create("第二个工作区") }
+                await("Second workspace created") { !workbench.state.value.busy && workbench.state.value.projects.size == 2 }
+                val other = workbench.state.value.projects.single { it.id != project.id }
+                main { workbench.ai.select(other.id) }
+                await("Other workspace ready") {
+                    workbench.ai.state.value.projectId == other.id && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading
+                }
+                assertEquals(listOf("builtin:frontend-design"), workbench.ai.globalSkills.value.enabledSkills)
+                assertTrue(workbench.ai.globalSkills.value.skillOnDemand)
+                screenshot("$theme-global-after-workspace-switch")
+                withContext(Dispatchers.IO) {
+                    assertEquals(AiGlobalSkills.Selection(listOf("builtin:frontend-design"), true), AiGlobalSkills(isolated).load())
+                }
                 assertEquals(0, fixture.server.requestCount)
                 assertFalse(workbench.ai.state.value.active)
                 assertTrue(workbench.state.value.sessions.isEmpty())
-                withContext(Dispatchers.IO) {
-                    assertTrue(fixture.history.load(project.id, first).state!!.skillOnDemand)
-                    assertEquals(listOf("builtin:frontend-design"), fixture.history.load(project.id, first).state!!.enabledSkills)
-                    assertFalse(fixture.history.load(project.id, second).state!!.skillOnDemand)
-                }
             }
         } finally {
             withContext(NonCancellable + Dispatchers.Main) { owned?.stopAll() }

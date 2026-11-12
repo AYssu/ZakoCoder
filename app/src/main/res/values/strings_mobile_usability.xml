@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mobile_add_project">添加项目</string>
     <string name="mobile_import_source">导入现有源码</string>
     <string name="mobile_import_source_hint">选择文件夹，导入为应用内副本</string>
     <string name="mobile_create_empty">创建空项目</string>

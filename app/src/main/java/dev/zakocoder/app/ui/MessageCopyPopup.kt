@@ -23,6 +23,7 @@ import dev.zakocoder.app.R
 @Composable
 internal fun MessageCopyPopup(onDismiss: () -> Unit, onCopy: () -> Unit, onEdit: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null, onRequests: (() -> Unit)? = null) {
+    if (!LocalWorkbenchPageInteractive.current) return
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     Popup(popupPositionProvider = object : PopupPositionProvider {
         override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {

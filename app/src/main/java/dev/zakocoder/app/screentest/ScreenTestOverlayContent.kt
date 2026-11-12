@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -30,7 +31,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ui.WorkbenchCard
+import dev.zakocoder.app.ui.WorkbenchPrimaryButton
+import dev.zakocoder.app.ui.WorkbenchSecondaryButton
 import dev.zakocoder.app.ui.Glyph
+import dev.zakocoder.app.ui.WorkbenchMiuixTheme
 import dev.zakocoder.app.ui.WorkbenchColors
 import dev.zakocoder.app.ui.WorkbenchDarkColors
 import dev.zakocoder.app.ui.WorkbenchIcon
@@ -47,7 +52,7 @@ internal data class ScreenOverlayPresentation(val packageName: String = "", val 
 internal fun DebugOverlayCard(model: ScreenOverlayPresentation, expanded: Boolean, scroll: ScrollState, followLatest: Boolean, onFollowLatest: (Boolean) -> Unit,
     dark: Boolean, onExpand: () -> Unit, onReturn: () -> Unit, onStop: () -> Unit,
     onDrag: (Float, Float) -> Unit, onActionBounds: (Int, Rect) -> Unit) {
-    MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+    WorkbenchMiuixTheme(dark) {
         val colors = MaterialTheme.colorScheme
         val progressColor = when (model.progress.phase) {
             ScreenOverlayPhase.Failed -> if (dark) Color(0xFFFF9B94) else Color(0xFFB42318)
@@ -61,8 +66,8 @@ internal fun DebugOverlayCard(model: ScreenOverlayPresentation, expanded: Boolea
         val drag = Modifier.pointerInput(Unit) {
             detectDragGestures { change, amount -> change.consume(); dragCallback(amount.x, amount.y) }
         }
-        Surface(Modifier.fillMaxSize(), shape = RoundedCornerShape(if (expanded) 16.dp else 12.dp),
-            color = colors.surface, border = BorderStroke(1.dp, colors.outlineVariant), shadowElevation = 6.dp) {
+        WorkbenchCard(Modifier.fillMaxSize().shadow(1.dp, RoundedCornerShape(12.dp)), cornerRadius = 12.dp,
+            color = colors.surface) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
             val shortWindow = maxHeight < 400.dp
             if (!expanded) {
@@ -141,14 +146,14 @@ internal fun DebugOverlayCard(model: ScreenOverlayPresentation, expanded: Boolea
                     OverlayConversation(model.conversation, scroll, followLatest, onFollowLatest, Modifier.weight(1f).fillMaxWidth())
                     HorizontalDivider(color = colors.outlineVariant)
                     Row(Modifier.fillMaxWidth().padding(if (shortWindow) 8.dp else 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(onClick = onReturn, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                        WorkbenchPrimaryButton(onClick = onReturn, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                             .onGloballyPositioned { onActionBounds(R.string.screen_overlay_return, it.boundsInRoot()) }) {
                             WorkbenchIcon(Glyph.Ai, Modifier.size(18.dp), tint = colors.onPrimary)
                             Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.debug_overlay_return), maxLines = 1)
                         }
-                        OutlinedButton(onClick = onStop, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = 12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = if (dark) Color(0xFFFF9B94) else Color(0xFFB42318)),
-                            border = BorderStroke(1.dp, colors.outlineVariant),
+                        WorkbenchSecondaryButton(onClick = onStop, shape = RoundedCornerShape(10.dp), contentPadding = PaddingValues(horizontal = 12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceContainerLow, contentColor = if (dark) Color(0xFFFF9B94) else Color(0xFFB42318)),
+                            border = BorderStroke(1.dp, (if (dark) Color(0xFFFF9B94) else Color(0xFFB42318)).copy(alpha = .3f)),
                             modifier = Modifier.heightIn(min = 48.dp).onGloballyPositioned { onActionBounds(R.string.screen_overlay_stop, it.boundsInRoot()) }) {
                             Box(Modifier.size(10.dp).background(if (dark) Color(0xFFFF9B94) else Color(0xFFB42318), RoundedCornerShape(2.dp)))
                             Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.debug_overlay_stop), maxLines = 1)

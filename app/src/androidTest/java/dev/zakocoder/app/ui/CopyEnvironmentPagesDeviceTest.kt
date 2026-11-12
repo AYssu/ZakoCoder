@@ -112,7 +112,8 @@ class CopyEnvironmentPagesDeviceTest {
                 assertTrue(workbench.state.value.sessions.isEmpty())
 
                 instrumentation.runOnMainSync { page = 2 }
-                await("Project import sheet") { shown(base.getString(R.string.mobile_add_project)) }
+                await("Workspace modes") { shown(base.getString(R.string.workspace_flow_work)) }
+                click(base.getString(R.string.workspace_flow_work))
                 scrollUntil(base.getString(R.string.mobile_clone_hint), 350f)
                 assertTrue(base.getString(R.string.mobile_clone_hint).contains("私有"))
                 capture(dark, "add-project")

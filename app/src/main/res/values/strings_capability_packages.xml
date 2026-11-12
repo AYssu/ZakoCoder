@@ -1,18 +1,17 @@
 <resources>
     <string name="capability_packages_title">能力包</string>
-    <string name="capability_packages_subtitle">为当前项目按需开启工具</string>
+    <string name="capability_packages_subtitle">按需开启工具，系统权限与任务授权单独确认</string>
     <string name="capability_packages_settings_hint">屏幕识别与操作 · SSH 远程开发</string>
     <string name="capability_packages_project">当前项目 · %1$s</string>
     <string name="capability_packages_no_project">先选择一个项目，再管理它可以使用的能力包。</string>
     <string name="capability_packages_enabled">已启用</string>
     <string name="capability_packages_disabled">未启用</string>
-    <string name="capability_packages_project_only">仅此项目</string>
     <string name="capability_screen_configure">配置屏幕操作</string>
     <string name="capability_ssh_configure">配置 SSH 连接</string>
-    <string name="capability_packages_loading_hint">能力包默认关闭，仅对当前项目生效。开启后，操作按当前工具权限执行。</string>
+    <string name="capability_packages_loading_hint">屏幕操作为通用配置，SSH 按工作区设置。能力包默认关闭，开启不等于授权执行。</string>
     <string name="capability_screen_title">Android 屏幕识别与操作</string>
     <string name="capability_screen_description">读取界面节点，按需截图；点击、输入和检查应用界面。</string>
-    <string name="capability_screen_hint">优先使用节点树。截图分享、无障碍和 Root 权限分别授权，仅操作你选择的项目应用。</string>
+    <string name="capability_screen_hint">优先读取节点；截图分享、系统权限和本次设备操作任务分别授权。</string>
     <string name="capability_ssh_title">SSH 远程开发</string>
     <string name="capability_ssh_description">连接远程主机，执行命令和管理文件；可选 tmux 保留长任务。</string>
     <string name="capability_ssh_hint">连接凭据保存在本机，不发送给模型。长任务可使用 tmux 保持运行。</string>

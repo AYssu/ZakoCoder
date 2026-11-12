@@ -111,7 +111,7 @@ private fun ServiceToggle(label: Int, checked: Boolean, enabled: Boolean, update
     val description = stringResource(label)
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(description, Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.bodySmall)
-        Switch(checked, update, enabled = enabled, modifier = Modifier.semantics { contentDescription = description })
+        WorkbenchSwitch(checked, update, enabled = enabled, modifier = Modifier.semantics { contentDescription = description })
     }
 }
 

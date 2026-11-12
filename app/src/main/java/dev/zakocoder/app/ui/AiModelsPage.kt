@@ -42,9 +42,9 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
         AiModelEditor(ai, profile) { editing = false }
         return
     }
-    BackHandler(onBack = close)
-    Column(Modifier.fillMaxSize()) {
-        ModelNavigation(stringResource(R.string.ai_settings), close) {
+    val back = rememberWorkbenchBackMotion(onBack = close)
+    Column(Modifier.fillMaxSize().then(back.modifier)) {
+        ModelNavigation(stringResource(R.string.ai_settings), back.close) {
             TextButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active && !state.loading && !state.saving && state.catalog.profiles.size < 32) {
                 WorkbenchIcon(Glyph.Add, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ai_models_add))
@@ -66,9 +66,9 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
             item { Text(stringResource(R.string.ai_models_list_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(state.catalog.profiles, key = { it.id }) { item ->
                 val selected = item.id == state.catalog.activeId
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surface,
+                    border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(item.name, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
                             if (selected) Text(stringResource(R.string.ai_models_current), color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
@@ -89,7 +89,7 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
             }
         }
     }
-    deleting?.let { item -> AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_models_delete_title)) },
+    deleting?.let { item -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_models_delete_title)) },
         text = { Text(stringResource(R.string.ai_models_delete_hint, item.name) + if (item.id == "legacy") "\n" + stringResource(R.string.ai_models_legacy_retained) else "") }, confirmButton = { TextButton(onClick = { deleting = null; ai.models.delete(item.id) }) { Text(stringResource(R.string.file_delete)) } },
         dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
@@ -179,11 +179,11 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                 if (original != null && normalized != null && runCatching { !sameModelOrigin(original.endpoint, normalized) }.getOrDefault(false) &&
                     (original.hasKey || original.headerNames.isNotEmpty())) Text(stringResource(R.string.ai_provider_origin_hint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(key, { key = it; clearKey = false; changed() }, label = { Text(stringResource(if (original?.hasKey == true) R.string.ai_key_replace else R.string.ai_key)) },
+                WorkbenchTextField(key, { key = it; clearKey = false; changed() }, label = stringResource(if (original?.hasKey == true) R.string.ai_key_replace else R.string.ai_key),
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                     singleLine = true, enabled = editable, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth(),
                     supportingText = { Text(stringResource(if (clearKey) R.string.ai_models_key_cleared else if (original?.hasKey == true && key.isEmpty()) R.string.ai_models_key_retained else R.string.ai_models_key_private), fontSize = 11.sp) })
-                if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(clearKey, { clearKey = it; key = ""; changed() }, enabled = editable); Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp) }
+                if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) { WorkbenchCheckbox(clearKey, { clearKey = it; key = ""; changed() }, enabled = editable); Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp) }
             }
             ModelSection(stringResource(R.string.ai_models_model_section)) {
                 ModelField(model, ::selectModel, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
@@ -209,7 +209,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 if (!picker && state.probeProgress != null) AiModelProbeProgressContent(state)
                 if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); TextButton(onClick = ai.models::stopProbe) { Text(stringResource(R.string.cancel)) } }
-                else OutlinedButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && modelValid && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
+                else WorkbenchSecondaryButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && modelValid && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -240,7 +240,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
             endpoint = preset.endpoint; selectProtocol(preset.protocol); templates = false
         }
     }
-    if (discard) AlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },
+    if (discard) WorkbenchAlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },
         confirmButton = { TextButton(onClick = { key = ""; close() }) { Text(stringResource(R.string.ai_models_discard)) } }, dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.ai_models_keep_editing)) } })
 }
 
@@ -251,15 +251,15 @@ private fun sameModelOrigin(first: String, second: String): Boolean =
 private fun ModelSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+        WorkbenchCard(color = MaterialTheme.colorScheme.surface, cornerRadius = 12.dp) {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         }
     }
 }
 @Composable
 private fun ModelField(value: String, update: (String) -> Unit, label: Int, enabled: Boolean = true, error: Boolean = false, keyboard: KeyboardType = KeyboardType.Text) {
     val description = stringResource(label)
-    OutlinedTextField(value, update, Modifier.fillMaxWidth().semantics { contentDescription = description }, label = { Text(stringResource(label), fontSize = 12.sp) }, enabled = enabled, singleLine = true, isError = error,
+    WorkbenchTextField(value, update, Modifier.fillMaxWidth().semantics { contentDescription = description }, label = description, enabled = enabled, singleLine = true, isError = error,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrectEnabled = false), textStyle = LocalTextStyle.current.copy(fontSize = 13.sp))
 }
 @Composable
@@ -267,7 +267,7 @@ private fun ParameterInput(label: Int, enabled: Boolean, toggle: (Boolean) -> Un
     val description = stringResource(R.string.ai_models_enable_parameter, stringResource(label))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(label), Modifier.weight(1f), fontSize = 13.sp)
-        Switch(enabled, toggle, enabled = editable, modifier = Modifier.semantics { contentDescription = description })
+        WorkbenchSwitch(enabled, toggle, enabled = editable, modifier = Modifier.semantics { contentDescription = description })
     }
     if (enabled) ModelField(value, update, label, editable, !valid, keyboard)
 }

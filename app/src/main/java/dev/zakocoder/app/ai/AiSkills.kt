@@ -1,6 +1,6 @@
 package dev.zakocoder.app.ai
 
-/** Project-owned Markdown instructions. No automatic script execution, installation or privilege changes. */
+/** Markdown instructions stored under the root provided by the owner. No automatic script execution, installation or privilege changes. */
 enum class AiSkillCategory { Coding, Expression, Project }
 data class AiSkill(val path: String, val name: String, val description: String, val valid: Boolean = true,
     val builtIn: Boolean = false, val recommended: Boolean = false, val category: AiSkillCategory = AiSkillCategory.Project)
@@ -10,7 +10,7 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
         const val MAX_CUSTOM_CHARS = 24000
         const val MAX_CUSTOM_BYTES = 64000
     }
-    /** Creates one project-owned skill. Existing directories are never reused or overwritten. Blocking IO. */
+    /** Creates one skill under the supplied root. Existing directories are never reused or overwritten. Blocking IO. */
     fun create(project: String, name: String, description: String, body: String, operationId: String = java.util.UUID.randomUUID().toString()): AiSkill {
         require(name.isNotBlank() && name.length <= 100 && name.none(Char::isISOControl))
         require(description.isNotBlank() && description.length <= 500 && description.none(Char::isISOControl))
@@ -151,8 +151,8 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
             val fallback = path.substringBeforeLast('/').substringAfterLast('/')
             try {
                 val text = files.read(project, path).text
-                val metadata = metadata(text)
-                AiSkill(path, metadata.first.ifBlank { fallback }.take(100), metadata.second.take(500))
+                val metadata = validateMarkdown(text)
+                AiSkill(path, metadata.first, metadata.second)
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { AiSkill(path, fallback.take(100), "", false) }
         }
@@ -163,7 +163,7 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
         val available = scan(project).filter { it.valid }.associateBy { it.path }
         val result = paths.joinToString("\n\n") { path ->
             require(path in available)
-            val text = if (available.getValue(path).builtIn) requireNotNull(builtIns).content(path) else files.read(project, path).text
+            val text = if (available.getValue(path).builtIn) requireNotNull(builtIns).content(path) else readCustom(project, path)
             "Skill: ${available.getValue(path).name}; source: $path\n$text"
         }
         require(result.length <= 32000)
@@ -184,8 +184,12 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
         return AiSkillSession(selected) { skill, resource ->
             validateSkillResource(resource)
             if (skill.builtIn) requireNotNull(builtIns).resource(skill.path, resource)
-            else files.read(project, skill.path.substringBeforeLast('/') + "/" + resource).text
+            else readCustom(project, skill.path.substringBeforeLast('/') + "/" + resource)
         }
+    }
+
+    fun readCustom(project: String, path: String): String {
+        return files.read(project, path).text
     }
 
     private fun metadata(text: String): Pair<String, String> {

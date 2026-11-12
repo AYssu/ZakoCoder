@@ -26,6 +26,8 @@
     </queries>
     <application
         android:name=".ZakoApplication"
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="33"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:fullBackupContent="false"

@@ -1,0 +1,10 @@
+<resources>
+    <string name="drawer_new_conversation">新增对话</string>
+    <string name="drawer_conversations">对话</string>
+    <string name="drawer_manage_workspaces">管理工作区</string>
+    <string name="drawer_no_workspaces">先添加一个工作区，开始你的第一段对话。</string>
+    <string name="drawer_open_failed">暂时无法打开对话。请重试，或到“管理工作区”查看详情。</string>
+    <string name="drawer_history_retry">对话暂不可用，点击查看或重试</string>
+    <string name="drawer_expand_workspace">展开工作区对话</string>
+    <string name="drawer_collapse_workspace">收起工作区对话</string>
+</resources>

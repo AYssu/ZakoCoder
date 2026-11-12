@@ -34,8 +34,9 @@ class CapabilityPackagesDeviceTest {
             main { recreated = CapabilityPackages(context) }; await { recreated.state.value.loaded }
             assertNull(recreated.state.value.error)
             assertEquals(setOf(CapabilityPackage.Screen), recreated.snapshot("project-a").keys)
-            assertEquals(setOf(CapabilityPackage.Ssh), recreated.snapshot("project-b").keys)
-            assertTrue(recreated.snapshot("project-c").isEmpty())
+            assertEquals(setOf(CapabilityPackage.Screen, CapabilityPackage.Ssh), recreated.snapshot("project-b").keys)
+            assertEquals(setOf(CapabilityPackage.Screen), recreated.snapshot("project-c").keys)
+            assertTrue(recreated.enabled(null, CapabilityPackage.Screen))
             assertNotEquals(oldScreen, recreated.snapshot("project-a")[CapabilityPackage.Screen])
             assertNotEquals(oldSsh, recreated.snapshot("project-b")[CapabilityPackage.Ssh])
         }
@@ -52,12 +53,13 @@ class CapabilityPackagesDeviceTest {
                 packages.setEnabled("project-a", CapabilityPackage.Screen, false)
                 assertFalse(packages.enabled("project-a", CapabilityPackage.Screen))
                 assertTrue(packages.snapshot("project-a").isEmpty())
-                assertEquals("project-a" to CapabilityPackage.Screen, changes.last())
+                assertEquals(CapabilityPackage.Screen, changes.last().second)
             }
             await { !packages.state.value.busy }
             main { packages.setEnabled("project-a", CapabilityPackage.Screen, true) }; await { !packages.state.value.busy }
             assertNotEquals(first, packages.snapshot("project-a")[CapabilityPackage.Screen])
-            assertTrue(packages.snapshot("project-b").isEmpty())
+            assertEquals(first != packages.snapshot("project-b")[CapabilityPackage.Screen], true)
+            assertEquals(packages.snapshot("project-a")[CapabilityPackage.Screen], packages.snapshot("project-b")[CapabilityPackage.Screen])
         }
     }
 
@@ -82,7 +84,8 @@ class CapabilityPackagesDeviceTest {
             lateinit var packages: CapabilityPackages
             main { packages = CapabilityPackages(context) }; await { packages.state.value.loaded }
             assertNull(packages.state.value.error)
-            assertEquals(setOf(CapabilityPackage.Screen), packages.snapshot("project-a").keys)
+            assertTrue("Legacy project screen switches must not become global consent", packages.snapshot("project-a").isEmpty())
+            assertFalse(packages.enabled(null, CapabilityPackage.Screen))
             assertEquals(setOf(CapabilityPackage.Ssh), packages.snapshot("project-b").keys)
         }
     }

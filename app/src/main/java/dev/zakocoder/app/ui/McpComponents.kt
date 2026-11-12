@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,13 +36,12 @@ import dev.zakocoder.app.mcp.McpController
 import dev.zakocoder.app.mcp.McpServer
 import dev.zakocoder.app.mcp.McpTransport
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.util.UUID
 
 @Composable
-internal fun McpManagementPanel(controller: McpController, projectId: String?, editable: Boolean, modifier: Modifier = Modifier) {
+internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PARAMETER") projectId: String?, editable: Boolean, modifier: Modifier = Modifier) {
     val state by controller.state.collectAsStateWithLifecycle()
     var adding by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<McpServer?>(null) }
@@ -53,7 +53,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
     var connecting by remember { mutableStateOf<String?>(null) }
     var failedServer by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(projectId) { failedServer = null; viewing = null; confirmation = null }
+    LaunchedEffect(Unit) { failedServer = null; viewing = null; confirmation = null }
     val canEdit = editable && !state.loading && !state.busy && connecting == null
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -91,7 +91,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
                 }
             }
             items(state.servers, key = { it.id }) { server ->
-                val tested = state.probeProjectId == projectId && state.probeServerId == server.id && state.probeResult.isNotEmpty()
+                val tested = state.probeProjectId == "global-network" && state.probeServerId == server.id && state.probeResult.isNotEmpty()
                 McpDesignCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -101,12 +101,12 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         val switchDescription = stringResource(R.string.mcp_switch, server.name)
-                        Switch(modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = switchDescription },
+                        WorkbenchSwitch(modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = switchDescription },
                             checked = server.enabled, onCheckedChange = { enabled ->
                                 if (enabled) confirmation = server to false else controller.setEnabled(server.id, false)
                             }, enabled = canEdit)
                     }
-                    Text(if (server.transport == McpTransport.Stdio) server.command else remoteTarget(server.url),
+                    Text(remoteTarget(server.url),
                         fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     val status = when {
@@ -120,7 +120,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
                         color = if (failedServer == server.id) MaterialTheme.colorScheme.error else if (server.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { confirmation = server to true }, enabled = canEdit && server.enabled && projectId != null,
+                        TextButton(onClick = { confirmation = server to true }, enabled = canEdit && server.enabled,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                             Text(stringResource(R.string.mcp_connect))
                         }
@@ -133,8 +133,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
                             WorkbenchIcon(Glyph.Trash, description = stringResource(R.string.mcp_delete), modifier = Modifier.size(20.dp))
                         }
                     }
-                    if (projectId == null && server.enabled) Text(stringResource(R.string.mcp_project_required),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                 }
             }
         }
@@ -152,37 +151,32 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
         Text(stringResource(R.string.mcp_approval_boundary), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     confirmation?.let { (server, probe) ->
-        AlertDialog(onDismissRequest = { confirmation = null }, title = { Text(stringResource(if (probe) R.string.mcp_connect_confirm else R.string.mcp_enable_confirm)) },
+        WorkbenchAlertDialog(onDismissRequest = { confirmation = null }, title = { Text(stringResource(if (probe) R.string.mcp_connect_confirm else R.string.mcp_enable_confirm)) },
             text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(server.name, style = MaterialTheme.typography.titleSmall)
-                Text(stringResource(if (server.transport == McpTransport.Stdio) R.string.mcp_stdio_risk else R.string.mcp_remote_risk))
-                if (server.transport == McpTransport.Stdio) {
-                    Text(stringResource(R.string.mcp_guest_cwd, projectId?.let { "/workspace/$it" } ?: stringResource(R.string.mcp_no_project)), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                    Text(server.command, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                    Text(stringResource(R.string.mcp_argument_count, server.args.size), style = MaterialTheme.typography.bodySmall)
-                    Text(stringResource(R.string.mcp_environment_keys, server.env.keys.joinToString(", ").ifEmpty { "—" }), style = MaterialTheme.typography.bodySmall)
-                } else Text(remoteOrigin(server.url), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.mcp_remote_risk))
+                Text(remoteOrigin(server.url), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.mcp_approval_boundary), style = MaterialTheme.typography.bodySmall)
             } },
             confirmButton = { TextButton(onClick = {
                 confirmation = null
-                if (probe) projectId?.let { project -> scope.launch {
+                if (probe) scope.launch {
                     connecting = server.id
                     failedServer = null
                     try {
-                        controller.probe(project, server.id).join()
+                        controller.probe("global-network", server.id).join()
                         if (controller.state.value.error.isNotEmpty()) failedServer = server.id
                     } finally { connecting = null }
-                } } else controller.setEnabled(server.id, true)
-            }, enabled = canEdit && (!probe || projectId != null)) { Text(stringResource(R.string.mcp_confirm)) } },
+                } else controller.setEnabled(server.id, true)
+            }, enabled = canEdit) { Text(stringResource(R.string.mcp_confirm)) } },
             dismissButton = { TextButton(onClick = { confirmation = null }) { Text(stringResource(R.string.mcp_cancel)) } })
     }
-    deleting?.let { server -> AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.mcp_delete_confirm, server.name)) },
+    deleting?.let { server -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.mcp_delete_confirm, server.name)) },
         text = { Text(stringResource(R.string.mcp_delete_effect)) },
         confirmButton = { TextButton(onClick = { controller.remove(server.id); deleting = null }, enabled = canEdit) { Text(stringResource(R.string.mcp_delete), color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.mcp_cancel)) } }) }
     viewing?.let { id -> AiFullScreen(stringResource(R.string.mcp_tools), { viewing = null }) {
-        val result = state.probeResult.takeIf { state.probeProjectId == projectId && state.probeServerId == id }.orEmpty()
+        val result = state.probeResult.takeIf { state.probeProjectId == "global-network" && state.probeServerId == id }.orEmpty()
         val tools = remember(result) { runCatching {
             val array = JSONObject(result).getJSONArray("tools")
             (0 until array.length()).map { index ->
@@ -201,7 +195,7 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
                 if (tools?.isEmpty() == true) item { Text(stringResource(R.string.mcp_no_tools)) }
                 tools?.let { values -> items(values.size) { index ->
                     val (name, description) = values[index]
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(16.dp)) {
+                    WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow, cornerRadius = 12.dp) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(name, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleSmall)
                             if (description.isNotEmpty()) Text(description.take(4000), style = MaterialTheme.typography.bodySmall)
@@ -219,7 +213,6 @@ internal fun McpManagementPanel(controller: McpController, projectId: String?, e
 
 @Composable
 private fun transportLabel(transport: McpTransport): String = stringResource(when (transport) {
-    McpTransport.Stdio -> R.string.mcp_transport_stdio
     McpTransport.StreamableHttp -> R.string.mcp_transport_http
     McpTransport.Sse -> R.string.mcp_transport_sse
 })
@@ -235,11 +228,8 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
     val scope = rememberCoroutineScope()
     val id = remember { initial?.id ?: UUID.randomUUID().toString() }
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
-    var transport by remember { mutableStateOf(initial?.transport ?: McpTransport.Stdio) }
+    var transport by remember { mutableStateOf(initial?.transport ?: McpTransport.StreamableHttp) }
     var url by remember { mutableStateOf(initial?.url.orEmpty()) }
-    var command by remember { mutableStateOf(initial?.command.orEmpty()) }
-    var args by remember { mutableStateOf(JSONArray(initial?.args ?: emptyList<String>()).toString()) }
-    var environment by remember { mutableStateOf(JSONObject(initial?.env ?: emptyMap<String, String>()).toString()) }
     val credentialFields = remember { McpBearerCredentials.split(initial?.headers.orEmpty()) }
     var bearerToken by remember { mutableStateOf(credentialFields.token) }
     var revealToken by remember { mutableStateOf(false) }
@@ -253,8 +243,8 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
     AiFullScreen(stringResource(if (initial == null) R.string.mcp_design_add_server else R.string.mcp_edit), close) {
         Column(Modifier.weight(1f).fillMaxWidth()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(name, { if (it.length <= 100) { name = it; invalid = false } }, label = { Text(stringResource(R.string.mcp_name)) }, enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Surface(shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+                WorkbenchTextField(name, { if (it.length <= 100) { name = it; invalid = false } }, label = stringResource(R.string.mcp_name), enabled = enabled, singleLine = true, modifier = Modifier.fillMaxWidth())
+                WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surface) {
                     Row(Modifier.fillMaxWidth().clickable(enabled = enabled) { choosingTransport = true }.heightIn(min = 64.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(stringResource(R.string.mcp_design_protocol), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -263,10 +253,8 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
                         WorkbenchIcon(Glyph.ChevronDown, Modifier.size(18.dp))
                     }
                 }
-                if (transport == McpTransport.Stdio) {
-                    OutlinedTextField(command, { if (it.length <= 2048) { command = it; invalid = false } }, label = { Text(stringResource(R.string.mcp_command)) }, enabled = enabled, modifier = Modifier.fillMaxWidth())
-                } else {
-                    OutlinedTextField(url, { value ->
+                run {
+                    WorkbenchTextField(url, { value ->
                         if (value.length <= 2048) {
                             if (remoteOrigin(value) != remoteOrigin(url) && (headers != "{}" || bearerToken.isNotEmpty())) {
                                 headers = "{}"; bearerToken = ""; revealToken = false; credentialsCleared = true
@@ -274,10 +262,10 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
                             url = value
                             invalid = false
                         }
-                    }, label = { Text(stringResource(R.string.mcp_url)) }, enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
+                    }, label = stringResource(R.string.mcp_url), enabled = enabled, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
                     if (credentialsCleared) Text(stringResource(R.string.mcp_credentials_cleared), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    OutlinedTextField(bearerToken, { if (it.length <= 8192) { bearerToken = it; invalid = false } },
-                        label = { Text(stringResource(R.string.mcp_bearer_token)) },
+                    WorkbenchTextField(bearerToken, { if (it.length <= 8192) { bearerToken = it; invalid = false } },
+                        label = stringResource(R.string.mcp_bearer_token),
                         supportingText = { Text(stringResource(R.string.mcp_bearer_hint)) },
                         trailingIcon = { TextButton(onClick = { revealToken = !revealToken }, enabled = enabled) {
                             Text(stringResource(if (revealToken) R.string.mcp_bearer_hide else R.string.mcp_bearer_show), style = MaterialTheme.typography.labelSmall)
@@ -287,7 +275,7 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                         modifier = Modifier.fillMaxWidth())
                 }
-                Surface(shape = RoundedCornerShape(16.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+                WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surface) {
                     Column(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().clickable { advanced = !advanced; reveal = false }.heightIn(min = 56.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(stringResource(R.string.mcp_design_advanced), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
@@ -295,12 +283,9 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
                         }
                         if (advanced) Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(stringResource(R.string.mcp_design_advanced_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (transport == McpTransport.Stdio) {
-                                McpSecretField(args, { if (it.length <= 65536) { args = it; invalid = false } }, R.string.mcp_args, enabled, reveal)
-                                McpSecretField(environment, { if (it.length <= 131072) { environment = it; invalid = false } }, R.string.mcp_env, enabled, reveal)
-                            } else McpSecretField(headers, { if (it.length <= 131072) { headers = it; invalid = false } }, R.string.mcp_other_headers, enabled, reveal)
+                            McpSecretField(headers, { if (it.length <= 131072) { headers = it; invalid = false } }, R.string.mcp_other_headers, enabled, reveal)
                             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(reveal, { reveal = it })
+                                WorkbenchCheckbox(reveal, { reveal = it })
                                 Text(stringResource(R.string.mcp_reveal), style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -316,12 +301,8 @@ internal fun McpServerEditor(controller: McpController, initial: McpServer?, edi
                             val json = JSONObject(text)
                             return json.keys().asSequence().associateWith { key -> json.get(key) as? String ?: error("string") }
                         }
-                        val values = if (transport == McpTransport.Stdio) JSONArray(args) else JSONArray()
-                        McpServer(id = id, name = name.trim(), transport = transport,
-                            url = if (transport == McpTransport.Stdio) "" else url.trim(), command = if (transport == McpTransport.Stdio) command.trim() else "",
-                            args = (0 until values.length()).map { values.get(it) as? String ?: error("string") },
-                            env = if (transport == McpTransport.Stdio) objectValues(environment) else emptyMap(),
-                            headers = if (transport == McpTransport.Stdio) emptyMap() else McpBearerCredentials.headers(bearerToken, objectValues(headers)), enabled = false)
+                        McpServer(id = id, name = name.trim(), transport = transport, url = url.trim(),
+                            headers = McpBearerCredentials.headers(bearerToken, objectValues(headers)), enabled = false)
                     }.getOrNull()
                     invalid = server == null
                     if (server != null) scope.launch { controller.save(server).join(); if (controller.state.value.error.isEmpty()) close() }
@@ -351,12 +332,12 @@ internal fun McpImportDialog(controller: McpController, editable: Boolean, close
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.mcp_import_formats_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CopyHelp(stringResource(R.string.copy_ai_mcp_import_help_title), stringResource(R.string.copy_ai_mcp_import_help))
-                OutlinedTextField(singleName, { if (it.length <= 100) singleName = it },
-                    label = { Text(stringResource(R.string.mcp_import_single_name)) },
+                WorkbenchTextField(singleName, { if (it.length <= 100) singleName = it },
+                    label = stringResource(R.string.mcp_import_single_name),
                     supportingText = { Text(stringResource(R.string.mcp_import_single_name_hint)) },
                     singleLine = true, enabled = editable && !state.busy, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(source, { if (it.length <= 524288) source = it }, label = { Text(stringResource(R.string.mcp_json)) }, minLines = 6, maxLines = 14, enabled = editable && !state.busy, visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
-                Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(reveal, { reveal = it }); Text(stringResource(R.string.mcp_reveal), style = MaterialTheme.typography.bodySmall) }
+                WorkbenchTextField(source, { if (it.length <= 524288) source = it }, label = stringResource(R.string.mcp_json), minLines = 6, maxLines = 14, enabled = editable && !state.busy, visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth())
+                Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) { WorkbenchCheckbox(reveal, { reveal = it }); Text(stringResource(R.string.mcp_reveal), style = MaterialTheme.typography.bodySmall) }
             }
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 McpFormError(state.error)
@@ -369,7 +350,7 @@ internal fun McpImportDialog(controller: McpController, editable: Boolean, close
 @Composable
 private fun McpSecretField(value: String, change: (String) -> Unit, label: Int, enabled: Boolean, reveal: Boolean) {
     val fieldLabel = stringResource(label)
-    OutlinedTextField(value, change, label = { Text(fieldLabel) }, enabled = enabled, minLines = 2, maxLines = 5,
+    WorkbenchTextField(value, change, label = fieldLabel, enabled = enabled, minLines = 2, maxLines = 5,
         visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth().semantics { contentDescription = fieldLabel })
 }
@@ -379,7 +360,7 @@ private fun McpFormError(message: String) {
     if (message.isEmpty()) return
     val clipboard = LocalClipboard.current
     val copyScope = rememberCoroutineScope()
-    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp)) {
+    WorkbenchCard(color = MaterialTheme.colorScheme.errorContainer, cornerRadius = 12.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.mcp_error_title), Modifier.weight(1f),
@@ -406,14 +387,13 @@ private fun remoteTarget(value: String): String = runCatching {
 
 @Composable
 private fun McpDesignCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(16.dp), border = cardBorder()) {
+    WorkbenchCard(color = MaterialTheme.colorScheme.surface, cornerRadius = 12.dp) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }
 
 @Composable
 private fun shortTransportLabel(transport: McpTransport): String = stringResource(when (transport) {
-    McpTransport.Stdio -> R.string.mcp_design_stdio
     McpTransport.StreamableHttp -> R.string.mcp_design_http
     McpTransport.Sse -> R.string.mcp_design_sse
 })

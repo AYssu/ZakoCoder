@@ -39,11 +39,11 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
             TextButton(onClick = workbench::doctor,
                 enabled = !state.busy && !state.checkingTools && !state.checkingPlans,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                Text(stringResource(R.string.refresh), fontSize = 11.5.sp)
+                Text(stringResource(R.string.refresh), fontSize = 12.sp)
             }
             TextButton(onClick = { managing = !managing; if (!managing) onSelected(emptyList()) },
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-                Text(stringResource(if (managing) R.string.done else R.string.manage_tools), fontSize = 11.5.sp)
+                Text(stringResource(if (managing) R.string.done else R.string.manage_tools), fontSize = 12.sp)
             }
         }
         Row(Modifier.fillMaxWidth().selectableGroup()
@@ -55,7 +55,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
                 } else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(8.dp))
                     .selectable(selected = filter == index, role = androidx.compose.ui.semantics.Role.Tab) { filter = index }
                     .padding(horizontal = 8.dp, vertical = 8.dp), contentAlignment = Alignment.Center) {
-                    Text(title, fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = if (filter == index) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
+                    Text(title, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = if (filter == index) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
                         color = if (filter == index) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -69,9 +69,9 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
             val status = ToolBundles.status(bundle, checks)
             filter == 0 || filter == 1 && status == BundleStatus.Ready || filter == 2 && status in setOf(BundleStatus.Missing, BundleStatus.Broken)
         }
-        Surface(shape = RoundedCornerShape(18.dp), border = cardBorder()) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
             Column {
-                if (bundles.isEmpty()) Text(stringResource(R.string.no_matching_tools), Modifier.padding(18.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (bundles.isEmpty()) Text(stringResource(R.string.no_matching_tools), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 bundles.forEachIndexed { index, bundle ->
                     if (index > 0) GroupDivider()
                     val status = ToolBundles.status(bundle, checks)
@@ -79,9 +79,9 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
                     val selectLabel = stringResource(R.string.select_bundle, stringResource(bundle.title))
                     val detailLabel = stringResource(R.string.bundle_details, stringResource(bundle.title))
                     Row(Modifier.fillMaxWidth().clickable { detail = bundle }.semantics { contentDescription = detailLabel }
-                        .padding(start = if (managing) 4.dp else 14.dp, end = 12.dp, top = 13.dp, bottom = 13.dp),
+                        .padding(start = if (managing) 4.dp else 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (managing) Checkbox(checked = bundle.id in selected,
+                        if (managing) WorkbenchCheckbox(checked = bundle.id in selected,
                             onCheckedChange = { checked -> onSelected(if (checked) (selected + bundle.id).distinct() else selected - bundle.id) },
                             enabled = selectable, modifier = Modifier.semantics { contentDescription = selectLabel })
                         else Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -89,10 +89,10 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
                                 Text(bundleMonogram(bundle), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             }
                         }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(stringResource(bundle.title), modifier = Modifier.weight(1f, fill = false),
-                                    style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (bundle.id in setOf("zsh", "git", "python")) Surface(
                                     shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primaryContainer) {
                                     Text(stringResource(R.string.environment_bundle_recommended), Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -118,12 +118,12 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
                 Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) { Text(bundleMonogram(bundle), style = MaterialTheme.typography.titleSmall) }
             }
         }, status = { BundleStatusChip(bundle, checks) }) {
-        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.secondaryContainer) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         bundle.tools.forEach { id ->
             val check = checks.singleOrNull { it.id == id }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(id, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Text(id, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Text(stringResource(when (check?.status) { ToolStatus.Ready -> R.string.tool_ready; ToolStatus.Missing -> R.string.tool_missing; ToolStatus.Broken -> R.string.tool_broken; null -> R.string.bundle_unknown }),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -145,7 +145,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
         }, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.select_for_install))
         }
-        OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = workbench::doctor, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = workbench::doctor, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.check_tools))
         }
     } }
@@ -205,12 +205,12 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
                 }) { Text(stringResource(R.string.android_sdk_license_open)) }
                 if (licenseBrowserError) Text(stringResource(R.string.android_license_browser_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Row(Modifier.fillMaxWidth().clickable { androidLicense = !androidLicense }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = androidLicense, onCheckedChange = { androidLicense = it })
+                    WorkbenchCheckbox(checked = androidLicense, onCheckedChange = { androidLicense = it })
                     Text(stringResource(R.string.android_sdk_license), style = MaterialTheme.typography.bodySmall)
                 }
             }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids, androidLicense) }, enabled = !state.busy && !state.checkingTools && (packages.isNotEmpty() || ids.any { it == "android" || it == "android-ndk" || it == "flutter" }) && canInstallNdk && ("android" !in ids || androidLicense), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
-            OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }
 }

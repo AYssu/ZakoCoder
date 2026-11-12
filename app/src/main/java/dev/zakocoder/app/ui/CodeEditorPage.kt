@@ -164,14 +164,14 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
         if (searching && document != null) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(query, { query = it }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.editor_find)) }, supportingText = if (compact) null else ({ Text(stringResource(R.string.editor_matches, matches)) }))
+                    WorkbenchTextField(query, { query = it }, Modifier.weight(1f), singleLine = true, label = stringResource(R.string.editor_find), supportingText = if (compact) null else ({ Text(stringResource(R.string.editor_matches, matches)) }))
                     IconButton(onClick = { editor?.searcher?.takeIf { it.hasQuery() }?.gotoPrevious() }, enabled = query.isNotEmpty()) { WorkbenchIcon(Glyph.Up, description = stringResource(R.string.editor_previous_match)) }
                     IconButton(onClick = { editor?.searcher?.takeIf { it.hasQuery() }?.gotoNext() }, enabled = query.isNotEmpty()) { WorkbenchIcon(Glyph.Down, description = stringResource(R.string.editor_next_match)) }
                     if (compact) IconButton(onClick = { replaceOpen = true }) { WorkbenchIcon(Glyph.Swap, description = stringResource(R.string.editor_replace)) }
                     IconButton(onClick = { searching = false }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.editor_close_search)) }
                 }
                 if (!compact) Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(replacement, { replacement = it }, Modifier.weight(1f), singleLine = true, label = { Text(stringResource(R.string.editor_replacement)) })
+                    WorkbenchTextField(replacement, { replacement = it }, Modifier.weight(1f), singleLine = true, label = stringResource(R.string.editor_replacement))
                     TextButton(onClick = { editor?.searcher?.takeIf { it.hasQuery() }?.replaceCurrentMatch(replacement) }, enabled = query.isNotEmpty() && !state.saving) { Text(stringResource(R.string.editor_replace)) }
                     TextButton(onClick = { controller.replaceAll(query, replacement) }, enabled = query.isNotEmpty() && !state.saving) { Text(stringResource(R.string.editor_replace_all)) }
                 }
@@ -246,16 +246,16 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
             }
         }
     }
-    if (replaceOpen && document != null) AlertDialog(onDismissRequest = { replaceOpen = false },
+    if (replaceOpen && document != null) WorkbenchAlertDialog(onDismissRequest = { replaceOpen = false },
         title = { Text(stringResource(R.string.editor_replace)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(stringResource(R.string.editor_matches, matches), style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(replacement, { replacement = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.editor_replacement)) })
+            WorkbenchTextField(replacement, { replacement = it }, Modifier.fillMaxWidth(), singleLine = true, label = stringResource(R.string.editor_replacement))
             TextButton(onClick = { editor?.searcher?.takeIf { it.hasQuery() }?.replaceCurrentMatch(replacement) }, enabled = query.isNotEmpty() && !state.saving) { Text(stringResource(R.string.editor_replace)) }
             TextButton(onClick = { controller.replaceAll(query, replacement) }, enabled = query.isNotEmpty() && !state.saving) { Text(stringResource(R.string.editor_replace_all)) }
         } },
         confirmButton = { TextButton(onClick = { replaceOpen = false }) { Text(stringResource(R.string.close)) } })
-    if (diskDetails) AlertDialog(onDismissRequest = { diskDetails = false },
+    if (diskDetails) WorkbenchAlertDialog(onDismissRequest = { diskDetails = false },
         title = { Text(stringResource(R.string.editor_disk_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(stringResource(if (state.diskState == EditorDiskState.Unavailable) R.string.editor_disk_unavailable else if (state.dirty) R.string.editor_disk_changed_dirty else R.string.editor_disk_changed_clean))
@@ -281,14 +281,14 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
         }
         LazyColumn(Modifier.heightIn(max = 400.dp)) { items(choices, key = { it.relative }) { file -> TextButton(onClick = { if (file.directory) directory = file.relative else { controller.open(state.projectId ?: return@TextButton, file.relative); picking = false } }, modifier = Modifier.fillMaxWidth()) { Text(file.name, Modifier.weight(1f)) } } }
     }
-    if (leave) AlertDialog(onDismissRequest = { leave = false }, title = { Text(stringResource(R.string.editor_leave_title)) },
+    if (leave) WorkbenchAlertDialog(onDismissRequest = { leave = false }, title = { Text(stringResource(R.string.editor_leave_title)) },
         text = { Text(stringResource(R.string.editor_leave_message)) },
         confirmButton = { TextButton(onClick = { leave = false; controller.save(closeAfter = true, keepEditorOpen = closeTab) }) { Text(stringResource(R.string.editor_save_leave)) } },
         dismissButton = { Row {
             TextButton(onClick = { leave = false }) { Text(stringResource(R.string.editor_keep_editing)) }
             TextButton(onClick = { leave = false; controller.close(keepEditorOpen = closeTab) }) { Text(stringResource(R.string.editor_discard)) }
         } })
-    if (reload) AlertDialog(onDismissRequest = { reload = false }, title = { Text(stringResource(R.string.editor_reload)) },
+    if (reload) WorkbenchAlertDialog(onDismissRequest = { reload = false }, title = { Text(stringResource(R.string.editor_reload)) },
         text = { Text(stringResource(R.string.editor_reload_message)) },
         confirmButton = { TextButton(onClick = { reload = false; controller.reload() }) { Text(stringResource(R.string.editor_confirm_reload)) } },
         dismissButton = { TextButton(onClick = { reload = false }) { Text(stringResource(R.string.cancel)) } })

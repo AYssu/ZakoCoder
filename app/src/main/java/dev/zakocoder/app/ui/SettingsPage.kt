@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -49,14 +50,19 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.runtime.StorageUsage
 import dev.zakocoder.app.settings.AptSource
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
+import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
+import top.yukonga.miuix.kmp.basic.BasicComponent
 
 @Composable
 internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Space.sm)) {
         Text(title, style = Type.bodyStrong,
             color = MaterialTheme.colorScheme.onSurface)
-        Surface(shape = Radius.mdShape, color = MaterialTheme.colorScheme.surface, border = cardBorder()) {
-            Column(Modifier.fillMaxWidth(), content = content)
+        MiuixCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp,
+            insideMargin = PaddingValues(0.dp), colors = MiuixCardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface)) {
+            content()
         }
     }
 }
@@ -81,9 +87,10 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, Modifier.padding(start = Space.xs).semantics { heading() }, style = Type.metaStrong,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Surface(shape = Radius.mdShape, color = MaterialTheme.colorScheme.surface,
-            border = cardBorder()) {
-            Column(Modifier.fillMaxWidth(), content = content)
+        MiuixCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp,
+            insideMargin = PaddingValues(0.dp), colors = MiuixCardDefaults.defaultColors(
+                color = MaterialTheme.colorScheme.surface)) {
+            content()
         }
     }
 }
@@ -91,22 +98,26 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
     val tone = if (enabled) 1f else .45f
-    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else Modifier)
-        .heightIn(min = 64.dp).padding(horizontal = Space.lg, vertical = Space.md), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-            Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
+    BasicComponent(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+        insideMargin = PaddingValues(horizontal = Space.lg, vertical = Space.md),
+        enabled = enabled, onClick = onClick, role = if (onClick != null) Role.Button else null,
+        startAction = {
+            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                    WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
+                }
             }
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = Type.body,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = tone))
-            if (value.isNotEmpty()) Text(value, style = Type.meta,
-                fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
+        },
+        endActions = {
+            if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
+        },
+    ) {
+        Text(title, style = Type.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = tone))
+        if (value.isNotEmpty()) Text(value, modifier = Modifier.padding(top = 4.dp), style = Type.meta,
+            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -114,7 +125,7 @@ private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Setti
 private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant) }
 
 @Composable
-internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}, onProxy: () -> Unit = {}) {
+internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}, onProxy: () -> Unit = {}, onSetup: () -> Unit = {}) {
     val context = LocalContext.current
     val installedVersion = installedAppVersion()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
@@ -266,6 +277,8 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             }
         } }
         item { SettingsGroup(stringResource(R.string.application_settings)) {
+            SettingsRow(stringResource(R.string.setup_reopen), stringResource(R.string.setup_reopen_hint), glyph = Glyph.Settings, onClick = onSetup)
+            SettingsDivider()
             SettingsRow(stringResource(R.string.update_title), stringResource(R.string.update_summary), glyph = Glyph.Environment, onClick = onUpdates)
             SettingsDivider()
             SettingsRow(stringResource(R.string.app_permissions_title), stringResource(R.string.app_permissions_hint), glyph = Glyph.Shield,
@@ -280,7 +293,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         }
     }
     }
-    if (confirmZsh) AlertDialog(onDismissRequest = { confirmZsh = false }, title = { Text(stringResource(R.string.install_zsh)) },
+    if (confirmZsh) WorkbenchAlertDialog(onDismissRequest = { confirmZsh = false }, title = { Text(stringResource(R.string.install_zsh)) },
         text = { Text(stringResource(R.string.package_confirmation, ToolBundles.packages(setOf("zsh"), state.bundleTools).joinToString(", "))) },
         confirmButton = { TextButton(onClick = { confirmZsh = false; editing = null; workbench.installToolBundles(setOf("zsh")) }) { Text(stringResource(R.string.run)) } },
         dismissButton = { TextButton(onClick = { confirmZsh = false }) { Text(stringResource(R.string.cancel)) } })
@@ -303,7 +316,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                             }
                         }
                         if (state.bundleTools.none { it.id == "zsh" && it.status == ToolStatus.Ready }) {
-                            OutlinedButton(onClick = { confirmZsh = true }, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
+                            WorkbenchSecondaryButton(onClick = { confirmZsh = true }, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
                                 Text(stringResource(R.string.install_zsh))
                             }
                         }
@@ -318,14 +331,14 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     "notifications" -> {
                         Text(stringResource(notificationStatus.label()), color = if (notificationStatus == RunningNotificationStatus.Available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)
                         Text(stringResource(R.string.notification_help))
-                        if (notificationStatus == RunningNotificationStatus.PermissionRequired && Build.VERSION.SDK_INT >= 33) OutlinedButton(
+                        if (notificationStatus == RunningNotificationStatus.PermissionRequired && Build.VERSION.SDK_INT >= 33) WorkbenchSecondaryButton(
                             onClick = { permission.launch(Manifest.permission.POST_NOTIFICATIONS) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.allow_notifications)) }
-                        OutlinedButton(onClick = { if (!notifications.openSettings()) error = notificationSettingsUnavailable }, modifier = Modifier.fillMaxWidth()) {
+                        WorkbenchSecondaryButton(onClick = { if (!notifications.openSettings()) error = notificationSettingsUnavailable }, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.notification_system_settings))
                         }
                     }
-                    else -> OutlinedTextField(draft, { draft = it; error = null }, modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(when (field) { "path" -> R.string.path_label; "dns" -> R.string.dns_label; else -> R.string.proxy_label })) },
+                    else -> WorkbenchTextField(draft, { draft = it; error = null }, modifier = Modifier.fillMaxWidth(),
+                        label = stringResource(when (field) { "path" -> R.string.path_label; "dns" -> R.string.dns_label; else -> R.string.proxy_label }),
                         singleLine = true, isError = error != null)
                 }
                 if (!informational) Text(stringResource(when (field) {
@@ -343,7 +356,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     catch (invalid: IllegalArgumentException) { error = invalid.message }
                 }
             }, enabled = informational || !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (informational) R.string.close else R.string.save_settings)) }
-            if (!informational) OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { editing = null }, modifier = Modifier.fillMaxWidth()) {
+            if (!informational) WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { editing = null }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(if (informational) R.string.close else R.string.cancel))
             }
         }
@@ -361,7 +374,7 @@ internal fun RunningNotificationStatus.label(): Int = when (this) {
 
 @Composable
 internal fun SshLicenseEntry(onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+    WorkbenchSecondaryButton(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(stringResource(R.string.ssh_license_entry))
     }
 }

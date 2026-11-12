@@ -229,6 +229,8 @@ tasks.matching { it.name.contains("Release") }.configureEach {
 }
 
 dependencies {
+    implementation(libs.miuix.ui)
+    implementation(libs.navigationevent.compose)
     implementation(project(":terminal-view"))
     implementation(libs.okhttp)
     implementation(libs.jsch)

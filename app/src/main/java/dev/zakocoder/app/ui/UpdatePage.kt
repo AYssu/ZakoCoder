@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.semantics.Role
@@ -28,7 +29,7 @@ internal fun UpdateBindings(updates: AppUpdates, onOpen: () -> Unit) {
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    if (state.prompt) AlertDialog(onDismissRequest = updates::dismissPrompt,
+    if (state.prompt) WorkbenchAlertDialog(onDismissRequest = updates::dismissPrompt,
         title = { Text(stringResource(R.string.update_available, state.release?.tag.orEmpty())) },
         text = { Text(stringResource(R.string.update_security)) },
         confirmButton = { TextButton(onClick = { updates.dismissPrompt(); onOpen() }) { Text(stringResource(R.string.update_view)) } },
@@ -57,7 +58,7 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
                     Text(stringResource(R.string.update_automatic_hint), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = state.automatic, enabled = state.initialized && !busy, onCheckedChange = { configure(it, state.channel) })
+                WorkbenchSwitch(checked = state.automatic, enabled = state.initialized && !busy, onCheckedChange = { configure(it, state.channel) })
             }
             GroupDivider()
             Text(stringResource(R.string.update_channel), Modifier.padding(start = 16.dp, top = 12.dp), style = MaterialTheme.typography.labelLarge)
@@ -70,7 +71,7 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
                 }
             }
         }
-        if (state.phase != UpdatePhase.Downloading && state.phase != UpdatePhase.Ready) OutlinedButton(onClick = check,
+        if (state.phase != UpdatePhase.Downloading && state.phase != UpdatePhase.Ready) WorkbenchSecondaryButton(onClick = check,
             enabled = state.initialized && !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(if (state.phase == UpdatePhase.Checking) R.string.update_checking else R.string.update_check))
         }
@@ -82,11 +83,11 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
             if (state.phase == UpdatePhase.Downloading) {
                 LinearProgressIndicator(progress = { if (state.total > 0) (state.received.toFloat() / state.total).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth())
                 Text(stringResource(R.string.update_downloading, StorageUsage.format(state.received), StorageUsage.format(state.total)), style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = cancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
+                WorkbenchSecondaryButton(onClick = cancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
             } else if (state.phase == UpdatePhase.Ready) {
                 Text(stringResource(R.string.update_ready), style = MaterialTheme.typography.bodySmall)
-                Button(onClick = install, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.update_install)) }
-            } else Button(onClick = download, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                WorkbenchPrimaryButton(onClick = install, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.update_install)) }
+            } else WorkbenchPrimaryButton(onClick = download, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.update_download, StorageUsage.format(release.apk.size)))
             }
             Text(stringResource(R.string.update_notes), style = MaterialTheme.typography.labelLarge)

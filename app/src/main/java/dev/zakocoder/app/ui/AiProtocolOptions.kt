@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -53,8 +54,7 @@ internal fun protocolParametersHint(protocol: AiApiProtocol): Int = when (protoc
 internal fun AiProtocolOptions(protocol: AiApiProtocol, editable: Boolean, update: (AiApiProtocol) -> Unit) {
     var choosing by remember { mutableStateOf(false) }
     val description = stringResource(R.string.ai_protocol_choose)
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.fillMaxWidth().semantics { contentDescription = description }.clickable(enabled = editable) { choosing = true }
             .heightIn(min = 56.dp).padding(12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -76,7 +76,7 @@ internal fun AiProtocolOptions(protocol: AiApiProtocol, editable: Boolean, updat
                 R.string.ai_protocol_group_google to listOf(AiApiProtocol.Gemini)).forEach { (label, entries) ->
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    WorkbenchCard(cornerRadius = 12.dp) {
                         Column(Modifier.selectableGroup()) {
                             entries.forEachIndexed { index, option ->
                                 if (index > 0) HorizontalDivider(Modifier.padding(start = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -110,7 +110,7 @@ internal fun AiProtocolRequestAddress(base: String, protocol: AiApiProtocol, mod
 internal fun AiProviderPresetList(editable: Boolean, choose: (AiProviderPreset) -> Unit) {
     Text(stringResource(R.string.ai_provider_presets_hint), style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(cornerRadius = 12.dp) {
         Column {
             AiProviderPresets.all.forEachIndexed { index, preset ->
                 if (index > 0) HorizontalDivider(Modifier.padding(start = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)

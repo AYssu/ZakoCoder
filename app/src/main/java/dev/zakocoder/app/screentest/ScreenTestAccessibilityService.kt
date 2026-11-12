@@ -24,7 +24,7 @@ import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/** No unselected application is inspected, including when the service is enabled but idle. */
+/** Screen data is read only for controller-authorized operations; idle service observes no events. */
 class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend {
     @Volatile private var target: String? = null
     private var snapshot: Snapshot? = null
@@ -64,9 +64,21 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
     }
 
     override suspend fun execute(packageName: String, args: JSONObject): ScreenTestResult = withContext(Dispatchers.Main.immediate) {
-        require(packageName != applicationContext.packageName)
-        if (target != packageName) bindTarget(packageName)
-        val root = foreground(packageName)
+        // Package filters restrict unsolicited events only. The foreground root is resolved
+        // for every authorized operation; no caller may bind authorization to an APK.
+        val current = rootInActiveWindow ?: error(getString(R.string.screen_test_wrong_foreground))
+        val actualPackage = current.packageName?.toString()?.takeIf(String::isNotBlank)
+            ?: error(getString(R.string.screen_test_wrong_foreground))
+        check(actualPackage != applicationContext.packageName) { getString(R.string.screen_test_device_open_target) }
+        val permissionController = resolvedPermissionController(this@ScreenTestAccessibilityService)
+        check(!protectedDeviceScreenPackage(actualPackage, applicationContext.packageName, permissionController)) {
+            getString(R.string.screen_test_sensitive)
+        }
+        check(packageName.isBlank() || packageName == actualPackage) {
+            getString(R.string.screen_test_wrong_foreground)
+        }
+        if (target != actualPackage) bindTarget(actualPackage)
+        val root = foreground(actualPackage)
         when (args.getString("action")) {
             "observe" -> observe(root)
             "assert_text" -> {
@@ -78,7 +90,7 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 }
                 ScreenTestResult(JSONObject().put("assertion", "passed").put("source", "visible_accessibility_nodes").toString())
             }
-            "screenshot" -> screenshot(packageName, root)
+            "screenshot" -> screenshot(actualPackage, root)
             "back" -> {
                 snapshot = null
                 check(performGlobalAction(GLOBAL_ACTION_BACK)) { getString(R.string.screen_test_action_failed) }
@@ -124,13 +136,14 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 ScreenTestResult(JSONObject().put("accepted", action).put("verified", false).put("next", "observe").toString())
             }
             else -> error("Unknown screen-test action")
-        }
+        }.copy(packageName = actualPackage)
     }
 
     private fun observedNode(root: AccessibilityNodeInfo, args: JSONObject): AccessibilityNodeInfo {
         val observed = snapshot
         check(observed != null && observed.token == args.optString("snapshot") &&
-            System.currentTimeMillis() - observed.createdAt <= 60_000) { getString(R.string.screen_test_stale_snapshot) }
+            android.os.SystemClock.elapsedRealtime() - observed.createdAt <= 60_000 &&
+            observed.packageName == root.packageName?.toString() && observed.windowId == root.windowId) { getString(R.string.screen_test_stale_snapshot) }
         val remembered = observed.nodes.firstOrNull { it.id == args.optString("node") }
             ?: error(getString(R.string.screen_test_stale_snapshot))
         var node = root
@@ -139,13 +152,22 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
             getString(R.string.screen_test_stale_snapshot)
         }
         check(!remembered.sensitive && !node.isPassword) { getString(R.string.screen_test_sensitive) }
+        var ancestor: AccessibilityNodeInfo? = node.parent
+        var depth = 0
+        while (ancestor != null) {
+            check(++depth <= 40 && !ancestor.isPassword) { getString(R.string.screen_test_sensitive) }
+            ancestor = ancestor.parent
+        }
+        val bounds = Rect().also(node::getBoundsInScreen)
+        val window = root.window ?: error(getString(R.string.screen_test_wrong_foreground))
+        check(!covered(window, bounds)) { getString(R.string.screen_test_wrong_foreground) }
         return node
     }
 
     private fun foreground(packageName: String): AccessibilityNodeInfo {
         check(target == packageName) { getString(R.string.screen_test_stopped) }
         val root = rootInActiveWindow ?: error(getString(R.string.screen_test_wrong_foreground))
-        check(root.packageName?.toString() == packageName && root.window?.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
+        check(root.packageName?.toString() == packageName && root.window?.type in setOf(AccessibilityWindowInfo.TYPE_APPLICATION, AccessibilityWindowInfo.TYPE_SYSTEM) &&
             root.window?.isActive == true) { getString(R.string.screen_test_wrong_foreground) }
         return root
     }
@@ -161,7 +183,7 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 .put("editable", node.editable).put("enabled", node.enabled).put("sensitive", node.sensitive)
         }
         val bounded = boundedScreenObservation(target, token, nodeJson, collected.truncated)
-        snapshot = Snapshot(token, System.currentTimeMillis(), collected.nodes.take(bounded.exposedCount))
+        snapshot = Snapshot(token, android.os.SystemClock.elapsedRealtime(), root.packageName?.toString().orEmpty(), root.windowId, collected.nodes.take(bounded.exposedCount))
         return ScreenTestResult(bounded.output)
     }
 
@@ -326,7 +348,7 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
         val text: String, val description: String, val className: String, val bounds: Rect,
         val clickable: Boolean, val longClickable: Boolean, val editable: Boolean, val enabled: Boolean)
     private data class Collected(val nodes: List<Node>, val truncated: Boolean)
-    private data class Snapshot(val token: String, val createdAt: Long, val nodes: List<Node>)
+    private data class Snapshot(val token: String, val createdAt: Long, val packageName: String, val windowId: Int, val nodes: List<Node>)
 
     companion object {
         @Volatile internal var instance: ScreenTestAccessibilityService? = null

@@ -48,7 +48,7 @@ class AiAndroidWorkflowDeviceTest {
         get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
 
     @Test(timeout = 180000)
-    fun approvedAiTaskLaunchesObservesClicksVerifiesAndSharesActualPixelsThenRevokesTarget() = runBlocking {
+    fun approvedAiTaskObservesClicksVerifiesAndSharesActualPixelsThenRevokesDeviceTask() = runBlocking {
         automation // Preserve the service explicitly enabled by the device test owner.
         await { ScreenTestAccessibilityService.isConnected() }
         AiDeviceTest.Fixture(base, timeoutSeconds = 45, readTimeoutSeconds = 30).use { fixture ->
@@ -85,6 +85,7 @@ class AiAndroidWorkflowDeviceTest {
                             screen.execute(id, args, lease).also { result -> result.imageUri?.let(screenshots::add) }
                         },
                         screenTestLease = screen::taskLease,
+                        screenTestAuthorize = { id, taskId -> screen.authorizeDeviceTask(id, taskId) },
                         screenTestDescription = { id -> "$id · ${screen.state.value.packageName.orEmpty()} · Accessibility" },
                         finishScreenTestTask = { id, lease -> screen.finishTask(id, lease) },
                         stopScreenTest = screen::stop,
@@ -94,23 +95,21 @@ class AiAndroidWorkflowDeviceTest {
                 val controller = requireNotNull(ai)
                 await { controller.state.value.configured && !controller.state.value.permissionsLoading &&
                     !controller.state.value.skillsLoading && !controller.models.state.value.loading }
-                // Selecting an AI project revokes any preceding screen target. Authorize only
-                // after that project transition, exactly as the user-facing panel does.
-                val selected = screen.selectApk(PROJECT, "app-debug.apk")
-                assertEquals(TARGET, selected.packageName)
-                assertTrue(selected.debuggable)
                 assertTrue(screen.state.value.enabled && screen.state.value.connected)
-                val originalLease = requireNotNull(screen.taskLease(PROJECT))
+                assertNull(screen.taskLease(PROJECT))
                 assertFalse(screen.state.value.shareScreenshots)
-                // This simulates the explicit user confirmation, not a model-provided option.
-                screen.setScreenshotSharing(PROJECT, true)
 
-                main { assertTrue(controller.send("对已构建并安装的调试应用执行界面测试：启动，点击 Increment，验证 Counter: 1，再检查截图。不要声称执行了构建或安装。")) }
+                main { assertTrue(controller.send("对用户已打开的界面执行屏幕测试：点击 Increment，验证 Counter: 1，再检查截图。不要声称执行了构建或安装。")) }
                 await { controller.state.value.approval != null }
-                assertTrue(controller.state.value.approval!!.detail.contains(TARGET))
+                assertTrue(controller.state.value.approval!!.detail.contains("当前设备屏幕"))
                 assertEquals(0, controller.state.value.events.count { it.status == AiToolStatus.Succeeded })
-                assertEquals(originalLease, screen.taskLease(PROJECT))
+                assertNull(screen.taskLease(PROJECT))
                 main { controller.approve(AiDecision.TaskTool) }
+                await { screen.taskLease(PROJECT) != null }
+                val originalLease = requireNotNull(screen.taskLease(PROJECT))
+                // Explicit fixture-owner screenshot consent follows the actual task lease.
+                screen.setScreenshotSharing(PROJECT, true)
+                shell("monkey -p $TARGET -c android.intent.category.LAUNCHER 1")
                 await { !controller.state.value.active }
 
                 assertNull("Local model fixture validation: ${model.failure.get()}", model.failure.get())
@@ -125,7 +124,7 @@ class AiAndroidWorkflowDeviceTest {
 
                 val report = screen.readReport(PROJECT)
                 val entries = report.lineSequence().filter { it.isNotBlank() }.map(::JSONObject).toList()
-                assertEquals(listOf("select", "launch", "observe", "click", "observe", "assert_text", "screenshot", "finish"),
+                assertEquals(listOf("authorize", "observe", "click", "observe", "assert_text", "screenshot", "finish"),
                     entries.map { it.getString("action") }.filter { it != "stop" })
                 assertEquals("task_finished", entries.single { it.getString("action") == "stop" }.getString("detail"))
                 assertTrue(entries.all { it.getBoolean("operationSucceeded") })
@@ -176,9 +175,9 @@ class AiAndroidWorkflowDeviceTest {
         override fun dispatch(request: RecordedRequest): MockResponse = try {
             val body = JSONObject(request.body.readUtf8())
             when (round.getAndIncrement()) {
-                0 -> response("launch")
+                0 -> response("authorize")
                 1 -> {
-                    require(tool(body, "android-launch").isNotBlank())
+                    require(tool(body, "android-authorize").isNotBlank())
                     awaitTargetReady()
                     response("observe")
                 }
@@ -313,7 +312,7 @@ class AiAndroidWorkflowDeviceTest {
                 JSONObject().put("name", "android_test").put("arguments", extra.toString()))
             return sse(JSONObject().put("tool_calls", JSONArray().put(call)), "tool_calls").setBodyDelay(delayMillis, TimeUnit.MILLISECONDS)
         }
-        private fun finalResponse() = sse(JSONObject().put("content", "已启动调试应用，实际观察点击前后计数由 0 变为 1，文字断言通过，并检查收到的测试截图。此测试未执行构建或安装。"), "stop")
+        private fun finalResponse() = sse(JSONObject().put("content", "用户已打开目标界面，实际观察点击前后计数由 0 变为 1，文字断言通过，并检查收到的测试截图。此测试未执行构建或安装。"), "stop")
         private fun sse(delta: JSONObject, finish: String): MockResponse {
             val chunk = JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", delta)))
             val ended = JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", finish)))

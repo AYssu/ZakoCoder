@@ -18,7 +18,7 @@ internal fun AiAgentSettings(state: AiState, controller: AiController) {
         val label = stringResource(R.string.ai_auto_delegate)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-            Switch(state.automaticDelegation, controller::setAutomaticDelegation,
+            WorkbenchSwitch(state.automaticDelegation, controller::setAutomaticDelegation,
                 enabled = state.projectId != null && !state.active && !state.restoring && !state.historyError && !state.permissionsLoading,
                 modifier = Modifier.semantics { contentDescription = label })
         }

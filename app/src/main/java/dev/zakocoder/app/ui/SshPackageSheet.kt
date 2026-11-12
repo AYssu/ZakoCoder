@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -88,19 +89,19 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
     val credentialLabel = stringResource(if (auth == SshAuthUi.Password) R.string.ssh_package_password else R.string.ssh_package_private_key)
     val revealLabel = stringResource(if (visible) R.string.ssh_package_hide_secret else R.string.ssh_package_show_secret)
     SshSection(stringResource(R.string.ssh_package_connection)) {
-        OutlinedTextField(value = host, onValueChange = { host = it; invalid = false },
-            label = { Text(stringResource(R.string.ssh_package_host)) }, singleLine = true, enabled = !model.busy,
+        WorkbenchTextField(value = host, onValueChange = { host = it; invalid = false },
+            label = stringResource(R.string.ssh_package_host), singleLine = true, enabled = !model.busy,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = port, onValueChange = { port = it; invalid = false },
-                label = { Text(stringResource(R.string.ssh_package_port)) }, singleLine = true, enabled = !model.busy,
+            WorkbenchTextField(value = port, onValueChange = { port = it; invalid = false },
+                label = stringResource(R.string.ssh_package_port), singleLine = true, enabled = !model.busy,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.width(112.dp))
-            OutlinedTextField(value = user, onValueChange = { user = it; invalid = false },
-                label = { Text(stringResource(R.string.ssh_package_user)) }, singleLine = true, enabled = !model.busy,
+            WorkbenchTextField(value = user, onValueChange = { user = it; invalid = false },
+                label = stringResource(R.string.ssh_package_user), singleLine = true, enabled = !model.busy,
                 modifier = Modifier.weight(1f))
         }
-        OutlinedTextField(value = workingDirectory, onValueChange = { workingDirectory = it; invalid = false },
-            label = { Text(stringResource(R.string.ssh_package_working_directory)) }, singleLine = true, enabled = !model.busy,
+        WorkbenchTextField(value = workingDirectory, onValueChange = { workingDirectory = it; invalid = false },
+            label = stringResource(R.string.ssh_package_working_directory), singleLine = true, enabled = !model.busy,
             supportingText = { Text(stringResource(R.string.ssh_package_working_directory_hint)) },
             modifier = Modifier.fillMaxWidth())
         Text(stringResource(R.string.ssh_package_auth), style = MaterialTheme.typography.labelLarge)
@@ -115,7 +116,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
                 }
             }
         }
-        OutlinedTextField(value = secret, onValueChange = { secret = it }, label = { Text(credentialLabel) },
+        WorkbenchTextField(value = secret, onValueChange = { secret = it }, label = credentialLabel,
             enabled = !model.busy, singleLine = auth == SshAuthUi.Password,
             minLines = if (auth == SshAuthUi.PrivateKey) 3 else 1, maxLines = if (auth == SshAuthUi.PrivateKey) 5 else 1,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -123,8 +124,8 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
             modifier = Modifier.fillMaxWidth())
         TextButton(onClick = { visible = !visible }, enabled = !model.busy,
             modifier = Modifier.heightIn(min = 48.dp)) { Text(revealLabel) }
-        if (auth == SshAuthUi.PrivateKey) OutlinedTextField(value = passphrase, onValueChange = { passphrase = it },
-            label = { Text(stringResource(R.string.ssh_package_passphrase)) }, singleLine = true, enabled = !model.busy,
+        if (auth == SshAuthUi.PrivateKey) WorkbenchTextField(value = passphrase, onValueChange = { passphrase = it },
+            label = stringResource(R.string.ssh_package_passphrase), singleLine = true, enabled = !model.busy,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
         Text(stringResource(if (model.hasSecret && auth == model.auth) R.string.ssh_package_secret_saved else R.string.ssh_package_secret_hint),
@@ -135,7 +136,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ssh_package_tmux_hint), Modifier.weight(1f),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Switch(checked = tmux, onCheckedChange = { tmux = it }, enabled = !model.busy,
+            WorkbenchSwitch(checked = tmux, onCheckedChange = { tmux = it }, enabled = !model.busy,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = label })
         }
         model.tmuxAvailable?.let { available -> Text(stringResource(if (available) R.string.ssh_package_tmux_ready else R.string.ssh_package_tmux_missing),
@@ -143,7 +144,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
     }
     if (invalid) CapabilityNotice(stringResource(R.string.ssh_package_invalid), error = true)
     model.error?.let { CapabilityNotice(it, error = true) }
-    Button(onClick = {
+    WorkbenchPrimaryButton(onClick = {
         val selectedPort = port.toIntOrNull()
         if (host.isBlank() || user.isBlank() || !workingDirectory.startsWith("/") || selectedPort == null || selectedPort !in 1..65535) invalid = true
         else {
@@ -165,7 +166,7 @@ internal fun SshConnectionStatus(model: SshPackageUiModel, canTest: Boolean,
         model.status?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (model.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        OutlinedButton(onClick = onTest, enabled = canTest && !model.busy,
+        WorkbenchSecondaryButton(onClick = onTest, enabled = canTest && !model.busy,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(if (model.busy) R.string.ssh_package_testing else R.string.ssh_package_test))
         }
@@ -180,7 +181,7 @@ internal fun SshConnectionStatus(model: SshPackageUiModel, canTest: Boolean,
         if (model.pendingFingerprint != null) {
             Text(stringResource(R.string.ssh_package_fingerprint_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onTrustHost, enabled = !model.busy && canTest && !model.fingerprintChanged,
+            WorkbenchSecondaryButton(onClick = onTrustHost, enabled = !model.busy && canTest && !model.fingerprintChanged,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ssh_package_trust)) }
         }
         if (model.trustedFingerprint != null) TextButton(onClick = onForgetHost, enabled = !model.busy,
@@ -190,8 +191,7 @@ internal fun SshConnectionStatus(model: SshPackageUiModel, canTest: Boolean,
 
 @Composable
 private fun SshSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    WorkbenchCard(cornerRadius = 12.dp, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             content()

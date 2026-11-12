@@ -83,7 +83,7 @@ class McpFailureUiDeviceTest {
         val alias = "mcp-ui-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = root }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-        val controller = McpController(isolated, scope, { _, _ -> error("No process") }, keyAlias = alias)
+        val controller = McpController(isolated, scope, keyAlias = alias)
         val closed = AtomicBoolean()
         try {
             withTimeout(10000) { while (controller.state.value.loading || controller.state.value.busy) delay(10) }

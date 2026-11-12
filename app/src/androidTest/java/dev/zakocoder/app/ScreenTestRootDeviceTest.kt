@@ -31,7 +31,7 @@ class ScreenTestRootDeviceTest {
             "dev.example.fixture", 100, 100, 300, 300))
     }
 
-    @Test fun rootControlsOnlySelectedForegroundAndVerifiesRealUi() = runBlocking {
+    @Test fun rootControlsAuthorizedCurrentForegroundAndVerifiesRealUi() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         // Match the real entry path: the user starts a test from the foreground host.
@@ -53,7 +53,7 @@ class ScreenTestRootDeviceTest {
             kotlinx.coroutines.delay(1000)
             suspend fun call(action: String, extra: (JSONObject) -> Unit = {}): JSONObject {
                 val args = JSONObject().put("action", action); extra(args)
-                return JSONObject(backend.execute("dev.zakocoder.screentest.fixture", args).output)
+                return JSONObject(backend.execute("", args).output)
             }
             val initial = call("observe")
             val nodes = initial.getJSONArray("nodes")
@@ -69,9 +69,9 @@ class ScreenTestRootDeviceTest {
                 call("click") { it.put("snapshot", initial.getString("snapshot")).put("node", button.getString("id")) }
                 fail("Consumed snapshots must be rejected")
             } catch (_: ScreenTestException) { }
-            shell("input keyevent KEYCODE_HOME")
+            shell("am start -W -n ${context.packageName}/dev.zakocoder.app.MainActivity")
             kotlinx.coroutines.delay(500)
-            try { call("observe"); fail("Other apps cannot be observed") } catch (_: ScreenTestException) { }
+            try { call("observe"); fail("Agent cannot operate its own approval UI") } catch (_: ScreenTestException) { }
         } finally { backend.stop() }
     }
 }

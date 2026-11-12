@@ -16,7 +16,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -180,24 +184,32 @@ internal fun PageHeading(title: String, action: @Composable RowScope.() -> Unit 
 @Composable
 internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: String? = null, darkBackdrop: Boolean = false, leading: (@Composable () -> Unit)? = null, status: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val p = LocalWorkbenchPalette.current
-    val dark = LocalWorkbenchDark.current
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = p.surfaceRaised, tonalElevation = 0.dp,
-        properties = ModalBottomSheetProperties(isAppearanceLightStatusBars = !dark && !darkBackdrop, isAppearanceLightNavigationBars = !dark),
-        scrimColor = p.scrim,
-        // 拖拽条 32 × 4 dp 胶囊，textTertiary @40%，上 8dp 下 12dp 留白（§8.11 的 10dp 不在六档里，归 8）。
-        dragHandle = { Box(Modifier.padding(top = Space.sm, bottom = Space.md).size(32.dp, 4.dp).background(p.textTertiary.copy(alpha = .4f), CircleShape)) },
-        shape = Radius.sheetShape) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().padding(start = Space.lg, end = Space.lg, bottom = Space.xxl),
-            verticalArrangement = Arrangement.spacedBy(Space.md)) {
+    var shown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
+    val dismiss = { shown = false }
+    top.yukonga.miuix.kmp.window.WindowBottomSheet(
+        show = shown, onDismissRequest = dismiss, onDismissFinished = onDismiss,
+        backgroundColor = p.surfaceRaised, cornerRadius = 24.dp,
+        outsideMargin = androidx.compose.ui.unit.DpSize(12.dp, 0.dp),
+        insideMargin = androidx.compose.ui.unit.DpSize(16.dp, 16.dp),
+    ) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        val dark = LocalWorkbenchDark.current
+        androidx.compose.runtime.SideEffect {
+            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { window ->
+                androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark && !darkBackdrop
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+        }
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).imePadding()
+            .padding(bottom = Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 leading?.invoke()
                 Text(title, Modifier.weight(1f), style = Type.section, color = p.textPrimary)
                 status?.invoke()
-                IconButton(onClick = onDismiss, modifier = Modifier.size(Touch48)) {
-                    Box(Modifier.size(TileSize.sm).background(p.surfaceSunken, Radius.pill), contentAlignment = Alignment.Center) {
-                        WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close), size = IconSize.sm)
-                    }
+                IconButton(onClick = dismiss, modifier = Modifier.size(Touch48)) {
+                    WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close), size = IconSize.sm)
                 }
             }
             subtitle?.let { Text(it, style = Type.meta, color = p.textSecondary) }
@@ -209,15 +221,15 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
 /**
  * 可选面板（单选项 / 可点卡片）。
  *
- * 选中态用 `surfaceAccent` 底 + `borderFocus` 描边 —— 只换颜色，不改线宽，
- * 避免选中时布局跳动 1dp（tokens.md §4.3）。
+ * 选中态用 `surfaceAccent` 底 + `borderFocus` 描边；未选中不加装饰边框。
+ * 描边不占布局空间，切换不会改变内容位置。
  */
 @Composable
 internal fun SelectablePanel(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
     val p = LocalWorkbenchPalette.current
-    Surface(onClick = onClick, shape = Radius.mdShape,
+    WorkbenchCard(onClick = onClick,
         color = if (selected) p.surfaceAccent else p.surface,
-        border = BorderStroke(1.dp, if (selected) p.borderFocus else p.borderHairline)) {
+        border = if (selected) BorderStroke(1.dp, p.borderFocus) else null) {
         Row(Modifier.fillMaxWidth().padding(Space.md), horizontalArrangement = Arrangement.spacedBy(Space.md), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }
@@ -232,13 +244,15 @@ internal fun CompactAction(label: String, onClick: () -> Unit, modifier: Modifie
                            enabled: Boolean = true, glyph: Glyph? = null) {
     val p = LocalWorkbenchPalette.current
     val foreground = if (primary) p.onPrimary else p.textPrimary
-    Box(modifier.sizeIn(minWidth = ControlSize.button, minHeight = ControlSize.button).clickable(enabled = enabled, role = Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        Surface(shape = Radius.mdShape, color = (if (primary) p.primaryFill else p.surfaceSunken).copy(alpha = if (enabled) 1f else .4f)) {
-            Row(Modifier.heightIn(min = ControlSize.buttonSecondary).padding(horizontal = Space.md, vertical = Space.sm), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                if (glyph != null) { WorkbenchIcon(glyph, description = null, tint = foreground, size = IconSize.sm); Spacer(Modifier.width(Space.xs)) }
-                Text(label, color = foreground, style = Type.bodyStrong)
-            }
+    WorkbenchSecondaryButton(onClick = onClick, enabled = enabled,
+        modifier = modifier.sizeIn(minWidth = ControlSize.button, minHeight = ControlSize.button),
+        colors = ButtonDefaults.buttonColors(containerColor = if (primary) p.primaryFill else p.surfaceSunken,
+            contentColor = foreground), contentPadding = PaddingValues(horizontal = Space.md, vertical = Space.sm)) {
+        if (glyph != null) {
+            WorkbenchIcon(glyph, description = null, tint = foreground, size = IconSize.sm)
+            Spacer(Modifier.width(Space.xs))
         }
+        Text(label, style = Type.bodyStrong)
     }
 }
 
@@ -264,23 +278,21 @@ internal fun EmptyArtwork(glyph: Glyph) {
 /**
  * 终端"空位"操作行。
  *
- * 名字保留（调用点不动），但视觉从虚线框改成实线框：
- * 虚线在手机上会糊，空位用 `borderHairline` 实线 + `surfaceSunken` 底表达更稳
- * （tokens.md §5）。同时删掉原来那层 3% 品牌蓝底 —— 那是装饰性用色，不是状态。
+ * 名字保留以兼容调用点；空位使用无装饰边框的 Miuix 卡片和 `surfaceSunken` 底。
+ * 禁用态保留语义和颜色提示，不响应点击。
  */
 @Composable
 internal fun DashedTerminalAction(label: String, enabled: Boolean, onClick: () -> Unit) {
     val p = LocalWorkbenchPalette.current
-    Row(Modifier.fillMaxWidth().heightIn(min = RowHeight.standard)
-        .background(p.surfaceSunken, Radius.mdShape)
-        .border(1.dp, p.borderHairline, Radius.mdShape)
-        .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(Space.lg),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        Box(Modifier.size(IconSize.lg).background(if (enabled) p.primaryFill else p.textDisabled, Radius.pill), contentAlignment = Alignment.Center) {
-            WorkbenchIcon(Glyph.Add, description = null, tint = p.onPrimary, size = IconSize.sm)
+    WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = p.surfaceSunken, enabled = enabled, onClick = onClick) {
+        Row(Modifier.fillMaxWidth().heightIn(min = RowHeight.standard).padding(Space.lg),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            Box(Modifier.size(IconSize.lg).background(if (enabled) p.primaryFill else p.textDisabled, Radius.pill), contentAlignment = Alignment.Center) {
+                WorkbenchIcon(Glyph.Add, description = null, tint = p.onPrimary, size = IconSize.sm)
+            }
+            Spacer(Modifier.width(Space.sm))
+            Text(label, style = Type.bodyStrong, color = if (enabled) p.primary else p.textTertiary, textAlign = TextAlign.Center)
         }
-        Spacer(Modifier.width(Space.sm))
-        Text(label, style = Type.bodyStrong, color = if (enabled) p.primary else p.textTertiary, textAlign = TextAlign.Center)
     }
 }
 
@@ -311,7 +323,32 @@ internal fun WorkbenchPrimaryButton(onClick: () -> Unit, modifier: Modifier = Mo
     shape: androidx.compose.ui.graphics.Shape = Radius.mdShape,
     colors: ButtonColors = ButtonDefaults.buttonColors(containerColor = LocalWorkbenchPalette.current.primaryFill, contentColor = LocalWorkbenchPalette.current.onPrimary),
     contentPadding: PaddingValues = PaddingValues(horizontal = Space.xl, vertical = Space.md), content: @Composable RowScope.() -> Unit) {
-    Button(onClick = onClick, modifier = modifier.heightIn(min = ControlSize.button), enabled = enabled, shape = shape, colors = colors, contentPadding = contentPadding, content = content)
+    val foreground = if (enabled) colors.contentColor else colors.disabledContentColor
+    top.yukonga.miuix.kmp.basic.Button(
+        onClick = onClick, modifier = modifier.heightIn(min = ControlSize.button).clip(shape), enabled = enabled,
+        cornerRadius = Radius.md, minHeight = ControlSize.button, insideMargin = contentPadding,
+        colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
+            color = colors.containerColor, disabledColor = colors.disabledContainerColor,
+            contentColor = colors.contentColor, disabledContentColor = colors.disabledContentColor),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides foreground) {
+            ProvideTextStyle(Type.bodyStrong) { content() }
+        }
+    }
+}
+
+
+/** Miuix secondary action shares the same geometry, with a neutral filled surface. */
+@Composable
+internal fun WorkbenchSecondaryButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    shape: androidx.compose.ui.graphics.Shape = Radius.mdShape,
+    border: androidx.compose.foundation.BorderStroke? = null,
+    colors: ButtonColors = ButtonDefaults.buttonColors(containerColor = LocalWorkbenchPalette.current.surfaceSunken,
+        contentColor = LocalWorkbenchPalette.current.textPrimary),
+    contentPadding: PaddingValues = PaddingValues(horizontal = Space.xl, vertical = Space.md),
+    content: @Composable RowScope.() -> Unit) {
+    WorkbenchPrimaryButton(onClick, modifier.then(if (border != null) Modifier.border(border, shape) else Modifier),
+        enabled, shape, colors, contentPadding, content)
 }
 
 /**

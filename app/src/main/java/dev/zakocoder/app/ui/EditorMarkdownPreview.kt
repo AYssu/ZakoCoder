@@ -23,7 +23,7 @@ internal fun EditorMarkdownPreview(text: String, modifier: Modifier = Modifier) 
         else AiMarkdown(text, onLink = { link = it })
     }
     link?.let { destination ->
-        AlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
+        WorkbenchAlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
             text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
             confirmButton = { TextButton(onClick = {
                 try { handler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { }

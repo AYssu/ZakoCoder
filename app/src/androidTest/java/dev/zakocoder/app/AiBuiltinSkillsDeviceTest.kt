@@ -18,10 +18,29 @@ class AiBuiltinSkillsDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(condition: () -> Boolean) = withTimeout(25000) { while (!condition()) delay(30) }
-    private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading }
+    private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.permissionsLoading && !ai.state.value.skillsLoading && ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading }
+    private fun isolatedContext(f: AiDeviceTest.Fixture) = object : ContextWrapper(context) {
+        override fun getFilesDir() = File(f.root, "control").apply { mkdirs() }
+        override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("${f.token}-$name", mode)
+    }
+    private fun globalStore(f: AiDeviceTest.Fixture) = AiGlobalSkills(isolatedContext(f))
+    private fun sharedRoot(f: AiDeviceTest.Fixture) = File(f.root, "control/shared-skills").apply { mkdirs() }
+    private suspend fun enable(ai: AiController, path: String, selected: Boolean) {
+        main { ai.enableGlobalSkill(path, selected) }
+        await { !ai.globalSkills.value.active && ai.state.value.enabledSkills == ai.globalSkills.value.enabledSkills }
+        assertEquals(selected, path in ai.globalSkills.value.enabledSkills)
+    }
+    private suspend fun disableAll(ai: AiController) {
+        for (path in ai.globalSkills.value.enabledSkills.toList()) enable(ai, path, false)
+    }
+    private suspend fun onDemand(ai: AiController, enabled: Boolean) {
+        main { ai.setGlobalSkillOnDemand(enabled) }
+        await { !ai.globalSkills.value.active && ai.state.value.skillOnDemand == ai.globalSkills.value.skillOnDemand }
+        assertEquals(enabled, ai.globalSkills.value.skillOnDemand)
+    }
     private fun controller(f: AiDeviceTest.Fixture): AiController {
-        val isolated = object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }
-        return AiController(isolated, { File(f.root, "project").apply { mkdirs() } }, { _, _ -> false }, { _, _ -> error("Skills must not execute automatically") }, {}, {}, f.transport, f.config, history = f.history)
+        val isolated = isolatedContext(f)
+        return AiController(isolated, { File(f.root, "project").apply { mkdirs() } }, { _, _ -> false }, { _, _ -> error("Skills must not execute automatically") }, {}, {}, f.transport, f.config, history = f.history).also { it.refreshGlobalSkills() }
     }
 
     @Test fun bundledCatalogIsOfflineSelfContainedAndProjectNamesCannotShadowIt() {
@@ -55,19 +74,19 @@ class AiBuiltinSkillsDeviceTest {
             AiDeviceTest.Fixture(context).use { f ->
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("choices") }; ready(ai)
-                assertEquals(AiBuiltinSkills.defaults, ai.state.value.enabledSkills)
-                main { ai.enableSkill("builtin:megacave", true) }
+                assertEquals(AiBuiltinSkills.defaults.sorted(), ai.state.value.enabledSkills.sorted())
+                enable(ai, "builtin:megacave", true)
                 assertTrue("builtin:megacave" in ai.state.value.enabledSkills); assertFalse("builtin:caveman" in ai.state.value.enabledSkills)
-                main { ai.enableSkill("builtin:ultracave", true) }
+                enable(ai, "builtin:ultracave", true)
                 assertEquals(1, ai.state.value.enabledSkills.count { it in AiBuiltinSkills.expressionStyles })
                 main { ai.enableSkill("builtin:unknown", true) }; assertFalse("builtin:unknown" in ai.state.value.enabledSkills)
-                for (path in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(path, false) }
-                await { f.history.load("choices").state?.let { it.skillsInitialized && it.enabledSkills.isEmpty() } == true }
+                disableAll(ai)
+                assertTrue(globalStore(f).load().enabled.isEmpty())
                 lateinit var restored: AiController
                 main { restored = controller(f); restored.select("choices") }; ready(restored)
                 assertTrue(restored.state.value.enabledSkills.isEmpty()); assertTrue(restored.state.value.skillsInitialized)
                 main { restored.conversation() }; ready(restored)
-                assertEquals(AiBuiltinSkills.defaults, restored.state.value.enabledSkills)
+                assertTrue("New conversations share the global empty selection", restored.state.value.enabledSkills.isEmpty())
                 assertEquals(0, f.server.requestCount)
             }
         }
@@ -78,8 +97,8 @@ class AiBuiltinSkillsDeviceTest {
             AiDeviceTest.Fixture(context).use { f ->
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("injection") }; ready(ai)
-                for (path in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(path, false) }
-                main { ai.enableSkill("builtin:frontend-design", true) }
+                disableAll(ai)
+                enable(ai, "builtin:frontend-design", true)
                 f.enqueue("已读取当前启用的参考规范。")
                 main { ai.send("设计一个页面") }; await { !ai.state.value.active }
                 val first = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
@@ -95,7 +114,7 @@ class AiBuiltinSkillsDeviceTest {
                 assertTrue("The sent skill snapshot remains literal history for a stable cache prefix",
                     ai.state.value.contextTurns.single().contains("# 界面设计与实现"))
                 val firstTurn = ai.state.value.contextTurns.single()
-                main { ai.enableSkill("builtin:frontend-design", false) }
+                enable(ai, "builtin:frontend-design", false)
                 f.enqueue("现在没有启用这份规范。")
                 main { ai.send("继续") }; await { !ai.state.value.active }
                 val second = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8()).getJSONArray("messages")
@@ -114,20 +133,20 @@ class AiBuiltinSkillsDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun moreThanEightSkillsPersistAndLegacySelectionIsPreserved() = runBlocking {
+    @Test(timeout = 120000) fun moreThanEightGlobalSkillsPersistAndLegacyWorkspaceSelectionIsIgnored() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
-                val root = File(f.root, "project/.zakocoder/skills/local").apply { mkdirs() }
-                File(root, "SKILL.md").writeText("---\nname: local\n---\nLOCAL_SKILL")
+                val root = File(sharedRoot(f), ".zakocoder/skills/local").apply { mkdirs() }
+                File(root, "SKILL.md").writeText("---\nname: local\ndescription: Shared fixture\n---\nLOCAL_SKILL")
                 val projectPath = ".zakocoder/skills/local/SKILL.md"
                 f.history.save("many", AiState(enabledSkills = listOf(projectPath)))
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("many") }; ready(ai)
-                assertEquals(listOf(projectPath), ai.state.value.enabledSkills)
-                for (skill in ai.state.value.skills.filter { it.path !in AiBuiltinSkills.expressionStyles || it.path == "builtin:caveman" }) main { ai.enableSkill(skill.path, true) }
+                assertEquals("Workspace snapshots do not become global configuration", AiBuiltinSkills.defaults.sorted(), ai.state.value.enabledSkills.sorted())
+                for (skill in ai.state.value.skills.filter { it.path !in AiBuiltinSkills.expressionStyles || it.path == "builtin:caveman" }) enable(ai, skill.path, true)
                 assertEquals(12, ai.state.value.enabledSkills.size)
-                await { f.history.load("many").state?.enabledSkills?.size == 12 }
-                assertTrue(AiSkills(AiProjectFiles { File(f.root, "project") }, AiBuiltinSkills(context)).content("many", ai.state.value.enabledSkills).length < 32000)
+                assertEquals(12, globalStore(f).load().enabled.size)
+                assertTrue(AiSkills(AiProjectFiles { sharedRoot(f) }, AiBuiltinSkills(context)).content("", ai.state.value.enabledSkills).length < 32000)
                 lateinit var restored: AiController
                 main { restored = controller(f); restored.select("many") }; ready(restored)
                 assertEquals(ai.state.value.enabledSkills, restored.state.value.enabledSkills)
@@ -141,8 +160,8 @@ class AiBuiltinSkillsDeviceTest {
             AiDeviceTest.Fixture(context).use { f ->
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("on-demand") }; ready(ai)
-                for (path in ai.state.value.enabledSkills.toList()) main { ai.enableSkill(path, false) }
-                main { ai.enableSkill("builtin:frontend-design", true); ai.setSkillOnDemand(true) }
+                disableAll(ai)
+                enable(ai, "builtin:frontend-design", true); onDemand(ai, true)
                 f.enqueue(calls = listOf(AiCall("skill1", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"读取界面指令\"}")))
                 f.enqueue(calls = listOf(AiCall("skill2", "load_skill", "{\"skill\":\"builtin:frontend-design\",\"reason\":\"检查加载状态\"}")))
                 f.enqueue("已读取指令，尚未修改项目。")
@@ -170,13 +189,13 @@ class AiBuiltinSkillsDeviceTest {
     @Test(timeout = 120000) fun fileReadDenialAlsoDeniesOnDemandSkillLoading() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use {
             AiDeviceTest.Fixture(context).use { f ->
-                val custom = File(f.root, "project/.zakocoder/skills/selected").apply { mkdirs() }
-                val disabled = File(f.root, "project/.zakocoder/skills/disabled").apply { mkdirs() }
+                val custom = File(sharedRoot(f), ".zakocoder/skills/selected").apply { mkdirs() }
+                val disabled = File(sharedRoot(f), ".zakocoder/skills/disabled").apply { mkdirs() }
                 File(custom, "SKILL.md").writeText("---\nname: selected\ndescription: Selected metadata\n---\nSELECTED_PRIVATE_BODY")
                 File(disabled, "SKILL.md").writeText("---\nname: disabled\ndescription: Disabled metadata\n---\nDISABLED_PRIVATE_BODY")
                 val path = ".zakocoder/skills/selected/SKILL.md"
-                f.history.save("denied-load", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
-                AiPermissionStore(object : ContextWrapper(context) { override fun getFilesDir() = File(f.root, "control").apply { mkdirs() } }).save("denied-load", AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny)))
+                globalStore(f).save(AiGlobalSkills.Selection(listOf(path), true))
+                AiPermissionStore(isolatedContext(f)).save("denied-load", AiPolicy(overrides = mapOf(AiTool.ReadFile to AiPermission.Deny)))
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("denied-load") }; ready(ai)
                 f.enqueue(calls = listOf(AiCall("denied", "load_skill", JSONObject().put("skill", path).put("reason", "读取规范").toString())))
@@ -195,11 +214,11 @@ class AiBuiltinSkillsDeviceTest {
 
     @Test(timeout = 120000) fun previousTaskSkillDoesNotSkipNewReadAfterQuestionRestart() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
-            val file = File(f.root, "project/.zakocoder/skills/selected/SKILL.md").apply { parentFile!!.mkdirs() }
+            val file = File(sharedRoot(f), ".zakocoder/skills/selected/SKILL.md").apply { parentFile!!.mkdirs() }
             fun document(body: String) = "---\nname: selected\ndescription: Use for this fixture\n---\n$body"
             file.writeText(document("OLD_TASK_BODY"))
             val path = ".zakocoder/skills/selected/SKILL.md"
-            f.history.save("task-boundary", AiState(enabledSkills = listOf(path), skillsInitialized = true, skillOnDemand = true))
+            globalStore(f).save(AiGlobalSkills.Selection(listOf(path), true))
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("task-boundary") }; ready(ai)
             val loadArgs = JSONObject().put("skill", path).put("reason", "读取选中指令").toString()
@@ -212,8 +231,17 @@ class AiBuiltinSkillsDeviceTest {
             main { assertTrue(ai.send("第二个任务，先询问再读取指令")) }
             await { !ai.state.value.active && ai.state.value.questionContinuation != null }
             assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS))
+            globalStore(f).save(AiGlobalSkills.Selection(emptyList(), false))
             lateinit var reopened: AiController
             main { reopened = controller(f); reopened.select("task-boundary") }; ready(reopened)
+            assertEquals("The paused task retains its recorded selection", listOf(path), reopened.state.value.enabledSkills)
+            assertTrue(reopened.state.value.skillOnDemand)
+            main { reopened.resetGlobalSkillSelection() }
+            await { !reopened.globalSkills.value.active }
+            assertEquals(AiBuiltinSkills.defaults, reopened.globalSkills.value.enabledSkills)
+            assertEquals("Explicit global recovery does not rewrite a waiting task", listOf(path), reopened.state.value.enabledSkills)
+            assertTrue(reopened.state.value.skillOnDemand)
+            globalStore(f).save(AiGlobalSkills.Selection(emptyList(), false))
             val question = reopened.state.value.questions.last()
             f.enqueue(calls = listOf(AiCall("new-load", "load_skill", loadArgs)))
             f.enqueue("第二个任务完成。")
@@ -225,6 +253,16 @@ class AiBuiltinSkillsDeviceTest {
             assertFalse(result.getBoolean("already_loaded"))
             assertTrue(result.getString("content").contains("NEW_TASK_BODY"))
             assertFalse(result.getString("content").contains("OLD_TASK_BODY"))
+            repeat(2) { assertNotNull(f.server.takeRequest(5, TimeUnit.SECONDS)) }
+            f.enqueue("下一项任务使用全局空配置。")
+            main { assertTrue(reopened.send("第三个任务，检查当前选择")) }; await { !reopened.state.value.active }
+            val next = JSONObject(f.server.takeRequest(5, TimeUnit.SECONDS)!!.body.readUtf8())
+            val messages = next.getJSONArray("messages")
+            val currentSnapshot = (0 until messages.length()).map { messages.getJSONObject(it).optString("content") }
+                .last { it.startsWith("User-selected skills for this task.") }
+            assertFalse(currentSnapshot.contains("Skill: selected"))
+            assertTrue(reopened.state.value.enabledSkills.isEmpty())
+            assertFalse(reopened.state.value.skillOnDemand)
         }
     }
 

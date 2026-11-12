@@ -1,5 +1,8 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.Card as MiuixCard
+import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
+
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -38,7 +41,8 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, openedId: String?, onOpened: (String?) -> Unit,
-                               onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit, referencedPath: String? = null) {
+                               onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit, referencedPath: String? = null,
+                               workspaceId: String? = null, onWorkspace: (String?) -> Unit = {}, backEnabled: Boolean = true) {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::import) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::export) }
     var cloning by remember { mutableStateOf(false) }
@@ -50,17 +54,23 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     var query by rememberSaveable { mutableStateOf("") }
     var removing by remember { mutableStateOf<Project?>(null) }
     var actions by remember { mutableStateOf<Project?>(null) }
+    val assistant by workbench.ai.state.collectAsStateWithLifecycle()
     val opened = state.projects.singleOrNull { it.id == openedId }
-    BackHandler(opened != null) { onOpened(null) }
+    val workspace = state.projects.singleOrNull { it.id == workspaceId }
+    BackHandler(backEnabled && opened == null && workspace != null) { onWorkspace(null) }
+    BackHandler(backEnabled && opened != null) { onOpened(null) }
 
     if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null) },
-        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi, referencedPath = referencedPath)
+        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi, referencedPath = referencedPath, backEnabled = backEnabled)
+    else if (workspace != null) WorkbenchEntrance("workspace:${workspace.id}", ready = true) { WorkspaceConversationsPage(workbench, state, workspace,
+        onBack = { onWorkspace(null) }, onFiles = { onOpened(workspace.id) },
+        onTerminal = { onTerminal(workspace.id) }, onAi = { onAi(workspace.id) }, backEnabled = backEnabled) }
     else Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
             if (state.projects.isNotEmpty()) FilledTonalButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.primary)) {
                 WorkbenchIcon(Glyph.Add, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.mobile_add_project))
+                Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.workspace_flow_add))
             }
         }
         }
@@ -69,6 +79,8 @@ PageHeading(stringResource(R.string.projects_title)) {
         val emptyHeight = (maxHeight - 112.dp).coerceAtLeast(320.dp)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (assistant.active) item { Text(stringResource(R.string.ai_project_busy),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item {
             ProjectEnvironmentSummary(state.installed,
                 if (state.installed && state.bundleTools.isEmpty()) stringResource(if (state.checkingTools) R.string.checking_tools else R.string.bundle_unknown)
@@ -81,40 +93,40 @@ PageHeading(stringResource(R.string.projects_title)) {
                 verticalArrangement = Arrangement.Center) {
                 EmptyArtwork(Glyph.ProjectAdd)
                 Spacer(Modifier.height(20.dp))
-                Text(stringResource(R.string.library_empty_title), fontSize = 17.5.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.workspace_flow_empty), fontSize = 17.5.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.library_empty_description), style = MaterialTheme.typography.bodyMedium, color = TertiaryText, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.workspace_flow_empty_hint), style = MaterialTheme.typography.bodyMedium, color = TertiaryText, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(20.dp))
                 WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, contentPadding = PaddingValues(horizontal = 30.dp, vertical = 13.dp)) {
                     WorkbenchIcon(Glyph.Add, Modifier.size(16.dp), tint = androidx.compose.ui.graphics.Color.White)
-                    Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.mobile_add_project))
+                    Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.workspace_flow_add))
                 }
             }
         } else {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(stringResource(R.string.projects_section), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.workspace_flow_list), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                         Text(stringResource(R.string.project_count, state.projects.size), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
                     }
-                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.search_projects)) },
+                    WorkbenchTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.workspace_flow_search)) },
+                        accessibilityLabel = stringResource(R.string.workspace_flow_search),
                         leadingIcon = { WorkbenchIcon(Glyph.Search) }, singleLine = true, shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface),
                         trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.clear_search)) } })
                 }
             }
             val results = state.projects.filter { it.name.contains(query, ignoreCase = true) }.sortedByDescending { it.id == state.selectedId }
-            if (results.isEmpty()) item { Text(stringResource(R.string.project_search_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (results.isEmpty()) item { Text(stringResource(R.string.workspace_flow_search_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(results, key = { it.id }) { project ->
                 HomeProjectCard(project = project, boundPath = workbench.projects.bindingPath(project.id),
                     selected = project.id == state.selectedId,
                     runningTerminals = state.sessions.count { it.projectId == project.id && it.session.isRunning },
-                    enabled = !state.busy,
-                    onOpen = { workbench.select(project.id); onOpened(project.id) },
-                    onActions = { actions = project }, onAi = { onAi(project.id) }, onTerminal = { onTerminal(project.id) })
+                    enabled = !state.busy && (assistant.projectId == project.id ||
+                        (!assistant.active && !assistant.restoring && !assistant.permissionsLoading && !assistant.permissionsSaving)),
+                    onOpen = { if (workbench.openWorkspace(project.id)) onWorkspace(project.id) },
+                    onActions = { actions = project }, onAi = { if (workbench.openWorkspace(project.id)) onWorkspace(project.id) }, onTerminal = { onTerminal(project.id) })
             }
-            item { Text(stringResource(R.string.project_card_hint), Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center) }
+            item { Text(stringResource(R.string.workspace_flow_list_hint), Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center) }
         }
     }
     }
@@ -128,7 +140,7 @@ PageHeading(stringResource(R.string.projects_title)) {
     if (creating) WorkbenchSheet(stringResource(R.string.create_project), { creating = false }, stringResource(R.string.library_description)) {
         // A restored saveable may name a template that no longer exists; fall back to Other everywhere.
         val selectedTemplate = ProjectTemplates.entries.firstOrNull { it.name == templateName } ?: ProjectTemplate.Other
-        OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.project_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        WorkbenchTextField(name, { name = it }, label = stringResource(R.string.project_name), singleLine = true, modifier = Modifier.fillMaxWidth())
         Text(stringResource(R.string.create_template_section), style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.create_template_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ProjectTemplates.entries.forEach { template ->
@@ -153,8 +165,8 @@ PageHeading(stringResource(R.string.projects_title)) {
             cloning = false
         })
     actions?.let { project -> WorkbenchSheet(project.name, { actions = null }) {
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; workbench.select(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.use_project)) }
-        OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; workbench.select(project.id); onOpened(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) onWorkspace(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_flow_open)) }
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) onOpened(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.browse_project, project.name))
         }
         TextButton(onClick = { actions = null; removing = project },
@@ -162,7 +174,7 @@ PageHeading(stringResource(R.string.projects_title)) {
             Text(stringResource(R.string.remove_project), color = MaterialTheme.colorScheme.error)
         }
     } }
-    removing?.let { project -> AlertDialog(onDismissRequest = { removing = null }, title = { Text(stringResource(R.string.remove_project)) },
+    removing?.let { project -> WorkbenchAlertDialog(onDismissRequest = { removing = null }, title = { Text(stringResource(R.string.remove_project)) },
         text = { Text(stringResource(if (workbench.projects.isBound(project.id)) R.string.local_project_unbind_confirmation else R.string.remove_confirmation, project.name)) },
         confirmButton = { TextButton(onClick = { removing = null; onOpened(null); workbench.removeProject(project.id) }) { Text(stringResource(R.string.remove)) } },
         dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }) }
@@ -170,7 +182,8 @@ PageHeading(stringResource(R.string.projects_title)) {
 
 @Composable
 internal fun ProjectEnvironmentSummary(installed: Boolean, summary: String, onOpen: () -> Unit) {
-    Surface(onClick = onOpen, shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+    MiuixCard(onClick = onOpen, cornerRadius = 12.dp,
+        colors = MiuixCardDefaults.defaultColors(color = MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatusDot(if (installed) ReadyGreen else WaitingAmber)
@@ -188,7 +201,8 @@ internal fun ProjectEnvironmentSummary(installed: Boolean, summary: String, onOp
 @Composable
 internal fun HomeProjectCard(project: Project, boundPath: String?, selected: Boolean, runningTerminals: Int,
     enabled: Boolean, onOpen: () -> Unit, onActions: () -> Unit, onAi: () -> Unit, onTerminal: () -> Unit) {
-    Surface(shape = RoundedCornerShape(12.dp), border = cardBorder(), color = MaterialTheme.colorScheme.surface) {
+    MiuixCard(modifier = Modifier.fillMaxWidth(), cornerRadius = 12.dp,
+        colors = MiuixCardDefaults.defaultColors(color = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().combinedClickable(enabled = enabled, onClick = onOpen,
             onLongClickLabel = stringResource(R.string.project_actions), onLongClick = onActions)
             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -210,16 +224,15 @@ internal fun HomeProjectCard(project: Project, boundPath: String?, selected: Boo
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(if (boundPath == null) R.string.local_project_managed_label else R.string.local_project_bound_label),
+                Text(stringResource(if (boundPath == null) R.string.workspace_flow_work else R.string.workspace_flow_local),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (boundPath != null) Text(boundPath, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactAction(stringResource(R.string.nav_ai), onAi, Modifier.weight(1f), enabled = enabled)
-                CompactAction(stringResource(R.string.open_terminal), onTerminal, Modifier.weight(1f), enabled = enabled)
-                CompactAction(stringResource(R.string.browse_files), onOpen, Modifier.weight(1f), primary = true, enabled = enabled)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.workspace_flow_open), Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                WorkbenchIcon(Glyph.Next, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -234,7 +247,7 @@ internal fun ProjectKindsText(project: Project) {
 }
 
 @Composable
-private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit, referencedPath: String? = null) {
+private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit, referencedPath: String? = null, backEnabled: Boolean = true) {
     var showReferencedDirectory by remember(project.id, referencedPath) { mutableStateOf(referencedPath != null) }
     var tasks by rememberSaveable(project.id) { mutableStateOf(false) }
     var git by rememberSaveable(project.id) { mutableStateOf(false) }
@@ -284,7 +297,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     val upload = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) workbench.importFile(uploadProjectId, uploadDirectory, uri)
     }
-    BackHandler { if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack() }
+    BackHandler(enabled = backEnabled) { if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack() }
     if (tasks) { ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }; return }
     if (git) { ProjectGitPage(workbench, project.id, close = { git = false }); return }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
@@ -375,7 +388,8 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     }
     installingApk?.let { file ->
         val needsPermission = apkInstaller.needsSourcePermission()
-        AlertDialog(onDismissRequest = { if (!apkBusy) installingApk = null },
+        WorkbenchAlertDialog(onDismissRequest = { if (!apkBusy) installingApk = null },
+            dismissible = !apkBusy,
             title = { Text(stringResource(if (needsPermission) R.string.apk_source_permission else R.string.apk_install)) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(if (needsPermission) R.string.apk_source_permission_hint else R.string.apk_install_confirmation, file.relative))
@@ -415,17 +429,17 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
         TextButton(onClick = { fileActions = null; fileOperation = file to "delete" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_delete), color = MaterialTheme.colorScheme.error) }
     } }
     fileOperation?.let { (file, action) ->
-        AlertDialog(onDismissRequest = { fileOperation = null }, title = { Text(stringResource(when (action) { "rename" -> R.string.file_rename; "copy" -> R.string.file_copy; else -> R.string.file_delete })) },
+        WorkbenchAlertDialog(onDismissRequest = { fileOperation = null }, title = { Text(stringResource(when (action) { "rename" -> R.string.file_rename; "copy" -> R.string.file_copy; else -> R.string.file_delete })) },
             text = { if (action == "delete") Text(stringResource(R.string.file_delete_confirmation, file.relative))
-                else OutlinedTextField(actionName, { actionName = it }, singleLine = true, label = { Text(stringResource(R.string.file_name)) }) },
+                else WorkbenchTextField(actionName, { actionName = it }, singleLine = true, label = stringResource(R.string.file_name)) },
             confirmButton = { TextButton(onClick = { fileOperation = null; workbench.fileAction(project.id, file.relative, action, actionName) }, enabled = !state.busy && (action == "delete" || actionName.isNotBlank())) { Text(stringResource(if (action == "delete") R.string.file_delete else R.string.editor_save)) } },
             dismissButton = { TextButton(onClick = { fileOperation = null }) { Text(stringResource(R.string.cancel)) } })
     }
     if (creatingFile) WorkbenchSheet(stringResource(R.string.create_file), { creatingFile = false }) {
-        OutlinedTextField(fileName, { fileName = it }, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.file_name)) }, singleLine = true)
+        WorkbenchTextField(fileName, { fileName = it }, modifier = Modifier.fillMaxWidth(), label = stringResource(R.string.file_name), singleLine = true)
         WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false; workbench.createFile(project.id, directory, fileName); fileName = "" },
             enabled = !state.busy && fileName.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
-        OutlinedButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
     }
 
 }
@@ -434,16 +448,25 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
 @Composable
 internal fun AddProjectSheet(enabled: Boolean, onDismiss: () -> Unit, onImport: () -> Unit,
                              onCreate: () -> Unit, onClone: () -> Unit, onBind: (() -> Unit)? = null) {
-    WorkbenchSheet(stringResource(R.string.mobile_add_project), onDismiss,
-        stringResource(if (onBind == null) R.string.library_description else R.string.local_project_source_hint)) {
-        ProjectEntryOption(stringResource(R.string.mobile_import_source), stringResource(R.string.mobile_import_source_hint),
-            Glyph.Import, enabled, primary = true, onClick = onImport)
-        ProjectEntryOption(stringResource(R.string.mobile_create_empty), stringResource(R.string.mobile_create_empty_hint),
-            Glyph.ProjectAdd, enabled, onClick = onCreate)
-        if (onBind != null) ProjectEntryOption(stringResource(R.string.local_project_bind), stringResource(R.string.local_project_bind_hint),
-            Glyph.Projects, enabled, onClick = onBind)
-        ProjectEntryOption(stringResource(R.string.git_clone), stringResource(R.string.mobile_clone_hint),
-            Glyph.History, enabled, onClick = onClone)
+    var work by rememberSaveable { mutableStateOf(false) }
+    WorkbenchSheet(stringResource(R.string.workspace_flow_add), onDismiss,
+        stringResource(if (work) R.string.workspace_flow_source else R.string.workspace_flow_choose_mode)) {
+        if (!work) {
+            ProjectEntryOption(stringResource(R.string.workspace_flow_work), stringResource(R.string.workspace_flow_work_hint),
+                Glyph.ProjectAdd, enabled, onClick = { work = true })
+            if (onBind != null) ProjectEntryOption(stringResource(R.string.workspace_flow_local), stringResource(R.string.workspace_flow_local_hint),
+                Glyph.Projects, enabled, onClick = onBind)
+        } else {
+            TextButton(onClick = { work = false }) { Text(stringResource(R.string.workspace_flow_change_mode)) }
+            Text(stringResource(R.string.workspace_flow_work_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ProjectEntryOption(stringResource(R.string.mobile_import_source), stringResource(R.string.mobile_import_source_hint),
+                Glyph.Import, enabled, onClick = onImport)
+            ProjectEntryOption(stringResource(R.string.mobile_create_empty), stringResource(R.string.mobile_create_empty_hint),
+                Glyph.ProjectAdd, enabled, onClick = onCreate)
+            ProjectEntryOption(stringResource(R.string.git_clone), stringResource(R.string.mobile_clone_hint),
+                Glyph.History, enabled, onClick = onClone)
+        }
     }
 }
 
@@ -451,15 +474,15 @@ internal fun AddProjectSheet(enabled: Boolean, onDismiss: () -> Unit, onImport: 
 private fun ProjectEntryOption(title: String, description: String, glyph: Glyph, enabled: Boolean,
                                primary: Boolean = false, onClick: () -> Unit) {
     val foreground = if (primary) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface
-    Surface(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(12.dp),
-        color = if (primary) BrandFill else MaterialTheme.colorScheme.surface,
-        contentColor = foreground,
-        border = if (primary) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    MiuixCard(onClick = if (enabled) onClick else null, cornerRadius = 12.dp,
+        colors = MiuixCardDefaults.defaultColors(
+            color = if (primary) BrandFill else MaterialTheme.colorScheme.surface,
+            contentColor = foreground)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             WorkbenchIcon(glyph, Modifier.size(20.dp), tint = foreground)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = foreground)
                 Text(description, style = MaterialTheme.typography.bodyMedium,
                     color = if (primary) foreground else MaterialTheme.colorScheme.onSurfaceVariant)
             }
