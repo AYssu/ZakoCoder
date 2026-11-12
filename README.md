@@ -54,7 +54,7 @@ AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD�
 
 从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 选择与设备及需求对应的 APK，并下载 `SHA256SUMS.txt` 校验文件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
 
-开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行的 **Artifacts** 按 Lite／Full 和 ARM64／x86_64 区分 Debug APK，并提供运行时来源、摘要与构建信息，保留 14 天；下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行后可按 Lite／Full 和 ARM64／x86_64 单独下载所需 Debug APK，每份附对应摘要与构建信息；Lite 可选插件按架构另行下载，运行时来源及完整校验材料独立归档，保留 14 天。下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
 
 Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
 
