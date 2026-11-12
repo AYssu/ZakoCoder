@@ -10,6 +10,50 @@ import unittest
 
 
 class DebugApkWorkflowTest(unittest.TestCase):
+    def test_ci_four_builds_share_resolved_identity_and_inventory_version(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/ci.yml").read_text()
+        job = workflow.split("  android:\n", 1)[1].split("  kernel-plugin:", 1)[0]
+        self.assertIn('scripts/build_version.py --channel dev --github-output "$GITHUB_OUTPUT"', job)
+        step = job.split("      - name: Check all four distribution builds and actual package inventories\n", 1)[1]
+        self.assertIn("BUILD_VERSION: ${{ steps.version.outputs.version }}", step)
+        self.assertIn("BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}", step)
+        command = textwrap.dedent(step.split("        run: |\n", 1)[1].split("      - name: ", 1)[0])
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            (fixture / "scripts").mkdir()
+            gradle = fixture / "gradlew"
+            gradle.write_text(textwrap.dedent('''\
+                #!/usr/bin/env python3
+                import json, pathlib, sys
+                properties = dict(arg[2:].split('=', 1) for arg in sys.argv[1:] if arg.startswith('-P'))
+                # A separate invocation would otherwise resolve a different clock value.
+                apk = pathlib.Path('app/build/outputs/apk/debug/app-debug.apk')
+                apk.parent.mkdir(parents=True, exist_ok=True)
+                apk.write_text(json.dumps(properties))
+                '''))
+            gradle.chmod(0o755)
+            (fixture / "scripts/distribution.py").write_text(textwrap.dedent('''\
+                import json, pathlib, sys
+                args = sys.argv[1:]
+                version = args[args.index('--version') + 1]
+                code = args[args.index('--expected-version-code') + 1]
+                assert version == '0.1.2111216-dev'
+                assert code == '216000000'
+                apks = list(pathlib.Path('distribution-ci').glob('*.apk'))
+                assert len(apks) == 4
+                for apk in apks:
+                    properties = json.loads(apk.read_text())
+                    assert properties['buildVersion'] == version
+                    assert properties['buildVersionCode'] == code
+                    edition, abi = properties['distributionEdition'], properties['compatibilityAbis']
+                    assert apk.name == f'ZakoCoder-{version}-{edition}-{abi}.apk'
+                '''))
+            result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=fixture,
+                env={**os.environ, "BUILD_VERSION": "0.1.2111216-dev", "BUILD_VERSION_CODE": "216000000",
+                     "ANDROID_HOME": str(fixture / "sdk")}, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+
     def test_build_metadata_is_written_to_artifact_without_executing_description(self):
         workflow = Path(__file__).resolve().parents[1] / ".github/workflows/build-apk.yml"
         lines = workflow.read_text().splitlines(keepends=True)

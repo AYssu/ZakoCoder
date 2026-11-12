@@ -44,6 +44,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Resolve CI build identity
+        id: version
+        run: python3 scripts/build_version.py --channel dev --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -69,16 +72,20 @@ jobs:
           go-version-file: native-kernel/go.version
           cache: false
       - name: Check all four distribution builds and actual package inventories
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
           mkdir -p distribution-ci
           for edition in lite full; do
             for abi in arm64-v8a x86_64; do
-              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" --stacktrace
-              cp app/build/outputs/apk/debug/app-debug.apk "distribution-ci/ZakoCoder-ci-$edition-$abi.apk"
+              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" \
+                -PbuildVersion="$BUILD_VERSION" -PbuildVersionCode="$BUILD_VERSION_CODE" --stacktrace
+              cp app/build/outputs/apk/debug/app-debug.apk "distribution-ci/ZakoCoder-$BUILD_VERSION-$edition-$abi.apk"
             done
           done
-          python3 scripts/distribution.py --directory distribution-ci --version ci --debug \
+          python3 scripts/distribution.py --directory distribution-ci --version "$BUILD_VERSION" --expected-version-code "$BUILD_VERSION_CODE" --debug \
             --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner"
       - name: Verify self-built runtime artifacts and regression checks
         run: |
