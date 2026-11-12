@@ -27,7 +27,8 @@ import dev.zakocoder.app.settings.RunningNotificationStatus
 @Composable
 internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false, rootError: String = "",
     onRequestRoot: () -> Unit, onToolPermissions: () -> Unit, onBack: () -> Unit,
-    toolsEnabled: Boolean = true, backgroundServiceRunning: Boolean = false, backgroundServiceError: Boolean = false) {
+    toolsEnabled: Boolean = true, backgroundServiceRunning: Boolean = false, backgroundServiceError: Boolean = false,
+    embedded: Boolean = false, backEnabled: Boolean = true) {
     val context = LocalContext.current
     val access = remember(context) { AppPermissions(context) }
     val owner = LocalLifecycleOwner.current
@@ -47,7 +48,7 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
         text = { Text(stringResource(R.string.app_permissions_root_confirm)) },
         confirmButton = { TextButton(onClick = { confirmRoot = false; onRequestRoot() }) { Text(stringResource(R.string.app_permissions_root_request)) } },
         dismissButton = { TextButton(onClick = { confirmRoot = false }) { Text(stringResource(R.string.cancel)) } })
-    AiFullScreen(stringResource(R.string.app_permissions_title), onBack) {
+    val content: @Composable ColumnScope.() -> Unit = {
         AppPermissionsPanel(states, rootGranted, rootBusy, rootError,
             navigationError, onManage = { permission -> navigationError = !access.openSettings(permission) },
             onRequest = { permission ->
@@ -57,6 +58,21 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
             }, onRoot = { confirmRoot = true }, onTools = onToolPermissions, toolsEnabled = toolsEnabled,
             backgroundServiceRunning = backgroundServiceRunning, backgroundServiceError = backgroundServiceError)
     }
+    if (embedded) {
+        val back = rememberWorkbenchBackMotion(enabled = backEnabled, onBack = onBack)
+        Surface(Modifier.fillMaxSize().then(back.modifier), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = back.close, enabled = backEnabled) {
+                        WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close))
+                    }
+                    Text(stringResource(R.string.app_permissions_title), style = MaterialTheme.typography.titleMedium)
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                content()
+            }
+        }
+    } else AiFullScreen(stringResource(R.string.app_permissions_title), onBack, content)
 }
 
 /** Pure presentation for both themes and large-font layout checks. No system queries or grants. */

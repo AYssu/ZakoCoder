@@ -185,7 +185,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     val assistantReady = !modelEntry.loading && !assistantEntry.loading &&
         (state.selectedId == null || assistantEntry.projectId != null) && markdownPrepared
-    val entryDestination = if (state.loading) "startup" else if (wantsSetup) "setup" else "workbench"
+    val entryDestination = if (state.loading) "startup" else if (state.onboarding.required) "setup" else "workbench"
     val entryReady = !state.loading && (wantsSetup || !enteringAssistant || assistantReady)
     val entryAnimationFinished = remember(entryDestination) { mutableStateOf(false) }
     val dark = isSystemInDarkTheme()
@@ -210,7 +210,16 @@ fun ZakoCoderApp(workbench: Workbench) {
             page = AppDestination.Project
         } else page = AppDestination.Ai
     }
-        AnimatedContent(entryDestination, modifier = Modifier.fillMaxSize(), transitionSpec = {
+        Box(Modifier.fillMaxSize()) {
+        // Reopening setup is an overlay: keep the user's actual settings page and scroll
+        // position alive underneath, so a cancelled back gesture has a real destination.
+        val coveredWorkbench = if (setupOpen && !state.onboarding.required) Modifier.clearAndSetSemantics { }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                }
+            } else Modifier
+        AnimatedContent(entryDestination, modifier = Modifier.fillMaxSize().then(coveredWorkbench), transitionSpec = {
             fadeIn(tween(340)) togetherWith fadeOut(tween(280, delayMillis = 80))
         }, label = "application-entry") { shownEntry ->
         WorkbenchEntrance(shownEntry, entryReady && shownEntry == entryDestination,
@@ -408,6 +417,15 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
         }
     }
     }
+        if (setupOpen && !state.onboarding.required) {
+            WorkbenchEntrance("setup-overlay", ready = true, retainBackground = false) {
+                OnboardingPage(workbench, state, startFromBeginning = true,
+                    onExit = { setupOpen = false }, onComplete = {
+                        workbench.completeOnboarding { setupOpen = false; page = AppDestination.Ai }
+                    })
+            }
+        }
+        }
     }
     }
     // Register after page handlers so Back always closes an open navigation drawer first.

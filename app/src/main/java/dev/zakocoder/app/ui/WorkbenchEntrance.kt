@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun WorkbenchEntrance(destination: String, ready: Boolean, animate: Boolean = true,
-    onRevealed: () -> Unit = {}, content: @Composable () -> Unit) {
+    onRevealed: () -> Unit = {}, retainBackground: Boolean = true, content: @Composable () -> Unit) {
     val reveal = remember(destination) { Animatable(0f) }
     var laidOut by remember(destination) { mutableStateOf(false) }
     var prepared by remember(destination) { mutableStateOf(false) }
@@ -39,7 +39,10 @@ internal fun WorkbenchEntrance(destination: String, ready: Boolean, animate: Boo
         }
     }
     BackHandler(enabled = reveal.isRunning) { }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // Overlays must reveal the still-live destination after entry settles; retaining an
+    // opaque entrance layer would hide it again during their predictive back gesture.
+    val background = if (retainBackground || reveal.value < 1f) Modifier.background(MaterialTheme.colorScheme.background) else Modifier
+    Box(Modifier.fillMaxSize().then(background)) {
         if (composeDestination) Box(Modifier.fillMaxSize().onGloballyPositioned { laidOut = true }.graphicsLayer {
             alpha = reveal.value
             val scale = 0.985f + 0.015f * reveal.value
