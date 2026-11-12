@@ -2,6 +2,12 @@ name: Build Debug APK
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Base version (for example 0.1.2; Beijing MMddHH and -dev are added automatically)
+        required: true
+        default: 0.1.2
+        type: string
 
 permissions:
   contents: read
@@ -15,6 +21,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Resolve build version
+        id: version
+        env:
+          BASE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/build_version.py --base-version "$BASE_VERSION" --channel dev --github-output "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -47,6 +58,9 @@ jobs:
         with:
           cache-provider: basic
       - name: Build four Debug distributions and optional Lite plugin
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}
         shell: bash
         run: |
           set -euo pipefail
@@ -57,10 +71,11 @@ jobs:
           python3 scripts/prepare_proxy_kernel.py --abis arm64-v8a x86_64 --force --strict-hash
           ./gradlew :app:lintDebug --stacktrace
           mkdir -p apk-output
-          version="debug-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          version="$BUILD_VERSION"
           for edition in lite full; do
             for abi in arm64-v8a x86_64; do
-              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" --stacktrace
+              ./gradlew :app:assembleDebug -PdistributionEdition="$edition" -PcompatibilityAbis="$abi" \
+                -PbuildVersion="$BUILD_VERSION" -PbuildVersionCode="$BUILD_VERSION_CODE" --stacktrace
               name="ZakoCoder-$version-$edition-$abi.apk"
               "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$HOME/.android/debug.keystore" \
                 --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
@@ -68,16 +83,18 @@ jobs:
               rm -f "apk-output/$name.idsig"
             done
           done
-          python3 scripts/distribution.py --directory apk-output --version "$version" --debug \
+          python3 scripts/distribution.py --directory apk-output --version "$version" --expected-version-code "$BUILD_VERSION_CODE" --debug \
             --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner"
           mkdir -p plugin-output
           for abi in arm64-v8a x86_64; do
-            ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug -PcompatibilityAbis="$abi" --stacktrace
+            ./gradlew :kernel-plugin:assembleDebug :kernel-plugin:lintDebug -PcompatibilityAbis="$abi" \
+              -PkernelPluginVersionName="$BUILD_VERSION" -PkernelPluginVersionCode="$BUILD_VERSION_CODE" --stacktrace
             cp kernel-plugin/build/outputs/apk/debug/kernel-plugin-debug.apk "plugin-output/ZakoCoder-kernel-plugin-debug-$abi.apk"
           done
           (cd plugin-output && sha256sum *.apk > SHA256SUMS.txt)
           printf '%s\n' \
             'ZakoCoder Lite/Full ARM64/x86_64 Debug test builds; not production releases.' \
+            "Version: $BUILD_VERSION (versionCode $BUILD_VERSION_CODE)" \
             "Commit: $GITHUB_SHA" \
             "Ref: $GITHUB_REF" \
             "Run: $GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
@@ -87,10 +104,12 @@ jobs:
             > apk-output/BUILD.txt
           python3 native-runtime/bundle_sources.py --output apk-output/native-runtime-sources.tar.gz
       - name: Prepare individual downloads
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          version="debug-${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          version="$BUILD_VERSION"
           package_apk() {
             local source="$1" target="$2" description="$3"
             mkdir -p "$target"
@@ -177,6 +196,8 @@ jobs:
           retention-days: 14
       - name: Show download links
         env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           LITE_ARM64_URL: ${{ steps.debug_lite_arm64_v8a.outputs.artifact-url }}
           LITE_X86_64_URL: ${{ steps.debug_lite_x86_64.outputs.artifact-url }}
           FULL_ARM64_URL: ${{ steps.debug_full_arm64_v8a.outputs.artifact-url }}
@@ -188,6 +209,7 @@ jobs:
         run: |
           {
             printf '## Debug 测试包：按需下载\n\n'
+            printf '版本：`%s` · versionCode：`%s`\n\n' "$BUILD_VERSION" "$BUILD_VERSION_CODE"
             printf '主流手机推荐 Lite ARM64；希望内置 Ubuntu 和代理内核可选 Full ARM64。电脑 Android 模拟器通常选择 x86_64。每份安装包单独下载，包含一个 APK、对应 SHA-256 和构建信息。\n\n'
             printf '| 版本 | ARM64 手机 | x86_64 模拟器 |\n| --- | --- | --- |\n'
             printf '| Lite 轻量版 | [下载](%s) | [下载](%s) |\n' "$LITE_ARM64_URL" "$LITE_X86_64_URL"

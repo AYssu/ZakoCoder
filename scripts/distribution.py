@@ -92,6 +92,7 @@ def main():
     parser.add_argument('--aapt', required=True)
     parser.add_argument('--apksigner', required=True)
     parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--expected-version-code', type=int)
     args = parser.parse_args()
     reports = []
     for edition, abi in VARIANTS:
@@ -101,6 +102,10 @@ def main():
         raise ValueError('All four distributions must share a signing certificate')
     if len({(r['package'], r['versionName'], r['versionCode']) for r in reports}) != 1:
         raise ValueError('All four distributions must share package and version')
+    if any(r['versionName'] != args.version for r in reports):
+        raise ValueError('APK versionName must match the requested build version')
+    if args.expected_version_code is not None and any(r['versionCode'] != args.expected_version_code for r in reports):
+        raise ValueError('APK versionCode must match the resolved build versionCode')
     write_checksums(args.directory, args.version)
     (args.directory / 'distribution-validation.json').write_text(json.dumps(reports, indent=2) + '\n')
 

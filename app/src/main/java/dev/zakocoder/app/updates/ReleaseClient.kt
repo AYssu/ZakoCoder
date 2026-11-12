@@ -7,6 +7,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -38,7 +39,11 @@ internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Bui
                 }
                 val apk = selectDistributionAsset(parsed, tag, edition, installedAbi)?.takeIf { it.size in 1..MAX_APK } ?: continue
                 val sums = parsed.singleOrNull { it.name == "SHA256SUMS.txt" && it.size in 1..65536 } ?: continue
-                all += AppRelease(tag, r.optString("body").take(24000), r.optBoolean("prerelease"), apk, sums)
+                val body = r.optString("body")
+                val code = embeddedVersionCode(body, tag)
+                // An invalid advertised build record must not fall back to name ordering.
+                if (body.contains("<!-- zakocoder-build") && code == null) continue
+                all += AppRelease(tag, body.take(24000), r.optBoolean("prerelease"), apk, sums, code)
             }
             if (json.length() < 30) break
         }
@@ -100,6 +105,12 @@ internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Bui
     }
     companion object {
         private const val MAX_APK = 1_000_000_000L
+        internal fun embeddedVersionCode(body: String, tag: String): Long? {
+            val records = Regex("<!-- zakocoder-build\\n(.*?)\\n-->", RegexOption.DOT_MATCHES_ALL).findAll(body).toList()
+            if (records.size != 1 || records.single().groupValues[1].length > 1_000_000) return null
+            val record = try { JSONObject(records.single().groupValues[1]) } catch (_: org.json.JSONException) { return null }
+            return releaseBuildVersionCode(tag, record.opt("schemaVersion"), record.opt("package"), record.opt("version"), record.opt("versionCode"))
+        }
         internal fun validAssetUrl(raw: String, tag: String): Boolean {
             val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return false
             return uri.scheme == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port == -1 &&

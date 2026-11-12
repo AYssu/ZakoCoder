@@ -21,7 +21,8 @@ class DebugApkWorkflowTest(unittest.TestCase):
             (root / "apk-output").mkdir()
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root,
                 env={**os.environ, "GITHUB_SHA": "fixture-commit", "GITHUB_REF": "refs/heads/main",
-                     "GITHUB_RUN_NUMBER": "12", "GITHUB_RUN_ATTEMPT": "2"},
+                     "GITHUB_RUN_NUMBER": "12", "GITHUB_RUN_ATTEMPT": "2",
+                     "BUILD_VERSION": "0.1.2111216-dev", "BUILD_VERSION_CODE": "216000000"},
                 capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertEqual("", result.stdout)
@@ -31,7 +32,8 @@ class DebugApkWorkflowTest(unittest.TestCase):
             self.assertIn("Run: 12 (attempt 2)\n", metadata)
             self.assertIn("kernel plugin APK is optional", metadata)
             self.assertIn("Upgrading does not automatically replace", metadata)
-            self.assertEqual(7, len(metadata.splitlines()))
+            self.assertEqual(8, len(metadata.splitlines()))
+            self.assertIn("Version: 0.1.2111216-dev (versionCode 216000000)", metadata)
 
     def test_downloads_contain_one_apk_with_its_own_checksum_and_metadata(self):
         workflow = Path(__file__).resolve().parents[1] / ".github/workflows/build-apk.yml"
@@ -47,7 +49,7 @@ class DebugApkWorkflowTest(unittest.TestCase):
             sources = {}
             for edition in ("lite", "full"):
                 for abi in ("arm64-v8a", "x86_64"):
-                    name = f"ZakoCoder-debug-12-fixture-{edition}-{abi}.apk"
+                    name = f"ZakoCoder-0.1.2111216-dev-{edition}-{abi}.apk"
                     source = apps / name
                     source.write_bytes(f"fixture {edition} {abi}".encode())
                     sources[f"debug-{edition}-{abi}"] = source
@@ -61,7 +63,7 @@ class DebugApkWorkflowTest(unittest.TestCase):
             for name in ("native-runtime-sources.tar.gz", "distribution-validation.json", "LICENSE.txt"):
                 (apps / name).write_text(f"fixture {name}\n")
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root,
-                env={**os.environ, "GITHUB_SHA": "fixture-commit", "GITHUB_RUN_NUMBER": "12"},
+                env={**os.environ, "GITHUB_SHA": "fixture-commit", "GITHUB_RUN_NUMBER": "12", "BUILD_VERSION": "0.1.2111216-dev"},
                 capture_output=True, text=True)
             self.assertEqual(0, result.returncode, result.stderr)
             output = root / "artifact-output"

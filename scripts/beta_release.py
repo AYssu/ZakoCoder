@@ -460,7 +460,9 @@ def main():
     resolve = sub.add_parser("resolve")
     resolve.add_argument("--target-ref", default="main")
     resolve.add_argument("--version", required=True)
-    resolve.add_argument("--version-code", required=True)
+    resolve.add_argument("--version-code", default="")
+    resolve.add_argument("--stamp-version", action="store_true",
+                         help="Append Beijing MMddHH to the base version before validation")
     resolve.add_argument("--repository", required=True)
     resolve.add_argument("--github-output", type=Path)
     meta = sub.add_parser("metadata")
@@ -477,16 +479,22 @@ def main():
         publish_parser.add_argument("--" + name, required=True, type=Path)
     args = parser.parse_args()
     if args.command == "resolve":
-        validate_inputs(args.version, args.version_code, args.target_ref)
+        resolved = {}
+        if args.stamp_version or args.version_code == "":
+            from build_version import resolve_version
+            resolved = resolve_version(args.version, "release")
+        actual_version = resolved["version"] if args.stamp_version else args.version
+        actual_code = version_code(args.version_code if args.version_code != "" else resolved["version_code"])
+        validate_inputs(actual_version, actual_code, args.target_ref)
         latest_main = subprocess.check_output(["git", "rev-parse", "--verify", "origin/main^{commit}"], text=True).strip()
         commit = latest_main if args.target_ref == "main" else args.target_ref
         validate_commit(commit)
         require_publishable_target(commit, latest_main)
-        preflight(args.repository, args.version, args.version_code)
+        preflight(args.repository, actual_version, actual_code)
         if args.github_output:
             with args.github_output.open("a") as output:
-                output.write(f"commit={commit}\nversion={args.version}\nversion_code={version_code(args.version_code)}\n")
-        print(json.dumps({"commit": commit, "version": args.version, "versionCode": version_code(args.version_code)}))
+                output.write(f"commit={commit}\nversion={actual_version}\nversion_code={actual_code}\n")
+        print(json.dumps({"commit": commit, "version": actual_version, "versionCode": actual_code}))
     elif args.command == "metadata":
         create_metadata(args.directory, args.version, args.version_code, args.commit, args.certificate, args.run_url, args.signing_key_kind)
     elif args.command == "finalize":

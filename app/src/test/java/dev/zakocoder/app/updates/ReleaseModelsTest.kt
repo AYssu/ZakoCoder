@@ -24,6 +24,46 @@ class ReleaseModelsTest {
         assertNull(selectRelease(candidates, "0.1.0-beta.2", UpdateChannel.Stable))
         assertEquals("v0.1.0", selectRelease(candidates + release("v0.1.0"), "0.1.0-rc.1", UpdateChannel.Stable)?.tag)
     }
+    @Test fun publishedBuildCodeOrdersCalendarNamesAcrossNewYear() {
+        val january = release("v0.1.2010100").copy(versionCode = 4_000_002)
+        val december = release("v0.1.2123123").copy(versionCode = 4_000_001)
+        assertEquals(january, selectRelease(listOf(december, january), "0.1.2123023", UpdateChannel.Stable, 4_000_000))
+        assertNull(selectRelease(listOf(december), "0.1.2010100", UpdateChannel.Stable, 4_000_002))
+    }
+    @Test fun developmentBuildCanFindNewerOfficialReleaseByCode() {
+        val stable = release("v0.1.2111216").copy(versionCode = 4_000_002)
+        assertEquals(stable, selectRelease(listOf(stable), "0.1.2111216-dev", UpdateChannel.Stable, 4_000_001))
+        assertNull(selectRelease(listOf(stable), "0.1.2111216-dev", UpdateChannel.Stable, 4_000_002))
+        assertNull(selectRelease(listOf(stable), "0.1.2111216-dev", UpdateChannel.Stable, 4_000_003))
+        assertEquals(stable, selectRelease(listOf(stable), "0.1.2111216-rc.1-dev", UpdateChannel.Stable, 4_000_001))
+        assertNull(selectRelease(listOf(release("v0.1.2111217-dev").copy(versionCode = 4_000_003)),
+            "0.1.2111216-dev", UpdateChannel.Beta, 4_000_001))
+    }
+    @Test fun codeOrderingStillHonorsStableAndPreviewChannels() {
+        val stable = release("v0.1.2111216").copy(versionCode = 4_000_002)
+        val beta = release("v0.1.2111216-beta.1").copy(versionCode = 4_000_003)
+        val rc = release("v0.1.2111216-rc.1").copy(versionCode = 4_000_004)
+        assertEquals(stable, selectRelease(listOf(stable, beta, rc), "0.1.2111215-dev", UpdateChannel.Stable, 4_000_001))
+        assertEquals(rc, selectRelease(listOf(stable, beta, rc), "0.1.2111215-dev", UpdateChannel.Beta, 4_000_001))
+        assertNull(selectRelease(listOf(beta, rc), "0.1.2111215-dev", UpdateChannel.Stable, 4_000_001))
+    }
+    @Test fun legacyReleasesWithoutBuildCodeRetainSemanticOrdering() {
+        assertEquals("v0.1.2", selectRelease(listOf(release("v0.1.2")), "0.1.1", UpdateChannel.Stable, 1007)?.tag)
+        val oldCode = release("v99.0.0").copy(versionCode = 1006)
+        assertNull(selectRelease(listOf(oldCode), "0.1.1", UpdateChannel.Stable, 1007))
+    }
+    @Test fun buildRecordMustMatchItsReleaseAndContainBoundedIntegerCode() {
+        fun code(value: Any?, tag: String = "v0.1.2111216", schema: Any? = 1,
+            name: Any? = "dev.zakocoder.app", version: Any? = "0.1.2111216") =
+            releaseBuildVersionCode(tag, schema, name, version, value)
+        assertEquals(4_000_002L, code(4_000_002))
+        assertEquals(2_100_000_000L, code(2_100_000_000L))
+        for (invalid in listOf(null, 0, -1, 2_100_000_001L, "4000002", 4_000_002.0, true)) assertNull(code(invalid))
+        assertNull(code(4_000_002, schema = 2))
+        assertNull(code(4_000_002, name = "other.package"))
+        assertNull(code(4_000_002, version = "0.1.2111215"))
+        assertNull(code(4_000_002, tag = "v0.1.2111215"))
+    }
     @Test fun checksumMatchesExactAssetOnlyAndRejectsAmbiguity() {
         val digest = "a".repeat(64)
         assertEquals(digest, releaseChecksum("$digest  app.apk\n", "app.apk"))

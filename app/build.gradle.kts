@@ -3,6 +3,10 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 plugins {
     alias(libs.plugins.android.application)
@@ -21,9 +25,46 @@ val kernelLock = groovy.json.JsonSlurper().parse(rootProject.file("native-kernel
 val kernelVersion = (kernelLock["upstreamTag"] ?: kernelLock["version"]) as String
 val distributionAssets = layout.buildDirectory.dir("generated/distributionAssets/$distributionEdition")
 
+val maximumVersionCode = 2_100_000_000
+fun parseBuildVersionCode(value: String, property: String): Int = value.toIntOrNull().also {
+    require(it != null && it in 1..maximumVersionCode) { "$property must be a positive Android version code (at most $maximumVersionCode)" }
+}!!
 val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCode").orNull?.let {
-    it.toInt().also { code -> require(code > 0) }
-} ?: 1
+    parseBuildVersionCode(it, "compatibilityVersionCode")
+}
+val buildVersionPattern = Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\\.[1-9][0-9]*)?")
+fun hasSupportedVersionComponents(value: String): Boolean =
+    value.substringBefore('-').split('.').all { it.toIntOrNull() != null }
+val baseBuildVersion = providers.gradleProperty("baseVersion").orElse("0.1.2").get().also {
+    require(it.matches(buildVersionPattern) && hasSupportedVersionComponents(it)) { "baseVersion must be major.minor.patch with optional -beta.N or -rc.N" }
+}
+// Resolve once per Gradle invocation. CI passes both immutable values to every APK build.
+val buildMoment = Instant.now()
+val buildTimestamp = DateTimeFormatter.ofPattern("MMddHH").withZone(ZoneId.of("Asia/Shanghai")).format(buildMoment)
+val baseVersionCore = baseBuildVersion.substringBefore('-')
+val timestampedPatch = (baseVersionCore.substringAfterLast('.') + buildTimestamp).toLong().toString()
+val generatedVersionName = baseVersionCore.substringBeforeLast('.') + "." + timestampedPatch +
+    baseBuildVersion.substringAfter('-', "").let { if (it.isEmpty()) "" else "-$it" } + "-dev"
+require(hasSupportedVersionComponents(generatedVersionName)) {
+    "Timestamped version components must not exceed a signed 32-bit integer"
+}
+val explicitBuildVersion = providers.gradleProperty("buildVersion").orNull?.also {
+    require(it.removeSuffix("-dev").matches(buildVersionPattern) && hasSupportedVersionComponents(it)) { "buildVersion must be a valid numeric version with optional beta/rc and dev suffixes" }
+}
+val explicitBuildVersionCode = providers.gradleProperty("buildVersionCode").orNull?.let {
+    parseBuildVersionCode(it, "buildVersionCode")
+}
+require((explicitBuildVersion == null) == (explicitBuildVersionCode == null)) {
+    "Set buildVersion and buildVersionCode together for a fixed Debug build identity"
+}
+require(explicitBuildVersionCode == null || compatibilityVersionCode == null) {
+    "Use buildVersionCode or compatibilityVersionCode, not both"
+}
+val debugVersionCode = explicitBuildVersionCode ?: compatibilityVersionCode ?: run {
+    val code = Duration.between(Instant.parse("2020-01-01T00:00:00Z"), buildMoment).seconds
+    require(code in 1..maximumVersionCode.toLong()) { "Build time is outside the Android versionCode range" }
+    code.toInt()
+}
 val runtimeVerification = providers.gradleProperty("runtimeVerification").orNull == "true"
 val appApplicationId = if (runtimeVerification) "dev.zakocoder.app.runtimecheck" else "dev.zakocoder.app"
 val kernelPluginPackage = "$appApplicationId.kernel"
@@ -34,10 +75,15 @@ val betaRelease = providers.gradleProperty("betaRelease").orNull == "true"
 val betaVersion = providers.gradleProperty("betaVersion").orNull
 val betaVersionCode = providers.gradleProperty("betaVersionCode").orNull?.toIntOrNull()
 if (betaRelease) {
-    require(betaVersion?.matches(Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\\.[1-9][0-9]*)?")) == true) {
-        "Release requires -PbetaVersion=<major>.<minor>.<patch> with optional -beta.N or -rc.N"
+    require(betaVersion?.let { it.matches(buildVersionPattern) && hasSupportedVersionComponents(it) } == true) {
+        "Release requires -PbetaVersion=<major>.<minor>.<patch>[MMddHH] with optional -beta.N or -rc.N"
     }
-    require(betaVersionCode != null && betaVersionCode > 0) { "Release requires a positive -PbetaVersionCode" }
+    require(betaVersionCode != null && betaVersionCode in 1..maximumVersionCode) {
+        "Release requires -PbetaVersionCode in 1..$maximumVersionCode"
+    }
+    require(explicitBuildVersion == null && explicitBuildVersionCode == null) {
+        "Use betaVersion and betaVersionCode alone for distribution builds"
+    }
     require(!providers.gradleProperty("compatibilityVersionCode").isPresent) {
         "Use betaVersionCode alone for distribution builds"
     }
@@ -52,8 +98,8 @@ android {
         applicationId = appApplicationId
         minSdk = 26
         targetSdk = 36
-        versionCode = if (betaRelease) requireNotNull(betaVersionCode) else compatibilityVersionCode
-        versionName = if (betaRelease) requireNotNull(betaVersion) else "0.1.0-dev"
+        versionCode = if (betaRelease) requireNotNull(betaVersionCode) else debugVersionCode
+        versionName = if (betaRelease) requireNotNull(betaVersion) else explicitBuildVersion ?: generatedVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["kernelPluginPackage"] = kernelPluginPackage
         manifestPlaceholders["kernelPermission"] = kernelPermission
