@@ -6,9 +6,12 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
@@ -38,6 +41,63 @@ class AiProviderConfigUiDeviceTest {
     @Before fun foreground() = warmDeviceActivity()
     @Test(timeout = 180000) fun day360Font130() = render(false)
     @Test(timeout = 180000) fun night360Font130() = render(true)
+    @Test(timeout = 120000) fun editorOwnsOpaqueBackgroundForAddAndEditInBothThemes() {
+        AiDeviceTest.Fixture(context).use { f ->
+            f.config.saveProfile(AiModelDraft("legacy", "背景验证", f.server.url("/v1").toString(), "fixture-model", null))
+            val isolated = object : ContextWrapper(context) {
+                override fun getFilesDir() = File(f.root, "background-check").apply { mkdirs() }
+            }
+            val controller = AtomicReference<AiController>()
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity {
+                    controller.set(AiController(isolated, { File(f.root, "project").apply { mkdirs() } },
+                        { _, _ -> false }, { _, _ -> error("No commands expected") }, {}, {},
+                        f.transport, f.config, history = f.history))
+                }
+                try {
+                    await("isolated models loaded") { !controller.get().models.state.value.loading }
+                    for (dark in listOf(false, true)) for (editing in listOf(true, false)) {
+                        val expected = AtomicInteger()
+                        val profile = if (editing) f.config.catalog().active!! else null
+                        scenario.onActivity { activity -> activity.setContent {
+                            CompositionLocalProvider(LocalWorkbenchDark provides dark) {
+                                WorkbenchMiuixTheme(dark) {
+                                    // Deliberately obvious underlying page: the editor must cover it,
+                                    // even when no parent Surface supplies a background for the form.
+                                    Box(Modifier.fillMaxSize().background(Color.Magenta).systemBarsPadding()) {
+                                        AiModelEditor(controller.get(), profile) {}
+                                    }
+                                    val background = MaterialTheme.colorScheme.background
+                                    SideEffect { expected.set(background.toArgb()) }
+                                }
+                            }
+                        } }
+                        val title = context.getString(if (editing) R.string.ai_models_edit_title else R.string.ai_models_add)
+                        await("editor title: $title") { has(title) && expected.get() != 0 }
+                        settle()
+                        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+                        try {
+                            val name = "${if (dark) "night" else "day"}-opaque-${if (editing) "edit" else "add"}.png"
+                            File(context.cacheDir, "ui-review/provider-config/$name").apply {
+                                parentFile!!.mkdirs()
+                                outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+                            }
+                            // The form has 20dp horizontal padding; its edge must still be opaque
+                            // across the whole viewport, including the scrollable body.
+                            for (fraction in listOf(.25f, .5f, .75f)) {
+                                val y = (bitmap.height * fraction).toInt()
+                                assertEquals("Editor edge must paint theme background ($name at y=$y)",
+                                    expected.get(), bitmap.getPixel(5, y))
+                            }
+                        } finally { bitmap.recycle() }
+                    }
+                    assertEquals("This UI check must never contact a model", 0, f.server.requestCount)
+                } finally {
+                    instrumentation.runOnMainSync { controller.get().stop(); controller.get().select(null) }
+                }
+            }
+        }
+    }
     private fun <T> nodes(block: (List<SemanticsNode>) -> T): T {
         val result = AtomicReference<T>()
         instrumentation.runOnMainSync {
