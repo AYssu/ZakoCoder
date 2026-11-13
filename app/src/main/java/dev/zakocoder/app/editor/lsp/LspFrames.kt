@@ -15,7 +15,7 @@ import java.nio.charset.CodingErrorAction
 internal const val LSP_MAX_FRAME_BYTES = 8 * 1024 * 1024
 private const val MAX_HEADER_BYTES = 8192
 
-/** A narrow compatibility boundary for Sora 0.23.6's raw file URIs and extension IDs. */
+/** A narrow compatibility boundary for Sora file URIs and extension IDs. */
 internal class LspWireAdapter(
     projectPath: String,
     documentPath: String,
@@ -28,9 +28,16 @@ internal class LspWireAdapter(
     internal fun hasSentSnapshot(text: String): Boolean = sentText == text
     private val visibleDocument = documentPath
     private val uriMap = listOf(projectPath, documentPath).associate { path ->
-        "file://$path" to URI("file", "", path, null).toASCIIString()
+        path to URI("file", "", path, null).toASCIIString()
     }
-    private fun uri(value: String): String = uriMap[value] ?: value
+    private fun uri(value: String): String {
+        // Accept the old raw spelling as well as 0.24.7's escaped file:/ form.
+        // Some servers key open buffers by the URI string, not URI equivalence.
+        uriMap.entries.firstOrNull { value == "file://${it.key}" }?.let { return it.value }
+        val parsed = runCatching { URI(value) }.getOrNull() ?: return value
+        return if (parsed.scheme == "file" && parsed.rawAuthority.isNullOrEmpty() &&
+            parsed.rawQuery == null && parsed.rawFragment == null) uriMap[parsed.path] ?: value else value
+    }
     private fun normalize(objectValue: JSONObject, key: String) {
         val value = objectValue.opt(key)
         if (value is String) objectValue.put(key, uri(value))
@@ -50,7 +57,7 @@ internal class LspWireAdapter(
         when {
             method == "initialize" -> {
                 normalize(params, "rootUri"); folders(params.optJSONArray("workspaceFolders"), requireNames = true)
-                // Sora 0.23.6 renders basic pushed diagnostics but omits this capability.
+                // Preserve support for clients that omit their pushed-diagnostic capability.
                 // TypeScript language server 4.4.0 disables all diagnostics without it.
                 val capabilities = params.optJSONObject("capabilities") ?: JSONObject().also { params.put("capabilities", it) }
                 val document = capabilities.optJSONObject("textDocument") ?: JSONObject().also { capabilities.put("textDocument", it) }
@@ -93,7 +100,7 @@ internal class LspWireAdapter(
             val current = documentSnapshot?.invoke()
             if (current != null) {
                 if (sentText != null && current != sentText) return null
-                val lines = current.split('\n')
+                val lines = current.lines()
                 val valid = JSONArray()
                 for (index in 0 until diagnostics.length()) {
                     val diagnostic = diagnostics.optJSONObject(index) ?: continue
@@ -101,7 +108,11 @@ internal class LspWireAdapter(
                     fun position(key: String): Pair<Int, Int>? {
                         val point = range.optJSONObject(key) ?: return null
                         val line = point.optInt("line", -1); val column = point.optInt("character", -1)
-                        return if (line in lines.indices && column in 0..lines[line].length) line to column else null
+                        if (line !in lines.indices || column < 0) return null
+                        // LSP Position requires past-EOL columns to resolve to the line end.
+                        val bounded = column.coerceAtMost(lines[line].length)
+                        point.put("character", bounded)
+                        return line to bounded
                     }
                     val start = position("start") ?: continue
                     val end = position("end") ?: continue

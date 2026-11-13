@@ -83,8 +83,9 @@ class EditorLspController(
                     val safe = text.takeLast(8000).replace(Regex("(?i)(https?://)[^\\s/@]+(?::[^\\s/@]*)?@"), "$1[redacted]@")
                     mutable.update { current -> if (ticket == generation && current.projectId == projectId && current.path == path) current.copy(stderr = safe) else current }
                 }, wire)
-                project.addServerDefinition(CustomLanguageServerDefinition(extension, mapOf(extension to server.languageFor(extension)),
-                    CustomLanguageServerDefinition.ServerConnectProvider { connection }))
+                project.addServerDefinition(CustomLanguageServerDefinition(extension,
+                    CustomLanguageServerDefinition.ServerConnectProvider { connection },
+                    languageId = server.languageFor(extension)))
                 val editor = project.createEditor(document)
                 val active = Session(projectId, path, WeakReference(view), project, editor, connection, languageFactory)
                 created = active
@@ -93,6 +94,8 @@ class EditorLspController(
                 active.unsubscribe = { receipt.unsubscribe() }
                 editor.wrapperLanguage = languageFactory()
                 editor.editor = view
+                val removeDiagnostics = attachLspDiagnostics(view, editor)
+                active.unsubscribe = { receipt.unsubscribe(); removeDiagnostics() }
                 mutable.value = mutable.value.copy(phase = LspPhase.Starting)
                 try { withTimeout(server.connectTimeoutMillis) { editor.connect() } }
                 catch (timeout: TimeoutCancellationException) {
@@ -103,8 +106,8 @@ class EditorLspController(
                     }
                     return@launch
                 }
-                // Sora 0.23.6 uses the insertion END as incremental range.end. Send full
-                // snapshots instead, which the selected servers accept, including after setText.
+                // Preserve full snapshots for the selected guest servers and wire adapter,
+                // including after setText, independently of Sora incremental edit ranges.
                 editor.textDocumentSyncKind = TextDocumentSyncKind.Full
                 ensureActive()
                 if (ticket != generation) return@launch
@@ -123,15 +126,18 @@ class EditorLspController(
                     if (pullsDiagnostics && wire.hasSentSnapshot(currentText) &&
                         System.nanoTime() >= nextPull) {
                         try {
-                            val future = editor.requestManager?.diagnostic(DocumentDiagnosticParams(TextDocumentIdentifier(lspFileUri(projectId, path))))
+                            val future = editor.requestManager.diagnostic(DocumentDiagnosticParams(TextDocumentIdentifier(lspFileUri(projectId, path))))
                             val report = future?.let { withTimeout(15_000) { it.awaitLsp() } }
                             if (report?.isLeft == true && currentText == snapshot.get() && ticket == generation && session === active) {
-                                val lines = currentText.split('\n')
+                                val lines = currentText.lines()
                                 val items = report.left.items.filter { item ->
                                     val start = item.range?.start; val end = item.range?.end
-                                    start != null && end != null && start.line in lines.indices && end.line in lines.indices &&
-                                        start.character in 0..lines[start.line].length && end.character in 0..lines[end.line].length &&
-                                        (end.line > start.line || end.line == start.line && end.character >= start.character)
+                                    if (start == null || end == null || start.line !in lines.indices || end.line !in lines.indices ||
+                                        start.character < 0 || end.character < 0) false else {
+                                        start.character = start.character.coerceAtMost(lines[start.line].length)
+                                        end.character = end.character.coerceAtMost(lines[end.line].length)
+                                        end.line > start.line || end.line == start.line && end.character >= start.character
+                                    }
                                 }
                                 project.diagnosticsContainer.setDiagnostics(io.github.rosemoe.sora.lsp.utils.FileUri(document), items.toMutableList())
                                 editor.diagnostics = items
@@ -199,7 +205,7 @@ class EditorLspController(
     suspend fun completionLabels(line: Int, column: Int): List<String> {
         require(line >= 0 && column >= 0)
         val active = session ?: return emptyList()
-        val response = active.editor.requestManager?.completion(CompletionParams(
+        val response = active.editor.requestManager.completion(CompletionParams(
             TextDocumentIdentifier(lspFileUri(active.projectId, active.path)), Position(line, column)))?.let { future -> withTimeout(15_000) { future.awaitLsp() } } ?: return emptyList()
         return (if (response.isLeft) response.left else response.right.items).map { it.label }.take(500)
     }

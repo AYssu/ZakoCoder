@@ -102,6 +102,7 @@ class LspFramesDeviceTest {
         }
         val lspProject = project
         val clientContext = object : io.github.rosemoe.sora.lsp.client.ClientContext {
+            override val serverName = "fixture"
             override fun getEditor(documentUri: FileUri): io.github.rosemoe.sora.lsp.editor.LspEditor? = null
             override val projectPath = FileUri(root)
             override val project = lspProject
@@ -242,7 +243,7 @@ class LspFramesDeviceTest {
         assertEquals(1, cleared)
     }
 
-    @Test fun outOfBoundsDiagnosticCoordinatesAreFilteredWhileValidAndEmptyUpdatesStillReplace() {
+    @Test fun invalidDiagnosticCoordinatesAreFilteredAndPastLineColumnsClampToLineEnd() {
         var cleared = 0
         val current = "🙂x\nok"
         val wire = LspWireAdapter(root, path, "python", documentSnapshot = { current }) { cleared++ }
@@ -260,13 +261,33 @@ class LspFramesDeviceTest {
             .put("not a diagnostic")
         val accepted = requireNotNull(wire.incoming(diagnosticNotification(1, values)))
             .getJSONObject("params").getJSONArray("diagnostics")
-        assertEquals(2, accepted.length())
+        assertEquals(3, accepted.length())
         assertEquals("UTF16 x", accepted.getJSONObject(0).getString("message"))
         assertEquals("valid multiline", accepted.getJSONObject(1).getString("message"))
+        assertEquals("past line end", accepted.getJSONObject(2).getString("message"))
+        assertEquals(3, accepted.getJSONObject(2).getJSONObject("range").getJSONObject("end").getInt("character"))
         assertEquals(1, cleared)
         val empty = requireNotNull(wire.incoming(diagnosticNotification(1, JSONArray())))
         assertEquals(0, empty.getJSONObject("params").getJSONArray("diagnostics").length())
         assertEquals("A current empty update must still clear prior diagnostics", 2, cleared)
+    }
+
+    @Test fun pythonDiagnosticsIncludingLineTerminatorsNormalizeForLfCrLfAndCr() {
+        for (ending in listOf("\n", "\r\n", "\r")) {
+            val first = "unknown_fixture_symbol"
+            val second = "another_unknown_symbol"
+            val current = first + ending + second + ending
+            val wire = LspWireAdapter(root, path, "python", documentSnapshot = { current })
+            wire.outgoing(open(current))
+            val values = JSONArray()
+                .put(diagnostic(0, 0, 0, first.length + ending.length, "first undefined name"))
+                .put(diagnostic(1, 0, 1, second.length + ending.length, "second undefined name"))
+            val accepted = requireNotNull(wire.incoming(diagnosticNotification(1, values)))
+                .getJSONObject("params").getJSONArray("diagnostics")
+            assertEquals(2, accepted.length())
+            assertEquals(first.length, accepted.getJSONObject(0).getJSONObject("range").getJSONObject("end").getInt("character"))
+            assertEquals(second.length, accepted.getJSONObject(1).getJSONObject("range").getJSONObject("end").getInt("character"))
+        }
     }
 
     @Test fun initializeWorkspaceFoldersReceiveRequiredNamesAndPreserveExplicitNames() {
@@ -288,6 +309,27 @@ class LspFramesDeviceTest {
         assertEquals("测试 # 项目", actual.getJSONObject(1).getString("name"))
         assertEquals("User workspace name", actual.getJSONObject(2).getString("name"))
         assertEquals("workspace", actual.getJSONObject(3).getString("name"))
+    }
+
+    @Test fun escapedSingleSlashUrisUseTheSameIdentityForOpenCompletionAndDiagnostics() {
+        val project = "/workspace/测试 # 项目"
+        val document = "$project/completion # fixture.py"
+        val expected = URI("file", "", document, null).toASCIIString()
+        val singleSlash = URI("file", null, document, null).toASCIIString()
+        val wire = LspWireAdapter(project, document, "python")
+        for (method in listOf("textDocument/didOpen", "textDocument/completion", "textDocument/diagnostic",
+            "textDocument/didChange", "textDocument/didSave", "textDocument/didClose")) {
+            for (spelling in listOf(singleSlash, expected, "file://$document")) {
+                val request = JSONObject().put("method", method).put("params", JSONObject()
+                    .put("textDocument", JSONObject().put("uri", spelling)))
+                assertEquals(method, expected, wire.outgoing(request).getJSONObject("params")
+                    .getJSONObject("textDocument").getString("uri"))
+            }
+        }
+        val foreign = "file:/workspace/other.py"
+        val request = JSONObject().put("method", "textDocument/completion").put("params", JSONObject()
+            .put("textDocument", JSONObject().put("uri", foreign)))
+        assertEquals(foreign, wire.outgoing(request).getJSONObject("params").getJSONObject("textDocument").getString("uri"))
     }
 
     @Test fun workspaceFolderChangeNormalizesNamesForAddedAndRemovedButNotWatchedFiles() {

@@ -7,7 +7,7 @@
     native <methods>;
 }
 
-# LSP4J 0.24.0 AnnotationUtil scans runtime annotations and generic method types.
+# LSP4J 1.0.0 AnnotationUtil scans runtime annotations and generic method types.
 # DefaultLanguageClient/LanguageServer endpoints use dynamic proxies and delegates.
 -keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault
 -keep @interface org.eclipse.lsp4j.jsonrpc.services.Json* { *; }
@@ -45,7 +45,7 @@
     public static ** valueOf(java.lang.String);
 }
 
-# TextMate 0.23.6 -> jcodings 1.0.63 loads registry names using Class.forName,
+# TextMate 0.24.7 -> jcodings 1.0.64 loads registry names using Class.forName,
 # then getField("INSTANCE"). Other encoder methods remain shrinkable/optimizable.
 -keep,allowoptimization class org.jcodings.specific.*Encoding {
     public static ** INSTANCE;
