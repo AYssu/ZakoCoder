@@ -19,7 +19,7 @@ okhttp = "5.5.1"
 jsch = "2.28.8"
 
 [libraries]
-navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.1.2" }
+navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.2.0" }
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version = "0.9.4" }
 lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "0.24.0" }
 jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
