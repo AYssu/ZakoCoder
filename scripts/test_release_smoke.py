@@ -89,14 +89,52 @@ class SmokeSafetyTest(unittest.TestCase):
         device.labels = {'bundle_ready': '已就绪'}
         report = {'checks': []}
         release_smoke.prepare_full_environment(device, 'full', report)
-        self.assertEqual([unittest.mock.call('nav_environment'), unittest.mock.call('nav_workspace')], device.navigate.call_args_list)
-        device.find.assert_called_once_with('已就绪', scroll='up', timeout=180)
+        self.assertEqual([unittest.mock.call('nav_environment'), unittest.mock.call('drawer_manage_workspaces')], device.navigate.call_args_list)
+        device.find.assert_called_once_with('已就绪', scroll='up', timeout=3)
         self.assertIn('full-bundled-ubuntu-ready-through-real-ui', report['checks'])
         device.reset_mock()
         with patch.object(device, 'find', side_effect=RuntimeError('not ready')):
             with self.assertRaisesRegex(RuntimeError, 'not ready'):
                 release_smoke.prepare_full_environment(device, 'full', {'checks': []})
         device.navigate.assert_called_once_with('nav_environment')
+
+    def test_first_run_setup_waits_for_each_page_and_never_installs_optional_tools(self):
+        device = MagicMock()
+        titles = ('setup_purpose_title', 'setup_environment_title', 'setup_model_title',
+                  'setup_skills_title', 'setup_packages_title', 'setup_permissions_title', 'setup_ready_title')
+        device.labels = {key: key for key in (*titles, 'app_navigation_open')}
+        report = {'checks': []}
+        release_smoke.complete_onboarding(device, report)
+        expected = []
+        for index, title in enumerate(titles):
+            expected += [unittest.mock.call.find(title), unittest.mock.call.click(
+                'setup_enter' if index == 6 else 'setup_continue')]
+        expected += [unittest.mock.call.find('app_navigation_open', description_only=True)]
+        self.assertEqual(expected, device.mock_calls)
+        self.assertIn('first-run-setup-completed-without-optional-downloads', report['checks'])
+
+    def test_full_environment_initializes_missing_bundled_image_and_fails_if_not_ready(self):
+        device = MagicMock()
+        device.labels = {'bundle_ready': '已就绪'}
+        report = {'checks': []}
+        device.find.side_effect = [RuntimeError('not installed'), None]
+        release_smoke.prepare_full_environment(device, 'full', report)
+        device.click.assert_called_once_with('bundled_runtime_initialize', scroll='up')
+        self.assertEqual([unittest.mock.call('已就绪', scroll='up', timeout=3),
+                          unittest.mock.call('已就绪', scroll='up', timeout=180)], device.find.call_args_list)
+        device.reset_mock()
+        device.find.side_effect = RuntimeError('not ready')
+        with self.assertRaisesRegex(RuntimeError, 'not ready'):
+            release_smoke.prepare_full_environment(device, 'full', {'checks': []})
+        device.navigate.assert_called_once_with('nav_environment')
+
+    def test_open_files_uses_workspace_conversations_instead_of_removed_card_button(self):
+        device = MagicMock()
+        release_smoke.open_workspace_files(device, 'owned-smoke-workspace')
+        self.assertEqual([unittest.mock.call.navigate('drawer_manage_workspaces'),
+                          unittest.mock.call.find('owned-smoke-workspace'),
+                          unittest.mock.call.click('workspace_flow_open'),
+                          unittest.mock.call.click('workspace_threads_files')], device.mock_calls)
 
     def test_environment_ready_search_scrolls_toward_hidden_first_card(self):
         device = release_smoke.Device('emulator-5554', self.root)

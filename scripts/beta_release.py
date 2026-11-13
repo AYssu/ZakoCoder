@@ -110,7 +110,13 @@ def published_builds(repo):
         data = gh("api", f"repos/{repo}/releases/assets/{assets[0]['id']}", "-H", "Accept: application/octet-stream")
         if len(data) > 1_000_000:
             raise ValueError("Published BUILD.json is too large")
-        builds.append(json.loads(data))
+        build = json.loads(data)
+        # Independent plugin channels share the repository's Releases endpoint,
+        # but their Android package/versionCode is not the main app's identity.
+        if (re.fullmatch(r"kernel-plugin-v[1-9][0-9]*", release.get("tag_name", "")) and
+                isinstance(build, dict) and build.get("package") == PACKAGE + ".kernel"):
+            continue
+        builds.append(build)
     return builds
 
 

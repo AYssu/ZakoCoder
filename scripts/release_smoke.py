@@ -125,14 +125,36 @@ def apk_edition(apk):
     return edition
 
 
+def complete_onboarding(device, report):
+    # Fresh installs must use the public setup flow; do not preseed preferences.
+    titles = ('setup_purpose_title', 'setup_environment_title', 'setup_model_title',
+              'setup_skills_title', 'setup_packages_title', 'setup_permissions_title', 'setup_ready_title')
+    for index, title in enumerate(titles):
+        device.find(device.labels[title])
+        device.click('setup_enter' if index == len(titles) - 1 else 'setup_continue')
+    device.find(device.labels['app_navigation_open'], description_only=True)
+    report['checks'].append('first-run-setup-completed-without-optional-downloads')
+
+
+def open_workspace_files(device, project):
+    device.navigate('drawer_manage_workspaces')
+    device.find(project)
+    device.click('workspace_flow_open')
+    device.click('workspace_threads_files')
+
+
 def prepare_full_environment(device, edition, report):
     if edition != 'full':
         return
     device.navigate('nav_environment')
-    device.find(device.labels['bundle_ready'], scroll='up', timeout=180)
+    try:
+        device.find(device.labels['bundle_ready'], scroll='up', timeout=3)
+    except RuntimeError:
+        device.click('bundled_runtime_initialize', scroll='up')
+        device.find(device.labels['bundle_ready'], scroll='up', timeout=180)
     report['checks'].append('full-bundled-ubuntu-ready-through-real-ui')
     device.shot('environment-ready')
-    device.navigate('nav_workspace')
+    device.navigate('drawer_manage_workspaces')
 
 
 def validate_edition_switch(original, alternate, aapt):
@@ -162,9 +184,7 @@ def verify_edition_switch(device, apk, project, marker, profile, report):
     device.click('ai_settings', scroll=True)
     device.saved_model_card(profile)
     device.click('ai_models_back')
-    device.navigate('nav_workspace')
-    device.find(project)
-    device.click('browse_files')
+    open_workspace_files(device, project)
     device.click('main.py')
     device.dump()
     if marker not in device.last_xml:
@@ -225,9 +245,12 @@ def run(args):
             raise ValueError('APK installation did not report success')
         installed = True
         device.launch()
+        complete_onboarding(device, report)
         if getattr(args, 'distribution', False):
             prepare_full_environment(device, apk_edition(args.apk), report)
-        device.click('mobile_add_project')
+        device.navigate('drawer_manage_workspaces')
+        device.click('workspace_flow_add')
+        device.click('workspace_flow_work')
         device.click('mobile_create_empty')
         name = 'beta-smoke-' + uuid.uuid4().hex[:10]
         device.text('project_name', name)
@@ -235,7 +258,8 @@ def run(args):
         device.click('create', scroll=True)
         device.find(name, timeout=35)
         report['checks'].append('project-created-through-real-ui')
-        device.click('browse_files')
+        device.click('workspace_flow_open')
+        device.click('workspace_threads_files')
         device.find('main.py')
         device.click('main.py')
         device.click('editor_content')
@@ -279,9 +303,7 @@ def run(args):
         time.sleep(1)
         device.shot('models-day')
         device.click('ai_models_back')
-        device.navigate('nav_workspace')
-        device.find(name)
-        device.click('browse_files')
+        open_workspace_files(device, name)
         device.click('main.py')
         device.dump()
         if marker not in device.last_xml:

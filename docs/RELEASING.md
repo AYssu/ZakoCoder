@@ -74,11 +74,11 @@ CI 签名材料只在 Secrets 和临时 runner 中使用，不写入聊天、Iss
 - `ZakoCoder-<version>-full-arm64-v8a.apk`、`ZakoCoder-<version>-full-x86_64.apk`：内置 Ubuntu 和内核的完整包。
 - `SHA256SUMS.txt`：覆盖以上四个 APK 的 SHA-256 校验摘要。
 
-发布正文面向用户说明安装、升级及已知限制；提交、versionCode、证书和构建验证信息放在可折叠的构建详情中。自动版本检查使用隐藏的元数据注释，不额外上传 `BUILD.txt`／`BUILD.json`。
+发布正文面向用户说明安装、升级及已知限制；提交、versionCode、证书和构建验证信息放在可折叠的构建详情中。自动版本检查使用隐藏的元数据注释，不额外上传 `BUILD.txt`／`BUILD.json`。主程序版本递增检查会读取全部已发布主程序的隐藏记录或历史 `BUILD.json`；独立 `kernel-plugin-vN` 通道仅在记录包名为 `dev.zakocoder.app.kernel` 时排除。主程序记录缺失、包名或格式不符仍会阻止发布，不应通过删除历史记录绕过检查。
 
 发布页须清楚指出本次不可变提交与版本标签，并链接其 GitHub **Source code (zip / tar.gz)** 完整归档。归档中的 `native-runtime/` 已包含固定原始 `sources/`、`patches/`、构建脚本、工具链／产物锁、交叉编译输入及 `licenses/`，用于取得与 APK 对应的完整运行时源码和重建材料。发布前核对归档确实包含这些内容；不能用可变上游分支或限期 Actions Artifact 代替长期可得的对应源码。许可证与版权声明保留在 APK 和源码中，详见[第三方材料](../THIRD_PARTY.md)。
 
-内部候选仍生成完整源码包、许可证、构建记录和验证材料，用于分发前校验；它们留在 Actions，不作为用户 Release 附件。候选 Artifact `beta-candidate-<runid>-<attempt>` 保留 7 天，解压目录为 `candidate/`，其中四个最终签名 APK 同时用于后续校验；不再另造多架构 QA 包。发布前另存 `beta-release-records-<runid>-<attempt>` 14 天，包含 BUILD 记录、独立源码包、运行时／Release 验证及许可归档；独立冒烟证据同样保留 14 天。内部完整摘要清单不作为用户版 `SHA256SUMS.txt` 上传。
+内部候选仍生成完整源码包、许可证、构建记录和验证材料，用于分发前校验；它们留在 Actions，不作为用户 Release 附件。候选 Artifact `beta-candidate-<runid>-<attempt>` 保留 7 天，解压目录为 `candidate/`，其中四个最终签名 APK 同时用于后续校验；不再另造多架构 QA 包。设备冒烟通过实际界面完成首次设置、Work 模式工作区创建、对话页文件入口、编辑保存与模型配置重启保留；Full 还须显式初始化并验证内置 Ubuntu 就绪。Lite／Full 覆盖切换后继续核对源码和模型配置，不预置应用私有设置。发布前另存 `beta-release-records-<runid>-<attempt>` 14 天，包含 BUILD 记录、独立源码包、运行时／Release 验证及许可归档；独立冒烟证据同样保留 14 天。内部完整摘要清单不作为用户版 `SHA256SUMS.txt` 上传。
 
 R8 `mapping.txt` 单独存入 R8 诊断 Actions Artifact，保留 90 天，不作为 Release 附件。**公开仓库的 Actions Artifact 不是私密存储：有仓库读取权限且登录的用户仍可能下载。**所有制品均不得含密钥、凭据或用户数据，维护者应在过期前另行保管诊断材料。
 

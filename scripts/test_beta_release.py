@@ -57,6 +57,25 @@ class BetaReleaseTest(unittest.TestCase):
         with patch.object(beta, "gh_json", return_value=[[{"draft": True, "assets": []}]]):
             self.assertEqual([], beta.published_builds("AYssu/ZakoCoder"))
 
+    def test_kernel_channel_is_excluded_but_main_metadata_stays_strict(self):
+        main = {"schemaVersion": 1, "package": beta.PACKAGE, "versionCode": 1006}
+        plugin = {"package": "dev.zakocoder.app.kernel", "versionCode": 1006}
+        for tag in ("kernel-plugin-v1", "kernel-plugin-v2"):
+            releases = [[{"tag_name": tag, "assets": [{"name": "BUILD.json", "id": 42}]},
+                         {"tag_name": "v0.1.1", "assets": [{"name": "BUILD.json", "id": 43}]}]]
+            with self.subTest(tag=tag), patch.object(beta, "gh_json", return_value=releases), \
+                    patch.object(beta, "gh", side_effect=[json.dumps(plugin).encode(), json.dumps(main).encode()]):
+                builds = beta.published_builds("AYssu/ZakoCoder")
+                self.assertEqual([main], builds)
+                beta.require_increasing_code(1007, builds)
+                with self.assertRaises(ValueError):
+                    beta.require_increasing_code(1006, builds)
+        # A main-app tag containing a plugin record must still fail closed.
+        releases = [[{"tag_name": "v0.1.1", "assets": [{"name": "BUILD.json", "id": 42}]}]]
+        with patch.object(beta, "gh_json", return_value=releases), \
+                patch.object(beta, "gh", return_value=json.dumps(plugin).encode()), self.assertRaises(ValueError):
+            beta.require_increasing_code(1007, beta.published_builds("AYssu/ZakoCoder"))
+
     def test_existing_tag_or_release_prevents_publication(self):
         for replies in (({"ref": "exists"},), (None, {"draft": True})):
             with patch.object(beta, "gh_json", side_effect=replies), self.assertRaises(ValueError):
