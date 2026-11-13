@@ -2,6 +2,7 @@ package dev.zakocoder.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -151,7 +152,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
     BackHandler { leave() }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ModelNavigation(stringResource(if (original == null) R.string.ai_models_add else R.string.ai_models_edit_title), ::leave) {
             TextButton(onClick = { savingRevision = state.revision; ai.models.save(draft()) }, enabled = editable && !state.loading && valid) { Text(stringResource(R.string.editor_save)) }
         }

@@ -3,178 +3,98 @@
 </p>
 
 <h1 align="center">ZakoCoder</h1>
-
-<p align="center"><strong>面向 Android 的原生 AI 编码工作台</strong></p>
-
-<p align="center">项目管理 · 代码编辑 · Linux 终端 · AI 编码 · 变更审阅</p>
+<p align="center"><strong>在 Android 上，与 AI 一起完成开发</strong></p>
+<p align="center">AI 助手 · 工作区 · 代码编辑 · Linux 终端 · 变更审阅</p>
 
 <p align="center">
   <a href="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml"><img src="https://github.com/AYssu/ZakoCoder/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <a href="https://github.com/AYssu/ZakoCoder/releases/latest"><img src="https://img.shields.io/github/v/release/AYssu/ZakoCoder?color=2563EB" alt="最新正式版下载" /></a>
-  <img src="https://img.shields.io/badge/Android-11%E2%80%9317%20%C2%B7%20ARM64-334155" alt="支持目标 Android 11–17 · ARM64" />
+  <a href="https://github.com/AYssu/ZakoCoder/releases/latest"><img src="https://img.shields.io/github/v/release/AYssu/ZakoCoder?color=2563EB" alt="最新正式版" /></a>
+  <img src="https://img.shields.io/badge/ABI-ARM64%20%7C%20x86__64-334155" alt="ARM64 与 x86_64 安装包" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-334155" alt="Apache-2.0" /></a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/AYssu/ZakoCoder/releases/latest">下载安装</a> ·
+  <a href="#界面预览">界面预览</a> ·
   <a href="#开始使用">开始使用</a> ·
-  <a href="#功能概览">功能概览</a> ·
-  <a href="#支持范围">支持范围</a> ·
-  <a href="#技术架构">技术架构</a> ·
-  <a href="#开发者区域">开发与贡献</a>
+  <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
----
+ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
-ZakoCoder 是面向 Android 手机的独立开源编码工具。围绕同一项目整合文件管理、代码编辑、Linux 开发环境和 AI 协作，让开发者在手机上完成修改、运行、审阅与验证。工具调用、权限审批和文件变更均有独立入口，执行过程可查看，源码修改可核对。
+工作区组织源码和对话；模型服务由你选择，开发工具按需安装。适合网页、脚本、命令行程序，以及满足工具链要求的 Android、Flutter 工程。也可以单独使用编辑器和终端。
 
-项目可以是网页、脚本、命令行程序、库或 Android 工程。工具按需安装，模型由你配置，项目与会话保存在本机。首个正式版为 `0.1.0`，面向 ARM64 真机，后续优先进行问题修复和适配优化。Android 11–17（含 12L）已完成 AOSP x86_64 Debug 系统基线，ARM64 真机主要验证 Android 13；最终签名包的设备检查以发布记录为准。实际范围见[兼容性结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)，不代表全部厂商设备或任意工程均已兼容。
+> 本页介绍主分支当前能力，已发布安装包可能稍有不同。版本变化与已知问题以对应发布说明为准。
 
-## 功能概览
+## 下载安装
 
-| 工作场景 | 你可以做什么 |
+前往 [Releases](https://github.com/AYssu/ZakoCoder/releases) 下载，日常使用选择正式版；标有 **Pre-release** 的版本用于提前体验和反馈。按设备架构和是否需要内置环境选择安装包：
+
+| 版本 | 适合谁 | 包含什么 |
+| --- | --- | --- |
+| **Lite 轻量版** | 希望按需下载、减少安装包体积 | Ubuntu 可在线安装或本地导入；代理内核按需安装独立插件。 |
+| **Full 完整版** | 希望减少首次环境下载 | 内置基础 Ubuntu 和代理内核，确认后在本机初始化，无需另装内核插件。 |
+
+- **ARM64 / arm64-v8a**：大多数 Android 手机。
+- **x86_64**：对应架构的设备与常见电脑 Android 模拟器。
+- 下载同一发布页的 `SHA256SUMS.txt`，用于校验安装包完整性。附件以该发布实际提供的内容为准。
+
+Full 仍需按项目安装 Node.js、Python、Java 等开发工具，并自行配置模型服务。Lite 与 Full 共用应用数据，切换时使用同签名且可覆盖升级的安装包；不要为切换版本直接卸载，以免丢失私有数据。签名与升级说明见[安装和测试说明](docs/BETA_TESTING.md)。
+
+需要测试主分支时，可在 [Debug 构建](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 的成功运行中单独下载所需 APK；Artifacts 下载需要登录 GitHub。
+
+## 界面预览
+
+以下为 Android 应用的实际开发演示与测试截图，使用装饰性手机外框展示；具体布局以安装版本为准。
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/product/assistant-day.webp" alt="助手对话中的工具执行、回复和模型选择入口" width="240" /></td>
+    <td align="center"><img src="docs/assets/product/skills-day.webp" alt="全局 Skill 开关、自定义与导入入口" width="240" /></td>
+    <td align="center"><img src="docs/assets/product/drawer-day.webp" alt="侧边栏按工作区展开对话列表，底部提供常用功能入口" width="240" /></td>
+  </tr>
+</table>
+
+## 你可以做什么
+
+| 场景 | 功能 |
 | --- | --- |
-| **组织工作区** | 按工作区管理源码和对话。Work 使用应用内副本，本地模式绑定真实目录；进入工作区可新建、切换对话，并访问文件与终端。同一工作区内的对话共用源码。 |
-| **编辑代码** | 使用 Sora 原生编辑器，切换多个文件，查找替换、撤销重做、恢复草稿；Markdown 可切换编辑与预览，Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart 可选实验性本机语言服务。 |
-| **运行项目** | 按需安装开发工具包，使用最多 4 个真实终端会话；从终端启动服务，在手机浏览器预览网页。 |
-| **连接网络** | 配置 HTTP／SOCKS5 代理（SOCKS5 可带账号密码），或粘贴机场订阅链接：先识别是单节点还是机场订阅，再列出节点；HTTP／SOCKS5 直连，VMess／VLESS／SS／Trojan 节点由自编译 Xray 内核启用，Lite 使用可选插件，Full 直接内置。VLESS 支持 REALITY、TLS、TCP／WebSocket／gRPC；TLS 可用于这三种传输，REALITY 仅用于 TCP／RAW 与 gRPC，WebSocket + REALITY 标记不支持；TCP/RAW 可选 XTLS Vision。订阅与凭据在本机加密保存，联网仅在点击识别或刷新时发生。 |
-| **与 AI 协作** | 配置及切换模型，流式阅读 Markdown 回复与服务返回的思考内容；附加图片、文件、选区或构建日志，查看每轮 Token、耗时与请求详情，按日／月、项目和模型筛选本机用量，查看请求、Token、工具调用趋势及模型分布；在任务内选择或填写回答，重启后继续待答任务。 |
-| **扩展能力** | 全局管理内置或自定义 Skill，导入 Markdown / ZIP，所有工作区共用；配置 Streamable HTTP 或 SSE MCP 服务，无工作区也可测试连接；屏幕操作为全局能力，按任务授权当前设备；SSH 按工作区配置。 |
-| **审阅与恢复** | 检查工具审批和文件增删行数，进入代码差异审阅；独立管理任务检查点、文件恢复与会话分叉。 |
-| **验证与版本管理** | 配置构建、测试、运行命令，查看日志与退出码；通过系统安装项目 APK，按任务授权助手观察和操作当前设备界面；查看 Git 状态、获取／拉取／推送、管理分支与冲突，选择暂存并创建提交。 |
+| **让 AI 协助开发** | 引用文件、选中代码、图片或报错，查看流式回答、工具执行过程和审批；执行中补充要求，保留本地对话记录。 |
+| **管理源码与对话** | 创建、导入或克隆工程，按工作区分组对话；Work 使用应用内副本，本地模式直接修改绑定目录。 |
+| **编辑与运行** | 原生代码编辑器、多文件切换、草稿恢复与 Markdown 预览；最多四个终端会话，运行服务后在手机浏览器预览。 |
+| **审阅与恢复** | 查看修改文件、增删行数与代码差异；使用任务检查点检查和恢复文件，核对实际构建与测试结果。 |
+| **同步 Git** | 克隆公开或私有 HTTPS 仓库，查看状态、暂存、提交、获取、拉取和推送，并处理分支与冲突。 |
+| **扩展助手** | 全局管理内置或自定义 Skill，导入 Markdown / ZIP，连接 HTTP / SSE MCP；按需开启屏幕操作和 SSH 远程开发。 |
+| **了解用量** | 查看每轮输入、输出、缓存和耗时，以及按时间、工作区和模型汇总的本机用量。 |
 
-请求与用量的范围、缓存口径及消息重试行为见[请求与用量](docs/AI_USAGE.md)。系统权限可从设置中的「权限管理」集中查看和调整。MCP 网络服务支持独立填写凭证并自动组成 Bearer 请求头，同时保留高级请求头配置。设置中的「应用更新」支持正式／Beta 渠道检查、下载校验和调用系统安装，详见[应用内更新](docs/UPDATES.md)。
-
-图片从附件入口添加，可单独发送或配合文字描述，需使用支持图片输入的模型服务；真实服务的视觉理解效果仍待验证。服务公开返回的思考内容在当前轮实时展开，开始正式回答或工具调用后自动收起；历史可展开和复制；不会推测或补造模型内部思考。工具权限提供普通、高权限、YOLO 和高级逐工具规则：高权限需确认并保留禁止项，MCP、Android 屏幕操作与 SSH 仍询问。YOLO 需单独确认，按项目保存，自动允许工具调用；它不会开启未启用的能力包、代替 Android 系统授权或跳过 SSH 主机信任。详见 [YOLO 权限](docs/YOLO_PERMISSIONS.md)。
-
-AI 输出中的项目路径可以跳转到文件所在位置。Shell、BAT/CMD、HTML/CSS、YAML、SQL、Go、Rust 等常见文件提供基础语法高亮，完整编辑范围见[编辑器说明](docs/EDITOR.md)。
+支持 Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，兼容 HTTP / HTTPS 服务地址；模型能力、参数和费用取决于你配置的服务。详见[模型配置](docs/MODEL_PROTOCOLS.md)、[请求与用量](docs/AI_USAGE.md)。
 
 ## 开始使用
 
-### 获取安装包
+1. **完成初始化**：首次打开时选择开发用途，配置环境、模型、Skill 和所需权限；可跳过部分步骤，之后从「设置 → 初始化配置」重新进入。
+2. **添加工作区**：选择 Work 应用内副本或本地目录，也可以导入源码、克隆仓库。同一工作区的对话共用源码；导入副本不会同步修改原目录。
+3. **准备所需工具**：从环境页安装或初始化 Ubuntu，再选择项目需要的工具包。安装工具不会自动启用语言服务。
+4. **开始对话或编辑**：配置模型并测试连接，新建对话交代任务；也可以直接打开文件修改，手动保存源码。
+5. **运行并检查**：执行构建、测试或启动命令，查看日志、变更和实际结果，再决定是否保留修改或提交 Git。
 
-从 [最新正式版](https://github.com/AYssu/ZakoCoder/releases/latest) 选择与设备及需求对应的 APK，并下载 `SHA256SUMS.txt` 校验文件；测试版本仍在 [Releases](https://github.com/AYssu/ZakoCoder/releases) 中标记为 **Pre-release**。构建详情、完整源码和已知限制见对应发布页，以实际存在的发布为准。遇到问题请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 附上版本、设备和复现步骤，勿发送密钥或私人源码。本次正式版为不可调试的 Release + R8 包，经维护者决定继续沿用仓库 CI Debug 签名（可选自有签名），它不是独立的长期正式发布密钥；同签名且版本递增可覆盖相应安装，其他 Debug 来源须先核对证书。未来切换正式密钥需另行说明迁移；签名冲突时先确认备份，避免清除重要数据。
+Skill、MCP 和屏幕能力是全局配置，不必先创建工作区；SSH 连接按工作区配置。系统权限可在「设置 → 权限管理」集中调整。
 
-开发测试仍保留 [Build Debug APK](https://github.com/AYssu/ZakoCoder/actions/workflows/build-apk.yml) 手动入口。成功运行后可按 Lite／Full 和 ARM64／x86_64 单独下载所需 Debug APK，每份附对应摘要与构建信息；Lite 可选插件按架构另行下载，运行时来源及完整校验材料独立归档，保留 14 天。下载需要登录 GitHub。无可用安装包时，可按[源码构建说明](docs/DEVELOPMENT.md#从源码构建-debug-apk)自行构建。
+## 支持范围与使用须知
 
-Release 构建、签名、源码与许可证分发要求见[发布流程](docs/RELEASING.md)。Beta 预发布与稳定版分别验收，未执行的检查不会标记为通过。
+- **系统与架构**：提供 ARM64 和 x86_64 安装包。Android 11–17 已有基础兼容性记录，ARM64 真机主要覆盖 Android 13；最低安装要求为 Android 8.0，但不代表所有系统、厂商和开发工具均已验证。查看[实际兼容性记录](docs/ANDROID_COMPATIBILITY_RESULTS.md)。
+- **开发环境**：Ubuntu 24.04 用户空间，工具按需安装。Android SDK / NDK、Flutter 和 Kotlin 语言服务存在架构限制；x86_64 安装包不意味着这些工具链全部可用。详见[运行环境](docs/RUNTIME.md)、[Flutter 开发](docs/FLUTTER.md)。
+- **代码编辑**：UTF-8，单文件最多 1 MiB、最多八个缓冲区。Python、JS / TS、Java、Kotlin、C / C++、Go、Rust、Dart 语言服务为可选实验功能，默认关闭。详见[编辑器](docs/EDITOR.md)、[语言服务](docs/LSP.md)。
+- **数据保存**：对话、草稿、配置和应用内工作区保存在本机；卸载或清除数据会删除私有数据。绑定目录中的源码仍在原位置，源码导出不是完整数据备份。
+- **模型与权限**：AI 读取的项目内容和附件会发送到所选服务；密钥在本机加密保存。执行工具前请核对权限与审批，HTTP 明文连接不加密。
+- **恢复与后台**：检查点只恢复覆盖范围内的文件，不能撤销依赖安装、网络或数据库等外部操作。PRoot 提供 Linux 兼容环境，不构成安全隔离；系统结束应用后，不保证终端任务继续运行。
 
-### 选择 Lite 或 Full
+更多说明：[产品范围](docs/PRODUCT.md) · [AI 工作流](docs/AI_WORKFLOW.md) · [Git](docs/GIT.md) · [屏幕操作](docs/SCREEN_TESTING.md) · [网络代理](docs/PROXY.md)
 
-每个构建类型按两种版本、两种架构提供四个 APK，以发布页实际附件为准。主流手机选择 ARM64；常见电脑 Android 模拟器选择 x86_64，架构不符不能安装。
+## 反馈与参与
 
-| 版本 | ARM64 / x86_64 | 首次使用 |
-| --- | --- | --- |
-| Lite 轻量版 | 各一个 APK | Ubuntu 在线安装或手动导入；需要代理内核时另行安装可选插件。 |
-| Full 完整版 | 各一个 APK | 内置基础 Ubuntu 和代理内核；首次配置中确认后在本机准备 Ubuntu，显示进度，可取消或失败后在环境页重试，无需另装内核插件。跳过配置不会静默安装。 |
+遇到问题，请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、订阅令牌或私人源码。
 
-Full 不包含所有开发工具，Node.js、Java、Android SDK／NDK 等仍需按需安装，模型服务也需自行配置。x86_64 的基础 Ubuntu／终端支持不代表 ARM64 专属 Android／Flutter 工具链均可使用。Lite 与 Full 使用相同包名和存储位置；同签名且系统允许的版本升级可覆盖切换，保留项目、配置及已有环境。已有环境不会因切换或更新而重新解包覆盖，不要通过卸载来切换版本。
-
-### 完成第一个项目
-
-首次安装会引导你选择用途，并依次配置 Ubuntu 软件源、AI 服务、默认 Skill、工具包和系统权限；各项可稍后设置，不自动授权或安装。应用默认进入助手，原项目管理入口统一称为「工作区」，「对话记录」查看当前工作区的历史。已有用户的项目、环境与模型配置会保留，不强制重走引导；需要调整时可从「设置 → 初始化配置」重新进入。
-
-1. **添加项目**：创建项目、导入副本、绑定本地目录或克隆 HTTPS 仓库。私有仓库需填写具有对应权限的用户名和访问令牌。导入副本与原目录独立；绑定本地目录直接修改原文件。
-2. **准备环境**：Lite 从环境页安装或导入 Ubuntu；Full 在首次配置中确认本地初始化，跳过或失败后可从环境页安装。再按项目需要选择工具包，工具检测不会自动安装依赖。
-3. **开始编辑**：点击文件打开编辑器；Markdown 可切换预览，修改后显式保存。
-4. **配置助手**：在设置中填写模型地址、模型和密钥，手动测试连接；高级设置可调整生成参数、思考模式、上下文和压缩策略、请求头；服务是否支持这些参数需实际测试。也可以独立使用编辑器和终端。
-5. **运行并核对**：通过终端或项目命令构建、测试、启动服务；使用 AI 时，核对审批、变更和实际验证结果。
-
-Flutter 项目从环境页安装可选工具包，在项目终端初始化平台并运行；Android APK 还需安装 Android 与 NDK 工具包并确认 SDK 许可，步骤与边界见 [Flutter 开发](docs/FLUTTER.md)。
-
-**预览网页**：在项目终端启动开发服务，再通过终端的“预览网页”打开手机浏览器。已有 Python 工具包时，可以在项目目录运行：
-
-```sh
-python3 -m http.server 8000 --bind 127.0.0.1
-```
-
-Vite 等工程使用自身的安装和启动命令。按实际输出选择端口；地址出现不代表服务已经就绪。
-
-## 支持范围
-
-| 项目 | 当前支持 |
-| --- | --- |
-| 设备 | 面向 ARM64、Android 11–17；已有 AOSP x86_64 系统基线和 Android 13 ARM64 真机记录，不保证全部厂商设备。最低 SDK 仍为 Android 8.0，但完整开发环境未验收；实验 x86_64 仅用于基础兼容性验证，不含 Android SDK／NDK 工具包。见[实际结果](docs/ANDROID_COMPATIBILITY_RESULTS.md)。 |
-| 开发环境 | Ubuntu 24.04 用户空间，按需安装 Zsh、Git、Node.js、Python、Go、Rust、Android、Flutter 等工具包。 |
-| Android 工程 | Java / Kotlin Debug APK 构建及系统安装入口；可选 NDK 支持 arm64-v8a CMake / JNI。曾验证切换运行时前的 ZakoCoder Compose + JNI 构建；当前仓库的运行时源码构建固定 Linux x86_64 宿主，其他工程兼容性取决于依赖与工具链。 |
-| Flutter 工程 | 可选固定 Flutter 3.47.9／Dart 3.13.7 工具包、Dart 模板与基础着色；ARM64 Ubuntu 中的依赖、分析、Widget 测试及 Web 构建已有真机记录，Android APK 与完整应用流程的验收状态见 [Flutter 开发](docs/FLUTTER.md)。 |
-| 模型服务 | Chat Completions、Responses、Anthropic Messages、Gemini 原生协议，含流式工具调用、图片格式转换、签名／推理续接与常用服务预设；地址支持 HTTP / HTTPS 域名或 IP，可指定端口，HTTP 不加密。真实服务、参数与视觉理解需按所选模型验证；详见[模型协议](docs/MODEL_PROTOCOLS.md)，不含本地模型推理。 |
-| 编辑器 | UTF-8、单文件最多 1 MiB、最多 8 个缓冲区；基础词法着色，可选实验性 Python／JS／TS／Java／Kotlin／C/C++／Go／Rust／Dart LSP 补全与诊断；Kotlin 仅 Ubuntu ARM64。暂不提供完整重构，工程和设备适用性需分别验证。 |
-| Git | 公开／私有 HTTPS 克隆、按仓库保存令牌、状态、暂存、提交、获取／快进拉取／推送、分支管理及冲突编辑入口；不提供强推、rebase 或 Git SSH 密钥管理。 |
-
-Git 与语言服务均使用同一项目及手机上的 Ubuntu 环境。Git 拉取默认仅快进，分叉需明确合并；冲突处理后保存并标记解决，再提交。领先／落后数量来自最近获取的记录。已有 `ssh://` 远端使用终端配置的身份与严格主机校验，不提供密钥管理界面，详见 [Git 工作流](docs/GIT.md)。
-
-语言服务默认关闭，需从编辑器底部 LSP 入口主动开启；工具包按需联网安装，仅为当前可见文件建立连接。按文件类型连接对应服务，提供实验性补全和诊断，不能代替项目构建；Java／Kotlin 需要 JVM，Dart 复用 Flutter 工具包。新增语言已有最小工程的单台真机验证，复杂工程仍需单独验收；依赖解析和设备适用性见[语言服务说明](docs/LSP.md)。
-
-「设置 → 开发能力 → 能力包」与助手更多菜单提供统一入口，**Android 屏幕识别与操作**、**SSH 远程开发**是两个独立能力包且默认关闭。屏幕操作配置全局共用，不要求创建工作区；SSH 连接继续按工作区管理。未开启时，不向模型加载对应工具定义与专属说明。屏幕包优先读取节点树，需要检查排版或图像时再按需截图；无障碍和 Root 方式的权限分别授权，截图分享默认关闭。每次任务首次操作均需明确授权当前设备屏幕，不绑定 APK，可在应用之间切换；任务结束或停止后立即撤销。系统安装和权限确认仍由用户处理。具体边界见[屏幕测试说明](docs/SCREEN_TESTING.md)。
-
-SSH 使用原生客户端，无需安装 Ubuntu；支持远程命令、SFTP 文件操作及可选 tmux 长任务。首次连接需确认主机指纹，认证凭据由设备 Keystore 加密保存，不回填或发给模型。远程项目目录只是工作目录，不限制获批 Shell 命令的访问范围；取消连接不保证远程后台进程退出，tmux 任务可以保留并重新接管。算法兼容性、并发写入等限制见[产品范围](docs/PRODUCT.md#可选能力包)。
-
-完整限制与未完成项见[产品范围](docs/PRODUCT.md)、[运行环境](docs/RUNTIME.md)和[路线图](docs/ROADMAP.md)。
-
-### 项目存放方式
-
-| 方式 | 适用情况 | 修改对象 |
-| --- | --- | --- |
-| 创建 / 克隆 | 在应用内开始开发 | 应用私有工作区。 |
-| 导入副本 | 从文件选择器、文档提供者取得源码 | 导入后的副本，原目录保持独立。 |
-| 绑定本地目录 | 持续维护手机共享存储中的同一份源码 | 原目录；编辑器、AI 和项目终端使用同一根目录。解除绑定保留源码。 |
-
-绑定通过图形化文件夹浏览器选择真实目录，无需输入路径；访问共享存储需另行授予系统文件权限。Android 11 及以上仍需要一次“管理所有文件”授权，不等于只授权所选文件夹。云盘和仅提供 `content://` 文档的来源使用导入副本。共享存储不完整支持 Linux 执行权限和符号链接，部分构建工具需使用应用私有工作区；详见[运行环境](docs/RUNTIME.md)。
-
-### 数据与操作边界
-
-- 应用内项目、草稿、会话和日志保存在私有存储；绑定项目的源码仍在原目录。卸载或清除数据会删除私有数据及绑定登记；项目导出是源码副本，不是所有数据的完整备份。
-- AI 任务读取的项目内容及附加图片会发送到你配置的模型服务。密钥在本机加密保存，项目规则、Skill 与 MCP 输出不会自动提升工具权限。
-- 文件恢复前会检查后续修改；检查点有范围和容量限制，不能回滚安装依赖、网络、数据库等外部副作用。
-- PRoot 用于兼容 Linux 工具，不构成独立安全隔离。系统结束应用后，不保证终端服务继续运行。
-
-## 技术架构
-
-应用采用 **Kotlin + Jetpack Compose** 原生方案。页面展示状态并派发操作，控制器处理任务与生命周期，文件、网络和进程操作由各自模块负责。
-
-| 层次 | 主要实现 |
-| --- | --- |
-| 原生交互 | Jetpack Compose、StateFlow、Sora 编辑器、原生终端视图。 |
-| 编码与协作 | 项目文件、编辑缓冲、Git、AI 会话、工具审批、Skill / MCP、检查点及验证记录。 |
-| 运行环境 | PRoot + Ubuntu、PTY 会话、开发工具包及项目命令管理。 |
-| 传输与存储 | OkHttp / SSE、CommonMark 文本解析、应用私有存储、Android Keystore 配置加密。 |
-
-模块职责、异步状态与生命周期约束见[架构说明](docs/ARCHITECTURE.md)。
-
-
-> Lite 主 APK 不含 Xray；Full 直接集成仓库锁定的自编译 Xray。普通主应用打包由 JVM 校验预编译制品，无需 Go。
-> 独立插件模块 `:kernel-plugin` 普通打包同样由 JVM 校验并复用仓库预编译制品，无需 Python 或 Go；
-> 制品缺失或主动源码重建时才需 Python、固定 **Go 1.27.3**（见 `native-kernel/go.version`）及可访问的 Go 模块代理，产物按 `native-kernel/artifacts.lock.json` 校验。
-> Lite 用户使用 VMess／VLESS／SS／Trojan 时另行安装插件（应用内在线下载或本地导入）；Full 无需另装插件。
-## 开发者区域
-
-面向源码构建、架构维护与贡献协作。欢迎提交问题、修复与功能建议。开发工作从短期分支发起 PR，采用 Conventional Commits；PR 需说明实际行为、验证结果和兼容影响。
-
-| 文档 | 内容 |
-| --- | --- |
-| [贡献指南](CONTRIBUTING.md) | 分支、Commit、PR、审查及合并流程。 |
-| [开发与测试](docs/DEVELOPMENT.md) | 工具链、源码构建、仓库检查与真机验证。 |
-| [Android 兼容性](docs/ANDROID_COMPATIBILITY.md) | 系统版本矩阵、隔离测试包、进程恢复、覆盖升级及手动 CI。 |
-| [界面规范](docs/DESIGN.md) | 原生页面结构、交互与移动布局约定。 |
-| [AI 工作流](docs/AI_WORKFLOW.md) | 模型、上下文、权限、扩展、审阅与验证。 |
-| [Flutter 开发](docs/FLUTTER.md) | 安装固定 SDK、创建 Dart 项目、分析测试、Web 预览及 Android APK。 |
-| [Git 工作流](docs/GIT.md) · [语言服务](docs/LSP.md) | 仓库同步、认证、冲突处理及可选本机补全与诊断。 |
-| [发布流程](docs/RELEASING.md) · [更新记录](CHANGELOG.md) | Debug／预发布／正式版打包、发布签名与分发条件。 |
-| [安全报告](SECURITY.md) · [行为准则](CODE_OF_CONDUCT.md) | 漏洞反馈与社区协作。 |
-
-<details>
-<summary><strong>开发者快速构建</strong></summary>
-
-打包准备 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，配置 `ANDROID_HOME` 或本地 `local.properties`。以下仓库检查另需 Python 3；仅打包可直接执行 Gradle 命令：
-
-```sh
-python3 scripts/check_repository.py
-./gradlew :app:assembleDebug :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest
-```
-
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。首次构建需要联网获取 Maven 依赖；PRoot 与 loader 默认使用仓库随附并校验的预编译产物，无需额外安装 Make 等原生构建工具；完整源码仍保留，CI 从源码重建验证，不依赖本地参考工程。详细步骤见[开发文档](docs/DEVELOPMENT.md)。
-
-</details>
+欢迎贡献修复、翻译和功能建议。应用采用 Kotlin + Jetpack Compose 原生方案；源码构建、架构和协作流程分别见[开发文档](docs/DEVELOPMENT.md)、[架构说明](docs/ARCHITECTURE.md)和[贡献指南](CONTRIBUTING.md)。发布变化见[更新记录](CHANGELOG.md)。
 
 ## 开源致谢
 
