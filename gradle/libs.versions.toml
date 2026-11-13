@@ -4,7 +4,7 @@ kotlin = "2.4.21"
 compose-bom = "2026.09.00"
 activity = "1.13.0"
 core = "1.19.1"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 
 commons-compress = "1.28.0"
 xz = "1.12"
