@@ -22,6 +22,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.ui.*
+import dev.zakocoder.app.test.R as TestR
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -159,9 +160,9 @@ No test result was invented; this is UI-only fixture content."""
             }
             panel(ScreenTestUiModel())
             await("Global screen scope without a workspace") { has(context.getString(R.string.screen_device_current)) }
-            assertFalse(has(context.getString(R.string.screen_test_no_project)))
-            assertFalse(has(context.getString(R.string.screen_test_choose_apk)))
-            assertFalse(has(context.getString(R.string.screen_test_allow_install)))
+            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_no_project)))
+            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_choose_apk)))
+            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_allow_install)))
             click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
             click(context.getString(R.string.screen_test_access_root)); assertEquals(ScreenTestAccess.Root, access.get())
             capture(dark, "global-no-workspace")

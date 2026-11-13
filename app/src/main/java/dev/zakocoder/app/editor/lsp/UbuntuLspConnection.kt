@@ -11,11 +11,12 @@ import java.io.OutputStream
 internal class UbuntuLspConnection(command: RuntimeCommand, hostDirectory: File, stderr: (String) -> Unit, private val adapter: LspWireAdapter) : StreamConnectionProvider {
     private val process = LspProcess(command, hostDirectory, stderr)
     val isAlive: Boolean get() = process.isAlive
+    override val isClosed: Boolean get() = process.isClosed
     private lateinit var incoming: InputStream
     private lateinit var outgoing: OutputStream
     override fun start() {
         process.start()
-        // Pinned Sora 0.23.6/LSP4J 0.24.0 invoke notification handlers synchronously
+        // Notification dispatch and before-handler replacement must remain ordered
         // before reading the next frame (StreamMessageProducer -> RemoteEndpoint ->
         // GenericEndpoint -> DefaultLanguageClient). Keep this boundary unbuffered:
         // pre-handler diagnostic replacement must precede exactly that notification.

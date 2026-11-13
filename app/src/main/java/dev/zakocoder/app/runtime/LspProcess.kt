@@ -18,6 +18,7 @@ internal class LspProcess(
     @Volatile private var process: Process? = null
     @Volatile private var ownedPid: Int? = null
     private val errors = StringBuilder()
+    val isClosed: Boolean get() = closed.get()
     val isAlive: Boolean get() = !closed.get() && process?.isAlive == true
     val input: InputStream get() = process?.inputStream ?: throw IOException("Language server not started")
     val output: OutputStream get() = process?.outputStream ?: throw IOException("Language server not started")

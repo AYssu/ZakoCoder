@@ -155,19 +155,27 @@ class AiFilesUiDeviceTest {
         }
         lateinit var w: Workbench
         try {
+            // This case checks empty-workbench recovery after the separate first-run guide.
+            withContext(Dispatchers.IO) {
+                dev.zakocoder.app.settings.OnboardingRepository(isolated).save(
+                    dev.zakocoder.app.settings.OnboardingProgress(completed = true))
+            }
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 main { w = Workbench(isolated) }; await { !w.state.value.loading && !w.editor.state.value.loading }
                 scenario.onActivity { it.setContent { ZakoCoderApp(w) } }
                 assertTrue(w.state.value.projects.isEmpty()); assertFalse(w.state.value.installed); assertFalse(w.ai.state.value.configured)
-                click(context.getString(R.string.nav_ai)); screenshot("ux-empty-ai")
+                await { visibleText(context.getString(R.string.ai_select_project_first)) }; screenshot("ux-empty-ai")
                 click(context.getString(R.string.ai_select_project_first))
-                assertTrue(visibleText(context.getString(R.string.library_empty_title)))
+                await { visibleText(context.getString(R.string.workspace_flow_empty)) }
+                click(context.getString(R.string.app_navigation_open))
                 click(context.getString(R.string.nav_environment)); click(context.getString(R.string.select_project_first))
-                assertTrue(visibleText(context.getString(R.string.library_empty_title)))
+                await { visibleText(context.getString(R.string.workspace_flow_empty)) }
                 main { w.create("setup-owned-fixture") }; await { !w.state.value.busy && w.state.value.projects.size == 1 }
-                click(context.getString(R.string.nav_ai)); await { !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
+                click(context.getString(R.string.workspace_flow_open))
+                click(context.getString(R.string.workspace_threads_new))
+                await { !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                 click(context.getString(R.string.ai_models_add_first))
-                assertTrue(visibleText(context.getString(R.string.ai_settings)))
+                await { visibleText(context.getString(R.string.ai_settings)) }
                 assertFalse("No automatic runtime install", w.state.value.installed || w.state.value.busy)
                 assertFalse("No automatic AI task", w.ai.state.value.active || w.ai.state.value.requests.isNotEmpty())
             }

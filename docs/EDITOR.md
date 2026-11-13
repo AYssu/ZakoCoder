@@ -1,6 +1,8 @@
 # 原生代码编辑器与项目文件
 
-ZakoCoder 使用Sora原生编辑器，以Kotlin/Compose页面承载AndroidView；不使用网页编辑器。依赖版本、对应源码及许可证见[第三方说明](../THIRD_PARTY.md)。
+ZakoCoder 使用Sora原生编辑器，以Kotlin/Compose页面承载AndroidView；不使用网页编辑器。依赖版本、对应源码及许可证见[第三方说明](../THIRD_PARTY.md)。当前编辑器、TextMate 和 LSP 模块统一使用 Sora 0.24.7（上游标记为预发布），LSP4J 使用 1.0.0；三模块使用新的 `io.github.rosemoe` Maven 坐标，需作为一组升级或回退。
+
+当前发布依赖不提供编辑器内的代码折叠／展开操作；语法着色和代码块边界信息不等于可交互折叠。
 
 ## 项目与文件入口
 

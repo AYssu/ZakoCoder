@@ -19,7 +19,13 @@ import java.util.UUID
 class EditorLspDeviceTest {
     @Before fun foregroundForDeviceUi() = warmDeviceActivity()
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
-    private suspend fun await(condition: () -> Boolean) = withTimeout(40_000) { while (!condition()) delay(100) }
+    private suspend fun await(stage: String = "workbench", detail: () -> String = { "" }, condition: () -> Boolean) {
+        try { withTimeout(40_000) { while (!condition()) delay(100) } }
+        catch (timeout: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            throw AssertionError("Python LSP stage timed out: $stage; ${detail()}", timeout)
+        }
+    }
     @Test(timeout = 150000) fun pythonDiagnosticsCompletionUnsavedChangesAndCloseUseRealServer() = runBlocking {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             val app = (context.applicationContext as ZakoApplication).workbench
@@ -44,13 +50,13 @@ class EditorLspDeviceTest {
                         controller.attach(view, project.id, source.name) { EmptyLanguage() }
                     }
                 }
-                await { controller.state.value.phase in setOf(LspPhase.Ready, LspPhase.Failed, LspPhase.MissingServer) }
+                await("server initialization", { controller.state.value.toString() }) { controller.state.value.phase in setOf(LspPhase.Ready, LspPhase.Failed, LspPhase.MissingServer) }
                 assertEquals(controller.state.value.toString(), LspPhase.Ready, controller.state.value.phase)
-                await { controller.state.value.diagnosticCount > 0 }
+                await("initial unsaved diagnostics", { controller.state.value.toString() }) { controller.state.value.diagnosticCount > 0 }
                 val labels = withTimeout(20000) { controller.completionLabels(2, 7) }
                 assertTrue("Real Jedi completion contains sqrt: $labels", labels.any { it.substringBefore('(').trim() == "sqrt" })
                 withContext(Dispatchers.Main) { view.setText("import math\nmath.sqrt(4)\n") }
-                await { controller.state.value.diagnosticCount == 0 }
+                await("fixed unsaved diagnostics cleared", { controller.state.value.toString() }) { controller.state.value.diagnosticCount == 0 }
                 withContext(Dispatchers.IO) { assertEquals("print('disk baseline remains unchanged')\n", source.readText()) }
                 // Retry the SAME connected view with an unsupported document: connection
                 // teardown must restore the base Language even though no new LSP is attached.

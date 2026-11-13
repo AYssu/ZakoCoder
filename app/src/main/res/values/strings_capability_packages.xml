@@ -3,7 +3,6 @@
     <string name="capability_packages_subtitle">按需开启工具，系统权限与任务授权单独确认</string>
     <string name="capability_packages_settings_hint">屏幕识别与操作 · SSH 远程开发</string>
     <string name="capability_packages_project">当前项目 · %1$s</string>
-    <string name="capability_packages_no_project">先选择一个项目，再管理它可以使用的能力包。</string>
     <string name="capability_packages_enabled">已启用</string>
     <string name="capability_packages_disabled">未启用</string>
     <string name="capability_screen_configure">配置屏幕操作</string>

@@ -2,7 +2,7 @@
     <string name="about_product_description">在 Android 上管理项目、编辑代码、运行终端并与 AI 协作。模型服务需自行配置。</string>
     <string name="about_version_unavailable">版本暂不可用</string>
     <string name="about_license_summary">开源组件与许可声明</string>
-    <string name="about_license_components">Markdown：CommonMark Java 0.32.0，BSD-2-Clause。网络：OkHttp 5.5.1 / Okio 3.18.1，Apache-2.0。代码编辑器：Sora Editor 0.23.6，LGPL-2.1；TextMate 内含 TM4E，EPL-2.0。完整声明见 assets/licenses。终端字体：JetBrains Mono 2.304（SIL OFL 1.1，原始声明随 APK 保存于 assets/licenses）。终端基础库：Termux terminal-emulator / terminal-view（Apache-2.0）。PRoot 源码 GPL-2.0-or-later；静态链接 talloc 后的组合制品按 GPL-3.0-or-later 提供，talloc 为 LGPL-3.0-or-later，libandroid-shmem 为 BSD-3-Clause；Ubuntu 基础系统保留各包 /usr/share/doc 中的许可。版本与摘要见仓库 THIRD_PARTY.md 和 runtime/artifacts.json。</string>
+    <string name="about_license_components">Markdown：CommonMark Java 0.32.0，BSD-2-Clause。网络：OkHttp 5.5.1 / Okio 3.18.1，Apache-2.0。代码编辑器：Sora Editor 0.24.7，LGPL-2.1；TextMate 内含 TM4E，EPL-2.0。完整声明见 assets/licenses。终端字体：JetBrains Mono 2.304（SIL OFL 1.1，原始声明随 APK 保存于 assets/licenses）。终端基础库：Termux terminal-emulator / terminal-view（Apache-2.0）。PRoot 源码 GPL-2.0-or-later；静态链接 talloc 后的组合制品按 GPL-3.0-or-later 提供，talloc 为 LGPL-3.0-or-later，libandroid-shmem 为 BSD-3-Clause；Ubuntu 基础系统保留各包 /usr/share/doc 中的许可。版本与摘要见仓库 THIRD_PARTY.md 和 runtime/artifacts.json。</string>
     <string name="about_license_originals">查看原始许可全文</string>
     <string name="about_license_originals_title">选择许可文件</string>
     <string name="about_license_read_failed">无法读取许可文件，请关闭后重试。</string>
