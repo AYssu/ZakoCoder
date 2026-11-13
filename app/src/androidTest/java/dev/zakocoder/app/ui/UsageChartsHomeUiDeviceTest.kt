@@ -111,10 +111,9 @@ class UsageChartsHomeUiDeviceTest {
             instrumentation.runOnMainSync { page = 2 }
             await("Project state") { shown(context.getString(R.string.home_current_project)) }
             capture(dark, "home-bound")
-            click(context.getString(R.string.browse_files))
+            click(context.getString(R.string.workspace_flow_open))
             assertEquals(1, opened)
-            click(context.getString(R.string.open_terminal))
-            assertEquals(1, terminal)
+            assertEquals("Opening a workspace does not start a terminal", 0, terminal)
             click(context.getString(R.string.home_project_actions, "移动端管理控制台与客户端应用 / alpha"))
             assertEquals(1, actions)
             instrumentation.runOnMainSync { page = 3 }

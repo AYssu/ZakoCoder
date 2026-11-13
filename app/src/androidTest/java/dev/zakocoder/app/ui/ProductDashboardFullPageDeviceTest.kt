@@ -78,15 +78,24 @@ class ProductDashboardFullPageDeviceTest {
                     }
                     }
                 }
-                await("Real homepage with search and project") { shown("移动端管理控制台") && shown(base.getString(R.string.search_projects)) }
+                click(base.getString(R.string.app_navigation_open))
+                click(base.getString(R.string.drawer_manage_workspaces))
+                await("Real homepage with search and project") { shown("移动端管理控制台") && shown(base.getString(R.string.workspace_flow_search)) }
                 capture(dark, "home-full")
                 nodes { all ->
-                    val field = all.first { it.config.getOrNull(SemanticsActions.SetText) != null }
+                    val field = all.first { it.config.getOrNull(SemanticsActions.SetText) != null &&
+                        base.getString(R.string.workspace_flow_search) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
                     assertTrue(field.config[SemanticsActions.SetText].action?.invoke(AnnotatedString("CLI")) == true)
                 }
-                await("Search filters complete homepage") { shown("CLI 开发工具") && !shown("移动端管理控制台") }
+                // The selected workspace name also appears in the global header/drawer.
+                // Assert card actions, which belong only to the filtered list.
+                await("Search filters workspace cards") {
+                    shown(base.getString(R.string.home_project_actions, "CLI 开发工具")) &&
+                        !shown(base.getString(R.string.home_project_actions, "移动端管理控制台"))
+                }
                 capture(dark, "home-search")
                 click(base.getString(R.string.clear_search))
+                click(base.getString(R.string.app_navigation_open))
                 click(base.getString(R.string.nav_settings))
                 val usage = base.getString(R.string.ai_usage_dashboard)
                 repeat(8) { if (!shown(usage)) scroll(360f) }
@@ -125,11 +134,15 @@ class ProductDashboardFullPageDeviceTest {
         return result.get()
     }
     private fun label(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
-    private fun shown(text: String) = nodes { all -> all.any { label(it) == text && it.boundsInWindow.height > 0 } }
-    private fun click(text: String) = nodes { all ->
+    private fun shown(text: String) = nodes { all -> all.any { (label(it) == text ||
+        text in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) && it.boundsInWindow.height > 0 } }
+    private fun click(text: String) {
+        await("Visible action: $text") { shown(text) }
+        nodes { all ->
         var node: SemanticsNode? = all.last { label(it) == text || text in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
         while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
         assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+        }
     }
     private fun scroll(amount: Float) {
         nodes { all -> all.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null }

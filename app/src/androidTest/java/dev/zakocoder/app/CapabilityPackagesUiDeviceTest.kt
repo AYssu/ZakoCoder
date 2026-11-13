@@ -22,6 +22,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.ui.*
+import dev.zakocoder.app.test.R as TestR
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -52,7 +53,9 @@ class CapabilityPackagesUiDeviceTest {
         return result.get()
     }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
-    private fun has(label: String) = nodes { all -> all.any { text(it) == label } }
+    private fun matches(node: SemanticsNode, label: String) = text(node) == label ||
+        label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+    private fun has(label: String) = nodes { all -> all.any { matches(it, label) } }
     private fun await(label: String, predicate: () -> Boolean) {
         val until = SystemClock.uptimeMillis() + 15000
         while (!predicate()) {
@@ -64,13 +67,13 @@ class CapabilityPackagesUiDeviceTest {
         await("Control: $label") { has(label) }
         await("Enabled control: $label") {
             nodes { all ->
-                var node = all.lastOrNull { text(it) == label } as SemanticsNode?
+                var node = all.lastOrNull { matches(it, label) } as SemanticsNode?
                 while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
                 node != null && node.config.getOrNull(SemanticsProperties.Disabled) == null
             }
         }
         nodes { all ->
-            var node = all.last { text(it) == label } as SemanticsNode?
+            var node = all.last { matches(it, label) } as SemanticsNode?
             while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
             val control = requireNotNull(node)
             assertNull("Enabled: $label", control.config.getOrNull(SemanticsProperties.Disabled))
@@ -80,7 +83,7 @@ class CapabilityPackagesUiDeviceTest {
     private fun edit(label: String, value: String) {
         await("Editable field: $label") { has(label) }
         nodes { all ->
-            var node = all.last { text(it) == label } as SemanticsNode?
+            var node = all.last { matches(it, label) } as SemanticsNode?
             while (node != null && node.config.getOrNull(SemanticsActions.SetText) == null) node = node.parent
             assertTrue(requireNotNull(node).config[SemanticsActions.SetText].action
                 ?.invoke(androidx.compose.ui.text.AnnotatedString(value)) == true)
@@ -89,10 +92,10 @@ class CapabilityPackagesUiDeviceTest {
             // Password semantics may contain transformed bullets rather than the raw draft.
             editableValue(label)?.length == value.length
         }
-        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {}
     }
     private fun editableValue(label: String): String? = nodes { all ->
-        var node = all.lastOrNull { text(it) == label } as SemanticsNode?
+        var node = all.lastOrNull { matches(it, label) } as SemanticsNode?
         while (node != null && node.config.getOrNull(SemanticsActions.SetText) == null) node = node.parent
         node?.config?.getOrNull(SemanticsProperties.EditableText)?.text
     }
@@ -102,7 +105,7 @@ class CapabilityPackagesUiDeviceTest {
         var diagnostic = "No target geometry"
         repeat(30) {
             val visible = nodes { all ->
-                val target = all.lastOrNull { text(it) == label } ?: return@nodes false
+                val target = all.lastOrNull { matches(it, label) } ?: return@nodes false
                 var scroll: SemanticsNode? = target
                 while (scroll != null && scroll.config.getOrNull(SemanticsActions.ScrollBy) == null) scroll = scroll.parent
                 val viewport = scroll?.boundsInWindow
@@ -125,7 +128,7 @@ class CapabilityPackagesUiDeviceTest {
                 false
             }
             if (visible) return
-            instrumentation.waitForIdleSync(); SystemClock.sleep(120)
+            instrumentation.runOnMainSync {}; SystemClock.sleep(120)
         }
         throw AssertionError("Could not reveal: $label; $diagnostic")
     }
@@ -145,11 +148,15 @@ class CapabilityPackagesUiDeviceTest {
         val forgotten = AtomicBoolean()
         val disconnected = AtomicBoolean()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var activity: MainActivity
+            scenario.onActivity { activity = it }
             var fixtureGeneration = 0
+            // Busy SSH fixtures intentionally animate forever; synchronize with composition,
+            // not ActivityScenario.onActivity/waitForIdleSync, which can wait indefinitely.
             fun show(content: @Composable () -> Unit) {
                 val generation = ++fixtureGeneration
                 val committed = AtomicBoolean()
-                scenario.onActivity { activity -> activity.setContent {
+                instrumentation.runOnMainSync { activity.setContent {
                     val current = LocalConfiguration.current
                     val widthPx = LocalWindowInfo.current.containerSize.width
                     val configuration = remember(current, dark) { Configuration(current).apply {
@@ -171,7 +178,7 @@ class CapabilityPackagesUiDeviceTest {
                 // setContent posts composition. Existing labels may still belong to the preceding
                 // fixture, so waiting only for a shared label can edit a draft that is about to vanish.
                 await("Fixture $generation committed") { committed.get() }
-                instrumentation.waitForIdleSync()
+                instrumentation.runOnMainSync {}
             }
             fun packages(model: CapabilityPackagesUiModel) {
                 show { CapabilityPackagesSheet(model, { screen.set(it) }, { ssh.set(it) }, { details.set(true) }, { details.set(true) }, {}) }
@@ -182,7 +189,7 @@ class CapabilityPackagesUiDeviceTest {
             }
             packages(CapabilityPackagesUiModel())
             await("Global screen available without workspace") { has(context.getString(R.string.capability_screen_title)) }
-            assertFalse(has(context.getString(R.string.capability_packages_no_project)))
+            assertFalse(has(instrumentation.context.getString(TestR.string.capability_packages_no_project)))
             nodes { all ->
                 val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
                 assertEquals(2, switches.size)
@@ -275,7 +282,7 @@ class CapabilityPackagesUiDeviceTest {
     }
 
     private fun capture(dark: Boolean, name: String) {
-        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {}
         // A passing semantic callback can precede the Sheet expansion animation. Wait for
         // actual window-relative geometry to settle before treating the screenshot as evidence.
         SystemClock.sleep(400)

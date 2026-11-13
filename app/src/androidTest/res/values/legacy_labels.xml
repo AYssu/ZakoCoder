@@ -1,0 +1,7 @@
+<resources>
+    <!-- Removed production labels retained for assertions that old controls stay absent. -->
+    <string name="capability_packages_no_project">先选择一个项目，再管理它可以使用的能力包。</string>
+    <string name="screen_test_allow_install">允许安装应用</string>
+    <string name="screen_test_no_project">先在工作区选择一个 Android 项目，再构建 Debug APK。</string>
+    <string name="screen_test_choose_apk">选择调试 APK</string>
+</resources>

@@ -3,8 +3,6 @@
     <string name="screen_test_development_group">开发能力</string>
     <string name="screen_test_title">屏幕操作</string>
     <string name="screen_test_subtitle">查看当前设备界面，按任务授权助手操作。</string>
-    <string name="screen_test_no_project">先在工作区选择一个 Android 项目，再构建 Debug APK。</string>
-    <string name="screen_test_choose_apk">选择调试 APK</string>
     <string name="screen_test_service">屏幕交互</string>
     <string name="screen_test_service_off">尚未开启</string>
     <string name="screen_test_service_connecting">已开启，等待连接</string>
@@ -22,7 +20,6 @@
     <string name="screen_test_report_empty">暂无操作记录。任务完成或停止后可查看实际结果。</string>
     <string name="screen_test_operation_failed">操作未完成，请重试。</string>
     <string name="screen_test_details">能力与授权范围</string>
-    <string name="screen_test_allow_install">允许安装应用</string>
     <string name="screen_test_capture_hint">Android 8–10 可检查界面节点；截图需要 Android 11 或以上。密码和敏感窗口不采集。</string>
     <string name="screen_test_root_capture_hint">Root 截图也需要开启无障碍服务，用于安全检查与画面捕获。</string>
     <string name="screen_test_root_text_hint">Root 输入仅支持已聚焦输入框中的可打印 ASCII；中文或替换整段文字请使用无障碍方式。</string>
