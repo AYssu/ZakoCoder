@@ -21,7 +21,7 @@ jsch = "2.28.8"
 [libraries]
 navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.2.0" }
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version = "0.9.4" }
-lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "0.24.0" }
+lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "1.0.0" }
 jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
 commonmark = { module = "org.commonmark:commonmark", version = "0.32.0" }
