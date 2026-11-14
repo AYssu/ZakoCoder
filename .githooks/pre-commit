@@ -1,0 +1,3 @@
+#!/bin/sh
+# Rotate the staged README without staging any unrelated working-tree edits.
+exec python3 scripts/rotate_readme_mascot.py

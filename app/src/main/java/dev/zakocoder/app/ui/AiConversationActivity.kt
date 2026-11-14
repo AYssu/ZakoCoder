@@ -1,5 +1,11 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -40,7 +46,8 @@ internal fun aiDisplayActivity(state: AiState, preparationTexts: Set<String>): A
     val notices = linkedMapOf<String, List<AiEntry>>()
     var index = 0
     fun completedTool(entry: AiEntry): AiToolEvent? = events[entry.toolId]?.takeIf {
-        it.turn == entry.turn && it.status == AiToolStatus.Succeeded &&
+        it.turn == entry.turn && (it.status == AiToolStatus.Succeeded ||
+            (state.active && entry.turn == state.turn && it.status in setOf(AiToolStatus.Queued, AiToolStatus.Running))) &&
             it.tool != null && it.tool != AiTool.AskUser && entry.text.isEmpty() &&
             entry.reasoning.isEmpty() && !entry.reasoningTruncated
     }
@@ -91,17 +98,21 @@ internal fun AiPreparationActivity(entries: List<AiEntry>) {
     var expanded by remember(entries.first().id) { mutableStateOf(false) }
     Column {
         ActivityDisclosure(stringResource(R.string.ai_activity_preparation), expanded) { expanded = !expanded }
-        if (expanded) entries.forEach { Text(it.text, style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        ActivityChildren(expanded) {
+            entries.forEach { Text(it.text, Modifier.padding(bottom = 4.dp), fontSize = 11.sp,
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
     }
 }
 
 @Composable
 internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry> = emptyList(),
-    revealToolId: String? = null, revealRequest: String? = null, highlightTool: Boolean = false) {
+    revealToolId: String? = null, revealRequest: String? = null, highlightTool: Boolean = false, active: Boolean = false, entrances: Map<String, Long> = emptyMap()) {
     val matched = revealToolId?.takeIf { id -> events.any { it.id == id } }
-    var expanded by remember(events.first().id) { mutableStateOf(matched != null) }
-    LaunchedEffect(revealRequest, matched) { if (revealRequest != null && matched != null) expanded = true }
+    var chosen by remember(events.first().id) { mutableStateOf<Boolean?>(null) }
+    val expanded = chosen ?: (active || matched != null)
+    val appeared = remember(events.first().id) { events.map { it.id }.toMutableSet() }
+    LaunchedEffect(revealRequest, matched) { if (revealRequest != null && matched != null) chosen = true }
     val parts = buildList {
         val reads = events.filter { it.tool == AiTool.ReadFile }.map { it.target }.distinct().size
         val searches = events.count { it.tool == AiTool.SearchFiles }
@@ -120,14 +131,26 @@ internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry
         }
     }
     Column {
-        ActivityDisclosure(parts.joinToString(" · "), expanded) { expanded = !expanded }
-        if (expanded) {
-            preparation.forEach { Text(it.text, style = MaterialTheme.typography.bodySmall,
+        ActivityDisclosure(parts.joinToString(" · "), expanded) { chosen = !expanded }
+        ActivityChildren(expanded) {
+            preparation.forEach { Text(it.text, fontSize = 11.sp, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            events.forEach { event -> AiToolCard(event,
-                revealRequest = revealRequest.takeIf { event.id == matched },
-                highlighted = highlightTool && event.id == matched) }
+            events.forEach { event -> key(event.id) {
+                val enter = remember(event.id) { active && appeared.add(event.id) }
+                ProcessArrival(enter, entrances[event.id]) {
+                    AiToolCard(event, revealRequest = revealRequest.takeIf { event.id == matched },
+                        highlighted = highlightTool && event.id == matched)
+                }
+            } }
         }
+    }
+}
+
+@Composable
+private fun ActivityChildren(expanded: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    AnimatedVisibility(expanded, enter = fadeIn(tween(140)) + expandVertically(tween(180)),
+        exit = fadeOut(tween(100)) + shrinkVertically(tween(160))) {
+        Column(Modifier.padding(start = 20.dp), content = content)
     }
 }
 
@@ -135,8 +158,9 @@ internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry
 private fun ActivityDisclosure(label: String, expanded: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        WorkbenchIcon(Glyph.History, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(label, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodySmall, fontSize = 12.sp, lineHeight = 18.sp,
+            style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, lineHeight = 17.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         WorkbenchIcon(if (expanded) Glyph.ChevronDown else Glyph.Next, Modifier.size(12.dp),
             description = stringResource(if (expanded) R.string.ai_tool_collapse else R.string.ai_tool_details),

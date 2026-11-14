@@ -17,21 +17,6 @@ class StreamingTextPacerTest {
         assertFalse(LiveEntryAnimations(listOf("live")).consume("live"))
     }
 
-    @Test fun burstsAdvanceInSmallStepsAndCompleteByDeadline() {
-        for (size in listOf(1, 32, 12000, 1000000)) {
-            val text = "a".repeat(size)
-            var visible = 0
-            for (elapsed in 32L..480L step 32) {
-                val next = StreamingTextPacer.atTime(text, 0, visible, elapsed)
-                assertTrue(next > visible || visible == size)
-                assertTrue(next <= size)
-                if (size > 32 && elapsed == 32L) assertTrue(next < size / 4)
-                visible = next
-            }
-            assertEquals(size, visible)
-        }
-    }
-
     @Test fun unicodeClustersAreNeverPartiallyExposed() {
         for (cluster in listOf("😀", "e\u0301", "👩🏽‍💻", "🇨🇳", "\r\n", "✈️")) {
             val text = "x${cluster}y"
@@ -44,12 +29,4 @@ class StreamingTextPacerTest {
         assertEquals(8, StreamingTextPacer.boundary("🇨🇳🇺🇸", 6))
     }
 
-    @Test fun retainedPrefixAndFreshBurstDoNotReplay() {
-        val text = "previous answer\n" + "新的内容".repeat(400)
-        val initial = "previous answer\n".length
-        val next = StreamingTextPacer.atTime(text, initial, initial, 32)
-        assertTrue(next > initial)
-        assertEquals(text.length, StreamingTextPacer.atTime(text, initial, next, 480))
-        assertEquals(text.length, StreamingTextPacer.advance(text, text.length, 32))
-    }
 }

@@ -17,7 +17,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.zakocoder.app.ai.AiRole
 import kotlinx.coroutines.launch
@@ -51,6 +50,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     }
     val entryAnimations = remember(state.projectId, state.conversationId) { LiveEntryAnimations(state.timeline.map { it.id }) }
     entryAnimations.observe(state.timeline.map { it.id }, state.active)
+    val toolEntrances = remember(state.projectId, state.conversationId, state.turn) { ToolEntrances(state.events) }
+    toolEntrances.observe(state.drafts, state.events)
     var commands by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     var commandsTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
     var checkpoints by remember { mutableStateOf(false) }
@@ -72,26 +73,16 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     var automaticScroll by remember { mutableStateOf(false) }
     val dragging by listState.interactionSource.collectIsDraggedAsState()
     val uiScope = rememberCoroutineScope()
-    var contentHeight by remember { mutableIntStateOf(0) }
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
-    val viewportHeight by remember { derivedStateOf { listState.layoutInfo.viewportSize.height } }
     LaunchedEffect(listState, state.conversationId) {
-        var userScrolled = false
-        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
-            if (scrolling && !automaticScroll) { userScrolled = true; follow = false }
-            if (!scrolling && userScrolled) {
-                if (!listState.canScrollForward) follow = true
-                userScrolled = false
+        snapshotFlow { Triple(dragging, listState.isScrollInProgress, listState.canScrollForward) }
+            .collect { (drag, scrolling, canScroll) ->
+                if (drag) follow = false
+                else if (!scrolling && !canScroll) follow = true
             }
-        }
     }
-    LaunchedEffect(dragging) { if (dragging) follow = false }
-    LaunchedEffect(state.timeline.size, state.drafts.size, state.timeline.lastOrNull()?.text?.length, state.events.lastOrNull()?.output?.length, contentHeight, viewportHeight) {
-        if (follow && !dragging && !listState.isScrollInProgress && state.timeline.isNotEmpty()) {
-            automaticScroll = true
-            try { listState.scrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)) } finally { automaticScroll = false }
-        }
-    }
+    ConversationEndFollower(listState, state.projectId to state.conversationId,
+        enabled = follow && !dragging && !automaticScroll && state.timeline.isNotEmpty())
     var history by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(historyRequest) { if (historyRequest > 0) { history = true; onHistoryRequestConsumed() } }
     var deleting by remember { mutableStateOf<String?>(null) }
@@ -212,13 +203,14 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             } }
             itemsIndexed(displayActivity.entries, key = { _, entry -> entry.id }) { index, entry ->
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
-                Column(Modifier.fillMaxWidth().background(if (highlightedEntry == entry.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .35f) else androidx.compose.ui.graphics.Color.Transparent).animateItem(fadeInSpec = androidx.compose.animation.core.tween(180),
+                Column(Modifier.fillMaxWidth().background(if (highlightedEntry == entry.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .35f) else androidx.compose.ui.graphics.Color.Transparent).animateItem(fadeInSpec = if (entry.toolId != null || displayActivity.tools.containsKey(entry.id) || entry.role == AiRole.Assistant) null else androidx.compose.animation.core.tween(180),
                     placementSpec = if (state.active && entry.turn == state.turn) null else androidx.compose.animation.core.tween(220), fadeOutSpec = null)) {
-                if (displayActivity.tools.containsKey(entry.id)) AiReadActivity(requireNotNull(displayActivity.tools[entry.id]), displayActivity.preparation[entry.id].orEmpty(),
+                if (displayActivity.tools.containsKey(entry.id)) ProcessArrival(state.active && entry.turn == state.turn,
+                    toolEntrances.events[displayActivity.tools[entry.id]?.firstOrNull()?.id]) { AiReadActivity(requireNotNull(displayActivity.tools[entry.id]), displayActivity.preparation[entry.id].orEmpty(),
                     revealToolId = state.timeline.firstOrNull { it.id == revealedRequest?.entryId }?.toolId,
-                    revealRequest = revealedRequest?.requestId, highlightTool = highlightedEntry == entry.id)
+                    revealRequest = revealedRequest?.requestId, highlightTool = highlightedEntry == entry.id, active = state.active && entry.turn == state.turn, entrances = toolEntrances.events) }
                 else if (displayActivity.preparation.containsKey(entry.id)) AiPreparationActivity(requireNotNull(displayActivity.preparation[entry.id]))
-                else if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
+                else if (entry.toolId == null) Column(Modifier.fillMaxWidth()) {
                     AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
                         onRetry = if (!state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
                             retryTarget = state.timeline.first { it.turn == entry.turn && it.role == AiRole.User }; editingMessage = false
@@ -250,8 +242,10 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                             onResume = if (continuation != null && question.answer != null && !state.active) ({
                                 if (projectId != null && !workbench.ai.resumeQuestion(projectId, state.conversationId, question.id)) messageActionError = true
                             }) else null)
-                    } else AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } },
-                        revealRequest = revealedRequest?.takeIf { it.entryId == entry.id }?.requestId, highlighted = highlightedEntry == entry.id)
+                    } else ProcessArrival(state.active && entry.turn == state.turn, toolEntrances.events[event.id]) {
+                        AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } },
+                            revealRequest = revealedRequest?.takeIf { it.entryId == entry.id }?.requestId, highlighted = highlightedEntry == entry.id)
+                    }
                 }
                 if (entry.turn > 0 && displayActivity.entries.getOrNull(index + 1)?.turn != entry.turn) {
                     if (entry.turn == state.turn && state.active) {
@@ -264,10 +258,12 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 }
                 }
             }
-            items(state.drafts, key = { "draft-${it.index}" }) { draft ->
-                AiToolLivePreview(draft)
+            items(if (state.active) toolEntrances.drafts else emptyList(), key = { "draft-${it.index}" }) { draft ->
+                Column(Modifier.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)) {
+                    ProcessArrival(true, toolEntrances.draft(draft)) { AiToolLivePreview(draft) }
+                }
             }
-            item(key = "conversation-bottom") { Spacer(Modifier.height(1.dp)) }
+            item(key = "conversation-bottom") { Spacer(Modifier.height(with(androidx.compose.ui.platform.LocalDensity.current) { 36.sp.toDp() })) }
         }
         }
         }
@@ -475,8 +471,18 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}, onRetry: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null, revealRequest: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
-    val visibleResponse = if (entry.role == AiRole.Assistant) smoothStreamingText(entry.id, entry.text, responseStreaming, animateOnMount) else entry.text
-    val visibleReasoning = if (entry.role == AiRole.Assistant) smoothStreamingText("${entry.id}:reasoning", entry.reasoning, reasoningStreaming, animateOnMount) else entry.reasoning
+    val visibleResponse = entry.text
+    val visibleReasoning = entry.reasoning
+    var wasLive by remember(entry.id) { mutableStateOf(responseStreaming) }
+    var settled by remember(entry.id) { mutableStateOf(!responseStreaming) }
+    LaunchedEffect(entry.text, responseStreaming) {
+        if (responseStreaming) { wasLive = true; settled = false }
+        else {
+            if (wasLive) kotlinx.coroutines.delay((TEXT_REVEAL_MS + 80).toLong())
+            settled = true
+        }
+    }
+    CompositionLocalProvider(LocalTextArrival provides (responseStreaming || reasoningStreaming || !settled)) {
     when (entry.role) {
         AiRole.User -> Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (imageLoader != null) AiImageAttachments(entry.images, imageLoader)
@@ -506,13 +512,14 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
                     { AiMessageMore(entry, onRetry, onRequests, onQuote) }
                 } else null)
             if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink)
-            if (entry.text.isNotEmpty() && !responseStreaming && visibleResponse == entry.text) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (entry.text.isNotEmpty() && !responseStreaming && settled) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { Row { actions?.invoke(this) } }
                 IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (onRetry != null || onRequests != null || onQuote != null) AiMessageMore(entry, onRetry, onRequests, onQuote)
             }
         }
         AiRole.Notice -> Text(entry.text, Modifier.padding(vertical = 4.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     }
 }
 

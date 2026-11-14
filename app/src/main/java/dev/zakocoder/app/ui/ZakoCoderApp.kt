@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
@@ -79,6 +80,11 @@ fun ZakoCoderApp(workbench: Workbench) {
     var extensionsOpen by rememberSaveable { mutableStateOf(false) }
     var extensionsTab by rememberSaveable { mutableIntStateOf(0) }
     var shortcutPage by rememberSaveable { mutableStateOf<String?>(null) }
+    var drawerUtility by rememberSaveable { mutableStateOf<AppDestination?>(null) }
+    var utilityTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
+    val closeShortcut: () -> Unit = {
+        shortcutPage = null
+    }
     var searchConversations by rememberSaveable { mutableStateOf(false) }
     var terminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var terminalOpen by rememberSaveable { mutableStateOf(false) }
@@ -123,7 +129,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                         (conversation != null && result.conversationId != conversation) ||
                         (conversation == null && result.conversationId == previous)) return@withTimeoutOrNull false
                     modelsOpen = false; extensionsOpen = false; shortcutPage = null; openedProjectId = null; workspaceId = project
-                    page = AppDestination.Ai
+                    drawerUtility = null; page = AppDestination.Ai
                     // The requested navigation is complete. Do not mistake our own close for a dismissal.
                     drawerOpening = false
                     drawerState.close()
@@ -138,15 +144,18 @@ fun ZakoCoderApp(workbench: Workbench) {
     LaunchedEffect(browserNavigation) {
         browserNavigation?.let { request ->
             focus.clearFocus(); keyboard?.hide(); modelsOpen = false; extensionsOpen = false
-            shortcutPage = "browser"; drawerState.close(); workbench.consumeBrowserNavigation(request)
+            shortcutPage = "browser"
+            if (drawerUtility == null) drawerState.close()
+            workbench.consumeBrowserNavigation(request)
         }
     }
     // A setting-owned dialog must not survive navigation and appear over an unrelated
     // destination. AnimatedContent can keep old callbacks alive through its exit frames.
-    LaunchedEffect(page) {
-        if (page != AppDestination.Settings) proxyOpen = false
+    LaunchedEffect(page, drawerUtility) {
+        if ((drawerUtility ?: page) != AppDestination.Settings) proxyOpen = false
     }
     val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen
+    val baseCovered = overlayOpen || drawerUtility != null
     val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
     LaunchedEffect(assistantNavigation?.requestId) {
         val request = assistantNavigation ?: return@LaunchedEffect
@@ -213,15 +222,17 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     CompositionLocalProvider(LocalWorkbenchDark provides dark, LocalMinimumInteractiveComponentSize provides 48.dp) {
     WorkbenchMiuixTheme(dark) {
-    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = shortcutPage == null && page != AppDestination.Project &&
-        (page != AppDestination.Ai || assistantEntry.projectId != null) && !(page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()) &&
+    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && page != AppDestination.Project && page != AppDestination.Ai && !(page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()) &&
         !modelsOpen && !extensionsOpen && !updatesOpen && !proxyOpen && !drawerState.isOpen &&
         drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning && !setupOpen && !state.onboarding.required) {
-        if (page == AppDestination.Ai) {
-            workspaceId = assistantEntry.projectId
-            openedProjectId = null
-            page = AppDestination.Project
-        } else page = AppDestination.Ai
+        page = AppDestination.Ai
+    }
+    val settingsContent: @Composable () -> Unit = {
+        Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, onSetup = { workbench.saveOnboardingStep(0); setupOpen = true }, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { if ((drawerUtility ?: page) == AppDestination.Settings && !overlayOpen && !updatesOpen &&
+                        (drawerUtility != null || (!drawerState.isOpen && drawerState.targetValue != DrawerValue.Open &&
+                        !drawerState.isAnimationRunning)) && !mainBack.exiting.value) {
+                        focus.clearFocus(); keyboard?.hide(); proxyOpen = true
+                    } }) }
     }
         Box(Modifier.fillMaxSize()) {
         // Reopening setup is an overlay: keep the user's actual settings page and scroll
@@ -251,26 +262,23 @@ fun ZakoCoderApp(workbench: Workbench) {
         }
         UpdateBindings(workbench.updates) { updatesOpen = true }
         if (updatesOpen) UpdatePage(workbench.updates) { updatesOpen = false }
-        if (proxyOpen && page == AppDestination.Settings) ProxySettingsPage(workbench, state) { proxyOpen = false }
-        AppNavigation(drawerState = drawerState, selected = page, version = updateInfo.currentVersion,
+        if (proxyOpen && (drawerUtility ?: page) == AppDestination.Settings) ProxySettingsPage(workbench, state) { proxyOpen = false }
+        AppNavigation(drawerState = drawerState, selected = drawerUtility ?: page, version = updateInfo.currentVersion,
             onSearch = { searchConversations = true },
-            gesturesEnabled = !inTerminal && !inFiles && !overlayOpen && !updatesOpen && !proxyOpen,
+            gesturesEnabled = !inTerminal && !inFiles && !baseCovered && !updatesOpen && !proxyOpen,
             onClose = { cancelDrawerNavigation(); navigationScope.launch { drawerState.close() } },
             onSkills = {
                 cancelDrawerNavigation(); focus.clearFocus(); keyboard?.hide()
                 modelsOpen = false; extensionsOpen = false; shortcutPage = "skill"
-                navigationScope.launch { drawerState.close() }
             },
             onMcp = {
                 cancelDrawerNavigation(); focus.clearFocus(); keyboard?.hide()
                 modelsOpen = false; extensionsOpen = false; shortcutPage = "mcp"
-                navigationScope.launch { drawerState.close() }
             },
             shortcut = shortcutPage,
             onCapabilities = {
                 cancelDrawerNavigation(); focus.clearFocus(); keyboard?.hide()
                 modelsOpen = false; extensionsOpen = false; shortcutPage = "capabilities"
-                navigationScope.launch { drawerState.close() }
             },
             conversations = {
                 ConversationDrawer(workbench, state, visible = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open,
@@ -279,7 +287,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     onManage = {
                         if (!drawerOpening) {
                             modelsOpen = false; extensionsOpen = false; shortcutPage = null; openedProjectId = null; workspaceId = null
-                            referencedPath = null; page = AppDestination.Project
+                            referencedPath = null; drawerUtility = null; page = AppDestination.Project
                             navigationScope.launch { drawerState.close() }
                         }
                     })
@@ -297,10 +305,92 @@ fun ZakoCoderApp(workbench: Workbench) {
                 shortcutPage = null; modelsOpen = false; extensionsOpen = false
                 focus.clearFocus()
                 keyboard?.hide()
-                terminalOpen = false
-                if (destination == AppDestination.Project) { openedProjectId = null; workspaceId = null; referencedPath = null }
-                page = destination
-                navigationScope.launch { drawerState.close() }
+                if (destination in listOf(AppDestination.Settings, AppDestination.Environment, AppDestination.Terminal)) {
+                    if (drawerUtility != destination) utilityTerminalId = null
+                    drawerUtility = destination
+                } else {
+                    drawerUtility = null
+                    if (destination == AppDestination.Project) { openedProjectId = null; workspaceId = null; referencedPath = null }
+                    page = destination
+                }
+                if (drawerUtility == null) navigationScope.launch { drawerState.close() }
+            }, foregroundVisible = baseCovered, foreground = {
+                if (baseCovered || state.message.isNotEmpty()) Scaffold(
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                    contentWindowInsets = WindowInsets.systemBars) { foregroundPadding ->
+                    Box(Modifier.fillMaxSize()) {
+                        val blockBackground = Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                            }
+                        }
+            drawerUtility?.let { destination ->
+                val utilityBack = rememberWorkbenchBackMotion(resetKey = destination,
+                    enabled = !overlayOpen && !updatesOpen && !proxyOpen && !setupOpen && utilityTerminalId == null) {
+                    drawerUtility = null; utilityTerminalId = null
+                }
+                CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!overlayOpen && !updatesOpen && !proxyOpen && !setupOpen)) {
+                    Surface(Modifier.fillMaxSize().then(utilityBack.modifier).then(if (overlayOpen) blockBackground else Modifier), color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.fillMaxSize().padding(foregroundPadding)
+                            .consumeWindowInsets(foregroundPadding).imePadding()) {
+                            if (utilityTerminalId == null) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
+                                Text(stringResource(destination.label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open)) }
+                            }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                when (destination) {
+                                    AppDestination.Settings -> settingsContent()
+                                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) {
+                                        EnvironmentPage(workbench, state,
+                                            onTerminal = { drawerUtility = AppDestination.Terminal },
+                                            onProjects = { drawerUtility = null; openedProjectId = null; page = AppDestination.Project },
+                                            onAi = { drawerUtility = null; page = AppDestination.Ai })
+                                    }
+                                    AppDestination.Terminal -> if (utilityTerminalId != null && state.sessions.any { it.id == utilityTerminalId }) {
+                                        TerminalPage(workbench, state, utilityTerminalId, { utilityTerminalId = it }, { utilityTerminalId = null })
+                                    } else TerminalLibraryPage(workbench, state,
+                                        onOpen = { utilityTerminalId = it },
+                                        onEnvironment = { drawerUtility = AppDestination.Environment },
+                                        onProjects = { drawerUtility = null; page = AppDestination.Project })
+                                    else -> Unit
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Child pages draw over the entire base column, including its app header. Their own
+            // back modifier moves their opaque surface, exposing this still-live destination.
+            if (overlayOpen) {
+                val pageOwnsInsets = extensionsOpen || shortcutPage in listOf("skill", "mcp", "capabilities")
+                Box(Modifier.fillMaxSize().then(if (pageOwnsInsets) Modifier else
+                    Modifier.background(MaterialTheme.colorScheme.background).padding(foregroundPadding)
+                        .consumeWindowInsets(foregroundPadding).imePadding())) {
+                when {
+                    shortcutPage == "memory" -> AgentMemoryPage(workbench.ai.memory) { closeShortcut() }
+                    // AiPage stays noninteractive underneath. This foreground destination owns
+                    // its approval host, so tool confirmation never requires destroying WebView.
+                    shortcutPage == "browser" -> AgentBrowserWorkspacePage(workbench) { closeShortcut() }
+                    shortcutPage == "capabilities" -> CapabilityPackageBindings(workbench, state.selectedId,
+                        state.project?.name.orEmpty(), fullPage = true, contentPadding = foregroundPadding) { closeShortcut() }
+                    shortcutPage != null -> AiExtensionsPage(workbench, state,
+                        initialTab = if (shortcutPage == "mcp") 1 else 0, standalone = true, contentPadding = foregroundPadding) { closeShortcut() }
+                    extensionsOpen -> AiExtensionsPage(workbench, state, initialTab = extensionsTab, contentPadding = foregroundPadding) { extensionsOpen = false }
+                    modelsOpen -> AiModelsPage(workbench.ai, startAdding = modelsAdd,
+                        onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false }
+                }
+                }
+            }
+            if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(foregroundPadding).padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                    Row(Modifier.padding(start = 14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(state.message, Modifier.weight(1f).heightIn(max = 96.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = if (state.messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+                        IconButton(onClick = workbench::dismissMessage) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.dismiss)) }
+                    }
+                }
+                    }
+                }
             }) {
         Scaffold(containerColor = if (inTerminal) TerminalBackground else MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.systemBars) { padding ->
@@ -312,24 +402,12 @@ fun ZakoCoderApp(workbench: Workbench) {
                     while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                 }
             }
-            if (page == AppDestination.Ai) {
-                val targetWorkspace = state.projects.singleOrNull { it.id == assistantEntry.projectId }
-                if (targetWorkspace != null) Column(Modifier.fillMaxSize().then(blockBackground)) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = {}) { WorkbenchIcon(Glyph.Menu) }
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
-                    }
-                    WorkspaceConversationsPage(workbench, state, targetWorkspace,
-                        onBack = {}, onFiles = {}, onTerminal = {}, onAi = {}, backEnabled = false)
-                }
-            }
+            // Assistant is the launch root. System Back belongs to Android here;
+            // only explicitly opened pages may retain an in-app return destination.
             Box(Modifier.fillMaxSize()
                 .then(if (page == AppDestination.Ai) mainBack.modifier else Modifier)
-                .then(if (page != AppDestination.Ai || overlayOpen) blockBackground else Modifier)) {
-CompositionLocalProvider(LocalWorkbenchPageInteractive provides (page == AppDestination.Ai && !overlayOpen && !updatesOpen && !proxyOpen)) {
+                .then(if (page != AppDestination.Ai || baseCovered) blockBackground else Modifier)) {
+CompositionLocalProvider(LocalWorkbenchPageInteractive provides (page == AppDestination.Ai && !baseCovered && !updatesOpen && !proxyOpen)) {
 WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.value) { aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, historyRequest = historyRequest, onHistoryRequestConsumed = { historyRequest = 0 }, onConversations = {
                         workspaceId = workbench.ai.state.value.projectId; openedProjectId = null; page = AppDestination.Project
                     }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onTerminal = { id ->
@@ -345,11 +423,11 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                 }
             }
             if (page != AppDestination.Ai) {
-            CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!overlayOpen && !updatesOpen && !proxyOpen)) {
+            CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!baseCovered && !updatesOpen && !proxyOpen)) {
             // Keep the actual destination composed behind child pages, including its scroll and drafts.
             // Its pixels are the predictive-back destination; input and accessibility stay on the overlay.
             Column(Modifier.fillMaxSize().then(mainBack.modifier)
-                .then(if (overlayOpen) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
+                .then(if (baseCovered) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                     }
@@ -406,40 +484,13 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                             onOpen = { terminalId = it; terminalOpen = true },
                             onEnvironment = { page = AppDestination.Environment }, onProjects = { page = AppDestination.Project })
                     AppDestination.Ai -> Unit
-                    AppDestination.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, onSetup = { workbench.saveOnboardingStep(0); setupOpen = true }, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { if (page == AppDestination.Settings && !overlayOpen && !updatesOpen &&
-                        !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open &&
-                        !drawerState.isAnimationRunning && !mainBack.exiting.value) {
-                        focus.clearFocus(); keyboard?.hide(); proxyOpen = true
-                    } }) }
+                    AppDestination.Settings -> settingsContent()
                 }
             }
             }
             }
             }
-            // Child pages draw over the entire base column, including its app header. Their own
-            // back modifier moves their opaque surface, exposing this still-live destination.
-            if (overlayOpen) Box(Modifier.fillMaxSize()) {
-                when {
-                    shortcutPage == "memory" -> AgentMemoryPage(workbench.ai.memory) { shortcutPage = null }
-                    // AiPage stays noninteractive underneath. This foreground destination owns
-                    // its approval host, so tool confirmation never requires destroying WebView.
-                    shortcutPage == "browser" -> AgentBrowserWorkspacePage(workbench) { shortcutPage = null }
-                    shortcutPage == "capabilities" -> CapabilityPackageBindings(workbench, state.selectedId,
-                        state.project?.name.orEmpty(), fullPage = true) { shortcutPage = null }
-                    shortcutPage != null -> AiExtensionsPage(workbench, state,
-                        initialTab = if (shortcutPage == "mcp") 1 else 0, standalone = true) { shortcutPage = null }
-                    extensionsOpen -> AiExtensionsPage(workbench, state, initialTab = extensionsTab) { extensionsOpen = false }
-                    modelsOpen -> AiModelsPage(workbench.ai, startAdding = modelsAdd,
-                        onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false }
-                }
-            }
-            if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(start = 20.dp, end = 20.dp, top = 12.dp),
-                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                    Row(Modifier.padding(start = 14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text(state.message, Modifier.weight(1f).heightIn(max = 96.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = if (state.messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-                        IconButton(onClick = workbench::dismissMessage) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.dismiss)) }
-                    }
-                }
+
             }
         }
         }
@@ -457,7 +508,8 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
     }
     }
     // Register after page handlers so Back always closes an open navigation drawer first.
-    androidx.activity.compose.BackHandler(enabled = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open || drawerState.isAnimationRunning) {
+    androidx.activity.compose.BackHandler(enabled = !baseCovered && !updatesOpen && !proxyOpen && !setupOpen &&
+        (drawerState.isOpen || drawerState.targetValue == DrawerValue.Open || drawerState.isAnimationRunning)) {
         cancelDrawerNavigation()
         navigationScope.launch { drawerState.close() }
     }

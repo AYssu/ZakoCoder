@@ -143,7 +143,7 @@ class AiComposerDockDeviceTest {
                                                             WorkbenchIcon(Glyph.Shield, Modifier.size(14.dp),
                                                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                                             if (!narrow.value && !largeText.value) Text(
-                                                                context.getString(R.string.ai_permission_short_ask), fontSize = 10.sp,
+                                                                context.getString(R.string.ai_permission_ask), fontSize = 10.sp,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         }
                                                     }

@@ -46,7 +46,7 @@ def resolve_version(base_version: str, channel: str, now: datetime | None = None
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-version", default="0.1.2")
+    parser.add_argument("--base-version", default="0.1.3")
     parser.add_argument("--channel", choices=("dev", "release"), required=True)
     parser.add_argument("--github-output", type=Path)
     parser.add_argument("--now", help="Reproducible ISO 8601 build time with timezone")

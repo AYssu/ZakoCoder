@@ -1,28 +1,7 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.runtime.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlin.math.ceil
-import kotlin.math.max
-
 /** Presentation-only cursor; source/history, tool approvals and usage never wait for it. */
 internal object StreamingTextPacer {
-    const val TICK_MS = 32L
-    const val CATCH_UP_MS = 480L
-
-    fun advance(source: String, visible: Int, elapsedMs: Long): Int {
-        if (visible >= source.length) return source.length
-        val remaining = source.length - visible
-        val step = max(1, ceil(remaining * elapsedMs.coerceIn(1, 64).toDouble() / CATCH_UP_MS).toInt())
-        return boundary(source, (visible + step).coerceAtMost(source.length))
-    }
-
-    fun atTime(source: String, initial: Int, visible: Int, elapsedMs: Long): Int {
-        val deadlineStep = initial + ceil((source.length - initial) * elapsedMs.coerceIn(0, CATCH_UP_MS).toDouble() / CATCH_UP_MS).toInt()
-        return boundary(source, max(advance(source, visible, TICK_MS), deadlineStep))
-    }
-
     /** Avoid splitting surrogate pairs, combining marks, emoji modifiers, ZWJ and flags. */
     fun boundary(text: String, requested: Int): Int {
         var end = requested.coerceIn(0, text.length)
@@ -61,27 +40,4 @@ internal class LiveEntryAnimations(initialIds: Collection<String>) {
     }
 
     fun consume(id: String): Boolean = pending.remove(id)
-}
-
-@Composable
-internal fun smoothStreamingText(identity: String, source: String, streaming: Boolean, animateOnMount: Boolean = false): String {
-    // Existing/history text is immediately readable, even after scrolling away or returning.
-    var shown by remember(identity) { mutableStateOf(if (animateOnMount && streaming) "" else source) }
-    var wasStreaming by remember(identity) { mutableStateOf(streaming) }
-    val latestSource by rememberUpdatedState(source)
-    val latestStreaming by rememberUpdatedState(streaming)
-    LaunchedEffect(identity) {
-        snapshotFlow { latestSource to latestStreaming }.collectLatest { (target, active) ->
-            if (!target.startsWith(shown) || (!active && !wasStreaming)) shown = target
-            wasStreaming = active
-            val started = System.nanoTime()
-            val initial = shown.length
-            while (shown.length < target.length) {
-                delay(StreamingTextPacer.TICK_MS)
-                val elapsed = (System.nanoTime() - started) / 1_000_000
-                shown = target.take(StreamingTextPacer.atTime(target, initial, shown.length, elapsed))
-            }
-        }
-    }
-    return shown
 }

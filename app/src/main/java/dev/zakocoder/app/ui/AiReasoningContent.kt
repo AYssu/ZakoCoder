@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -73,13 +75,14 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
         }
     }
     val clipboard = LocalClipboardManager.current
-    Column(modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.onSurface.copy(alpha = .025f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp)) {
         Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { onReadingInteraction(); expanded = !expanded }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WorkbenchIcon(Glyph.Ai, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(stringResource(if (streaming) R.string.ai_reasoning_in_progress else R.string.ai_reasoning_title),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!expanded && displayedReasoning.isNotBlank()) Text(
                         displayedReasoning.lineSequence().firstOrNull { it.isNotBlank() }?.trim().orEmpty(),
                         modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp,
@@ -94,8 +97,9 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (entry.reasoning.isNotEmpty()) SelectionContainer {
-                    Text(pausedPreview ?: preview, Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ArrivalText(pausedPreview ?: preview, Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 17.sp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        animated = pausedPreview == null && LocalTextArrival.current)
                 }
                 if (entry.reasoning.length > AiReasoningPreview.MAX_CHARS) Text(stringResource(
                     if (streaming && pausedPreview != null) R.string.ai_reading_reasoning_paused_preview

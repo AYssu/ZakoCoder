@@ -17,27 +17,28 @@ import dev.zakocoder.app.ai.AiTool
 
 /** Presentation only: incomplete arguments never become executable commands. */
 @Composable
-internal fun AiToolLivePreview(draft: AiCallDraft) {
+internal fun AiToolLivePreview(draft: AiCallDraft, modifier: Modifier = Modifier) {
     var expanded by remember(draft.index, draft.name) { mutableStateOf(false) }
     val label = AiTool.named(draft.name)?.let { stringResource(it.label) }
         ?: draft.name.ifBlank { stringResource(R.string.ai_receiving_arguments) }
     val preview = remember(draft.arguments, draft.previewLine) { draft.previewLine.ifEmpty { dev.zakocoder.app.ai.toolArgumentLine(draft.arguments, localEdit = draft.name == "edit_file") } }
-    Column {
+    Column(modifier) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             CircularProgressIndicator(Modifier.size(10.dp), strokeWidth = 1.dp)
+            WorkbenchIcon(aiToolGlyph(AiTool.named(draft.name)), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            Text(preview, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ArrivalText(preview, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, animated = true)
             WorkbenchIcon(if (expanded) Glyph.ChevronDown else Glyph.Next, Modifier.size(12.dp),
                 description = stringResource(if (expanded) R.string.ai_tool_collapse else R.string.ai_tool_details))
         }
         if (expanded) {
             Text(stringResource(R.string.ai_tool_generating), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            CodeDetail(draft.arguments)
+            CodeDetail(draft.arguments, animated = true)
             if (draft.argumentTail.isNotEmpty()) {
                 Text(stringResource(R.string.ai_tool_preview_tail), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                CodeDetail(draft.argumentTail)
+                CodeDetail(draft.argumentTail, animated = true)
             }
         }
     }

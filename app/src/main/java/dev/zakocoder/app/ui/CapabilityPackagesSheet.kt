@@ -1,5 +1,6 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,10 +31,12 @@ internal data class CapabilityPackagesUiModel(
 internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
                                     onScreenEnabled: (Boolean) -> Unit, onSshEnabled: (Boolean) -> Unit,
                                     onScreenDetails: () -> Unit, onSshDetails: () -> Unit, onDismiss: () -> Unit, fullPage: Boolean = false,
-                                    onBrowserEnabled: (Boolean) -> Unit = {}, onBrowserDetails: () -> Unit = {}) {
+                                    onBrowserEnabled: (Boolean) -> Unit = {}, onBrowserDetails: () -> Unit = {},
+                                    contentPadding: PaddingValues = PaddingValues(0.dp)) {
     if (fullPage) {
         val back = rememberWorkbenchBackMotion(onBack = onDismiss)
-        Column(Modifier.fillMaxSize().then(back.modifier).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
+            .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding().padding(horizontal = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
                 Text(stringResource(R.string.capability_packages_title), style = MaterialTheme.typography.titleMedium)

@@ -35,7 +35,7 @@ val compatibilityVersionCode = providers.gradleProperty("compatibilityVersionCod
 val buildVersionPattern = Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:beta|rc)\\.[1-9][0-9]*)?")
 fun hasSupportedVersionComponents(value: String): Boolean =
     value.substringBefore('-').split('.').all { it.toIntOrNull() != null }
-val baseBuildVersion = providers.gradleProperty("baseVersion").orElse("0.1.2").get().also {
+val baseBuildVersion = providers.gradleProperty("baseVersion").orElse("0.1.3").get().also {
     require(it.matches(buildVersionPattern) && hasSupportedVersionComponents(it)) { "baseVersion must be major.minor.patch with optional -beta.N or -rc.N" }
 }
 // Resolve once per Gradle invocation. CI passes both immutable values to every APK build.

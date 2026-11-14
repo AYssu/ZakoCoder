@@ -210,4 +210,4 @@ Lucide 0.468.0，来源 https://github.com/lucide-icons/lucide/tree/0.468.0/icon
 
 ## 品牌图片
 
-应用全彩图标与 README 角色插画由维护者提供。分发文件使用固定路径 `app/src/main/res/drawable-nodpi/ic_launcher_art.webp` 和 `docs/assets/brand/`，经过尺寸适配及无损 WebP 编码，透明插画保留透明通道。未加入其余宣传画报。系统单色主题与通知使用本项目绘制的简化鱼形编码标记。
+应用全彩图标、透明项目 Logo 与 README 角色插画由维护者提供。分发文件使用固定路径 `app/src/main/res/drawable-nodpi/ic_launcher_art.webp` 和 `docs/assets/brand/`，经过尺寸适配及无损 WebP 编码，透明插画保留透明通道。未加入其余宣传画报。系统单色主题与通知使用本项目绘制的简化鱼形编码标记。
