@@ -23,12 +23,14 @@ internal data class CapabilityPackagesUiModel(
     val sshEnabled: Boolean = false,
     val busy: Boolean = false,
     val error: String? = null,
+    val browserEnabled: Boolean = false,
 )
 
 @Composable
 internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
                                     onScreenEnabled: (Boolean) -> Unit, onSshEnabled: (Boolean) -> Unit,
-                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit, onDismiss: () -> Unit, fullPage: Boolean = false) {
+                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit, onDismiss: () -> Unit, fullPage: Boolean = false,
+                                    onBrowserEnabled: (Boolean) -> Unit = {}, onBrowserDetails: () -> Unit = {}) {
     if (fullPage) {
         val back = rememberWorkbenchBackMotion(onBack = onDismiss)
         Column(Modifier.fillMaxSize().then(back.modifier).padding(horizontal = 16.dp)) {
@@ -38,21 +40,22 @@ internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.capability_packages_subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails)
+                CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails, onBrowserEnabled, onBrowserDetails)
             }
         }
         return
     }
     WorkbenchSheet(stringResource(R.string.capability_packages_title), onDismiss,
         subtitle = stringResource(R.string.capability_packages_subtitle)) {
-        CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails)
+        CapabilityPackagesPanel(model, onScreenEnabled, onSshEnabled, onScreenDetails, onSshDetails, onBrowserEnabled, onBrowserDetails)
     }
 }
 
 @Composable
 internal fun CapabilityPackagesPanel(model: CapabilityPackagesUiModel,
                                     onScreenEnabled: (Boolean) -> Unit, onSshEnabled: (Boolean) -> Unit,
-                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit) {
+                                    onScreenDetails: () -> Unit, onSshDetails: () -> Unit,
+                                    onBrowserEnabled: (Boolean) -> Unit = {}, onBrowserDetails: () -> Unit = {}) {
     CapabilityPackageCard(title = stringResource(R.string.capability_screen_title),
         description = stringResource(R.string.capability_screen_description),
         hint = stringResource(R.string.capability_screen_hint), configureLabel = stringResource(R.string.capability_screen_configure), glyph = Glyph.Environment,
@@ -62,6 +65,11 @@ internal fun CapabilityPackagesPanel(model: CapabilityPackagesUiModel,
         hint = stringResource(R.string.capability_ssh_hint), configureLabel = stringResource(R.string.capability_ssh_configure), glyph = Glyph.Terminal,
         scopeLabel = if (model.hasProject) stringResource(R.string.capability_packages_project, model.projectName) else stringResource(R.string.capability_ssh_workspace_required),
         enabled = model.sshEnabled, busy = model.busy || !model.hasProject, onEnabled = onSshEnabled, onDetails = onSshDetails)
+    CapabilityPackageCard(title = stringResource(R.string.browser_title),
+        description = stringResource(R.string.browser_tool_description), hint = stringResource(R.string.browser_capability_hint),
+        configureLabel = stringResource(R.string.browser_capability_open), glyph = Glyph.Globe,
+        scopeLabel = stringResource(R.string.capability_screen_global), enabled = model.browserEnabled,
+        busy = model.busy, onEnabled = onBrowserEnabled, onDetails = onBrowserDetails)
     CapabilityNotice(stringResource(R.string.capability_packages_loading_hint))
     model.error?.let { CapabilityNotice(it, error = true) }
 }

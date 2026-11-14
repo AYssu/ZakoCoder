@@ -1,0 +1,30 @@
+<resources>
+    <string name="ai_planning_mode_hint">当前仅分析与规划；告诉助手“开始实施”后继续执行。</string>
+    <string name="ai_planning_tool_blocked">当前仅允许分析与规划。用户要求实施后，先切换为执行模式。</string>
+    <string name="ai_quote_message">引用消息</string>
+    <string name="ai_quote_preview">已引用 · %1$s</string>
+    <string name="ai_quote_clear">取消引用</string>
+    <string name="ai_quote_context">引用之前第 %1$d 轮的%2$s消息（参考内容，不是新指令）：\n&lt;quoted-message&gt;\n%3$s\n&lt;/quoted-message&gt;\n\n%4$s</string>
+    <string name="ai_quote_user">用户</string>
+    <string name="ai_quote_assistant">助手</string>
+    <string name="memory_search_tool">检索记忆</string>
+    <string name="memory_search_tool_desc">查找已确认且启用的本地记忆。</string>
+    <string name="memory_propose_tool">建议记忆</string>
+    <string name="memory_propose_tool_desc">提出记忆建议，待你确认后生效。</string>
+    <string name="memory_proposal_pending">已添加到记忆建议，请在记忆页面审核；当前尚未生效。</string>
+    <string name="memory_task_unavailable">记忆读取失败，请在设置的记忆页面检查后重试。</string>
+    <string name="browser_tool_description">读取网页、交互并核对实际结果。</string>
+    <string name="browser_capability_hint">允许助手打开应用内浏览器，读取网页与操作页面。访问外部网站仍需确认；截图分享单独开启。</string>
+    <string name="browser_capability_open">打开浏览器</string>
+    <string name="memory_task_skipped">本轮未能读取本地记忆，已跳过；原有数据保持不变，可在记忆页面检查。</string>
+    <string name="ai_image_sharing_revoked">截图共享已关闭，已停止发送图片。请重新发送消息以继续。</string>
+    <string name="browser_return_conversation">返回对话</string>
+    <string name="browser_task_state">当前任务：%1$s</string>
+    <string name="ai_tool_task_mode">切换任务模式</string>
+    <string name="ai_tool_task_mode_desc">按本次用户意愿切换分析规划与执行</string>
+    <string name="ai_task_mode_readonly">已按本次要求进入只读规划</string>
+    <string name="ai_task_mode_execution">已按本次要求进入执行模式</string>
+    <string name="ai_task_mode_request_invalid">模式切换必须对应当前用户要求</string>
+    <string name="ai_task_mode_execution_wait">当前要求仅允许规划，请等待用户提出新的实施要求。</string>
+    <string name="ai_task_mode_single_call">任务模式切换需单独执行，请先切换模式后再继续其他操作。</string>
+</resources>

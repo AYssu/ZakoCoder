@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0-zakocoder",
+  "version": "1.1.0-zakocoder",
   "license": "Apache-2.0 (ZakoCoder authored assets)",
   "references": [
     {
@@ -81,12 +81,47 @@
       "distribution": "not bundled; independently authored mobile guidance"
     }
   ],
-  "date": "2026-10-28",
+  "date": "2026-11-13",
   "bundled": [
+    {
+      "id": "anti-cheat-systems",
+      "path": "app/src/main/assets/skills/anti-cheat-systems/SKILL.md",
+      "sha256": "0b7be123f2c42198246577e609e6628f5f42e9901a9744e8e78a70047d2c7e8e",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "api-security",
+      "path": "app/src/main/assets/skills/api-security/SKILL.md",
+      "sha256": "8b3efa37d835bc8a686a2997c45330ea42d3ee3b36d4d2a2c6e7518dba8cd88d",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "apk-reverse",
+      "path": "app/src/main/assets/skills/apk-reverse/SKILL.md",
+      "sha256": "70884a86fb251453c9b3c055376fa22b59994361065ccc8fdfaa4ad03dc97f84",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
     {
       "id": "audit",
       "path": "app/src/main/assets/skills/audit/SKILL.md",
       "sha256": "b70a99bc9b24dca6d3252a8e01dcc5046bbe6f2f2fe964d2a93711823ac47efd"
+    },
+    {
+      "id": "binary-analysis",
+      "path": "app/src/main/assets/skills/binary-analysis/SKILL.md",
+      "sha256": "61bd4fd8fdcdc151e35b54cf2670f64cf0a0dbf585938267ce2f3e998cc223cf",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "binary-diff",
+      "path": "app/src/main/assets/skills/binary-diff/SKILL.md",
+      "sha256": "74c8d921955f1b06985eccc015b62a6060d7369e537744e4e71713c28750388d",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
     },
     {
       "id": "caveman",
@@ -109,9 +144,79 @@
       "sha256": "698183a7d2caf236cca9b5067c7be368713470b629076da73d30e1f67f2af817"
     },
     {
+      "id": "crash-triage",
+      "path": "app/src/main/assets/skills/crash-triage/SKILL.md",
+      "sha256": "41f260ecc9c35d81f5cf688b720f8db1dc9dca998954658adb7d7f20de845608",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "dma-security",
+      "path": "app/src/main/assets/skills/dma-security/SKILL.md",
+      "sha256": "5e904f2a11c7c4b29a3bd0ce45054e63fa5bcea73a7f41dd476eb2e19f21edf5",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "dotnet-reverse",
+      "path": "app/src/main/assets/skills/dotnet-reverse/SKILL.md",
+      "sha256": "84f0762094a2d3ab2673d080d63b4e282ff747df054c9a9b6b5b2690c645d2fe",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "dsl-vm-reverse",
+      "path": "app/src/main/assets/skills/dsl-vm-reverse/SKILL.md",
+      "sha256": "2817557da5386bd603f5777ca87b7026bfb4c4554495a89c902e9dca56b916ca",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "dynamic-instrumentation",
+      "path": "app/src/main/assets/skills/dynamic-instrumentation/SKILL.md",
+      "sha256": "cfc95a5ec62ac121a9e3de0fe04947b798f3edceeba1dd6c754f31085ed99a96",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "env-audit",
+      "path": "app/src/main/assets/skills/env-audit/SKILL.md",
+      "sha256": "0f2b049f54567c9f3948ecd57e18e20104a985cb5e6f9429579bfd01625cec3a",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "firmware-analysis",
+      "path": "app/src/main/assets/skills/firmware-analysis/SKILL.md",
+      "sha256": "754beafa1074cb83b6af99d971998d296ad6e6310d6c39c450741d54dc5aaa0f",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
       "id": "frontend-design",
       "path": "app/src/main/assets/skills/frontend-design/SKILL.md",
       "sha256": "5cf80e25e4943ede5bfeb2d1c1266676d3245fed002215608f0ca9bd89b35cc0"
+    },
+    {
+      "id": "game-engine",
+      "path": "app/src/main/assets/skills/game-engine/SKILL.md",
+      "sha256": "cb5f9e1fa2b5bfde1ec282a073187043033b4e4169a3bd5b3f3ceae0bcbfa7a4",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "graphics-api",
+      "path": "app/src/main/assets/skills/graphics-api/SKILL.md",
+      "sha256": "74b40154f7e1f2af994e411bb810cbe993a222dbb87c36b4fef602511aef0a60",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "ida-reverse",
+      "path": "app/src/main/assets/skills/ida-reverse/SKILL.md",
+      "sha256": "0da9222aac1c9dabbf0c9f2a85b8ecd0bbe0d092f5548f1f2d24725fdcc4d460",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
     },
     {
       "id": "investigate-first",
@@ -119,9 +224,30 @@
       "sha256": "4cb08d0c19e76f3112553a3f3d9ac51c1a4f5afa2bbd40efc268539115365c52"
     },
     {
+      "id": "js-reverse",
+      "path": "app/src/main/assets/skills/js-reverse/SKILL.md",
+      "sha256": "1a74b0c4ec3909350612a79c616134659b81ccb7cffbec52dec2b64751098439",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
       "id": "lean-build",
       "path": "app/src/main/assets/skills/lean-build/SKILL.md",
       "sha256": "c9f8add99bd2e48d3270f0d6969361090d849522786c49475dd2b47cd21e66f6"
+    },
+    {
+      "id": "license-security",
+      "path": "app/src/main/assets/skills/license-security/SKILL.md",
+      "sha256": "1c6d72bcac234b9681038fbd2f7d24b0c61726dc19076a00aa8e82864a4b075a",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "malware-analysis",
+      "path": "app/src/main/assets/skills/malware-analysis/SKILL.md",
+      "sha256": "6d6ae460bed0ba64707d6e8542361970ff6ae28a15c4c8c83866a36cf5a8335e",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
     },
     {
       "id": "megacave",
@@ -129,9 +255,121 @@
       "sha256": "d6362552ac3dbb3ff2588edbfee6d445d78f65d85c0eafbc67cb649d216fe5f9"
     },
     {
+      "id": "memory-analysis",
+      "path": "app/src/main/assets/skills/memory-analysis/SKILL.md",
+      "sha256": "cf899129b5700db9e3b9c50810b05d8d1da5edde92a20ad1d3922728ec4a0bd4",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "mobile-reverse",
+      "path": "app/src/main/assets/skills/mobile-reverse/SKILL.md",
+      "sha256": "8cfe04a4588b19c581b21ce42805a9eb990961c6036e634a619210a66fb774e4",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "mobile-security",
+      "path": "app/src/main/assets/skills/mobile-security/SKILL.md",
+      "sha256": "601c51853855ff26427ca1617d51a807c949661c57ffa13fc08dae302a4b4922",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "network-diagnostics",
+      "path": "app/src/main/assets/skills/network-diagnostics/SKILL.md",
+      "sha256": "c88054681648bddac357130949ae4a1e2ea9fe8d24471298041cb7e04c24d673",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "osint",
+      "path": "app/src/main/assets/skills/osint/SKILL.md",
+      "sha256": "bf5abf861c1fa4f40cdb2dd59395e8184b6ba61dc527c47590c1c3877d4b25e5",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "protocol-reverse-engineering",
+      "path": "app/src/main/assets/skills/protocol-reverse-engineering/SKILL.md",
+      "sha256": "c45b315a5dc6b2c2a2b098d6d3168e1187ce758ec335dd7ed2cf18ba705dde81",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "radare2",
+      "path": "app/src/main/assets/skills/radare2/SKILL.md",
+      "sha256": "adca3e19f099deb2fe4eb27096de554b20f6eecfd90f6139397d5a2dd57068e1",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "render-pipeline",
+      "path": "app/src/main/assets/skills/render-pipeline/SKILL.md",
+      "sha256": "e4b38cc06c14e58f5dcadc9e06d15071b05b520795e6a7f07f4f9a3979a228ce",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "research-rigor",
+      "path": "app/src/main/assets/skills/research-rigor/SKILL.md",
+      "sha256": "2e5b7c88cfa17a5ca1cf98f77cc2208d504ade3a15c9022bfb439b75d2bf2d6b",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "research-workspace",
+      "path": "app/src/main/assets/skills/research-workspace/SKILL.md",
+      "sha256": "66db160b1f4b4bf5a422de666b6739c79f3d3fa19d0291ad45cc8a117df08051",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "reverse-engineer-anything",
+      "path": "app/src/main/assets/skills/reverse-engineer-anything/SKILL.md",
+      "sha256": "93598ccc83d5044cbc00b165acb55866679e60585eeed9d78f2cb68d04f2c97c",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "reverse-engineering-api",
+      "path": "app/src/main/assets/skills/reverse-engineering-api/SKILL.md",
+      "sha256": "f0d14857f46518c1c591cc6707a51c34833eeac671e63f6db83328616f45ccba",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
       "id": "safe-refactor",
       "path": "app/src/main/assets/skills/safe-refactor/SKILL.md",
       "sha256": "87b815aeb58711ce9e46d89e1a2923b1706ae2ffcfc4bf0a4c585e6bb866cf9b"
+    },
+    {
+      "id": "security-testing",
+      "path": "app/src/main/assets/skills/security-testing/SKILL.md",
+      "sha256": "e40a48306705496b8b5c28bacc4fa4ebd3ed7a108b0768047289a42e59cf279a",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "self-improving-agent",
+      "path": "app/src/main/assets/skills/self-improving-agent/SKILL.md",
+      "sha256": "dc0dea22725f68a7d2ec5bbdffe974f11694fb7d732df8a09a52c8821cea5a5a",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "skill-creator",
+      "path": "app/src/main/assets/skills/skill-creator/SKILL.md",
+      "sha256": "16812c70703a21fb9cba7d1dd4ca560cb3e033c53fd0e8f68b44e245167c9437",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
+    },
+    {
+      "id": "skill-installer",
+      "path": "app/src/main/assets/skills/skill-installer/SKILL.md",
+      "sha256": "bab6e08388ae4908c5da09327ed4a73f8e9153a04c885f05da5e99981c900e1c",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
     },
     {
       "id": "surgical-patch",
@@ -147,6 +385,13 @@
       "id": "verify-and-stop",
       "path": "app/src/main/assets/skills/verify-and-stop/SKILL.md",
       "sha256": "00670758f7e3d08e5f19aa0dce70d804c4c353cfe7782ab1e16ff23bcd310cc1"
+    },
+    {
+      "id": "windows-kernel",
+      "path": "app/src/main/assets/skills/windows-kernel/SKILL.md",
+      "sha256": "8888bbd473c1843d88a9595fa2f137b13b74f1c4d4534e47fd1619ea04897d44",
+      "authorship": "ZakoCoder original mobile guidance",
+      "version": "1.1.0-zakocoder"
     }
   ],
   "reference_notes": "Reference material is not bundled. Identifiers name the material whose SHA-256 was recorded; they are not upstream repository URLs or executable dependencies."

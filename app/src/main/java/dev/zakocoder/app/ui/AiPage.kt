@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.foundation.background
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -35,8 +37,12 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 
 @Composable
-internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null) {
+internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var quotedMessage by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf("") }
+    var quotedTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
+    var quotedUser by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
     val usageStatistics by workbench.ai.usageStatistics.collectAsStateWithLifecycle()
     val changeReads = remember(state.projectId, state.conversationId, state.workspaceRevision,
@@ -104,6 +110,28 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     val project = workbenchState.projects.singleOrNull { it.id == state.projectId }
     val preparationTexts = setOf(stringResource(R.string.ai_checkpoint_created), stringResource(R.string.ai_project_overview_loaded))
     val displayActivity = remember(state.timeline, state.events, preparationTexts) { aiDisplayActivity(state, preparationTexts) }
+    val focusRequest by workbench.ai.conversationFocus.collectAsStateWithLifecycle()
+    var highlightedEntry by remember(state.projectId, state.conversationId) { mutableStateOf<String?>(null) }
+    var revealedRequest by remember(state.projectId, state.conversationId) { mutableStateOf<dev.zakocoder.app.ai.AiConversationFocus?>(null) }
+    LaunchedEffect(focusRequest?.requestId, state.projectId, state.conversationId, state.restoring, state.permissionsLoading, displayActivity.entries, pageInteractive) {
+        val request = focusRequest ?: return@LaunchedEffect
+        if (!pageInteractive || request.projectId != state.projectId || request.conversationId != state.conversationId || state.restoring || state.permissionsLoading) return@LaunchedEffect
+        val target = displayActivity.focusRow(state, request.entryId)
+        val index = displayActivity.entries.indexOfFirst { it.id == target }
+        if (index >= 0) {
+            follow = false
+            revealedRequest = request
+            highlightedEntry = target
+            // Compose the disclosure state before measuring the destination; a matched tool
+            // then brings its own output into view after the existing expansion animation.
+            androidx.compose.runtime.withFrameNanos { }
+            listState.scrollToItem(index)
+        } else if (request.entryId.isNotBlank()) messageActionError = true
+        workbench.ai.consumeConversationFocus(request.requestId)
+    }
+    LaunchedEffect(highlightedEntry, revealedRequest?.requestId) {
+        if (highlightedEntry != null) { kotlinx.coroutines.delay(3500); highlightedEntry = null }
+    }
     val lastAnswers = remember(displayActivity.entries) { displayActivity.entries.filter { it.role == AiRole.Assistant && it.text.isNotEmpty() && it.toolId == null }.associateBy { it.turn } }
 
     if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.projectId, project?.name.orEmpty()) { capabilityPackagesOpen = false }
@@ -132,6 +160,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             Box {
                 IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
                 DropdownMenu(expanded = more && pageInteractive, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.agent_memory_title)) }, onClick = { more = false; onMemory() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.browser_title)) }, onClick = { more = false; onBrowser() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_history)) }, leadingIcon = { WorkbenchIcon(Glyph.History) },
                         enabled = project != null && !state.active && !state.restoring,
                         onClick = { more = false; onConversations?.invoke() ?: run { history = true } })
@@ -151,6 +181,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 }
             }
         }
+        if (state.planningMode) Text(stringResource(R.string.ai_planning_mode_hint), fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (messageActionError) Text(stringResource(R.string.ai_message_retry_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -180,9 +212,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             } }
             itemsIndexed(displayActivity.entries, key = { _, entry -> entry.id }) { index, entry ->
                 val animateOnMount = remember(entry.id) { entryAnimations.consume(entry.id) }
-                Column(Modifier.fillMaxWidth().animateItem(fadeInSpec = androidx.compose.animation.core.tween(180),
+                Column(Modifier.fillMaxWidth().background(if (highlightedEntry == entry.id) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .35f) else androidx.compose.ui.graphics.Color.Transparent).animateItem(fadeInSpec = androidx.compose.animation.core.tween(180),
                     placementSpec = if (state.active && entry.turn == state.turn) null else androidx.compose.animation.core.tween(220), fadeOutSpec = null)) {
-                if (displayActivity.tools.containsKey(entry.id)) AiReadActivity(requireNotNull(displayActivity.tools[entry.id]), displayActivity.preparation[entry.id].orEmpty())
+                if (displayActivity.tools.containsKey(entry.id)) AiReadActivity(requireNotNull(displayActivity.tools[entry.id]), displayActivity.preparation[entry.id].orEmpty(),
+                    revealToolId = state.timeline.firstOrNull { it.id == revealedRequest?.entryId }?.toolId,
+                    revealRequest = revealedRequest?.requestId, highlightTool = highlightedEntry == entry.id)
                 else if (displayActivity.preparation.containsKey(entry.id)) AiPreparationActivity(requireNotNull(displayActivity.preparation[entry.id]))
                 else if (entry.toolId == null) Column(Modifier.fillMaxWidth().onSizeChanged { contentHeight++ }) {
                     AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
@@ -190,6 +224,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                             retryTarget = state.timeline.first { it.turn == entry.turn && it.role == AiRole.User }; editingMessage = false
                         }) else null,
                         onEdit = if (entry.role == AiRole.User && !state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured) ({ retryTarget = entry; editingMessage = true }) else null,
+                        revealRequest = revealedRequest?.takeIf { it.entryId == entry.id }?.requestId,
+                        onQuote = if (!state.active && !state.restoring && state.questionContinuation == null && entry.text.isNotBlank()) ({
+                            quotedMessage = entry.text.take(2000) + if (entry.text.length > 2000) "…" else ""
+                            quotedTurn = entry.turn; quotedUser = entry.role == AiRole.User
+                        }) else null,
                         onRequests = if (state.requests.any { it.turn == entry.turn }) ({ detailPanel = "requests" }) else null,
                         actions = if (entry.turn > 0 && lastAnswers[entry.turn]?.id == entry.id && !(state.active && entry.turn == state.turn)) ({
                             AiConversationChangeCard(state, entry.turn, workbench.editor.languages, workbench.ai::undo,
@@ -211,7 +250,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                             onResume = if (continuation != null && question.answer != null && !state.active) ({
                                 if (projectId != null && !workbench.ai.resumeQuestion(projectId, state.conversationId, question.id)) messageActionError = true
                             }) else null)
-                    } else AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } })
+                    } else AiToolCard(event, terminal?.number, onTerminal = { terminal?.let { onTerminal(it.id) } },
+                        revealRequest = revealedRequest?.takeIf { it.entryId == entry.id }?.requestId, highlighted = highlightedEntry == entry.id)
                 }
                 if (entry.turn > 0 && displayActivity.entries.getOrNull(index + 1)?.turn != entry.turn) {
                     if (entry.turn == state.turn && state.active) {
@@ -257,35 +297,38 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 state.queuedMessages.count { it.status == dev.zakocoder.app.ai.AiQueuedStatus.Pending } < dev.zakocoder.app.ai.AiTaskQueue.MAX_PENDING,
             onSteer = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.Steer)) input = "" else messageActionError = true },
             onFollowUp = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.FollowUp)) input = "" else messageActionError = true })
-        AiComposerDock(input, { if (it.length <= 16000) input = it },
+        if (quotedMessage.isNotBlank()) Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.ai_quote_preview, quotedMessage), Modifier.weight(1f), maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = { quotedMessage = "" }) { WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.ai_quote_clear)) }
+            }
+        }
+        val outgoing = if (quotedMessage.isBlank()) input else stringResource(R.string.ai_quote_context, quotedTurn,
+            stringResource(if (quotedUser) R.string.ai_quote_user else R.string.ai_quote_assistant), quotedMessage, input)
+        AiComposerDock(input, { if (it.length <= 16000 - (outgoing.length - input.length)) input = it },
             modifier = Modifier.padding(bottom = 4.dp),
             inputEnabled = state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             awaitingAnswer = state.questionContinuation != null,
             attachEnabled = project != null && !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             running = state.active || state.questionContinuation != null,
-            sendEnabled = if (state.active || state.questionContinuation != null) !state.restoring && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && !workbenchState.busy,
+            sendEnabled = if (state.active || state.questionContinuation != null) !state.restoring && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && outgoing.length <= 16000 && !workbenchState.busy,
             onAttach = { attaching = true },
-            onSend = { if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(input)) { input = ""; follow = true } }) {
-            val permissionState = stringResource(R.string.ai_permission_current, stringResource(if (state.policy.yolo) R.string.ai_permission_preset_yolo else state.policy.default.label), state.policy.overrides.size)
-            val compactPermission = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width / androidx.compose.ui.platform.LocalDensity.current.density < 360f || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.15f
-            val permissionLabel = stringResource(when {
-                state.policy.yolo -> R.string.ai_permission_short_yolo
-                state.policy.default == dev.zakocoder.app.ai.AiPermission.Allow -> R.string.ai_permission_short_allow
-                state.policy.default == dev.zakocoder.app.ai.AiPermission.Deny -> R.string.ai_permission_short_deny
-                else -> R.string.ai_permission_short_ask
-            })
+            onSend = { if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(outgoing)) { input = ""; quotedMessage = ""; follow = true } }) {
+            val permissionPreset = dev.zakocoder.app.ai.AiPermissionPresets.matching(state.policy)
+            val permissionLabel = stringResource(permissionModeLabel(permissionPreset))
+            val permissionState = stringResource(R.string.ai_permission_current, permissionLabel, state.policy.overrides.size)
             TextButton(onClick = { permissions = true }, enabled = project != null,
                 contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.heightIn(min = 48.dp).semantics { stateDescription = permissionState; contentDescription = permissionLabel + " · " + permissionState }) {
-                val permissionTint = if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF9AA5B1) else MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.size(48.dp).semantics { stateDescription = permissionState; contentDescription = permissionLabel + " · " + permissionState }) {
+                val permissionTint = permissionModeTint(permissionPreset)
                 Surface(shape = RoundedCornerShape(50), color = androidx.compose.ui.graphics.Color.Transparent,
                     border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF333B45) else MaterialTheme.colorScheme.outlineVariant)) {
-                    Row(Modifier.heightIn(min = 28.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        WorkbenchIcon(Glyph.Shield, Modifier.size(14.dp), description = stringResource(R.string.ai_permissions),
+                    Row(Modifier.width(40.dp).heightIn(min = 28.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center) {
+                        WorkbenchIcon(permissionModeGlyph(permissionPreset), Modifier.size(14.dp), description = stringResource(R.string.ai_permissions),
                             tint = permissionTint)
-                        if (!compactPermission || state.policy.yolo) Text(permissionLabel, fontSize = 10.sp,
-                            color = permissionTint)
                     }
                 }
             }
@@ -430,7 +473,7 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 @Suppress("DEPRECATION")
 @Composable
 internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}, onRetry: (() -> Unit)? = null,
-    onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
+    onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null, revealRequest: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     val visibleResponse = if (entry.role == AiRole.Assistant) smoothStreamingText(entry.id, entry.text, responseStreaming, animateOnMount) else entry.text
     val visibleReasoning = if (entry.role == AiRole.Assistant) smoothStreamingText("${entry.id}:reasoning", entry.reasoning, reasoningStreaming, animateOnMount) else entry.reasoning
@@ -451,21 +494,22 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
                 }
                 if (actions) MessageCopyPopup(onDismiss = { actions = false },
                     onCopy = { clipboard.setText(AnnotatedString(entry.text)); actions = false },
+                    onQuote = onQuote?.let { action -> { actions = false; action() } },
                     onEdit = onEdit?.let { action -> { actions = false; action() } },
                     onRetry = onRetry?.let { action -> { actions = false; action() } },
                     onRequests = onRequests?.let { action -> { actions = false; action() } })
             }
         }
         AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(Modifier.padding(top = if (entry.text.isNotEmpty()) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction,
-                trailingActions = if (!reasoningStreaming && entry.text.isEmpty() && (onRetry != null || onRequests != null)) {
-                    { AiMessageMore(entry, onRetry, onRequests) }
+            AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction, revealRequest = revealRequest,
+                trailingActions = if (!reasoningStreaming && entry.text.isEmpty() && (onRetry != null || onRequests != null || onQuote != null)) {
+                    { AiMessageMore(entry, onRetry, onRequests, onQuote) }
                 } else null)
             if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink)
             if (entry.text.isNotEmpty() && !responseStreaming && visibleResponse == entry.text) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { Row { actions?.invoke(this) } }
                 IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (onRetry != null || onRequests != null) AiMessageMore(entry, onRetry, onRequests)
+                if (onRetry != null || onRequests != null || onQuote != null) AiMessageMore(entry, onRetry, onRequests, onQuote)
             }
         }
         AiRole.Notice -> Text(entry.text, Modifier.padding(vertical = 4.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -474,14 +518,14 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
 
 @Suppress("DEPRECATION")
 @Composable
-private fun AiMessageMore(entry: dev.zakocoder.app.ai.AiEntry, onRetry: (() -> Unit)?, onRequests: (() -> Unit)?) {
+private fun AiMessageMore(entry: dev.zakocoder.app.ai.AiEntry, onRetry: (() -> Unit)?, onRequests: (() -> Unit)?, onQuote: (() -> Unit)? = null) {
     val clipboard = LocalClipboardManager.current
     Box {
         var actions by remember(entry.id) { mutableStateOf(false) }
         IconButton(onClick = { actions = true }) { WorkbenchIcon(Glyph.More, Modifier.size(16.dp), description = stringResource(R.string.ai_message_actions)) }
         if (actions) MessageCopyPopup({ actions = false }, {
             clipboard.setText(AnnotatedString(entry.text.ifEmpty { entry.reasoning })); actions = false
-        }, onRetry = onRetry?.let { action -> { actions = false; action() } },
+        }, onQuote = onQuote?.let { action -> { actions = false; action() } }, onRetry = onRetry?.let { action -> { actions = false; action() } },
             onRequests = onRequests?.let { action -> { actions = false; action() } })
     }
 }

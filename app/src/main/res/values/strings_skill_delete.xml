@@ -1,0 +1,7 @@
+<resources>
+    <string name="ai_skill_delete">删除 Skill</string>
+    <string name="ai_skill_delete_action">确认删除</string>
+    <string name="ai_skill_delete_named">删除 %1$s</string>
+    <string name="ai_skill_delete_confirm">删除“%1$s”及其附带资源？同时取消启用，其他 Skill 不受影响。此操作无法撤销。</string>
+    <string name="ai_skill_delete_error">删除未完成，请刷新列表后重试。该 Skill 可能已停用。</string>
+</resources>

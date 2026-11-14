@@ -77,7 +77,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
         val permissionController = resolvedPermissionController(context)
         if (protectedDeviceScreenPackage(actualPackage, context.packageName, permissionController)) fail(R.string.screen_test_sensitive)
         val action = args.getString("action")
-        val coordinateAction = action in setOf("click", "long_click", "input_text", "swipe")
+        val coordinateAction = action in setOf("click", "long_click", "input_text", "swipe", "scroll")
         // Coordinate actions build fixed argv from the last approved observation. A single
         // fresh hierarchy is compared immediately before input, rather than dumping twice.
         val nodes = if (coordinateAction) snapshot?.nodes.orEmpty() else readNodes(actualPackage)
@@ -112,7 +112,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 command(listOf("input", "keyevent", "4"), stage = "input")
                 requested(action)
             }
-            "click", "long_click", "input_text", "swipe" -> {
+            "click", "long_click", "input_text", "swipe", "scroll" -> {
                 val old = snapshot ?: fail(R.string.screen_test_stale_snapshot)
                 if (old.packageName != actualPackage || old.windowId != actualWindow || old.token != args.optString("snapshot") || android.os.SystemClock.elapsedRealtime() - old.time > 60_000 || old.nodes != nodes)
                     fail(R.string.screen_test_stale_snapshot)
@@ -121,11 +121,12 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                 val node = index?.takeIf { it < old.exposedCount }?.let(nodes::getOrNull) ?: fail(R.string.screen_test_stale_snapshot)
                 if (node.sensitive) fail(R.string.screen_test_sensitive)
                 if (!node.enabled || node.bounds.isEmpty) fail(R.string.screen_test_action_failed)
-                val argv = if (action == "swipe") {
+                if (action == "scroll" && !node.scrollable) fail(R.string.screen_test_action_failed)
+                val argv = if (action == "swipe" || action == "scroll") {
                     val bounds = node.bounds
                     val x = bounds.centerX(); val y = bounds.centerY()
                     val dx = bounds.width() / 4; val dy = bounds.height() / 4
-                    val points = when (args.getString("direction")) {
+                    val points = when (args.optString("direction", "up")) {
                         "up" -> listOf(x, y + dy, x, y - dy)
                         "down" -> listOf(x, y - dy, x, y + dy)
                         "left" -> listOf(x + dx, y, x - dx, y)
@@ -217,7 +218,7 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
                                 if (hidden) "" else attr("content-desc").take(160), attr("class").take(120),
                                 attr("resource-id").take(200), bounds, hidden, attr("enabled") == "true",
                                 attr("clickable") == "true", attr("long-clickable") == "true",
-                                attr("class").endsWith("EditText"), attr("focused") == "true")
+                                attr("class").endsWith("EditText"), attr("focused") == "true", attr("scrollable") == "true")
                         }
                     } else if (event == XmlPullParser.END_TAG && parser.name == "node") sensitive.removeAt(sensitive.lastIndex)
                     event = parser.nextToken()
@@ -279,12 +280,12 @@ class RootScreenTestBackend(private val context: Context) : ScreenTestBackend {
     private data class Snapshot(val token: String, val time: Long, val packageName: String, val windowId: String, val nodes: List<Node>, val exposedCount: Int)
     private data class Node(val text: String, val description: String, val className: String, val resource: String,
         val bounds: Rect, val sensitive: Boolean, val enabled: Boolean, val clickable: Boolean,
-        val longClickable: Boolean, val editable: Boolean, val focused: Boolean) {
+        val longClickable: Boolean, val editable: Boolean, val focused: Boolean, val scrollable: Boolean) {
         fun json(id: String) = JSONObject().put("id", id).put("text", if (sensitive) "[redacted]" else text.take(80))
             .put("description", if (sensitive) "[redacted]" else description.take(80)).put("class", className.take(80))
             .put("bounds", JSONArray(listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)))
             .put("sensitive", sensitive).put("enabled", enabled).put("clickable", clickable)
-            .put("longClickable", longClickable).put("editable", editable).put("focused", focused)
+            .put("longClickable", longClickable).put("editable", editable).put("focused", focused).put("scrollable", scrollable)
     }
     companion object {
         internal fun isTimeoutExit(exit: Int): Boolean = exit == 124

@@ -15,6 +15,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 
 /** Reveal only after required local data and the destination's first layout are ready.
  * No minimum display time; Compose respects the system animation duration scale.
@@ -23,6 +28,7 @@ import androidx.compose.ui.unit.dp
 internal fun WorkbenchEntrance(destination: String, ready: Boolean, animate: Boolean = true,
     onRevealed: () -> Unit = {}, retainBackground: Boolean = true, content: @Composable () -> Unit) {
     val reveal = remember(destination) { Animatable(0f) }
+    val showLoading = remember(destination) { !ready }
     var laidOut by remember(destination) { mutableStateOf(false) }
     var prepared by remember(destination) { mutableStateOf(false) }
     val composeDestination = ready || prepared
@@ -55,15 +61,32 @@ internal fun WorkbenchEntrance(destination: String, ready: Boolean, animate: Boo
                     while (true) awaitPointerEvent().changes.forEach { it.consume() }
                 }
             }, color = MaterialTheme.colorScheme.background) {
-            if (!composeDestination) Column(Modifier.fillMaxSize().systemBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally,
+            // Keep the same indicator alive while the destination first composes/layouts
+            // and while the cover fades. Data readiness alone is not visual readiness.
+            if (showLoading) Column(Modifier.fillMaxSize().systemBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center) {
                 Text(stringResource(dev.zakocoder.app.R.string.app_name), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(24.dp))
-                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                WorkbenchEntryProgress()
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(dev.zakocoder.app.R.string.setup_preparing_workspace),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+/** Platform indeterminate drawable can keep drawing independently of Compose's reveal work. */
+@Composable
+private fun WorkbenchEntryProgress() {
+    val tint = MaterialTheme.colorScheme.primary.toArgb()
+    AndroidView(
+        modifier = Modifier.size(24.dp).semantics { progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate },
+        factory = { context -> android.widget.ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
+            isIndeterminate = true
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(tint)
+        } },
+        update = { it.indeterminateTintList = android.content.res.ColorStateList.valueOf(tint) },
+    )
 }

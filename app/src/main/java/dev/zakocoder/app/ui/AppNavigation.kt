@@ -54,6 +54,7 @@ internal fun AppNavigation(
     onClose: () -> Unit,
     onSelect: (AppDestination) -> Unit,
     onHistory: () -> Unit = {},
+    onSearch: () -> Unit = {},
     conversations: (@Composable () -> Unit)? = null,
     onSkills: () -> Unit = {},
     onMcp: () -> Unit = {},
@@ -81,7 +82,7 @@ internal fun AppNavigation(
                             colors = MiuixCardDefaults.defaultColors(color = LocalWorkbenchPalette.current.primaryFill,
                                 contentColor = MaterialTheme.colorScheme.onSurface)) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                WorkbenchBrandMark(Modifier.size(24.dp))
+                                WorkbenchBrandMark(Modifier.fillMaxSize())
                             }
                         }
                         Spacer(Modifier.width(12.dp))
@@ -92,8 +93,8 @@ internal fun AppNavigation(
                                 style = MaterialTheme.typography.labelSmall, fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = onClose) {
-                            WorkbenchIcon(Glyph.Close, description = stringResource(R.string.app_navigation_close))
+                        IconButton(onClick = rememberWorkbenchClickFeedback(onSearch)) {
+                            WorkbenchIcon(Glyph.Search, description = stringResource(R.string.conversation_search_title))
                         }
                     }
                     HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -124,8 +125,7 @@ internal fun AppNavigation(
                                 .background(if (active) LocalWorkbenchPalette.current.surfaceAccent else Color.Transparent)
                                 .semantics { this.selected = active }
                                 .clickable(role = Role.Tab, onClick = {
-                                    if (!active) feedbackView.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
-                                    action()
+                                    if (!active) feedbackView.withWorkbenchClickFeedback(action) else action()
                                 })
                                 .heightIn(min = 64.dp).padding(vertical = 8.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,

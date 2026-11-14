@@ -272,11 +272,17 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
         }
         Box(Modifier.fillMaxSize().then(stepBack.modifier).then(if (detailVisible) blockPreview else Modifier)) {
             stepTransition.AnimatedContent(modifier = Modifier.fillMaxSize(), transitionSpec = {
+                if (targetState < initialState) {
+                    // The back surface has already completed its gesture/exit animation.
+                    // Retaining the old step here would paint it again after resetting motion.
+                    androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                } else {
                 val direction = if (targetState > initialState) 1 else -1
                 (slideInHorizontally(folmeSpring(damping = .95f, response = .35f)) { it / 7 * direction } +
                     fadeIn(tween(260, delayMillis = 60))) togetherWith
                     (slideOutHorizontally(folmeSpring(damping = .95f, response = .35f)) { -it / 10 * direction } +
                         fadeOut(tween(160))) using SizeTransform(clip = true)
+                }
             }) { shownStep ->
                 val interactive = shownStep == step && !detailVisible
                 Box(Modifier.fillMaxSize().then(if (interactive) Modifier else blockPreview)) {
@@ -285,9 +291,15 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
             }
         }
         detailTransition.AnimatedContent(modifier = Modifier.fillMaxSize(), transitionSpec = {
+            if (targetState.isEmpty()) {
+                // The detail's own back motion already faded it out. Do not retain an
+                // invisible, input-blocking old detail for a second spring transition.
+                androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+            } else {
             val direction = if (targetState.isEmpty()) -1 else 1
             (slideInHorizontally(folmeSpring(damping = .95f, response = .35f)) { it / 10 * direction } + fadeIn(tween(240))) togetherWith
                 (slideOutHorizontally(folmeSpring(damping = .95f, response = .35f)) { -it / 14 * direction } + fadeOut(tween(160)))
+            }
         }) { shownDetail ->
             val activeDetail = shownDetail == (if (detail == "tools") "permissions" else detail)
             Box(Modifier.fillMaxSize().then(if (activeDetail) Modifier else blockPreview)) {

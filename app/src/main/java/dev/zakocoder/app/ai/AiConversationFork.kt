@@ -32,6 +32,7 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
     }.take(12000)
     return AiState(
         projectId = projectId,
+        planningMode = planningMode,
         conversationId = java.util.UUID.randomUUID().toString(),
         turn = turn - 1,
         timeline = keptTimeline,

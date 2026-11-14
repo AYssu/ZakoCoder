@@ -1,6 +1,7 @@
 package dev.zakocoder.app.ui
 
 import androidx.activity.compose.BackHandler
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -87,18 +88,35 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
     var searching by rememberSaveable(state.path) { mutableStateOf(false) }
     var query by rememberSaveable(state.path) { mutableStateOf("") }
     var replacement by rememberSaveable(state.path) { mutableStateOf("") }
-    val requestClose = { closeTab = false; if (state.dirty) leave = true else controller.close() }
-    BackHandler { if (showingPreview) preview = false else if (searching) { searching = false; editor?.searcher?.stopSearch() } else requestClose() }
+    val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
+    val requestClose = {
+        if (!state.saving) {
+            clearNavigationFocus()
+            closeTab = false
+            if (state.dirty) leave = true else controller.close()
+        }
+    }
+    val interactive = LocalWorkbenchPageInteractive.current
+    val internalBack = showingPreview || searching
+    val back = rememberWorkbenchBackMotion(enabled = interactive && !state.saving && !internalBack,
+        resetKey = listOf(state.path, internalBack, leave), animateExit = !state.dirty && !state.saving, onBack = requestClose)
+    // Search and Markdown preview are modes within this page, not navigation to the file list.
+    // Consume their return without moving the whole editor and revealing the wrong destination.
+    BackHandler(enabled = interactive && state.saving) { }
+    BackHandler(enabled = interactive && !state.saving && internalBack) {
+        if (showingPreview) preview = false
+        else { searching = false; editor?.searcher?.stopSearch() }
+    }
     LaunchedEffect(searching, query, editor) {
         editor?.searcher?.let { searcher ->
             if (!searching || query.isEmpty()) searcher.stopSearch()
             else searcher.search(query, EditorSearcher.SearchOptions(false, false))
         }
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().then(back.modifier)) {
         Surface(color = PanelBackground) {
             Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = requestClose, enabled = !state.loading && !state.saving) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.editor_back)) }
+                IconButton(onClick = back.close, enabled = !state.loading && !state.saving) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.editor_back)) }
                 Column(Modifier.weight(1f)) {
                     Text(state.path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         fontSize = 15.sp, fontWeight = FontWeight.SemiBold)

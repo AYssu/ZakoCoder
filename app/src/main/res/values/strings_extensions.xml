@@ -23,7 +23,7 @@
     <string name="mcp_connect_confirm">连接这个服务？</string>
     <string name="mcp_enable_confirm">启用这个服务？</string>
     <string name="mcp_remote_risk">连接会向以下服务发送 MCP 协议请求及你配置的请求头。服务可能接收之后批准的工具参数。</string>
-    <string name="mcp_approval_boundary">启用仅让服务可被 AI 发现。连接测试会初始化协议并获取工具目录，不调用目录中的工具；启用不会授予自动审批。</string>
+    <string name="mcp_approval_boundary">启用后，执行任务前会检测连接；失败的服务本次不会提供给 AI。连接测试会初始化协议并获取工具目录，不执行目录中的工具；实际调用仍按权限审批。</string>
     <string name="mcp_confirm">确认</string>
     <string name="mcp_cancel">取消</string>
     <string name="mcp_delete_confirm">删除“%1$s”？</string>

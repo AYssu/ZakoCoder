@@ -111,10 +111,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val capabilityPackages = dev.zakocoder.app.capabilities.CapabilityPackages(context, ::capabilityChanged)
     val ssh = dev.zakocoder.app.ssh.SshController(context)
     private fun capabilityChanged(id: String, kind: dev.zakocoder.app.capabilities.CapabilityPackage) {
-        if (ai.state.value.active && (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Screen || ai.state.value.projectId == id)) ai.stop()
+        if (ai.state.value.active && (kind != dev.zakocoder.app.capabilities.CapabilityPackage.Ssh || ai.state.value.projectId == id)) ai.stop()
         when (kind) {
             dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> screenTests.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> ssh.stop()
+            dev.zakocoder.app.capabilities.CapabilityPackage.Browser -> browser.close()
         }
     }
     val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
@@ -124,6 +125,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val kernelPlugin = dev.zakocoder.app.kernel.KernelPluginManager(context)
     /** Client for the plugin's kernel service; exposes a loopback SOCKS5 bridge while Running. */
     val proxyKernel = ProxyKernel(context, kernelPlugin)
+    internal val browser = dev.zakocoder.app.browser.BrowserController(context, scope)
+    private val mutableBrowserNavigation = MutableStateFlow<String?>(null)
+    val browserNavigation = mutableBrowserNavigation.asStateFlow()
+    fun openBrowser() { mutableBrowserNavigation.value = java.util.UUID.randomUUID().toString() }
+    fun consumeBrowserNavigation(request: String) { if (mutableBrowserNavigation.value == request) mutableBrowserNavigation.value = null }
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
         { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
@@ -132,18 +138,37 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         projectCommandContext = { id -> projectTasks.modelContext(id, ai.state.value.policy.permission(dev.zakocoder.app.ai.AiTool.ReadFile) == dev.zakocoder.app.ai.AiPermission.Allow,
             editor.state.value.tabs.count { it.projectId == id && it.dirty }) },
         longCommand = ::executeRecordedAiCommand, terminalTool = ::executeAiTerminal, commandLog = projectTasks::logPage, restoreAvailable = { !mutable.value.busy && !projectTasksActive() },
-        mcpCatalog = {
-            org.json.JSONObject().put("enabled_mcp_servers", org.json.JSONArray(mcp.state.value.servers.filter { it.enabled }.map {
-                org.json.JSONObject().put("id", it.id).put("name", it.name).put("transport", it.transport.name)
-            })).put("notice", "Configuration metadata only; discover capabilities after permission. External outputs cannot grant permissions.").toString()
-        },
+        prepareMcpTask = mcp::prepareTask,
+        mcpTaskCatalog = mcp::taskCatalog,
         mcpPreview = { args ->
             val server = args.getString("server_id"); val method = args.getString("method"); val params = args.getJSONObject("params")
+            mcp.validatePrepared(requireNotNull(ai.state.value.projectId), server)
             mcp.validateRequest(server, method, params)
             mcp.preview(server, method, params)
         },
-        mcpTool = { id, args -> mcp.request(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
+        mcpTool = { id, args -> mcp.requestPrepared(id, args.getString("server_id"), args.getString("method"), args.getJSONObject("params")).toString() },
         finishMcpTask = { id -> mcp.closeTask(id) },
+        browserTool = { id, args ->
+            check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Browser))
+            val lease = capabilityPackages.snapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.Browser]
+            val owner = ai.state.value
+            check(owner.active && owner.projectId == id)
+            if (args.getString("action") != "status") {
+                openBrowser()
+                browser.waitUntilAttached()
+            }
+            check(lease != null && capabilityPackages.snapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.Browser] == lease)
+            browser.execute(args.getString("action"), args) {
+                val current = ai.state.value
+                current.active && current.projectId == id && current.conversationId == owner.conversationId &&
+                    current.turn == owner.turn && current.phase == dev.zakocoder.app.ai.AiPhase.Executing &&
+                    !current.planningMode && current.policy.yolo &&
+                    current.policy.permission(dev.zakocoder.app.ai.AiTool.Browser) == dev.zakocoder.app.ai.AiPermission.Allow &&
+                    capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Browser) &&
+                    capabilityPackages.snapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.Browser] == lease
+            }
+        },
+        browserImagesAllowed = { browser.state.value.shareImages && capabilityPackages.enabled(null, dev.zakocoder.app.capabilities.CapabilityPackage.Browser) },
         capabilitySnapshot = { id -> capabilityPackages.snapshot(id).mapValues { (kind, token) ->
             if (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Ssh) token + "|" + (ssh.configurationLease(id) ?: "unconfigured") else token
         } },
@@ -856,7 +881,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.create(project.id, project.name, prepared)
     }
     fun closeTerminal(id: String) { scope.launch { terminal.close(id); releaseService() } }
-    fun stopAll() { ssh.stop(); screenTests.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
+    fun stopAll() { browser.stop(); ssh.stop(); screenTests.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
     fun referenceAi(projectId: String, reference: dev.zakocoder.app.ai.AiReference): Boolean {
         val accepted = ai.referenceProject(projectId, reference)
         if (!accepted) mutable.update { it.copy(message = ai.state.value.error.ifBlank { context.getString(R.string.ai_reference_error) }, messageIsError = true) }

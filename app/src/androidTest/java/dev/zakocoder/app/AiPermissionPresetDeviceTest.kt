@@ -61,17 +61,17 @@ class AiPermissionPresetDeviceTest {
         drain(f)
     }
 
-    @Test(timeout = 180000) fun normalAndElevatedPresetsChangeRealWriteGateAndPreserveProjectDenialsAfterRestart() = runBlocking {
+    @Test(timeout = 180000) fun readOnlyAndApprovalModesChangeRealWriteGateAndPreserveProjectDenialsAfterRestart() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
             lateinit var ai: AiController
             main { ai = controller(f); ai.select("normal") }; ready(ai)
-            policy(ai, AiPermissionPreset.Normal)
+            policy(ai, AiPermissionPreset.ReadOnly)
             assertEquals(AiPermission.Ask, ai.state.value.policy.permission(AiTool.WriteFile))
             rejectedWrite(ai, f, "normal-write", "normal.txt")
             assertFalse(File(f.root, "project-normal/normal.txt").exists())
 
             main { ai.select("elevated") }; ready(ai)
-            policy(ai, AiPermissionPreset.Elevated)
+            policy(ai, AiPermissionPreset.Normal)
             assertEquals(AiPermission.Allow, ai.state.value.policy.permission(AiTool.WriteFile))
             noApprovalWrite(ai, f, "elevated-write", "allowed.txt", AiToolStatus.Succeeded)
             assertEquals("verified preset output", File(f.root, "project-elevated/allowed.txt").readText())
@@ -83,11 +83,13 @@ class AiPermissionPresetDeviceTest {
             assertFalse(File(f.root, "project-elevated/denied.txt").exists())
 
             main { ai.select("normal") }; ready(ai)
+            assertEquals(AiPermissionPreset.ReadOnly, ai.state.value.policy.mode)
             assertEquals(AiPermission.Ask, ai.state.value.policy.permission(AiTool.WriteFile))
             rejectedWrite(ai, f, "normal-after-switch", "normal-after-switch.txt")
             assertFalse(File(f.root, "project-normal/normal-after-switch.txt").exists())
             lateinit var reopened: AiController
             main { reopened = controller(f); reopened.select("elevated") }; ready(reopened)
+            assertEquals(AiPermissionPreset.Elevated, reopened.state.value.policy.mode)
             assertEquals(AiPermission.Deny, reopened.state.value.policy.permission(AiTool.WriteFile))
             noApprovalWrite(reopened, f, "denied-after-restart", "restart-denied.txt", AiToolStatus.Denied)
             assertFalse(File(f.root, "project-elevated/restart-denied.txt").exists())

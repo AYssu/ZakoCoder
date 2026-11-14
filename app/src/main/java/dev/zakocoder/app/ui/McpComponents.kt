@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.mcp.McpBearerCredentials
 import dev.zakocoder.app.mcp.McpController
+import dev.zakocoder.app.mcp.McpConnectionStatus
 import dev.zakocoder.app.mcp.McpServer
 import dev.zakocoder.app.mcp.McpTransport
 import kotlinx.coroutines.launch
@@ -92,6 +93,7 @@ internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PAR
             }
             items(state.servers, key = { it.id }) { server ->
                 val tested = state.probeProjectId == "global-network" && state.probeServerId == server.id && state.probeResult.isNotEmpty()
+                val connection = state.connections[server.id]
                 McpDesignCard {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -112,12 +114,18 @@ internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PAR
                     val status = when {
                         !server.enabled -> R.string.mcp_status_disabled
                         connecting == server.id -> R.string.mcp_connecting
+                        connection?.status == McpConnectionStatus.Checking -> R.string.mcp_connecting
+                        connection?.status == McpConnectionStatus.Failed -> R.string.mcp_preflight_failed
                         failedServer == server.id -> R.string.mcp_connection_failed
                         tested -> R.string.mcp_tested
+                        connection?.status == McpConnectionStatus.Ready -> R.string.mcp_preflight_ready
                         else -> R.string.mcp_enabled
                     }
                     Text(stringResource(status), style = MaterialTheme.typography.bodySmall,
-                        color = if (failedServer == server.id) MaterialTheme.colorScheme.error else if (server.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = if (failedServer == server.id || connection?.status == McpConnectionStatus.Failed) MaterialTheme.colorScheme.error else if (server.enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (connection?.status == McpConnectionStatus.Failed && connection.detail.isNotBlank()) {
+                        Text(connection.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = { confirmation = server to true }, enabled = canEdit && server.enabled,
@@ -152,7 +160,9 @@ internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PAR
     }
     confirmation?.let { (server, probe) ->
         WorkbenchAlertDialog(onDismissRequest = { confirmation = null }, title = { Text(stringResource(if (probe) R.string.mcp_connect_confirm else R.string.mcp_enable_confirm)) },
-            text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // WorkbenchAlertDialog owns the bounded scroll container for its text slot.
+            // A second verticalScroll here is measured with infinite height and crashes on enable.
+            text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(server.name, style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.mcp_remote_risk))
                 Text(remoteOrigin(server.url), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)

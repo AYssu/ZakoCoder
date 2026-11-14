@@ -89,4 +89,34 @@ class CapabilityPackagesDeviceTest {
             assertEquals(setOf(CapabilityPackage.Ssh), packages.snapshot("project-b").keys)
         }
     }
+
+    @Test(timeout = 60000) fun browserIsGlobalWithoutWorkspaceAndItsLeaseRevokesBeforeDiskWrite() = runBlocking {
+        isolated { context, _ ->
+            val revoked = mutableListOf<CapabilityPackage>()
+            lateinit var packages: CapabilityPackages
+            main { packages = CapabilityPackages(context) { _, kind -> revoked += kind } }
+            await { packages.state.value.loaded }
+            assertFalse(packages.enabled(null, CapabilityPackage.Browser))
+            main { packages.setBrowserEnabled(true) }; await { !packages.state.value.busy }
+            val lease = packages.snapshot("one")[CapabilityPackage.Browser]
+            assertNotNull(lease)
+            assertTrue(packages.enabled(null, CapabilityPackage.Browser))
+            assertEquals(lease, packages.snapshot("two")[CapabilityPackage.Browser])
+            lateinit var reloaded: CapabilityPackages
+            main { reloaded = CapabilityPackages(context) }; await { reloaded.state.value.loaded }
+            assertTrue(reloaded.enabled(null, CapabilityPackage.Browser))
+            assertNotEquals(lease, reloaded.snapshot("one")[CapabilityPackage.Browser])
+            main {
+                packages.setBrowserEnabled(false)
+                assertFalse(packages.enabled(null, CapabilityPackage.Browser))
+                assertFalse(packages.snapshot("two").containsKey(CapabilityPackage.Browser))
+                assertEquals(CapabilityPackage.Browser, revoked.last())
+            }
+            await { !packages.state.value.busy }
+            main { packages.setBrowserEnabled(true) }; await { !packages.state.value.busy }
+            assertNotEquals(lease, packages.snapshot("one")[CapabilityPackage.Browser])
+            assertFalse(packages.enabled(null, CapabilityPackage.Screen))
+            assertFalse(packages.enabled(null, CapabilityPackage.Ssh))
+        }
+    }
 }

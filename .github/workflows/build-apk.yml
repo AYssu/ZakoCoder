@@ -16,6 +16,9 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      PROXY_KERNEL_GOPROXY: https://proxy.golang.org,direct
+      PROXY_KERNEL_GOSUMDB: sum.golang.org
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

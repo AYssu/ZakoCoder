@@ -35,6 +35,7 @@ internal fun WorkbenchCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val interactive = onClick != null || onLongClick != null
+    val click = rememberWorkbenchClickFeedback { onClick?.invoke() }
     val decorated = modifier
         .then(if (border != null) Modifier.border(border, RoundedCornerShape(cornerRadius)) else Modifier)
         .then(if (interactive) Modifier.semantics {
@@ -47,7 +48,7 @@ internal fun WorkbenchCard(
     }
     if (interactive) {
         MiuixCard(modifier = decorated, cornerRadius = cornerRadius, insideMargin = PaddingValues(0.dp),
-            colors = colors, onClick = onClick.takeIf { enabled }, onLongPress = onLongClick.takeIf { enabled },
+            colors = colors, onClick = click.takeIf { enabled && onClick != null }, onLongPress = onLongClick.takeIf { enabled },
             showIndication = enabled, content = body)
     } else {
         MiuixCard(modifier = decorated, cornerRadius = cornerRadius, insideMargin = PaddingValues(0.dp),

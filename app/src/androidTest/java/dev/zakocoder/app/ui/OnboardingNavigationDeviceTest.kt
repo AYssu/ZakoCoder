@@ -88,12 +88,38 @@ class OnboardingNavigationDeviceTest {
     private fun left(resource: Int) = nodes { all ->
         all.last { label(it) == base.getString(resource) }.boundsInWindow.left
     }
-    private fun click(resource: Int) = nodes { all ->
+    private fun click(resource: Int) {
         val text = base.getString(resource)
-        val target = all.last { visible(it) && (label(it) == text || text in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) }
-        val action = generateSequence(target) { it.parent }
-            .firstNotNullOf { it.config.getOrNull(SemanticsActions.OnClick)?.action }
-        assertTrue("Action is available: $text", action())
+        fun root(node: SemanticsNode): SemanticsNode = generateSequence(node) { it.parent }.last()
+        fun enabled(node: SemanticsNode) = visible(node) && generateSequence(node) { it.parent }.none {
+            it.config.getOrNull(SemanticsProperties.Disabled) != null
+        }
+        fun action(node: SemanticsNode): (() -> Boolean)? {
+            if (!enabled(node)) return null
+            node.config.getOrNull(SemanticsActions.OnClick)?.action?.let { return it }
+            // Merged native buttons can expose a labelled wrapper with the actual
+            // action on a child; text-only nodes normally delegate to their row.
+            node.children.firstNotNullOfOrNull(::action)?.let { return it }
+            return null
+        }
+        await("Enabled clickable control missing: $text") {
+            nodes { all ->
+                val matches = all.filter { visible(it) && (label(it) == text ||
+                    text in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) }
+                val topRoot = matches.lastOrNull()?.let(::root)?.id ?: return@nodes false
+                val click = matches.asReversed().asSequence().filter { root(it).id == topRoot }
+                    .firstNotNullOfOrNull { match ->
+                        action(match) ?: generateSequence(match.parent) { it.parent }
+                            .firstNotNullOfOrNull { parent ->
+                                if (enabled(parent)) parent.config.getOrNull(SemanticsActions.OnClick)?.action else null
+                            }
+                    } ?: return@nodes false
+                // Lookup and invocation share the main-thread snapshot. Do not reuse
+                // a text node captured while entry/exit animation disables the control.
+                assertTrue("Action is accepted: $text", click())
+                true
+            }
+        }
     }
     private fun await(message: String, condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15_000

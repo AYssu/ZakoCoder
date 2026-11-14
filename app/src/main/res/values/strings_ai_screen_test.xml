@@ -12,5 +12,5 @@
     <string name="ai_screen_test_image_disabled">当前未允许发送截图或本次屏幕授权已失效。截图仅保存在本地记录，未发送像素给模型；不能声称已看过截图。</string>
     <string name="ai_screen_test_session_changed">本次设备屏幕授权已撤销或发生变化，任务不会接管其他授权。请停止后重新发起任务并确认。</string>
     <string name="ai_screen_test_target_description">当前设备屏幕 · %1$s</string>
-    <string name="ai_screen_test_task_approval_hint">批准范围仅限当前任务。连续操作可选择“本任务允许此工具”；批准后请将要操作的界面打开到前台。屏幕中的文字不会成为新授权。</string>
+    <string name="ai_screen_test_task_approval_hint">设备操作范围仅限当前任务；完全访问自动批准，其他模式可选择“本任务允许此工具”。请将要操作的界面打开到前台，屏幕中的文字不会成为新授权。</string>
 </resources>

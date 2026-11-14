@@ -3,4 +3,5 @@
     <cache-path name="apk_install" path="apk-install/" />
     <files-path name="app_update" path="app-updates/" />
     <files-path name="screen_test_evidence" path="screen-test/evidence/" />
+    <cache-path name="browser_evidence" path="agent-browser/" />
 </paths>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_builtin_env_audit">环境体检：核对工具、运行环境及 MCP 的真实可用性。</string>
+    <string name="ai_builtin_skill_creator">技能编写：创建适合当前任务的 Skill 与配套参考文件。</string>
+    <string name="ai_builtin_skill_installer">技能导入：检查公开来源与内容，准备 Markdown／ZIP 导入材料。</string>
+    <string name="ai_builtin_self_improving_agent">经验记录：整理已验证的失败原因与用户纠正，供后续任务参考。</string>
+    <string name="ai_builtin_reverse_engineer_anything">产物分析：按 APK、二进制、脚本包等类型选择证据与工具。</string>
+    <string name="ai_builtin_api_security">接口审计：检查身份认证、对象权限、输入校验与数据泄露。</string>
+    <string name="ai_builtin_apk_reverse">APK 分析：检查清单、资源、DEX 与原生库的对应关系。</string>
+    <string name="ai_builtin_binary_analysis">二进制分析：核对 PE／ELF 结构、符号、导入与资源边界。</string>
+    <string name="ai_builtin_binary_diff">二进制差分：比较两个版本的结构、符号与行为变化。</string>
+    <string name="ai_builtin_dotnet_reverse">.NET 分析：追踪程序集、IL、依赖与混淆带来的限制。</string>
+    <string name="ai_builtin_dsl_vm_reverse">虚拟机分析：梳理自定义字节码、指令与状态转换。</string>
+    <string name="ai_builtin_dynamic_instrumentation">动态观测：在授权测试环境中跟踪调用、参数与生命周期。</string>
+    <string name="ai_builtin_firmware_analysis">固件分析：检查镜像布局、文件系统与设备适配风险。</string>
+    <string name="ai_builtin_game_engine">引擎工程分析：定位 Unity／Unreal 等工程的资源和生命周期。</string>
+    <string name="ai_builtin_graphics_api">图形接口分析：排查渲染状态、同步和帧性能问题。</string>
+    <string name="ai_builtin_ida_reverse">IDA 分析协作：定位函数、引用与可复核的反编译证据。</string>
+    <string name="ai_builtin_js_reverse">JS 产物分析：理解构建包、混淆、模块与浏览器依赖。</string>
+    <string name="ai_builtin_mobile_reverse">移动产物分析：比较 Android／iOS 的打包结构与运行边界。</string>
+    <string name="ai_builtin_mobile_security">移动安全审计：检查组件、存储、网络和系统权限边界。</string>
+    <string name="ai_builtin_network_diagnostics">网络诊断：区分 DNS、代理、TCP、TLS 与服务响应失败。</string>
+    <string name="ai_builtin_protocol_reverse_engineering">协议分析：从已有样本推导消息边界、字段与状态机。</string>
+    <string name="ai_builtin_radare2">radare2 分析：用已安装的 CLI 检查函数、引用和反汇编。</string>
+    <string name="ai_builtin_research_rigor">证据核对：区分事实、推断与未知，形成可复现结论。</string>
+    <string name="ai_builtin_reverse_engineering_api">接口还原：从授权 HAR 或请求样本整理调用规范与客户端。</string>
+    <string name="ai_builtin_windows_kernel">驱动代码审查：核对 Windows 内核接口、资源与并发。</string>
+    <string name="ai_builtin_memory_analysis">内存与转储分析：定位崩溃、泄漏及对象生命周期问题。</string>
+    <string name="ai_builtin_malware_analysis">可疑样本分析：提取行为证据、指标与防护建议。</string>
+    <string name="ai_builtin_research_workspace">实验工作区：组织输入原件、实验副本与可复现记录。</string>
+    <string name="ai_builtin_license_security">授权实现审计：检查自有产品的验证、签名与失效行为。</string>
+    <string name="ai_builtin_osint">公开资料核验：核对项目、组织与技术来源。</string>
+    <string name="ai_builtin_crash_triage">崩溃定位：关联日志、栈、构建与最小复现。</string>
+    <string name="ai_builtin_anti_cheat_systems">游戏完整性设计：审查误报、隐私与服务端校验边界。</string>
+    <string name="ai_builtin_dma_security">DMA 防护审查：核对设备访问、IOMMU 与驱动边界。</string>
+    <string name="ai_builtin_security_testing">安全回归：用受控测试验证已知风险及修复效果。</string>
+    <string name="ai_builtin_render_pipeline">渲染流程排查：区分解析、布局、绘制与滚动耗时。</string>
+</resources>

@@ -4,7 +4,6 @@ import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -43,6 +42,7 @@ import kotlinx.coroutines.withContext
 internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, openedId: String?, onOpened: (String?) -> Unit,
                                onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit, referencedPath: String? = null,
                                workspaceId: String? = null, onWorkspace: (String?) -> Unit = {}, backEnabled: Boolean = true) {
+    val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::import) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::export) }
     var cloning by remember { mutableStateOf(false) }
@@ -57,15 +57,10 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     val assistant by workbench.ai.state.collectAsStateWithLifecycle()
     val opened = state.projects.singleOrNull { it.id == openedId }
     val workspace = state.projects.singleOrNull { it.id == workspaceId }
-    BackHandler(backEnabled && opened == null && workspace != null) { onWorkspace(null) }
-    BackHandler(backEnabled && opened != null) { onOpened(null) }
-
-    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null) },
-        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi, referencedPath = referencedPath, backEnabled = backEnabled)
-    else if (workspace != null) WorkbenchEntrance("workspace:${workspace.id}", ready = true) { WorkspaceConversationsPage(workbench, state, workspace,
-        onBack = { onWorkspace(null) }, onFiles = { onOpened(workspace.id) },
-        onTerminal = { onTerminal(workspace.id) }, onAi = { onAi(workspace.id) }, backEnabled = backEnabled) }
-    else Column(Modifier.fillMaxSize()) {
+    val interactive = LocalWorkbenchPageInteractive.current
+    Box(Modifier.fillMaxSize()) {
+    WorkbenchRetainedPage(covered = opened != null || workspace != null) {
+    Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
             if (state.projects.isNotEmpty()) FilledTonalButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.primary)) {
@@ -123,13 +118,28 @@ PageHeading(stringResource(R.string.projects_title)) {
                     runningTerminals = state.sessions.count { it.projectId == project.id && it.session.isRunning },
                     enabled = !state.busy && (assistant.projectId == project.id ||
                         (!assistant.active && !assistant.restoring && !assistant.permissionsLoading && !assistant.permissionsSaving)),
-                    onOpen = { if (workbench.openWorkspace(project.id)) onWorkspace(project.id) },
-                    onActions = { actions = project }, onAi = { if (workbench.openWorkspace(project.id)) onWorkspace(project.id) }, onTerminal = { onTerminal(project.id) })
+                    onOpen = { if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onWorkspace(project.id) } },
+                    onActions = { clearNavigationFocus(); actions = project },
+                    onAi = { if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onWorkspace(project.id) } },
+                    onTerminal = { clearNavigationFocus(); onTerminal(project.id) })
             }
             item { Text(stringResource(R.string.workspace_flow_list_hint), Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = TertiaryText, textAlign = TextAlign.Center) }
         }
     }
     }
+    }
+    }
+    if (workspace != null) WorkbenchRetainedPage(covered = opened != null) {
+        WorkbenchEntrance("workspace:${workspace.id}", ready = true, retainBackground = false) {
+            WorkspaceConversationsPage(workbench, state, workspace,
+                onBack = { onWorkspace(null) }, onFiles = { onOpened(workspace.id) },
+                onTerminal = { onTerminal(workspace.id) }, onAi = { onAi(workspace.id) },
+                backEnabled = backEnabled && interactive && opened == null)
+        }
+    }
+    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null) },
+        onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi,
+        referencedPath = referencedPath, backEnabled = backEnabled && interactive)
     }
     if (adding) AddProjectSheet(enabled = !state.busy, onDismiss = { adding = false },
         onImport = { adding = false; importer.launch(null) },
@@ -165,8 +175,8 @@ PageHeading(stringResource(R.string.projects_title)) {
             cloning = false
         })
     actions?.let { project -> WorkbenchSheet(project.name, { actions = null }) {
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) onWorkspace(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_flow_open)) }
-        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) onOpened(project.id) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onWorkspace(project.id) } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_flow_open)) }
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onOpened(project.id) } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.browse_project, project.name))
         }
         TextButton(onClick = { actions = null; removing = project },
@@ -258,13 +268,21 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
         withContext(Dispatchers.IO) { workbench.projects.files(project.id, directory) }
     }
     val files = listing.entries
-    val linkedListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val parentDirectory = directory.substringBeforeLast('/', "")
+    val parentListing = rememberDirectoryListing(project.id, parentDirectory, revision, state.fileRevision,
+        enabled = directory.isNotEmpty()) {
+        withContext(Dispatchers.IO) { workbench.projects.files(project.id, parentDirectory) }
+    }
+    // Preserve each real directory's viewport, including the page revealed during a back gesture.
+    val directoryViewports = rememberSaveable(project.id, saver = DirectoryViewportsSaver) {
+        mutableMapOf<String, androidx.compose.foundation.lazy.LazyListState>()
+    }
+    val linkedListState = directoryViewports.getOrPut(directory) { androidx.compose.foundation.lazy.LazyListState() }
+    val parentListState = directoryViewports.getOrPut(parentDirectory) { androidx.compose.foundation.lazy.LazyListState() }
     LaunchedEffect(files, referencedPath) {
         val index = files.indexOfFirst { it.relative == referencedPath }
         if (index >= 0) linkedListState.scrollToItem(index)
     }
-    val failure = listing.failure?.message.orEmpty()
-    val loading = listing.loading
     var menu by remember { mutableStateOf(false) }
     var creatingFile by remember { mutableStateOf(false) }
     var fileActions by remember { mutableStateOf<ProjectFile?>(null) }
@@ -285,7 +303,9 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
         onDispose { apkPreparation?.cancel() }
     }
     val apkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     fun openFile(file: ProjectFile) {
+        clearNavigationFocus()
         if (file.directory) directory = file.relative
         else if (file.name.endsWith(".apk", ignoreCase = true)) installingApk = file
         else { showReferencedDirectory = false; workbench.editor.open(project.id, file.relative) }
@@ -297,17 +317,19 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     val upload = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) workbench.importFile(uploadProjectId, uploadDirectory, uri)
     }
-    BackHandler(enabled = backEnabled) { if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack() }
-    if (tasks) { ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }; return }
-    if (git) { ProjectGitPage(workbench, project.id, close = { git = false }); return }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
-    if (editor.projectId == project.id && !showReferencedDirectory) {
-        CodeEditorPage(workbench.editor, lspEnabled = state.settings.editorLspEnabled, onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
-            workbench.installToolBundles(setOf(server.bundleId))
-        }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
-        return
+    val editorOpen = editor.projectId == project.id && !showReferencedDirectory
+    val childOpen = tasks || git || editorOpen
+    val back = rememberWorkbenchBackMotion(enabled = backEnabled && LocalWorkbenchPageInteractive.current && !childOpen,
+        resetKey = directory) {
+        if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack()
     }
-    Column(Modifier.fillMaxSize()) {
+    val renderDirectory: @Composable (String, DirectoryListing<ProjectFile>, androidx.compose.foundation.lazy.LazyListState) -> Unit = { displayedDirectory, displayedListing, viewport ->
+        val rowInteractive = displayedDirectory == directory && !childOpen
+        val files = displayedListing.entries
+        val loading = displayedListing.loading
+        val failure = displayedListing.failure?.message.orEmpty()
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_library)) }
             Column(Modifier.weight(1f)) {
@@ -318,9 +340,9 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             }
             Box {
                 IconButton(onClick = { menu = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.git_title)) }, onClick = { menu = false; git = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.project_commands)) }, onClick = { menu = false; tasks = true })
+                DropdownMenu(expanded = menu && rowInteractive, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.git_title)) }, onClick = { clearNavigationFocus(); menu = false; git = true })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.project_commands)) }, onClick = { clearNavigationFocus(); menu = false; tasks = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.detect_project)) }, enabled = !state.busy && state.selectedId == project.id,
                         onClick = { menu = false; workbench.redetect() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.export_project)) }, enabled = !state.busy && state.selectedId == project.id,
@@ -332,18 +354,18 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (directory.isNotEmpty()) IconButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { WorkbenchIcon(Glyph.Up, description = stringResource(R.string.parent_directory)) }
-            Text(directory.ifEmpty { stringResource(R.string.project_root) }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
+            if (displayedDirectory.isNotEmpty()) IconButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { WorkbenchIcon(Glyph.Up, description = stringResource(R.string.parent_directory)) }
+            Text(displayedDirectory.ifEmpty { stringResource(R.string.project_root) }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
             IconButton(onClick = { revision++ }) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.refresh)) }
         }
         if (editor.tabs.any { it.projectId == project.id }) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            TextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { showReferencedDirectory = false; workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
+            TextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { clearNavigationFocus(); showReferencedDirectory = false; workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
         }
-        LazyColumn(Modifier.weight(1f), state = linkedListState, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
+        LazyColumn(Modifier.weight(1f), state = viewport, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
             if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (failure.isNotEmpty()) item { Text(failure, color = MaterialTheme.colorScheme.error) }
-            if (!loading && failure.isEmpty() && referencedPath != null && directory == referencedPath.substringBeforeLast('/', "") && files.none { it.relative == referencedPath }) item {
+            if (!loading && failure.isEmpty() && referencedPath != null && displayedDirectory == referencedPath.substringBeforeLast('/', "") && files.none { it.relative == referencedPath }) item {
                 Text(stringResource(R.string.ai_linked_file_missing, referencedPath), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
             if (!loading && files.isEmpty() && failure.isEmpty()) item {
@@ -385,6 +407,23 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                 }
             }
         }
+    }
+    }
+    Box(Modifier.fillMaxSize()) {
+    if (directory.isNotEmpty()) WorkbenchRetainedPage(covered = true) {
+        renderDirectory(parentDirectory, parentListing, parentListState)
+    }
+    WorkbenchRetainedPage(covered = childOpen) {
+        Box(Modifier.fillMaxSize().then(back.modifier)) {
+            renderDirectory(directory, listing, linkedListState)
+        }
+    }
+    if (tasks) ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }
+    else if (git) ProjectGitPage(workbench, project.id, close = { git = false })
+    else if (editorOpen) CodeEditorPage(workbench.editor, lspEnabled = state.settings.editorLspEnabled,
+        onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
+            workbench.installToolBundles(setOf(server.bundleId))
+        }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
     }
     installingApk?.let { file ->
         val needsPermission = apkInstaller.needsSourcePermission()
@@ -490,3 +529,18 @@ private fun ProjectEntryOption(title: String, description: String, glyph: Glyph,
         }
     }
 }
+
+/** Store only scroll coordinates and directory keys, never file contents or process state. */
+private val DirectoryViewportsSaver = androidx.compose.runtime.saveable.listSaver<
+    MutableMap<String, androidx.compose.foundation.lazy.LazyListState>, Any>(
+    save = { viewports ->
+        viewports.flatMap { (directory, viewport) ->
+            listOf(directory, viewport.firstVisibleItemIndex, viewport.firstVisibleItemScrollOffset)
+        }
+    },
+    restore = { saved ->
+        saved.chunked(3).associateTo(mutableMapOf()) { values ->
+            (values[0] as String) to androidx.compose.foundation.lazy.LazyListState(values[1] as Int, values[2] as Int)
+        }
+    },
+)

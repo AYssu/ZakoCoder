@@ -65,8 +65,22 @@ class AiSkillLoadingUiDeviceTest {
                 candidate
             }
         }
-        await("Enabled target: $label") { target() != null }
-        assertTrue("Click $label", requireNotNull(target()).performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        // Some native controls handle pointer input without exposing ACTION_CLICK on
+        // their merged wrapper. Fall back to a real tap only on the exact labelled,
+        // visible and enabled control; subsequent assertions still verify the result.
+        fun pointerTarget() = nodes().firstOrNull { it.isVisibleToUser && it.isEnabled &&
+            it.contentDescription?.toString()?.lines()?.contains(label) == true &&
+            android.graphics.Rect().also(it::getBoundsInScreen).let { bounds ->
+                !bounds.isEmpty && bounds.width() <= context.resources.displayMetrics.widthPixels
+            } }
+        await("Enabled target: $label") { target() != null || pointerTarget() != null }
+        val actionable = target()
+        if (actionable != null) {
+            assertTrue("Click $label", actionable.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        } else {
+            val bounds = android.graphics.Rect().also(requireNotNull(pointerTarget())::getBoundsInScreen)
+            shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
+        }
         delay(150)
     }
     private suspend fun search(value: String) {
@@ -145,10 +159,20 @@ class AiSkillLoadingUiDeviceTest {
                 assertFalse(workbench.ai.globalSkills.value.skillOnDemand)
                 assertTrue(workbench.ai.globalSkills.value.enabledSkills.isEmpty())
                 screenshot("$theme-global-empty")
-                search("frontend-design")
-                click(context.getString(R.string.ai_skill_toggle, "frontend-design"))
+                search("env-audit")
+                screenshot("$theme-filtered")
+                click(context.getString(R.string.ai_skill_view, "env-audit"))
+                await("Skill detail contains its readable instructions") { find("环境体检") != null }
+                assertFalse("Skill frontmatter must not render as metadata headings or extra horizontal rules",
+                    nodes().any { it.isVisibleToUser && it.text?.toString()?.contains("name: env-audit") == true })
+                screenshot("$theme-detail")
+                shell("input keyevent 4")
+                await("Skill detail closes to the filtered library") {
+                    find(context.getString(R.string.ai_skill_view, "env-audit")) != null
+                }
+                click(context.getString(R.string.ai_skill_toggle, "env-audit"))
                 await("Global selection applied") {
-                    workbench.ai.globalSkills.value.enabledSkills == listOf("builtin:frontend-design") &&
+                    workbench.ai.globalSkills.value.enabledSkills == listOf("builtin:env-audit") &&
                         !workbench.ai.globalSkills.value.active
                 }
                 click(context.getString(R.string.ai_skill_on_demand))
@@ -176,7 +200,7 @@ class AiSkillLoadingUiDeviceTest {
                 for (conversation in listOf(second, first)) {
                     main { workbench.ai.conversation(conversation) }
                     ready(conversation)
-                    assertEquals(listOf("builtin:frontend-design"), workbench.ai.globalSkills.value.enabledSkills)
+                    assertEquals(listOf("builtin:env-audit"), workbench.ai.globalSkills.value.enabledSkills)
                     assertTrue(workbench.ai.globalSkills.value.skillOnDemand)
                 }
                 main { workbench.create("第二个工作区") }
@@ -186,12 +210,34 @@ class AiSkillLoadingUiDeviceTest {
                 await("Other workspace ready") {
                     workbench.ai.state.value.projectId == other.id && !workbench.ai.state.value.permissionsLoading && !workbench.ai.state.value.skillsLoading
                 }
-                assertEquals(listOf("builtin:frontend-design"), workbench.ai.globalSkills.value.enabledSkills)
+                assertEquals(listOf("builtin:env-audit"), workbench.ai.globalSkills.value.enabledSkills)
                 assertTrue(workbench.ai.globalSkills.value.skillOnDemand)
                 screenshot("$theme-global-after-workspace-switch")
                 withContext(Dispatchers.IO) {
-                    assertEquals(AiGlobalSkills.Selection(listOf("builtin:frontend-design"), true), AiGlobalSkills(isolated).load())
+                    assertEquals(AiGlobalSkills.Selection(listOf("builtin:env-audit"), true), AiGlobalSkills(isolated).load())
                 }
+                assertTrue(workbench.ai.saveGlobalSkill("删除测试技能", "用于验证自定义技能删除", "仅用于本次隔离测试。", false, UUID.randomUUID().toString(), null))
+                val custom = workbench.ai.globalSkills.value.skills.single { it.name == "删除测试技能" }
+                search("删除测试技能")
+                await("Custom delete entry appears") { find(context.getString(R.string.ai_skill_delete_named, custom.name)) != null }
+                screenshot("$theme-custom-delete-entry")
+                click(context.getString(R.string.ai_skill_delete_named, custom.name))
+                await("Delete confirmation appears") { find(context.getString(R.string.ai_skill_delete_action)) != null }
+                screenshot("$theme-custom-delete-confirm")
+                click(context.getString(R.string.cancel))
+                assertTrue("Cancel does not remove custom skill", workbench.ai.globalSkills.value.skills.any { it.path == custom.path })
+                click(context.getString(R.string.ai_skill_view, custom.name))
+                await("Custom detail supports deletion") { find(context.getString(R.string.ai_skill_delete)) != null }
+                screenshot("$theme-custom-delete-detail")
+                click(context.getString(R.string.ai_skill_delete))
+                click(context.getString(R.string.ai_skill_delete_action))
+                await("Confirmed delete removes skill and closes its detail") {
+                    !workbench.ai.globalSkills.value.active && workbench.ai.globalSkills.value.skills.none { it.path == custom.path } &&
+                        find(context.getString(R.string.ai_skills_empty)) != null
+                }
+                assertEquals(listOf("builtin:env-audit"), workbench.ai.globalSkills.value.enabledSkills)
+                search("env-audit")
+                assertNull("Built-in skill has no delete entry", find(context.getString(R.string.ai_skill_delete_named, "env-audit")))
                 assertEquals(0, fixture.server.requestCount)
                 assertFalse(workbench.ai.state.value.active)
                 assertTrue(workbench.state.value.sessions.isEmpty())

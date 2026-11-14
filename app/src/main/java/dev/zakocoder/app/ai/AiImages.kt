@@ -5,7 +5,7 @@ import dev.zakocoder.app.R
 
 class AiImageException(val reason: Reason) : Exception(reason.name) {
     enum class Reason(val label: Int) {
-        Invalid(R.string.ai_image_invalid), TooLarge(R.string.ai_image_too_large),
+        Invalid(R.string.ai_image_invalid), SharingRevoked(R.string.ai_image_sharing_revoked), TooLarge(R.string.ai_image_too_large),
         Capacity(R.string.ai_image_capacity), Missing(R.string.ai_image_missing), Storage(R.string.ai_image_storage)
     }
 }

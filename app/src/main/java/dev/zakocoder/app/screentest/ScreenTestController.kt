@@ -50,6 +50,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     private val epoch = AtomicLong()
     private val selectionLock = Any()
     private val actionMutex = Mutex()
+    private val actionFeedback = ScreenActionFeedback()
     private val reportMutex = Mutex()
     private val reportQueueLock = Any()
     private val reportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -156,6 +157,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 overlayProgress = ScreenOverlayProgress(ScreenOverlayPhase.Cancelled, title = message(R.string.screen_overlay_progress_stopped)), summary = message(R.string.screen_test_stopped)) }
             ScreenTestAccessibilityService.instance?.stop()
             rootBackend.stop()
+            actionFeedback.clear()
             overlayScope.launch { overlay.remove() }
             running
         }
@@ -298,12 +300,13 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                                 stage = "overlay_sync"
                                 suppressOverlay(selection, action)
                                 stage = "${mutableState.value.access.name.lowercase()}_$action"
-                                when (mutableState.value.access) {
+                                val access = mutableState.value.access
+                                val backend: ScreenTestBackend = when (access) {
                                     ScreenTestAccess.Normal -> error(message(R.string.screen_test_need_accessibility))
                                     ScreenTestAccess.Accessibility -> {
                                         val service = ScreenTestAccessibilityService.instance
                                         check(service != null && mutableState.value.enabled) { message(R.string.screen_test_need_accessibility) }
-                                        service.execute("", args)
+                                        service
                                     }
                                     ScreenTestAccess.Root -> {
                                         check(rootBackend.granted) { "Root access must be explicitly authorized by the user" }
@@ -312,10 +315,11 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                                             check(service != null && mutableState.value.enabled) {
                                                 message(R.string.screen_test_root_screenshot_accessibility)
                                             }
-                                            service.execute("", args)
-                                        } else rootBackend.execute("", args)
+                                            service
+                                        } else rootBackend
                                     }
                                 }
+                                actionFeedback.execute("${selection.sessionId}:${access.name}", args) { request -> backend.execute("", request) }
                             }
                         }
                     }
@@ -326,12 +330,20 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                     }
                     selection.currentPackage = result.packageName
                     withContext(Dispatchers.IO) {
-                        report(selection, action, true, if (action == "assert_text") "assertion_passed" else "request_completed",
-                            result.imageUri?.lastPathSegment)
+                        val output = if (action in setOf("click", "long_click", "input_text", "swipe", "scroll", "back", "wait_until", "assert_text"))
+                            JSONObject(result.output) else JSONObject()
+                        val verified = output.optBoolean("verified")
+                        report(selection, action, action != "wait_until" || verified,
+                            if (action == "assert_text") "assertion_passed" else if (action == "wait_until") {
+                                if (verified) "condition_observed" else "condition_unverified"
+                            } else "request_completed", result.imageUri?.lastPathSegment,
+                            output.takeIf { it.has("dispatched") })
                     }
                     synchronized(selectionLock) {
                         if (epoch.get() == generation && selected === selection) mutableState.update {
-                            it.copy(packageName = result.packageName ?: it.packageName, summary = result.output.take(800), overlayProgress = overlayProgress(action, ScreenOverlayPhase.Succeeded))
+                            val passed = action != "wait_until" || JSONObject(result.output).optBoolean("verified")
+                            it.copy(packageName = result.packageName ?: it.packageName, summary = result.output.take(800),
+                                overlayProgress = overlayProgress(action, if (passed) ScreenOverlayPhase.Succeeded else ScreenOverlayPhase.Failed))
                         }
                     }
                     if (action == "finish") { operation = null; stopWithReason("tool_finished") }
@@ -430,10 +442,10 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             "launch" -> R.string.screen_overlay_action_launch
             "observe" -> R.string.screen_overlay_action_observe
             "click", "long_click" -> R.string.screen_overlay_action_click
-            "swipe" -> R.string.screen_overlay_action_swipe
+            "swipe", "scroll" -> R.string.screen_overlay_action_swipe
             "input_text" -> R.string.screen_overlay_action_input
             "back" -> R.string.screen_overlay_action_back
-            "assert_text" -> R.string.screen_overlay_action_assert
+            "assert_text", "wait_until" -> R.string.screen_overlay_action_assert
             "screenshot" -> R.string.screen_overlay_action_screenshot
             else -> R.string.screen_overlay_action_finish
         })
@@ -608,24 +620,32 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
         }
     }
 
-    private suspend fun report(selection: Selection, action: String, passed: Boolean, detail: String, evidence: String? = null) {
-        enqueueReport(selection, action, passed, detail, evidence).await()
+    private suspend fun report(selection: Selection, action: String, passed: Boolean, detail: String, evidence: String? = null, feedback: JSONObject? = null) {
+        enqueueReport(selection, action, passed, detail, evidence, feedback).await()
     }
 
     /** Enqueue in call order. In particular, user stop never waits on disk on the main thread. */
-    private fun enqueueReport(selection: Selection, action: String, passed: Boolean, detail: String, evidence: String? = null): Deferred<Unit> {
+    private fun enqueueReport(selection: Selection, action: String, passed: Boolean, detail: String, evidence: String? = null, feedback: JSONObject? = null): Deferred<Unit> {
         val outcome = when {
             !passed -> "failed"
             action == "install" -> "awaiting_user_install_confirmation"
-            action in setOf("launch", "click", "long_click", "input_text", "back", "swipe") -> "requested_observe_to_verify"
+            action in setOf("launch", "click", "long_click", "input_text", "back", "swipe", "scroll") -> "requested_observe_to_verify"
             else -> "completed"
         }
         val entry = JSONObject().put("time", System.currentTimeMillis()).put("timeIso", java.time.Instant.now().toString())
             .put("session", selection.sessionId).put("taskId", selection.taskId).put("scope", if (selection.taskId != null) "current_device" else "apk_installation")
             .put("package", selection.apk?.packageName ?: selection.currentPackage).put("apkSha256", selection.artifactDigest)
             .put("action", action).put("outcome", outcome).put("operationSucceeded", passed)
-            .put("assertionPassed", if (action == "assert_text") passed else null)
-            .put("detail", detail.take(300)).put("evidence", evidence).toString()
+            .put("assertionPassed", if (action in setOf("assert_text", "wait_until")) passed else null)
+            .put("detail", detail.take(300)).put("evidence", evidence).apply {
+                // Only fixed receipt fields enter audit, never text, snapshots or node contents.
+                if (feedback != null) {
+                    put("dispatched", feedback.getBoolean("dispatched"))
+                    put("observed_change", feedback.opt("observed_change") ?: JSONObject.NULL)
+                    put("verified", feedback.getBoolean("verified"))
+                    put("unknown_reason", feedback.opt("unknown_reason") ?: JSONObject.NULL)
+                }
+            }.toString()
         return synchronized(reportQueueLock) {
             val previous = reportTail?.takeUnless { it.isCompleted }
             reportScope.async {
@@ -678,7 +698,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
         const val DEVICE_TASK_OWNER = "device-screen"
         private const val MAX_APK_BYTES = 512L * 1024 * 1024
         private const val MAX_REPORT_BYTES = 512L * 1024
-        private val ACTIONS = setOf("status", "install", "launch", "observe", "click", "long_click", "swipe", "input_text", "back", "assert_text", "screenshot", "finish")
+        private val ACTIONS = setOf("status", "install", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
     }
 }
 

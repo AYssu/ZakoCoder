@@ -47,24 +47,56 @@ class AiBuiltinSkillsDeviceTest {
         AiDeviceTest.Fixture(context).use { f ->
             val builtin = AiBuiltinSkills(context)
             val catalog = builtin.scan()
-            assertEquals(13, catalog.size); assertEquals(13, catalog.map { it.path }.distinct().size)
+            assertEquals(48, catalog.size); assertEquals(catalog.size, catalog.map { it.path }.distinct().size)
+            assertEquals(context.assets.list("skills")!!.toSet(), catalog.map { it.name }.toSet())
             assertEquals(5, catalog.count { it.recommended })
             catalog.forEach { skill ->
                 val text = builtin.content(skill.path)
-                assertTrue(text.contains("version: 1.0.0-zakocoder")); assertTrue(text.length > 200)
+                assertTrue(text.contains("version: 1.0.0-zakocoder") || text.contains("version: 1.1.0-zakocoder")); assertTrue(text.length > 200)
                 assertTrue(skill.description.isNotBlank()); assertTrue(skill.builtIn)
             }
             val root = File(f.root, "project").apply { mkdirs() }
             val own = File(root, ".zakocoder/skills/caveman").apply { mkdirs() }
             File(own, "SKILL.md").writeText("---\nname: caveman\ndescription: project override attempt\n---\nPROJECT_ONLY_MARKER")
             val store = AiSkills(AiProjectFiles { root }, builtin)
-            assertEquals(14, store.scan("p").size)
+            assertEquals(catalog.size + 1, store.scan("p").size)
             assertFalse(store.content("p", listOf("builtin:caveman")).contains("PROJECT_ONLY_MARKER"))
             assertTrue(store.content("p", listOf(".zakocoder/skills/caveman/SKILL.md")).contains("PROJECT_ONLY_MARKER"))
             // A malformed project skill root must not disable the app-owned catalog.
             File(root, ".zakocoder").deleteRecursively(); File(root, ".zakocoder").writeText("not a directory")
-            assertEquals(13, store.scan("p").count { it.builtIn })
+            assertEquals(catalog.size, store.scan("p").count { it.builtIn })
             assertTrue(store.content("p", listOf("builtin:caveman")).contains("简洁表达"))
+            assertEquals(0, f.server.requestCount)
+        }
+    }
+
+    @Test fun newGuidanceIsOptInPersistsGloballyAndLoadsWithoutWorkspace() {
+        AiDeviceTest.Fixture(context).use { f ->
+            val bundled = AiBuiltinSkills(context)
+            val catalog = bundled.scan()
+            val paths = listOf("builtin:env-audit", "builtin:skill-creator", "builtin:self-improving-agent")
+            val preferences = globalStore(f)
+            assertTrue(paths.none { it in preferences.load().enabled })
+            assertTrue(catalog.filter { it.path in paths }.all { !it.recommended })
+            preferences.save(AiGlobalSkills.Selection(paths, onDemand = true))
+            val restored = globalStore(f).load()
+            assertEquals(paths, restored.enabled)
+            assertTrue(restored.onDemand)
+            // No workspace root should be resolved when reading app-owned resources.
+            val files = AiSkills(AiProjectFiles { error("No workspace required") }, bundled)
+            val session = files.session("unused", restored.enabled, catalog)
+            paths.forEach { path ->
+                val loaded = session.load(path, "SKILL.md", kotlin.coroutines.EmptyCoroutineContext)
+                assertTrue(loaded.content.contains("name: ${path.removePrefix("builtin:")}"))
+                assertFalse(loaded.alreadyLoaded)
+                assertTrue(session.load(path, "SKILL.md", kotlin.coroutines.EmptyCoroutineContext).alreadyLoaded)
+            }
+            try {
+                session.load("builtin:apk-reverse", "SKILL.md", kotlin.coroutines.EmptyCoroutineContext)
+                fail("Unselected guidance must not load")
+            } catch (_: IllegalArgumentException) { }
+            preferences.save(AiGlobalSkills.Selection(emptyList()))
+            assertTrue(globalStore(f).load().enabled.isEmpty())
             assertEquals(0, f.server.requestCount)
         }
     }
@@ -143,7 +175,12 @@ class AiBuiltinSkillsDeviceTest {
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("many") }; ready(ai)
                 assertEquals("Workspace snapshots do not become global configuration", AiBuiltinSkills.defaults.sorted(), ai.state.value.enabledSkills.sorted())
-                for (skill in ai.state.value.skills.filter { it.path !in AiBuiltinSkills.expressionStyles || it.path == "builtin:caveman" }) enable(ai, skill.path, true)
+                // Use a fixed mixed collection: the full optional catalog now exceeds the
+                // selection limit, and enabling every available skill is not user behavior.
+                val selectedPaths = listOf("frontend-design", "lean-build", "surgical-patch", "investigate-first",
+                    "safe-refactor", "verify-and-stop", "audit", "caveman", "caveman-commit", "caveman-compress",
+                    "caveman-help").map { "builtin:$it" } + projectPath
+                for (path in selectedPaths) enable(ai, path, true)
                 assertEquals(12, ai.state.value.enabledSkills.size)
                 assertEquals(12, globalStore(f).load().enabled.size)
                 assertTrue(AiSkills(AiProjectFiles { sharedRoot(f) }, AiBuiltinSkills(context)).content("", ai.state.value.enabledSkills).length < 32000)

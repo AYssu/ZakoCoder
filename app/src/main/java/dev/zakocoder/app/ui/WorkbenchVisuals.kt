@@ -48,6 +48,10 @@ internal enum class Glyph(private val drawing: String) {
     Send("M3 11L21 3L13 21L11 13Z M11 13L21 3"),
     Trash("M4 6H20 M9 6V3H15V6 M6 6L7 21H17L18 6 M10 10V17 M14 10V17"),
     Shield("M12 3L21 7V12Q20 18 12 22Q4 18 3 12V7Z M8 12L11 15L16 9"),
+    ShieldAsk("M12 3L21 7V12Q20 18 12 22Q4 18 3 12V7Z M10 10A2 2 0 1 1 13 11.7Q12 12.2 12 14 M12 17V17.1"),
+    ShieldAuto("M12 3L21 7V12Q20 18 12 22Q4 18 3 12V7Z M13 7L9 13H13L11 18L16 11H12Z"),
+    Unlocked("M12 3L21 7V12Q20 18 12 22Q4 18 3 12V7Z M10 11V9A2 2 0 0 1 14 9 M9 11H15V16H9Z M12 13V14"),
+    ReadOnly("M12 3L21 7V12Q20 18 12 22Q4 18 3 12V7Z M6.5 12Q9 8.5 12 8.5Q15 8.5 17.5 12Q15 15.5 12 15.5Q9 15.5 6.5 12Z M13.5 12A1.5 1.5 0 1 1 10.5 12A1.5 1.5 0 1 1 13.5 12"),
     Ai("M4 5H20V17H10L5 21V17H4Z M8 9H16 M8 13H13"),
     Add("M12 5V19 M5 12H19"),
     Minus("M5 12H19"),
@@ -95,8 +99,8 @@ internal fun WorkbenchIcon(glyph: Glyph, modifier: Modifier = Modifier, descript
     Icon(glyph.vector, description, modifier.size(size), tint = tint)
 }
 
-/** Original Z and code cursor, shared with launcher foreground geometry. */
+/** Use the same full-color artwork as the launcher throughout the app. */
 @Composable
 internal fun WorkbenchBrandMark(modifier: Modifier = Modifier) {
-    Icon(painterResource(R.drawable.ic_brand_mark), contentDescription = null, modifier = modifier.size(IconSize.lg), tint = Color.Unspecified)
+    Icon(painterResource(R.drawable.ic_launcher_art), contentDescription = null, modifier = modifier.size(IconSize.lg), tint = Color.Unspecified)
 }

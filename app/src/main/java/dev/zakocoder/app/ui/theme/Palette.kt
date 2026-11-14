@@ -245,3 +245,9 @@ val DarkColorScheme = darkColorScheme(
 
     scrim = DarkPalette.scrim,
 )
+
+/** Status accents remain distinguishable on both input and sheet surfaces. */
+internal object PermissionModeColors {
+    fun fullAccess(dark: Boolean): Color = if (dark) Color(0xFFF0A0A0) else Color(0xFFCE7373)
+    fun readOnly(dark: Boolean): Color = if (dark) Color(0xFFE9C969) else Color(0xFFA88217)
+}
