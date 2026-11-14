@@ -59,7 +59,7 @@ fix(terminal): 取消任务时终止对应进程组
 build(android): 固定编译工具版本
 ```
 
-可选启用仓库内 commit-msg hook（只修改本地 Git 配置，不自动安装）：
+可选启用仓库内提交 hook（只修改本地 Git 配置，不自动安装）：
 
 ```sh
 git config --local core.hooksPath .githooks
@@ -111,3 +111,9 @@ UI 变更必须提供证据，但验证截图不作为源码提交：
 管理员应保护 `main`：要求 CI 的 `android`、`repository`、`pr-title` 三个检查通过和至少一位维护者批准，更新后撤销过期批准，禁止强推和删除受保护分支，普通贡献者不得直接提交。管理员保留紧急绕过能力，常规修改仍通过 PR；单人维护时自有 PR 无法获得自己的批准，应在检查通过后由管理员完成合并。GitHub 分支保护由仓库管理员配置。
 
 使用 squash merge，维护者最终核对标题与贡献者归属。敏感漏洞不在公开 Issue/PR 中披露，见 SECURITY.md。
+
+## README 看板娘轮换
+
+启用上述 `.githooks` 后，每次普通本地提交会依次选择 `docs/assets/brand/mascots/` 中的下一张透明插画，并将 README 引用加入同一次提交；不生成重复图片。GitHub 显示所查看分支最后提交选中的图片，不在打开或刷新时随机，也不会在页面内自动轮播。其他贡献者需自行启用 hook，GitHub 网页提交不会执行本地 hook。
+
+README 有未暂存修改时跳过轮换，避免影响部分暂存；合并、rebase、cherry-pick 和 revert 期间也跳过。临时关闭可用 `SKIP_README_MASCOT=1 git commit ...`。六张图属于 README 正式展示素材，不是阶段验收截图。
