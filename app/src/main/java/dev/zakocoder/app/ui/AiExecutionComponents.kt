@@ -31,6 +31,19 @@ import androidx.compose.ui.unit.sp
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.*
 
+internal fun aiToolGlyph(tool: AiTool?): Glyph = when (tool) {
+    AiTool.RunCommand, AiTool.ReadCommandLog, AiTool.ListTerminals, AiTool.ReadTerminal,
+    AiTool.StartTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal, AiTool.SshRemote -> Glyph.Terminal
+    AiTool.ReadFile, AiTool.WriteFile, AiTool.EditFile -> Glyph.File
+    AiTool.ListFiles, AiTool.MakeDirectory -> Glyph.Projects
+    AiTool.SearchFiles, AiTool.SearchMemory -> Glyph.Search
+    AiTool.UpdatePlan, AiTool.SetTaskMode -> Glyph.History
+    AiTool.Browser -> Glyph.Globe
+    AiTool.AndroidTest -> Glyph.ReadOnly
+    AiTool.AskUser, AiTool.DelegateReadOnly -> Glyph.Ai
+    else -> Glyph.Extensions
+}
+
 @Composable
 internal fun AiTaskPlanPanel(state: AiState, panel: Int, visible: Boolean) {
     key(state.projectId, state.conversationId, state.turn) {
@@ -59,15 +72,16 @@ internal fun AiPlanPanel(plan: List<AiPlanStep>, active: Boolean, panel: Int) {
                 .clickable(role = Role.Button, onClickLabel = action) {
                     choices = choices.copyOf().also { it[panel] = if (expanded) 0 else 1 }
                 }.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                WorkbenchIcon(if (expanded) Glyph.Down else Glyph.Next, Modifier.size(16.dp))
-                Text(stringResource(R.string.ai_current_plan), Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.labelLarge)
-                Text(stringResource(R.string.ai_plan_progress, plan.count { it.status == "completed" }, plan.size), style = MaterialTheme.typography.labelSmall)
+                WorkbenchIcon(Glyph.History, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ai_current_plan), Modifier.weight(1f).padding(start = 8.dp), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.ai_plan_progress, plan.count { it.status == "completed" }, plan.size), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                WorkbenchIcon(if (expanded) Glyph.Down else Glyph.Next, Modifier.padding(start = 6.dp).size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             AnimatedVisibility(visible = expanded, enter = fadeIn(tween(140)) + expandVertically(tween(200)),
-                exit = fadeOut(tween(100)) + shrinkVertically(tween(180))) { Column(Modifier.heightIn(max = 145.dp).verticalScroll(rememberScrollState()).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                exit = fadeOut(tween(100)) + shrinkVertically(tween(180))) { Column(Modifier.heightIn(max = 145.dp).verticalScroll(rememberScrollState()).padding(start = 32.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 plan.forEachIndexed { index, step -> Row {
-                    Text("${index + 1}.", Modifier.width(22.dp), fontSize = 12.sp)
-                    Text(step.title, Modifier.weight(1f), fontSize = 12.sp)
+                    Text("${index + 1}.", Modifier.width(20.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    ArrivalText(step.title, Modifier.weight(1f).padding(end = 8.dp), fontSize = 11.sp, lineHeight = 17.sp, animated = active, color = if (step.status == "in_progress") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(stringResource(when (step.status) { "completed" -> R.string.ai_plan_completed; "in_progress" -> R.string.ai_plan_active; else -> R.string.ai_plan_pending }), fontSize = 10.sp,
                         color = if (step.status == "in_progress") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 } }
@@ -99,14 +113,15 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
             .clickable(role = Role.Button, onClickLabel = expandAction) { expanded = !expanded }
             .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WorkbenchIcon(aiToolGlyph(event.tool), Modifier.size(14.dp), tint = color)
             Text(event.tool?.let { stringResource(it.label) } ?: event.name,
                 fontSize = 11.sp, color = color, maxLines = 1)
-            Text(if (event.status == AiToolStatus.Running) event.target.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty().takeLast(120) else event.target, Modifier.weight(1f), maxLines = 1,
+            ArrivalText(if (event.status == AiToolStatus.Running) event.target.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty().takeLast(120) else event.target, Modifier.weight(1f), maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                fontFamily = FontFamily.Monospace, fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace, fontSize = 11.sp, animated = false,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Crossfade(event.status, animationSpec = tween(140), label = "tool-state") { status ->
-                Text(stringResource(status.label), color = color, style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(status.label), color = color, fontSize = 10.sp)
             }
             WorkbenchIcon(if (expanded) Glyph.Up else Glyph.Down, Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -122,7 +137,7 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
             Text(stringResource(R.string.ai_rules_deferred_visible), style = MaterialTheme.typography.bodySmall, color = color)
         AnimatedVisibility(expanded, enter = fadeIn(tween(140)) + expandVertically(tween(180)),
             exit = fadeOut(tween(100)) + shrinkVertically(tween(160))) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(start = 22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (event.target.isNotEmpty()) Text(event.target, fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(event.reason.ifBlank { stringResource(R.string.ai_reason_missing) },
@@ -140,7 +155,7 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
                 if (event.preview.isNotEmpty()) CodeDetail(event.preview)
                 if (event.output.isNotEmpty()) {
                     Text(stringResource(R.string.ai_tool_output), style = MaterialTheme.typography.labelSmall)
-                    CodeDetail(event.output, Modifier.bringIntoViewRequester(resultLocation))
+                    CodeDetail(event.output, Modifier.bringIntoViewRequester(resultLocation), animated = event.status == AiToolStatus.Running)
                 }
                 if (event.truncated) Text(stringResource(R.string.ai_output_truncated),
                     style = MaterialTheme.typography.labelSmall)
@@ -160,8 +175,8 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
 }
 
 @Composable
-internal fun CodeDetail(text: String, modifier: Modifier = Modifier) {
+internal fun CodeDetail(text: String, modifier: Modifier = Modifier, animated: Boolean = false) {
     androidx.compose.foundation.text.selection.SelectionContainer {
-        Text(text, modifier.fillMaxWidth().heightIn(max = 240.dp).background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 17.sp)
+        ArrivalText(text, modifier.fillMaxWidth().heightIn(max = 240.dp).background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, animated = animated)
     }
 }

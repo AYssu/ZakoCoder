@@ -181,7 +181,12 @@ class RouteReturnDeviceTest {
     }
 
     @Test(timeout = 240_000)
-    fun settingsReturnThenAssistantBackShowsWorkspaceWithoutProxyAndKeepsDraft(): Unit = runBlocking {
+    fun settingsReturnThenAssistantBackExitsWithoutProxyAndKeepsDraft() = verifyRootBack(visitSettings = true)
+
+    @Test(timeout = 240_000)
+    fun launchThenImmediateBackExitsWithoutCreatingWorkspaceOrProxy() = verifyRootBack(visitSettings = false)
+
+    private fun verifyRootBack(visitSettings: Boolean): Unit = runBlocking {
         val fixture = withContext(Dispatchers.IO) { AiDeviceTest.Fixture(context) }
         val preferences = mutableSetOf<String>()
         val isolated = object : ContextWrapper(context) {
@@ -208,6 +213,8 @@ class RouteReturnDeviceTest {
             await("Workspace created") { !workbench.state.value.onboarding.required &&
                 !workbench.state.value.busy && workbench.state.value.projects.size == 1 }
             val project = workbench.state.value.projects.single()
+            withContext(Dispatchers.Main) { workbench.create("另一个工作区") }
+            await("Second workspace created") { !workbench.state.value.busy && workbench.state.value.projects.size == 2 }
             withContext(Dispatchers.Main) { workbench.ai.select(project.id) }
             await("Assistant ready") { workbench.ai.state.value.projectId == project.id &&
                 !workbench.ai.state.value.restoring && !workbench.ai.state.value.permissionsLoading }
@@ -243,12 +250,13 @@ class RouteReturnDeviceTest {
                         assertTrue(field.config[SemanticsActions.SetText].action?.invoke(AnnotatedString(draft)) == true)
                     }
                     val initialWindows = windows()
-                    repeat(2) { attempt ->
+                    repeat(if (visitSettings) 2 else 0) { attempt ->
                         click(menu)
                         await("Drawer opened") { has(search) }
                         click(context.getString(R.string.nav_settings), drawer = true)
                         await("Settings selected and drawer dismissed") { !has(search) && !draftVisible() }
                         renderedFrame()
+                        screenshot("${if (dark) "night" else "day"}-settings-$attempt-covered")
                         if (attempt == 0) {
                             val proxyRow = context.getString(R.string.proxy_short)
                             repeat(16) {
@@ -295,6 +303,7 @@ class RouteReturnDeviceTest {
                         renderedFrame()
                         scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackProgressed(event(.45f)) }
                         delay(80)
+                        screenshot("${if (dark) "night" else "day"}-settings-$attempt-back-progress")
                         scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                         delay(500)
                         assertFalse("Cancelled settings Back stays in settings", draftVisible())
@@ -303,7 +312,11 @@ class RouteReturnDeviceTest {
                             activity.onBackPressedDispatcher.onBackPressed()
                             activity.onBackPressedDispatcher.onBackPressed()
                         }
-                        await("Repeated Back commits settings only once") { draftVisible() }
+                        await("Settings Back restores the drawer over its original page") { has(search) }
+                        delay(400)
+                        screenshot("${if (dark) "night" else "day"}-drawer-restored")
+                        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                        await("Closing restored drawer preserves original assistant") { !has(search) && draftVisible() }
                         delay(400)
                         assertTrue("Parent remains after repeated Back", draftVisible())
                         assertFalse("Proxy was never opened", has(proxy))
@@ -319,17 +332,9 @@ class RouteReturnDeviceTest {
                     delay(500)
                     assertTrue("Cancelled assistant Back preserves message input", draftVisible())
                     scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-                    await("Assistant Back reaches actual workspace conversation list") {
-                        has(context.getString(R.string.workspace_threads_new)) && !draftVisible()
+                    await("Assistant root Back leaves the Activity instead of creating a workspace route") {
+                        scenario.state != Lifecycle.State.RESUMED
                     }
-                    assertFalse("Assistant Back never reveals an unopened proxy page", has(proxy))
-                    assertEquals("No retained full-screen Dialog", initialWindows, windows())
-                    assertEquals(Lifecycle.State.RESUMED, scenario.state)
-                    // Semantics becomes available before the destination's entrance reveal ends.
-                    // Capture the settled page, not its deliberately transparent first frame.
-                    delay(500)
-                    renderedFrame()
-                    screenshot("${if (dark) "night" else "day"}-workspace-return")
                     assertEquals("No model requests during navigation", 0, fixture.server.requestCount)
                 }
             }

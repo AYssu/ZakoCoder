@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -75,7 +75,7 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
                 Text(stringResource(R.string.drawer_no_workspaces), Modifier.padding(24.dp), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(state.projects, key = { it.id }) { project ->
+            itemsIndexed(state.projects, key = { _, project -> project.id }) { index, project ->
                 val open = project.id in expanded
                 val current = threads.project == project.id
                 var stored by remember(project.id) { mutableStateOf<List<AiConversation>>(emptyList()) }
@@ -90,46 +90,51 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
                     catch (_: Exception) { failed = true }
                     finally { loading = false }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(8.dp))
-                    .clickable { expanded = if (open) expanded - project.id else expanded + project.id }
-                    .heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    WorkbenchIcon(Glyph.Projects, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(8.dp))
-                    Text(project.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                    WorkbenchIcon(if (open) Glyph.ChevronDown else Glyph.Next, modifier = Modifier.size(16.dp),
-                        description = stringResource(if (open) R.string.drawer_collapse_workspace else R.string.drawer_expand_workspace))
-                }
-                AnimatedVisibility(open) {
-                    Column {
-                        val isLoading = if (current) threads.loading else loading
-                        val isFailed = if (current) threads.historyError else failed
-                        val conversations = if (current) threads.conversations else stored
-                        when {
-                            isLoading -> Text(stringResource(R.string.loading), Modifier.padding(start = 52.dp, top = 12.dp, bottom = 12.dp), style = MaterialTheme.typography.bodySmall)
-                            isFailed -> TextButton(onClick = { if (current) onManage() else retry++ }, modifier = Modifier.padding(start = 40.dp)) {
-                                Text(stringResource(R.string.drawer_history_retry), fontSize = 12.sp)
-                            }
-                            else -> {
-                                conversations.forEach { conversation ->
-                                    val selected = current && threads.conversation == conversation.id
-                                    Text(conversation.title.ifBlank { stringResource(R.string.ai_empty_conversation) },
-                                        Modifier.fillMaxWidth().padding(start = 40.dp, end = 12.dp, top = 2.dp, bottom = 2.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .45f) else androidx.compose.ui.graphics.Color.Transparent)
-                                            .semantics { this.selected = selected }
-                                            .clickable(enabled = !busy && !state.busy && !threads.loading && (!threads.locked || selected)) { onOpen(project.id, conversation.id) }
-                                            .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 14.dp),
-                                        maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, lineHeight = 18.sp,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .clickable { expanded = if (open) expanded - project.id else expanded + project.id }
+                        .heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        WorkbenchIcon(Glyph.Projects, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        Text(project.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        WorkbenchIcon(if (open) Glyph.ChevronDown else Glyph.Next, modifier = Modifier.size(16.dp),
+                            description = stringResource(if (open) R.string.drawer_collapse_workspace else R.string.drawer_expand_workspace))
+                    }
+                    AnimatedVisibility(open) {
+                        Column {
+                            val isLoading = if (current) threads.loading else loading
+                            val isFailed = if (current) threads.historyError else failed
+                            val conversations = if (current) threads.conversations else stored
+                            when {
+                                isLoading -> Text(stringResource(R.string.loading), Modifier.padding(start = 40.dp, top = 12.dp, bottom = 12.dp), style = MaterialTheme.typography.bodySmall)
+                                isFailed -> TextButton(onClick = { if (current) onManage() else retry++ }, modifier = Modifier.padding(start = 28.dp)) {
+                                    Text(stringResource(R.string.drawer_history_retry), fontSize = 12.sp)
                                 }
-                                TextButton(onClick = { onOpen(project.id, null) }, enabled = canCreate,
-                                    modifier = Modifier.padding(start = 40.dp).heightIn(min = 48.dp)) {
-                                    WorkbenchIcon(Glyph.Add, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.drawer_new_conversation), fontSize = 12.sp)
+                                else -> {
+                                    conversations.forEach { conversation ->
+                                        val selected = current && threads.conversation == conversation.id
+                                        Text(conversation.title.ifBlank { stringResource(R.string.ai_empty_conversation) },
+                                            Modifier.fillMaxWidth().padding(start = 28.dp, end = 0.dp, top = 2.dp, bottom = 2.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .45f) else androidx.compose.ui.graphics.Color.Transparent)
+                                                .semantics { this.selected = selected }
+                                                .clickable(enabled = !busy && !state.busy && !threads.loading && (!threads.locked || selected)) { onOpen(project.id, conversation.id) }
+                                                .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 14.dp),
+                                            maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, lineHeight = 18.sp,
+                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    TextButton(onClick = { onOpen(project.id, null) }, enabled = canCreate,
+                                        modifier = Modifier.padding(start = 28.dp).heightIn(min = 48.dp)) {
+                                        WorkbenchIcon(Glyph.Add, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.drawer_new_conversation), fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
                     }
+                    if (index < state.projects.lastIndex) HorizontalDivider(
+                        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        thickness = .5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
                 }
             }
         }

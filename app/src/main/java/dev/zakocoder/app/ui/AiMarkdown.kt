@@ -70,7 +70,7 @@ internal fun AiMarkdown(
     var fullTextLength by rememberSaveable { mutableStateOf<Int?>(null) }
     val current by rememberUpdatedState(text)
     LaunchedEffect(Unit) {
-        // Parsing is decoupled from the 32 ms reveal clock and never runs on the UI thread.
+        // Parsing is decoupled from the display frame clock and never runs on the UI thread.
         snapshotFlow { current.take(AiTextPages.MARKDOWN_LIMIT) }.sample(64).onStart { emit(current.take(AiTextPages.MARKDOWN_LIMIT)) }.distinctUntilChanged().conflate().collect { source ->
             document = withContext(Dispatchers.Default) { AiMarkdownCache.parse(source) }
         }
@@ -83,7 +83,17 @@ internal fun AiMarkdown(
         }
         SelectionContainer {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                document?.let { root -> AiMarkdownDocument.children(root).forEach { MarkdownBlock(it, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction) } }
+                document?.let { root ->
+                    val blocks = AiMarkdownDocument.children(root)
+                    val live = LocalTextArrival.current
+                    blocks.forEachIndexed { index, block -> key(index, block.javaClass) {
+                        ProcessArrival(live) {
+                            CompositionLocalProvider(LocalTextArrival provides (live && index == blocks.lastIndex)) {
+                                MarkdownBlock(block, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction)
+                            }
+                        }
+                    } }
+                }
             }
         }
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
@@ -102,9 +112,9 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
     if (depth > 16) return
     val children = AiMarkdownDocument.children(node)
     when (node) {
-        is Heading -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
+        is Heading -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
             fontSize = when (node.level) { 1 -> 18.sp; 2 -> 15.sp; else -> 13.sp }, lineHeight = 22.sp)
-        is org.commonmark.node.Paragraph -> Text(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 12.sp, lineHeight = 18.sp)
+        is org.commonmark.node.Paragraph -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 12.sp, lineHeight = 18.sp)
         is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40), streaming, sourceLimited, onReadingInteraction)
         is IndentedCodeBlock -> CodeBlock(node.literal, "", streaming, sourceLimited, onReadingInteraction)
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
@@ -144,7 +154,7 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
                                 Surface(modifier = Modifier.width(widths[index] + extra).fillMaxHeight(),
                                     border = BorderStroke(.5.dp, MaterialTheme.colorScheme.outlineVariant),
                                     color = if (header) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
-                                    Text(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = 12.sp, lineHeight = 19.sp,
+                                    ArrivalText(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = 12.sp, lineHeight = 19.sp,
                                         fontWeight = if (header) FontWeight.SemiBold else null)
                                 }
                             }
@@ -245,7 +255,7 @@ private fun CodeBlock(code: String, language: String, streaming: Boolean, source
                 TextButton(onClick = { clipboard.setText(AnnotatedString(code)) }, modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 10.dp)) { Text(stringResource(if (sourceLimited) R.string.ai_reading_code_copy_preview else R.string.ai_copy_code), fontSize = 11.sp) }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text(preview.text, Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 20.sp, softWrap = false)
+            ArrivalText(preview.text, Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 20.sp, softWrap = false)
             if (sourceLimited) Text(stringResource(R.string.ai_reading_code_source_limited, stringResource(R.string.ai_full_text_open)), Modifier.padding(12.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (collapsed.limited) {

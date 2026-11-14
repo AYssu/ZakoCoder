@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -13,7 +15,7 @@ import org.json.JSONObject
 
 /** UI delegates IO, permissions and network to the native controllers. */
 @Composable
-internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?, projectName: String, fullPage: Boolean = false, onDismiss: () -> Unit) {
+internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?, projectName: String, fullPage: Boolean = false, contentPadding: PaddingValues = PaddingValues(0.dp), onDismiss: () -> Unit) {
     val packages by workbench.capabilityPackages.state.collectAsStateWithLifecycle()
     val ssh by workbench.ssh.state.collectAsStateWithLifecycle()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
@@ -95,6 +97,6 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
             onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
             onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh },
             onBrowserEnabled = workbench.capabilityPackages::setBrowserEnabled,
-            onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage)
+            onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage, contentPadding = contentPadding)
     }
 }

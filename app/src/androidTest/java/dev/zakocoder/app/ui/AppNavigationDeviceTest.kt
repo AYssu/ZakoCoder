@@ -35,7 +35,10 @@ class AppNavigationDeviceTest {
         val result = AtomicReference<T>()
         instrumentation.runOnMainSync {
             val all = mutableListOf<SemanticsNode>()
-            fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
+            fun collect(node: SemanticsNode) {
+                all += node
+                if (!node.config.isClearingSemantics) node.children.forEach(::collect)
+            }
             fun visit(view: android.view.View) {
                 if (!view.isShown) return
                 if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
@@ -96,7 +99,8 @@ class AppNavigationDeviceTest {
         instrumentation.waitForIdleSync()
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            File(context.cacheDir, "ui-review/navigation/$name.png").apply { parentFile!!.mkdirs() }
+            File(context.cacheDir, "ui-review/navigation/${if (context.resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES) "night" else "day"}-$name.png").apply { parentFile!!.mkdirs() }
                 .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { bitmap.recycle() }
     }
@@ -182,8 +186,14 @@ class AppNavigationDeviceTest {
                         } } }
                     }
                     val label = context.getString(destination)
+                    val captureKey = when (destination) {
+                        R.string.ai_skills -> "skill"
+                        R.string.mcp_title -> "mcp"
+                        R.string.capability_packages_title -> "capabilities"
+                        else -> "utility"
+                    }
                     click(label, destinationOnly = true)
-                    await("destination closes drawer: $label") { drawerClosed() }
+                    await("destination covers retained drawer: $label") { drawerClosed() }
                     ensureActivityResumed(scenario)
                     // This exercises the active page handler, including Skill, MCP and capabilities.
                     // These injected AndroidX events prove state/cancellation, not OEM gesture support.
@@ -193,35 +203,43 @@ class AppNavigationDeviceTest {
                     scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackProgressed(
                         BackEventCompat(0f, 600f, .35f, BackEventCompat.EDGE_LEFT)) }
                     delay(100)
-                    if (destination == R.string.mcp_title) capture("mcp-back-progress")
+                    if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title))
+                        capture("$captureKey-back-progress")
                     scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                     delay(650)
                     ensureActivityResumed(scenario)
-                    if (destination == R.string.mcp_title) capture("mcp-back-cancelled")
-                    if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title)) {
-                        // Standalone shortcuts cover the app header, so there is no menu button
-                        // until Back. Check the retained drawer's selected semantics directly.
-                        await("cancel retains standalone page: $label") { has(label) }
-                        assertTrue("cancel retains shortcut selection: $label", nodes { all ->
-                            all.filter { matches(it, label) }.mapNotNull(::drawerItem)
-                                .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
-                        })
-                    } else {
-                        click(menu)
-                        await("cancel retains selected destination: $label") { nodes { all ->
-                            all.filter { matches(it, label) && visible(it) }.mapNotNull(::drawerItem)
-                                .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
-                        } }
-                        keyBack()
-                        await("stable drawer Back closes navigation") { drawerClosed() }
-                    }
+                    if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title))
+                        capture("$captureKey-back-cancelled")
+                    await("cancel retains the foreground destination: $label") { has(label) && drawerClosed() }
                     keyBack()
-                    await("page Back restores assistant") { has(menu) && nodes { all -> all.any {
+                    await("page Back restores the originating drawer: $label") { has(search) }
+                    keyBack()
+                    await("restored drawer closes without changing its source") { drawerClosed() }
+                    delay(400)
+                    await("page Back preserves assistant underneath") { has(menu) && nodes { all -> all.any {
                         visible(it) && it.config.getOrNull(SemanticsProperties.EditableText)?.text == draft
                     } } }
                     assertDraft()
                 }
 
+                // Utilities launched over the workspace library must return there, not to chat.
+                click(menu)
+                await("drawer available before managing workspaces") { has(search) }
+                click(context.getString(R.string.drawer_manage_workspaces))
+                await("workspace library visible") { has(context.getString(R.string.workspace_flow_list)) && drawerClosed() }
+                for (destination in listOf(R.string.nav_settings, R.string.mcp_title)) {
+                    click(menu)
+                    await("workspace-origin drawer visible") { has(search) }
+                    click(context.getString(destination), destinationOnly = true)
+                    await("workspace utility opened") { drawerClosed() }
+                    delay(400)
+                    keyBack()
+                    await("utility returns to workspace-origin drawer") { has(search) }
+                    keyBack()
+                    await("workspace origin survives utility Back") {
+                        drawerClosed() && has(context.getString(R.string.workspace_flow_list))
+                    }
+                }
                 click(menu)
                 fun windowCount(): Int {
                     val result = java.util.concurrent.atomic.AtomicInteger()
@@ -245,7 +263,7 @@ class AppNavigationDeviceTest {
                 // asynchronous WindowManager focus transfer or an input method callback.
                 if (!drawerClosed()) scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
                 await("search return restores assistant") { drawerClosed() }
-                assertDraft()
+                assertTrue("search returns to original workspace page", has(context.getString(R.string.workspace_flow_list)))
                 assertEquals("Navigation never sends a model request", 0, fixture.server.requestCount)
             }
         } finally {

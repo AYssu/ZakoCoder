@@ -122,4 +122,28 @@ class AiConversationActivityTest {
         assertEquals(3, visible.entries.size)
     }
 
+    @Test fun liveToolsKeepTheSameGroupWhenEachReadCompletes() {
+        val one = event("one", status = AiToolStatus.Running)
+        fun display(events: List<AiToolEvent>, active: Boolean = true) = aiDisplayActivity(
+            AiState(active = active, turn = 1, timeline = events.map { entry(it.id) }, events = events), emptySet())
+        val initial = display(listOf(one))
+        val second = event("two", status = AiToolStatus.Running)
+        val running = display(listOf(one.copy(status = AiToolStatus.Succeeded), second))
+        val completed = display(listOf(one.copy(status = AiToolStatus.Succeeded), second.copy(status = AiToolStatus.Succeeded)))
+        assertEquals(listOf("one"), initial.entries.map { it.id })
+        assertEquals(initial.entries, running.entries)
+        assertEquals(running.entries, completed.entries)
+        assertEquals(listOf("one", "two"), running.tools.getValue("one").map { it.id })
+        assertEquals(completed.tools, display(completed.tools.getValue("one"), active = false).tools)
+    }
+
+    @Test fun pendingDecisionsAndErrorsNeverEnterALiveCollapsedGroup() {
+        val events = listOf(event("read", status = AiToolStatus.Running),
+            event("approval", status = AiToolStatus.Waiting), event("error", status = AiToolStatus.Failed))
+        val display = aiDisplayActivity(AiState(active = true, turn = 1,
+            timeline = events.map { entry(it.id) }, events = events), emptySet())
+        assertEquals(listOf("read", "approval", "error"), display.entries.map { it.id })
+        assertEquals(setOf("read"), display.tools.keys)
+    }
+
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
@@ -60,6 +61,8 @@ internal fun AppNavigation(
     onMcp: () -> Unit = {},
     onCapabilities: () -> Unit = {},
     shortcut: String? = null,
+    foreground: @Composable () -> Unit = {},
+    foregroundVisible: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val feedbackView = androidx.compose.ui.platform.LocalView.current
@@ -69,6 +72,8 @@ internal fun AppNavigation(
     val pageBackground = MaterialTheme.colorScheme.background
     // Keep Material's swipe anchors, modal accessibility, scrim dismissal and Back handling.
     // Reading the offset in the graphics layer updates only drawing while a gesture is moving.
+    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().then(if (foregroundVisible) Modifier.clearAndSetSemantics {} else Modifier)) {
     ModalNavigationDrawer(drawerState = drawerState, gesturesEnabled = gesturesEnabled,
         scrimColor = Color.Black.copy(alpha = 0.22f),
         drawerContent = {
@@ -154,6 +159,9 @@ internal fun AppNavigation(
         }) {
             Surface(Modifier.fillMaxSize(), color = pageBackground, content = content)
         }
+    }
+    }
+    foreground()
     }
 }
 
