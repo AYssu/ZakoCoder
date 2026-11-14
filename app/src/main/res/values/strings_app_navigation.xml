@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_navigation_open">打开导航</string>
-    <string name="app_navigation_close">关闭导航</string>
 </resources>

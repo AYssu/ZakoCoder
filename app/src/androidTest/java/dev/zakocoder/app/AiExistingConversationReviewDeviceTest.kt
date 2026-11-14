@@ -93,7 +93,7 @@ class AiExistingConversationReviewDeviceTest {
     }
     private suspend fun openDrawer() {
         tap(context.getString(R.string.app_navigation_open))
-        await("Drawer open") { find(context.getString(R.string.app_navigation_close)) != null }
+        await("Drawer open") { find(context.getString(R.string.conversation_search_title)) != null }
         delay(600)
     }
     private suspend fun destination(label: Int) {
@@ -113,7 +113,7 @@ class AiExistingConversationReviewDeviceTest {
             assertNotNull("Actual drawer destination: $title", target)
             assertTrue(requireNotNull(target).config[SemanticsActions.OnClick].action?.invoke() == true)
         }
-        await("Drawer closes after selecting destination") { find(context.getString(R.string.app_navigation_close)) == null }
+        await("Drawer closes after selecting destination") { find(context.getString(R.string.conversation_search_title)) == null }
         delay(250)
     }
     private suspend fun screenshot(name: String) {
@@ -304,8 +304,8 @@ class AiExistingConversationReviewDeviceTest {
                         }
                         openDrawer()
                         screenshot("$theme-drawer")
-                        tap(context.getString(R.string.app_navigation_close))
-                        await("Explicit drawer close works") { find(context.getString(R.string.app_navigation_close)) == null }
+                        instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+                        await("Drawer Back closes navigation") { find(context.getString(R.string.conversation_search_title)) == null }
                     }
                     assertEquals("No new API requests during read-only review", initialRequests, workbench.ai.state.value.requests.map { it.id })
                     assertEquals("Review keeps the original retained conversation", conversationId, workbench.ai.state.value.conversationId)
