@@ -1,0 +1,89 @@
+name: UI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'app/src/main/java/dev/zakocoder/app/ui/**'
+      - 'app/src/androidTest/java/dev/zakocoder/app/ui/**'
+      - '.github/workflows/ui-review.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Build isolated UI test applications
+        run: |
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PruntimeVerification=true -PcompatibilityAbis=x86_64
+      - name: Start API 35 emulator at phone dimensions
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          mkdir -p out/ui-review
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpulse0
+          sdkmanager 'emulator' 'system-images;android-35;default;x86_64'
+          printf 'no\n' | avdmanager create avd --force --name ui-review --package 'system-images;android-35;default;x86_64'
+          sudo chmod a+rw /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -avd ui-review -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader -memory 2048 > out/ui-review/emulator.log 2>&1 &
+          timeout -k 5 180 adb -s emulator-5554 wait-for-device
+          deadline=$((SECONDS + 240))
+          while (( SECONDS < deadline )); do
+            boot=$(timeout -k 2 8 adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') || boot=''
+            [[ "$boot" == 1 ]] && break
+            sleep 2
+          done
+          [[ "$boot" == 1 ]]
+          adb -s emulator-5554 shell wm size 1080x2400
+          adb -s emulator-5554 shell wm density 440
+          adb -s emulator-5554 shell input keyevent 82
+      - name: Verify navigation and streaming, capture both themes
+        run: |
+          set -euo pipefail
+          adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+          adb -s emulator-5554 install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb -s emulator-5554 shell cmd uimode night no
+          adb -s emulator-5554 shell am start -W -n dev.zakocoder.app.runtimecheck/dev.zakocoder.app.MainActivity
+          classes='dev.zakocoder.app.ui.AppNavigationDeviceTest,dev.zakocoder.app.ui.RouteReturnDeviceTest,dev.zakocoder.app.ui.AiPresentationDeviceTest,dev.zakocoder.app.ui.LiveToolTransitionDeviceTest,dev.zakocoder.app.ui.ConversationEndFollowerDeviceTest,dev.zakocoder.app.ui.ArrivalTextDeviceTest,dev.zakocoder.app.ui.AiMessageStreamingDeviceTest'
+          adb -s emulator-5554 shell am instrument -w -r -e class "$classes" dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/instrumentation.txt
+          rg -q '^OK \([0-9]+ tests?\)' out/ui-review/instrumentation.txt
+          adb -s emulator-5554 shell cmd uimode night yes
+          adb -s emulator-5554 shell am instrument -w -r -e class dev.zakocoder.app.ui.AppNavigationDeviceTest dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/navigation-night.txt
+          rg -q '^OK \([0-9]+ tests?\)' out/ui-review/navigation-night.txt
+      - name: Collect screenshots and stop emulator
+        if: always()
+        run: |
+          mkdir -p out/ui-review
+          timeout -k 3 20 adb -s emulator-5554 exec-out run-as dev.zakocoder.app.runtimecheck tar -cf - -C cache ui-review > out/ui-review/screenshots.tar || true
+          timeout -k 3 15 adb -s emulator-5554 emu kill || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ui-review-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: out/ui-review/
+          if-no-files-found: error
+          retention-days: 14

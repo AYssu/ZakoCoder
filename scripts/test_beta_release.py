@@ -15,6 +15,19 @@ import beta_release as beta
 
 
 class BetaReleaseTest(unittest.TestCase):
+    def test_release_changes_match_exact_or_timestamped_version_only(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            changelog = Path(temporary, "CHANGELOG.md")
+            changelog.write_text("# Updates\n\n## 0.1.3 · Experience\n\n- Smooth wrapping\n\n## Other notes\n\n- Not this release\n\n## 0.1.0\n\n- First release\n")
+            for version in ("0.1.3", "0.1.3111502"):
+                notes = beta.release_changes(version, changelog)
+                self.assertIn("Smooth wrapping", notes)
+                self.assertNotIn("Not this release", notes)
+                self.assertNotIn("First release", notes)
+            self.assertEqual("", beta.release_changes("0.1.4", changelog))
+            self.assertEqual("", beta.release_changes("0.1.3111502-beta.1", changelog))
+            self.assertIn("First release", beta.release_changes("0.1.0", changelog))
+
     def test_accepts_stable_beta_or_rc_semver_and_full_trusted_ref_shape(self):
         self.assertEqual(1005, beta.validate_inputs("0.1.0", 1005))
         self.assertEqual(1006, beta.validate_inputs("1.2.3", 1006))
@@ -443,7 +456,7 @@ class BetaReleaseTest(unittest.TestCase):
             if not prerelease:
                 self.assertIn("正式版", body)
                 self.assertIn("维护者", body)
-                self.assertIn("RC", body)
+                self.assertNotIn("首个正式版本", body)
                 self.assertIn("Debug", body)
             self.assertIn("### 主要功能", body)
             self.assertIn("### 安装与开始", body)

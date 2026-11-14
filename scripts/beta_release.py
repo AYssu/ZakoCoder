@@ -22,6 +22,23 @@ DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 PACKAGE = "dev.zakocoder.app"
 
 
+def release_changes(version, changelog=Path("CHANGELOG.md")):
+    """Use only the matching release section, including timestamped build names."""
+    if not changelog.is_file():
+        return ""
+    core, _, suffix = version.partition("-")
+    text = changelog.read_text(encoding="utf-8")
+    headings = list(re.finditer(r"^## (\d+\.\d+\.\d+(?:-(?:beta|rc)\.[1-9][0-9]*)?)(?:[ \t]+[^\n]*)?$", text, re.MULTILINE))
+    for heading in headings:
+        base, _, base_suffix = heading[1].partition("-")
+        if suffix != base_suffix or not (core == base or re.fullmatch(re.escape(base) + r"\d{6}", core)):
+            continue
+        following = re.search(r"^## ", text[heading.end():], re.MULTILINE)
+        end = heading.end() + following.start() if following else len(text)
+        return "### 本次更新\n\n" + text[heading.end():end].strip() + "\n\n"
+    return ""
+
+
 def version_code(value):
     if isinstance(value, bool) or not re.fullmatch(r"[1-9][0-9]{0,9}", str(value)):
         raise ValueError("versionCode must be an explicit positive decimal integer")
@@ -360,7 +377,8 @@ def publish(repo, directory, qa_apk, report_file):
              + ("### 发布阶段\n\n本版本是准备转正式版的 Release Candidate，标记为 Pre-release，尚非稳定版。"
                 "本阶段原则上不新增功能，重点进行问题修复、兼容适配、性能与交互优化，以及安装、升级和数据保留验收。"
                 "如发现问题将发布后续 RC，验收通过后再发布正式版，不承诺固定转正日期。\n\n"
-                if '-rc.' in version else ("### 发布阶段\n\n首个正式版本，基于已发布 RC 的功能范围发布。维护者已确认完成本轮验证并批准转正式版；后续主要进行问题修复、兼容适配和体验优化。具体设备覆盖与已知限制见下文。\n\n" if not prerelease else "")) +
+                if '-rc.' in version else ("### 发布阶段\n\n正式维护版本，聚焦问题修复、兼容适配和体验优化。维护者已授权本次发布；实际自动检查和设备覆盖以下文构建记录为准，不代表所有场景均已验收。\n\n" if not prerelease else "")) +
+             release_changes(version) +
              "ZakoCoder 是面向 Android 的独立开源 AI 编码工作台，采用 Kotlin + Jetpack Compose 原生开发。"
              "在手机上管理项目、编辑代码、运行 Linux 开发工具，并审阅 AI 的工具调用与文件变更。\n\n"
              "### 主要功能\n\n"
@@ -375,7 +393,7 @@ def publish(repo, directory, qa_apk, report_file):
              f"[Beta 测试指南](https://github.com/{repo}/blob/{commit}/docs/BETA_TESTING.md)。\n\n"
              "### 测试范围与已知限制\n\n"
              "提供 ARM64 与 x86_64 安装包，测试目标为 Android 11–17；模拟器兼容性基线不代表全部厂商真机。"
-             + ("维护者已确认本轮 RC 验证；厂商系统、复杂工程及真实 16 KiB 页设备仍需持续验证。"
+             + ("厂商系统、复杂工程及真实 16 KiB 页设备仍需持续验证。"
                 if not prerelease else "最终 ARM64 Release 的真机安装、覆盖升级、Ubuntu／终端／HTTP 链路及真实 16 KiB 页设备仍待补测。") +
              "绑定目录会直接修改原文件；建议先使用测试项目。项目导出不包含会话、设置和密钥的完整备份。\n\n"
              "### 反馈问题与建议\n\n"

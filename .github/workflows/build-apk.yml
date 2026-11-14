@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Base version (for example 0.1.2; Beijing MMddHH and -dev are added automatically)
+        description: Base version (for example 0.1.3; Beijing MMddHH and -dev are added automatically)
         required: true
-        default: 0.1.2
+        default: 0.1.3
         type: string
 
 permissions:
