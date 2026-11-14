@@ -26,6 +26,7 @@ class ArrivalTextDeviceTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         warmDeviceActivity()
         val source = mutableStateOf("Stable text\n")
+        val animated = mutableStateOf(false)
         val bounds = AtomicReference<androidx.compose.ui.geometry.Rect>()
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.setContent {
@@ -35,16 +36,19 @@ class ArrivalTextDeviceTest {
                             ArrivalText(source.value, Modifier.width(300.dp).height(160.dp)
                                 .onGloballyPositioned { bounds.set(it.boundsInWindow()) },
                                 color = Color.Black, fontSize = 24.sp, lineHeight = 40.sp,
-                                fontFamily = FontFamily.Monospace, animated = true)
+                                fontFamily = FontFamily.Monospace, animated = animated.value,
+                                // Capture can outlast the normal 200ms on a software-rendered emulator.
+                                // Keep the same drawing path, with a longer sampling window in this fixture.
+                                durationMillis = 2000)
                         }
                     }
                 }
             } }
             Thread.sleep(450)
-            instrumentation.runOnMainSync { source.value += "New output" }
-            Thread.sleep(45)
+            instrumentation.runOnMainSync { source.value += "New output"; animated.value = true }
+            Thread.sleep(250)
             val early = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-            Thread.sleep(350)
+            Thread.sleep(2200)
             val complete = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
             try {
                 val rect = bounds.get()
@@ -63,7 +67,7 @@ class ArrivalTextDeviceTest {
                 assertTrue("Existing text must not fade again", kotlin.math.abs(oldEarly - oldComplete) < oldComplete / 50 + 1)
                 val addedEarly = ink(early, split, rect.bottom.toInt())
                 val addedComplete = ink(complete, split, rect.bottom.toInt())
-                assertTrue("New glyphs must have an intermediate opacity", addedEarly > 0 && addedEarly < addedComplete * .98)
+                assertTrue("New glyphs must have an intermediate opacity: $addedEarly / $addedComplete", addedEarly > 0 && addedEarly < addedComplete * .98)
                 val root = File(instrumentation.targetContext.cacheDir, "ui-review/presentation").apply { mkdirs() }
                 for ((name, image) in listOf("glyph-early" to early, "glyph-complete" to complete)) {
                     File(root, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }

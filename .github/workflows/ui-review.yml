@@ -70,10 +70,10 @@ jobs:
           adb -s emulator-5554 shell am start -W -n dev.zakocoder.app.runtimecheck/dev.zakocoder.app.MainActivity
           classes='dev.zakocoder.app.ui.AppNavigationDeviceTest,dev.zakocoder.app.ui.RouteReturnDeviceTest,dev.zakocoder.app.ui.AiPresentationDeviceTest,dev.zakocoder.app.ui.LiveToolTransitionDeviceTest,dev.zakocoder.app.ui.ConversationEndFollowerDeviceTest,dev.zakocoder.app.ui.ArrivalTextDeviceTest,dev.zakocoder.app.ui.AiMessageStreamingDeviceTest'
           adb -s emulator-5554 shell am instrument -w -r -e class "$classes" dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/instrumentation.txt
-          rg -q '^OK \([0-9]+ tests?\)' out/ui-review/instrumentation.txt
+          grep -Eq '^OK \([0-9]+ tests?\)' out/ui-review/instrumentation.txt
           adb -s emulator-5554 shell cmd uimode night yes
           adb -s emulator-5554 shell am instrument -w -r -e class dev.zakocoder.app.ui.AppNavigationDeviceTest dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/navigation-night.txt
-          rg -q '^OK \([0-9]+ tests?\)' out/ui-review/navigation-night.txt
+          grep -Eq '^OK \([0-9]+ tests?\)' out/ui-review/navigation-night.txt
       - name: Collect screenshots and stop emulator
         if: always()
         run: |

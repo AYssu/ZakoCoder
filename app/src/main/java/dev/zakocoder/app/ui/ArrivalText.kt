@@ -32,7 +32,8 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
     fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
     lineHeight: TextUnit = TextUnit.Unspecified, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true,
-    style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current) {
+    style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current,
+    durationMillis: Int = TEXT_REVEAL_MS) {
     val cursor = remember { Animatable(if (animated) 0f else text.length.toFloat()) }
     var previous by remember { mutableStateOf(text.text) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -46,11 +47,11 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
             }
         }.toIntArray()
     }
-    LaunchedEffect(text.text, animated) {
+    LaunchedEffect(text.text, animated, durationMillis) {
         val append = text.text.startsWith(previous)
         previous = text.text
         if (!animated || !append || cursor.value > text.length) cursor.snapTo(text.length.toFloat())
-        else cursor.animateTo(text.length.toFloat(), tween(TEXT_REVEAL_MS, easing = LinearEasing))
+        else cursor.animateTo(text.length.toFloat(), tween(durationMillis, easing = LinearEasing))
     }
     Text(text, modifier.drawWithContent {
         val result = layout
@@ -89,6 +90,7 @@ internal fun ArrivalText(text: String, modifier: Modifier = Modifier,
     fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
     lineHeight: TextUnit = TextUnit.Unspecified, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true,
-    style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current) =
+    style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current,
+    durationMillis: Int = TEXT_REVEAL_MS) =
     ArrivalText(AnnotatedString(text), modifier, color, fontSize, fontFamily, fontWeight,
-        lineHeight, maxLines, overflow, softWrap, style, animated)
+        lineHeight, maxLines, overflow, softWrap, style, animated, durationMillis)
