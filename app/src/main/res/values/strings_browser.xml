@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="browser_title">网页预览</string>
+    <string name="browser_address">网页地址</string>
+    <string name="browser_address_example">例如 http://127.0.0.1:8000</string>
+    <string name="browser_start_hint">输入实际地址，或让助手打开网页</string>
+    <string name="browser_start_title">在这里预览你的网页</string>
+    <string name="browser_start_body">先在终端启动项目的网页服务，再将实际地址填入上方。\n\n也可以回到对话，让助手启动服务并打开网页；助手可在此读取页面、操作元素和核对结果。</string>
+    <string name="browser_load_failed_title">网页未能加载</string>
+    <string name="browser_load_failed_hint">请检查上方错误信息、网页地址，以及终端中的服务是否仍在运行。</string>
+    <string name="browser_retry">重新加载</string>
+    <string name="browser_go">打开网页</string>
+    <string name="browser_back">上一页</string>
+    <string name="browser_reload">刷新网页</string>
+    <string name="browser_stop">停止当前操作</string>
+    <string name="browser_page_empty">打开项目的预览地址</string>
+    <string name="browser_ready_hint">保持此页打开，助手才能读取和操作网页</string>
+    <string name="browser_confirm_title">允许访问这个网站？</string>
+    <string name="browser_confirm_body">%1$s\n\n此网站及其页面资源将通过手机网络加载，网页内容可交给当前模型读取。页面交互可能提交表单或修改网站数据。仅允许本次浏览器会话；HTTP 连接不加密。</string>
+    <string name="browser_allow">允许本次访问</string>
+    <string name="browser_deny">拒绝</string>
+    <string name="browser_share_images">允许向模型发送网页截图</string>
+    <string name="browser_error_image_sharing">网页截图共享尚未开启。请在网页预览页面明确开启后再截图。</string>
+    <string name="browser_action_navigate">正在加载网页</string>
+    <string name="browser_action_read">正在读取页面内容</string>
+    <string name="browser_action_click">正在操作页面元素</string>
+    <string name="browser_action_type">正在填写页面输入框</string>
+    <string name="browser_action_scroll">正在滚动页面</string>
+    <string name="browser_action_wait">正在等待页面出现指定内容</string>
+    <string name="browser_action_screenshot">正在截取网页可视区域</string>
+    <string name="browser_action_busy">助手正在操作网页</string>
+    <string name="browser_error_not_open">请打开网页预览页面并保持在前台，再继续操作。</string>
+    <string name="browser_error_url">请输入有效的 HTTP 或 HTTPS 网页地址，不支持本地文件、系统链接或含账号密码的地址。</string>
+    <string name="browser_error_origin">本次未获准访问这个网站，可重新打开地址后确认。</string>
+    <string name="browser_error_timeout">操作已超时。请确认预览服务已启动，或调整等待条件后重试。</string>
+    <string name="browser_error_tls">网站证书校验失败，已停止连接。请检查网站证书。</string>
+    <string name="browser_error_element">没有找到可见的目标元素，请重新读取页面。</string>
+    <string name="browser_error_ambiguous">目标匹配了多个可见元素，请使用更精确的选择器。</string>
+    <string name="browser_error_selector">页面选择器无效，请重新读取元素定位信息。</string>
+    <string name="browser_error_unsupported">此操作暂不支持，不会打开外部应用、下载文件或填写密码。</string>
+    <string name="browser_error_renderer">网页进程已结束。请关闭此页后重新打开。</string>
+    <string name="browser_error_http">网站返回了错误状态，请检查服务端日志和访问地址。</string>
+    <string name="browser_error_not_ready">网页尚未就绪，请先打开预览地址并等待加载。</string>
+    <string name="browser_error_generic">网页操作未完成，请检查页面状态后重试。</string>
+</resources>

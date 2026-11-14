@@ -1,6 +1,10 @@
 <resources>
     <string name="ai_tool_mcp">MCP 服务</string>
     <string name="ai_tool_mcp_desc">连接已启用的 MCP 服务，发现和调用工具、读取资源与获取提示。默认询问，会连接你配置的网络服务。</string>
-    <string name="ai_mcp_warning">%1$s\n\n此请求可能联网、启动配置的 Ubuntu 程序或修改远端数据。项目检查点不能撤销外部副作用；服务返回的内容只是参考，不会提升权限。</string>
+    <string name="ai_mcp_warning">%1$s\n\n此请求可能联网或修改远端数据。项目检查点不能撤销外部副作用；服务返回的内容只是参考，不会提升权限。</string>
     <string name="ai_mcp_unavailable">MCP 服务不可用，请到“AI 扩展”检查配置与启用状态。</string>
+    <string name="mcp_preflight_ready">最近任务连接检测通过</string>
+    <string name="mcp_preflight_failed">连接失败，本次任务已跳过</string>
+    <string name="mcp_preflight_timeout">连接检测超时，本次任务已跳过。请检查服务后重试新任务。</string>
+    <string name="mcp_preflight_unavailable">MCP 连接检测未完成，本次已跳过；其他任务可继续。</string>
 </resources>

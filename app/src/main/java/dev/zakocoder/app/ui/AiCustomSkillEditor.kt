@@ -27,6 +27,7 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
     val owner = "global"
     val current by rememberUpdatedState(state)
     var opened by rememberSaveable(owner) { mutableStateOf(false) }
+    var onlineImport by rememberSaveable(owner) { mutableStateOf(false) }
     var imported by rememberSaveable(owner) { mutableStateOf(false) }
     var name by rememberSaveable(owner) { mutableStateOf("") }
     var description by rememberSaveable(owner) { mutableStateOf("") }
@@ -81,10 +82,12 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
             importOwner = owner
             launcher.launch(arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream", "application/zip", "application/x-zip-compressed"))
         }, enabled = editable) { Text(stringResource(R.string.ai_skill_import_custom)) }
+        TextButton(onClick = { onlineImport = true }, enabled = editable) { Text(stringResource(R.string.online_skills_entry)) }
         if (busy && !opened) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (error != 0 && !opened) Text(stringResource(error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (saved) Text(stringResource(R.string.ai_skill_custom_saved), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
     }
+    if (onlineImport) AiOnlineSkillImport(controller) { onlineImport = false }
     // Reopen the same SAF document after Activity recreation, verifying its exact bytes before
     // resuming a stable save. Binary data is never placed in the saved-instance-state Bundle.
     LaunchedEffect(owner, importedZip) {
@@ -116,7 +119,8 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
         catch (_: Exception) { error = R.string.ai_skill_custom_error }
         saving = false
     }
-    if (opened) AiFullScreen(stringResource(if (imported) R.string.ai_skill_import_custom else R.string.ai_skill_add_custom), { if (!busy) opened = false }) {
+    if (opened) AiFullScreen(stringResource(if (imported) R.string.ai_skill_import_custom else R.string.ai_skill_add_custom),
+        { if (!busy) opened = false }, animateExit = !busy) {
         Column(Modifier.fillMaxSize().imePadding()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(R.string.ai_skill_global_custom_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

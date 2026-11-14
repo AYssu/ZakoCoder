@@ -34,7 +34,8 @@ private data class DrawerThreads(val project: String?, val conversation: String,
 /** Only the conversation region scrolls; utility navigation belongs to the fixed drawer footer. */
 @Composable
 internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, visible: Boolean, busy: Boolean,
-    error: Boolean, onManage: () -> Unit, onOpen: (String, String?) -> Unit) {
+    error: Boolean, onManage: () -> Unit, onOpen: (String, String?) -> Unit,
+    searching: Boolean = false, onSearchDismiss: () -> Unit = {}) {
     val threads by remember(workbench) {
         workbench.ai.state.map { DrawerThreads(it.projectId, it.conversationId, it.conversations,
             it.active || it.restoring || it.permissionsSaving, it.permissionsLoading, it.historyError) }.distinctUntilChanged()
@@ -47,6 +48,13 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
         }
     }
     val canCreate = !busy && !state.busy && !threads.locked && !threads.loading && !threads.historyError
+    if (searching) ConversationSearchSheet(state.projects,
+        search = { query -> workbench.ai.searchConversations(state.projects.map { it.id }, query) },
+        onHit = { project, conversation, entry ->
+            onSearchDismiss()
+            workbench.ai.focusConversationEntry(project, conversation, entry)
+            onOpen(project, conversation)
+        }, onDismiss = onSearchDismiss)
     Column(Modifier.fillMaxSize()) {
         TextButton(onClick = { state.selectedId?.let { onOpen(it, null) } ?: onManage() }, enabled = canCreate,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 48.dp)) {

@@ -1,7 +1,7 @@
 package dev.zakocoder.app.ai
 
 /** Markdown instructions stored under the root provided by the owner. No automatic script execution, installation or privilege changes. */
-enum class AiSkillCategory { Coding, Expression, Project }
+enum class AiSkillCategory { Coding, Environment, Security, ReverseEngineering, Graphics, Research, SkillManagement, Expression, Project }
 data class AiSkill(val path: String, val name: String, val description: String, val valid: Boolean = true,
     val builtIn: Boolean = false, val recommended: Boolean = false, val category: AiSkillCategory = AiSkillCategory.Project)
 class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuiltinSkills? = null) {
@@ -190,6 +190,55 @@ class AiSkills(private val files: AiProjectFiles, private val builtIns: AiBuilti
 
     fun readCustom(project: String, path: String): String {
         return files.read(project, path).text
+    }
+
+    /** Resolve exactly one custom package; never accept a root, resource or built-in path. */
+    internal fun customDeletionDirectory(project: String, path: String): java.io.File {
+        require(Regex("\\.zakocoder/skills/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)?/SKILL\\.md").matches(path))
+        require(!java.nio.file.Files.isSymbolicLink(files.resolve(project, "", true).toPath()))
+        val base = files.resolve(project, ".zakocoder/skills")
+        val relative = path.substringBeforeLast('/')
+        val parts = relative.removePrefix(".zakocoder/skills/").split('/')
+        if (parts.size == 2) {
+            require(parts.first().startsWith("bundle-"))
+            require(files.resolve(project, ".zakocoder/skills/${parts.first()}/.import-sha256").isFile)
+        } else require(!parts.single().startsWith("bundle-"))
+        val directory = files.resolve(project, relative)
+        require(java.nio.file.Files.isDirectory(directory.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        require(directory.canonicalFile.toPath().startsWith(base.canonicalFile.toPath()) && directory.canonicalFile != base.canonicalFile)
+        return directory
+    }
+
+    /** Blocking IO. walkFileTree deliberately has no FOLLOW_LINKS: resources may be links. */
+    internal fun deleteCustom(project: String, path: String, checkActive: () -> Unit = {}) {
+        val directory = customDeletionDirectory(project, path).canonicalFile
+        val root = directory.toPath()
+        fun checkOwned(entry: java.nio.file.Path) {
+            checkActive()
+            require(files.resolve(project, path.substringBeforeLast('/')).canonicalFile.toPath() == root)
+            require(entry.toAbsolutePath().normalize().startsWith(root))
+            // Check the parent, not a symbolic-link entry's destination; only the link is removed.
+            if (entry != root) require(entry.parent.toFile().canonicalFile.toPath().startsWith(root))
+        }
+        java.nio.file.Files.walkFileTree(directory.toPath(), object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            override fun preVisitDirectory(dir: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes): java.nio.file.FileVisitResult {
+                checkOwned(dir)
+                require(dir.toFile().canonicalFile.toPath().startsWith(root))
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+            override fun visitFile(file: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes): java.nio.file.FileVisitResult {
+                checkOwned(file)
+                java.nio.file.Files.delete(file)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+            override fun postVisitDirectory(dir: java.nio.file.Path, failure: java.io.IOException?): java.nio.file.FileVisitResult {
+                if (failure != null) throw failure
+                checkOwned(dir)
+                java.nio.file.Files.delete(dir)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+        })
+        check(!java.nio.file.Files.exists(directory.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
     }
 
     private fun metadata(text: String): Pair<String, String> {

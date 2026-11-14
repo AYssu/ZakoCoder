@@ -23,9 +23,9 @@ import kotlinx.coroutines.launch
 /** Only publicly returned provider reasoning, never inferred or reconstructed hidden thoughts. */
 @Composable
 internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, streaming: Boolean = false, displayedReasoning: String = entry.reasoning,
-    onReadingInteraction: () -> Unit = {}, trailingActions: (@Composable () -> Unit)? = null) {
+    onReadingInteraction: () -> Unit = {}, revealRequest: String? = null, trailingActions: (@Composable () -> Unit)? = null) {
     if (entry.reasoning.isEmpty() && !entry.reasoningTruncated) return
-    var expanded by remember(entry.id) { mutableStateOf(streaming) }
+    var expanded by remember(entry.id) { mutableStateOf(streaming || revealRequest != null) }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var follow by remember(entry.id) { mutableStateOf(true) }
@@ -45,6 +45,14 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
         }
     }
     LaunchedEffect(streaming) { expanded = streaming; pausedPreview = null; follow = true }
+    LaunchedEffect(revealRequest) {
+        if (revealRequest != null) {
+            expanded = true
+            pausedPreview = null
+            follow = false
+            scroll.scrollTo(0)
+        }
+    }
     LaunchedEffect(dragged) { if (dragged) pauseReading() }
     LaunchedEffect(scroll, entry.id) {
         var userScrolled = false

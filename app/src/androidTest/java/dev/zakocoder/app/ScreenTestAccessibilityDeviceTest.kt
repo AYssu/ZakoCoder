@@ -46,7 +46,13 @@ class ScreenTestAccessibilityDeviceTest {
 
             val initial = observeUntil(controller, "Counter: 0")
             val increment = node(initial) { it.optString("text") == "Increment" }
-            action(controller, "click", initial, increment)
+            val clicked = action(controller, "click", initial, increment)
+            assertTrue(clicked.getBoolean("dispatched"))
+            assertFalse("A dispatch receipt is not an assertion", clicked.getBoolean("verified"))
+            assertTrue("The actual counter change must be observed", clicked.getBoolean("observed_change"))
+            val ready = json(controller, "wait_until") { it.put("text", "Counter: 1").put("timeout_ms", 5000) }
+            assertTrue(ready.getBoolean("verified"))
+            assertFalse(ready.getBoolean("dispatched"))
             observeUntil(controller, "Counter: 1")
             assertEquals("passed", json(controller, "assert_text") { it.put("text", "Counter: 1") }.getString("assertion"))
             assertTrue(runCatching { json(controller, "assert_text") { it.put("text", "Counter: 999") } }.exceptionOrNull() is ScreenTestException)
@@ -92,6 +98,9 @@ class ScreenTestAccessibilityDeviceTest {
             assertTrue(report.contains("\"assertionPassed\":false"))
             assertTrue(report.contains("\"action\":\"screenshot\""))
             assertFalse("Typed text must not be persisted in operation audit", report.contains("小明"))
+            assertTrue(report.contains("\"dispatched\":true"))
+            assertTrue(report.contains("\"verified\":true"))
+            assertFalse("Automatic observations are transient and must not enter audit", report.contains("Counter: 1"))
         }
     }
 

@@ -2,6 +2,8 @@ package dev.zakocoder.app.ai
 
 import android.content.Context
 import android.util.AtomicFile
+import android.util.JsonReader
+import android.util.JsonToken
 import dev.zakocoder.app.R
 import org.json.JSONArray
 import org.json.JSONObject
@@ -78,6 +80,172 @@ open class AiHistoryStore(private val directory: File) {
     }.sortedByDescending { it.updated }
     /** Read-only drawer summaries; never changes the selected conversation. */
     open fun listConversations(projectId: String): List<AiConversation> = summaries(records(projectId))
+
+    /** Streaming projection: provider replay/context fields never enter the search document. */
+    private fun readSearchRecord(file: File, checkCancelled: () -> Unit): JSONObject {
+        var bytes = 0L
+        var displayChars = 0L
+        val input = object : java.io.FilterInputStream(AtomicFile(file).openRead()) {
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                checkCancelled()
+                val count = super.read(buffer, offset, minOf(length, 8192))
+                if (count > 0) bytes += count
+                require(bytes <= 64L * 1024 * 1024)
+                return count
+            }
+            override fun read(): Int {
+                checkCancelled()
+                val value = super.read()
+                if (value >= 0) bytes++
+                require(bytes <= 64L * 1024 * 1024)
+                return value
+            }
+        }
+        return JsonReader(java.io.InputStreamReader(input, Charsets.UTF_8)).use { reader ->
+            fun scalar(): Any = when (reader.peek()) {
+                JsonToken.STRING -> reader.nextString().also {
+                    require(it.length <= 512000)
+                    displayChars += it.length
+                    require(displayChars <= 2L * 1024 * 1024)
+                }
+                JsonToken.NUMBER -> reader.nextString().toLong().let { if (it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) it.toInt() else it }
+                JsonToken.NULL -> { reader.nextNull(); JSONObject.NULL }
+                else -> throw IllegalArgumentException("invalid_search_field")
+            }
+            fun entries(fields: Set<String>, limit: Int): JSONArray {
+                val result = JSONArray()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    checkCancelled()
+                    require(result.length() < limit)
+                    val entry = JSONObject()
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        checkCancelled()
+                        val key = reader.nextName()
+                        if (key in fields) entry.put(key, scalar()) else reader.skipValue()
+                    }
+                    reader.endObject()
+                    result.put(entry)
+                }
+                reader.endArray()
+                return result
+            }
+            val result = JSONObject()
+            reader.beginObject()
+            while (reader.hasNext()) {
+                checkCancelled()
+                when (val key = reader.nextName()) {
+                    "schemaVersion", "id", "title", "updated", "error" -> result.put(key, scalar())
+                    "timeline" -> result.put(key, entries(setOf("id", "text", "tool", "role", "turn", "reasoning"), 512))
+                    "events" -> result.put(key, entries(setOf("id", "output", "turn"), 64))
+                    else -> reader.skipValue()
+                }
+            }
+            reader.endObject()
+            require(reader.peek() == JsonToken.END_DOCUMENT && result.opt("schemaVersion") == 1)
+            checkCancelled()
+            result
+        }
+    }
+
+    /** Blocking, read-only full transcript search. The controller holds its history mutex on IO.
+     * Read one record at a time, including old v1 records without decoding their model protocol.
+     * No independent index survives record deletion; no selected-conversation pointer is written.
+     */
+    open fun searchConversations(projectIds: List<String>, source: String, limit: Int = AiConversationSearch.DEFAULT_LIMIT,
+                                checkCancelled: () -> Unit = {}): AiConversationSearchResult {
+        require(limit in 1..200)
+        val query = AiConversationSearch.query(source)
+        if (query.isEmpty()) return AiConversationSearchResult()
+        val hits = mutableListOf<AiConversationSearchHit>()
+        var scanned = 0
+        var unreadable = 0
+        var scannedBytes = 0L
+        var partial = projectIds.distinct().size > 1024
+        val newest = compareByDescending<AiConversationSearchHit> { it.updated }
+            .thenBy { it.projectId }.thenBy { it.conversationId }.thenBy { it.entryId }.thenBy { it.kind.ordinal }
+        fun accept(hit: AiConversationSearchHit?) {
+            if (hit == null) return
+            hits += hit
+            if (hits.size > limit) { hits.sortWith(newest); hits.removeAt(hits.lastIndex); partial = true }
+        }
+        for (projectId in projectIds.distinct().take(1024)) {
+            checkCancelled()
+            val files = try {
+                val root = project(projectId)
+                if (!root.exists()) continue
+                require(Files.isDirectory(root.toPath(), NOFOLLOW_LINKS))
+                val entries = root.listFiles() ?: throw java.io.IOException("history_directory_unreadable")
+                require(entries.size <= 64)
+                entries.mapNotNull { file ->
+                    val name = file.name.removeSuffix(".bak")
+                    if (name != "selected.json" && name.endsWith(".json")) File(root, name) else null
+                }.distinctBy { it.name }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { unreadable++; continue }
+            for (file in files) {
+                checkCancelled()
+                try {
+                    session(file.nameWithoutExtension)
+                    require(!Files.isSymbolicLink(file.toPath()) && !Files.isSymbolicLink(File(file.path + ".bak").toPath()))
+                    val actual = File(file.path + ".bak").takeIf { it.exists() } ?: file
+                    val bytes = actual.length()
+                    require(bytes in 1..(64L * 1024 * 1024))
+                    if (scannedBytes + bytes > AiConversationSearch.MAX_SCAN_BYTES) { partial = true; continue }
+                    scannedBytes += bytes
+                    val json = readSearchRecord(file, checkCancelled)
+                    require(json.getString("id") == file.nameWithoutExtension)
+                    val conversation = json.getString("id")
+                    val title = json.getString("title").take(80)
+                    val updated = json.getLong("updated")
+                    val entries = json.getJSONArray("timeline")
+                    require(entries.length() <= 512)
+                    val anchors = mutableMapOf<String, String>()
+                    val turnAnchors = mutableMapOf<Int, String>()
+                    val pending = mutableListOf<AiConversationSearchHit>()
+                    fun match(id: String, kind: AiConversationSearchKind, text: String) {
+                        require(text.length <= 512000)
+                        AiConversationSearch.hit(projectId, conversation, id, title, updated, kind, text, query)?.let(pending::add)
+                    }
+                    var first = ""
+                    var last = ""
+                    for (index in 0 until entries.length()) {
+                        checkCancelled()
+                        val entry = entries.getJSONObject(index)
+                        val id = entry.getString("id").also { require(it.length in 1..100) }
+                        if (first.isEmpty()) first = id
+                        last = id
+                        turnAnchors[entry.optInt("turn")] = id
+                        if (!entry.isNull("tool")) anchors[entry.getString("tool")] = id
+                        val role = AiRole.valueOf(entry.getString("role"))
+                        match(id, when (role) {
+                            AiRole.User -> AiConversationSearchKind.User
+                            AiRole.Assistant -> AiConversationSearchKind.Assistant
+                            AiRole.Notice -> AiConversationSearchKind.Error
+                        }, entry.getString("text"))
+                        if (role == AiRole.Assistant) match(id, AiConversationSearchKind.Reasoning, entry.optString("reasoning"))
+                    }
+                    val events = json.optJSONArray("events") ?: JSONArray()
+                    require(events.length() <= 64)
+                    for (index in 0 until events.length()) {
+                        checkCancelled()
+                        val event = events.getJSONObject(index)
+                        val id = event.getString("id")
+                        match(anchors[id] ?: turnAnchors[event.optInt("turn")] ?: last,
+                            AiConversationSearchKind.Tool, event.optString("output"))
+                    }
+                    match(last, AiConversationSearchKind.Error, json.optString("error"))
+                    if (pending.isEmpty()) match(first, AiConversationSearchKind.Title, title)
+                    pending.distinctBy { Triple(it.entryId, it.kind, it.snippet) }.forEach(::accept)
+                    scanned++
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (_: Exception) { unreadable++ }
+            }
+        }
+        checkCancelled()
+        return AiConversationSearchResult(hits.sortedWith(newest), scanned, unreadable, partial || unreadable > 0)
+    }
 
     open fun load(projectId: String, conversation: String? = null): Loaded {
         val records = records(projectId)
@@ -202,7 +370,7 @@ open class AiHistoryStore(private val directory: File) {
     }
     private val sources = listOf(R.string.ai_permission_default_rule, R.string.ai_permission_tool_rule,
         R.string.ai_permission_task_rule, R.string.ai_permission_rejected_rule, R.string.ai_permission_once_rule,
-        R.string.ai_permission_yolo_rule, R.string.ai_edit_inherited_permission)
+        R.string.ai_permission_yolo_rule, R.string.ai_edit_inherited_permission, R.string.ai_permission_mode_rule)
     private fun encode(state: AiState): JSONObject = JSONObject().put("schemaVersion", 1).put("id", state.conversationId)
         .put("title", (state.conversations.firstOrNull { it.id == state.conversationId }?.title?.takeIf { it.isNotBlank() } ?: state.timeline.firstOrNull { it.role == AiRole.User }?.text)?.replace('\n', ' ')?.take(80).orEmpty())
         .put("checkpointId", state.checkpointId).put("updated", System.currentTimeMillis()).put("turn", state.turn).put("active", state.active)
@@ -210,6 +378,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("round", state.round).put("toolCount", state.toolCount)
         .put("automaticDelegation", state.automaticDelegation)
+        .put("planningMode", state.planningMode)
         .put("taskUsage", JSONObject().put("requests", state.taskUsage.requests).put("tools", state.taskUsage.tools)
             .put("tokens", state.taskUsage.tokens).put("estimatedRequests", state.taskUsage.estimatedRequests).put("elapsedMs", state.taskUsage.elapsedMs))
         .put("queuedMessages", AiTaskQueue.encode(state.queuedMessages))
@@ -385,7 +554,7 @@ open class AiHistoryStore(private val directory: File) {
                 require(usage.requests >= 0 && usage.tools >= 0 && usage.tokens >= 0 && usage.estimatedRequests in 0..usage.requests && usage.elapsedMs >= 0)
             }
         } ?: AiTaskUsage()
-        val state = AiState(automaticDelegation = json.optBoolean("automaticDelegation", false), taskUsage = taskUsage, queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
+        val state = AiState(planningMode = json.optBoolean("planningMode", false), automaticDelegation = json.optBoolean("automaticDelegation", false), taskUsage = taskUsage, queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
             round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
             toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,

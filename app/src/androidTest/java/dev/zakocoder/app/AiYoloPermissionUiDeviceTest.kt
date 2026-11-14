@@ -125,7 +125,7 @@ class AiYoloPermissionUiDeviceTest {
                     assertEquals(workbench.ai.state.value.policy, withContext(Dispatchers.IO) { AiPermissionStore(isolated).load(project.id) })
                     screenshot("permissions-yolo-enabled-$mode")
                     click(base.getString(R.string.ai_permission_preset_normal))
-                    await("Can revoke without extra warning") { !workbench.ai.state.value.permissionsSaving && workbench.ai.state.value.policy == AiPolicy() }
+                    await("Can revoke without extra warning") { !workbench.ai.state.value.permissionsSaving && workbench.ai.state.value.policy == AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Normal) }
                 }
             }
         } finally {

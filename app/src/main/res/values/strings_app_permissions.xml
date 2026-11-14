@@ -19,7 +19,7 @@
     <string name="app_permissions_overlay">悬浮窗</string>
     <string name="app_permissions_overlay_hint">用于设备屏幕操作时的监看与停止入口；系统授权后仍需在能力包中开启。</string>
     <string name="app_permissions_accessibility">屏幕操作服务</string>
-    <string name="app_permissions_accessibility_hint">用于读取当前设备界面节点并操作；助手每次任务仍需单独获得设备操作授权。</string>
+    <string name="app_permissions_accessibility_hint">用于读取当前设备界面节点并操作；完全访问自动授权当前任务，其他模式逐任务确认。</string>
     <string name="app_permissions_battery">电池优化</string>
     <string name="app_permissions_battery_hint">前往系统列表调整本应用的电池优化策略。</string>
     <string name="app_permissions_background_hint">前台任务通过运行通知保持可见。系统仍可能限制后台或结束进程，电池设置不能保证永久运行。</string>

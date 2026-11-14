@@ -1,0 +1,20 @@
+<resources>
+    <string name="conversation_search_title">搜索对话</string>
+    <string name="conversation_search_scope">在所有工作区的本机对话中搜索</string>
+    <string name="conversation_search_query">消息、代码片段或报错</string>
+    <string name="conversation_search_hint">搜索消息正文、公开思考内容、工具输出和错误；不读取模型配置、密钥存储或请求详情。</string>
+    <string name="conversation_search_loading">正在搜索本机记录…</string>
+    <string name="conversation_search_empty">没有找到匹配的对话内容</string>
+    <string name="conversation_search_partial_empty">已读取的记录中没有匹配内容；部分历史尚未搜索完成。</string>
+    <string name="conversation_search_partial">结果可能不完整：达到读取或显示上限，或有 %1$d 处历史无法读取。未展示的记录不代表没有匹配。</string>
+    <string name="conversation_search_results">匹配结果：%1$d</string>
+    <string name="conversation_search_failed">暂时无法搜索本机对话，请重试。</string>
+    <string name="conversation_search_retry">重新搜索</string>
+    <string name="conversation_search_user">我的消息</string>
+    <string name="conversation_search_assistant">助手回复</string>
+    <string name="conversation_search_reasoning">思考内容</string>
+    <string name="conversation_search_tool">工具输出</string>
+    <string name="conversation_search_error">错误与状态</string>
+    <string name="conversation_search_conversation">对话标题</string>
+    <string name="conversation_search_hit_meta">%1$s · %2$s · %3$s</string>
+</resources>

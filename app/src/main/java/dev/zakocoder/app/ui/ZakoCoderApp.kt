@@ -79,6 +79,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     var extensionsOpen by rememberSaveable { mutableStateOf(false) }
     var extensionsTab by rememberSaveable { mutableIntStateOf(0) }
     var shortcutPage by rememberSaveable { mutableStateOf<String?>(null) }
+    var searchConversations by rememberSaveable { mutableStateOf(false) }
     var terminalId by rememberSaveable { mutableStateOf<String?>(null) }
     var terminalOpen by rememberSaveable { mutableStateOf(false) }
     var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -132,6 +133,18 @@ fun ZakoCoderApp(workbench: Workbench) {
             } finally { if (generation == drawerNavigationGeneration) drawerOpening = false }
         }
         }
+    }
+    val browserNavigation by workbench.browserNavigation.collectAsStateWithLifecycle()
+    LaunchedEffect(browserNavigation) {
+        browserNavigation?.let { request ->
+            focus.clearFocus(); keyboard?.hide(); modelsOpen = false; extensionsOpen = false
+            shortcutPage = "browser"; drawerState.close(); workbench.consumeBrowserNavigation(request)
+        }
+    }
+    // A setting-owned dialog must not survive navigation and appear over an unrelated
+    // destination. AnimatedContent can keep old callbacks alive through its exit frames.
+    LaunchedEffect(page) {
+        if (page != AppDestination.Settings) proxyOpen = false
     }
     val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen
     val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
@@ -187,7 +200,7 @@ fun ZakoCoderApp(workbench: Workbench) {
         (state.selectedId == null || assistantEntry.projectId != null) && markdownPrepared
     val entryDestination = if (state.loading) "startup" else if (state.onboarding.required) "setup" else "workbench"
     val entryReady = !state.loading && (wantsSetup || !enteringAssistant || assistantReady)
-    val entryAnimationFinished = remember(entryDestination) { mutableStateOf(false) }
+    val entryAnimationFinished = remember { mutableStateOf(false) }
     val dark = isSystemInDarkTheme()
     val activity = androidx.activity.compose.LocalActivity.current
     SideEffect {
@@ -219,11 +232,14 @@ fun ZakoCoderApp(workbench: Workbench) {
                     while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                 }
             } else Modifier
+        // One startup cover/indicator survives startup -> setup/workbench. Construct the
+        // first destination behind it only after local data is ready; later route changes
+        // use AnimatedContent without restarting the startup indicator.
+        WorkbenchEntrance("application", entryReady,
+            onRevealed = { entryAnimationFinished.value = true }) {
         AnimatedContent(entryDestination, modifier = Modifier.fillMaxSize().then(coveredWorkbench), transitionSpec = {
             fadeIn(tween(340)) togetherWith fadeOut(tween(280, delayMillis = 80))
         }, label = "application-entry") { shownEntry ->
-        WorkbenchEntrance(shownEntry, entryReady && shownEntry == entryDestination,
-            onRevealed = { if (shownEntry == entryDestination) entryAnimationFinished.value = true }) {
         if (shownEntry == "setup") {
             OnboardingPage(workbench, state, startFromBeginning = setupOpen, onExit = { setupOpen = false }, onComplete = {
                 workbench.completeOnboarding {
@@ -231,12 +247,13 @@ fun ZakoCoderApp(workbench: Workbench) {
                     page = AppDestination.Ai
                 }
             })
-            return@WorkbenchEntrance
+            return@AnimatedContent
         }
         UpdateBindings(workbench.updates) { updatesOpen = true }
         if (updatesOpen) UpdatePage(workbench.updates) { updatesOpen = false }
-        if (proxyOpen) ProxySettingsPage(workbench, state) { proxyOpen = false }
+        if (proxyOpen && page == AppDestination.Settings) ProxySettingsPage(workbench, state) { proxyOpen = false }
         AppNavigation(drawerState = drawerState, selected = page, version = updateInfo.currentVersion,
+            onSearch = { searchConversations = true },
             gesturesEnabled = !inTerminal && !inFiles && !overlayOpen && !updatesOpen && !proxyOpen,
             onClose = { cancelDrawerNavigation(); navigationScope.launch { drawerState.close() } },
             onSkills = {
@@ -257,6 +274,7 @@ fun ZakoCoderApp(workbench: Workbench) {
             },
             conversations = {
                 ConversationDrawer(workbench, state, visible = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open,
+                    searching = searchConversations, onSearchDismiss = { searchConversations = false },
                     busy = drawerOpening, error = drawerOpenError, onOpen = openDrawerConversation,
                     onManage = {
                         if (!drawerOpening) {
@@ -312,7 +330,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                 .then(if (page == AppDestination.Ai) mainBack.modifier else Modifier)
                 .then(if (page != AppDestination.Ai || overlayOpen) blockBackground else Modifier)) {
 CompositionLocalProvider(LocalWorkbenchPageInteractive provides (page == AppDestination.Ai && !overlayOpen && !updatesOpen && !proxyOpen)) {
-WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.value) { aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, historyRequest = historyRequest, onHistoryRequestConsumed = { historyRequest = 0 }, onConversations = {
+WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.value) { aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, historyRequest = historyRequest, onHistoryRequestConsumed = { historyRequest = 0 }, onConversations = {
                         workspaceId = workbench.ai.state.value.projectId; openedProjectId = null; page = AppDestination.Project
                     }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onTerminal = { id ->
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
@@ -327,6 +345,7 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                 }
             }
             if (page != AppDestination.Ai) {
+            CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!overlayOpen && !updatesOpen && !proxyOpen)) {
             // Keep the actual destination composed behind child pages, including its scroll and drafts.
             // Its pixels are the predictive-back destination; input and accessibility stay on the overlay.
             Column(Modifier.fillMaxSize().then(mainBack.modifier)
@@ -387,8 +406,13 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                             onOpen = { terminalId = it; terminalOpen = true },
                             onEnvironment = { page = AppDestination.Environment }, onProjects = { page = AppDestination.Project })
                     AppDestination.Ai -> Unit
-                    AppDestination.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onSetup = { workbench.saveOnboardingStep(0); setupOpen = true }, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { focus.clearFocus(); keyboard?.hide(); proxyOpen = true }) }
+                    AppDestination.Settings -> Box(Modifier.padding(horizontal = 20.dp)) { SettingsPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, onSetup = { workbench.saveOnboardingStep(0); setupOpen = true }, onModels = { modelsOpen = true }, onExtensions = { extensionsOpen = true }, onUpdates = { updatesOpen = true }, onProxy = { if (page == AppDestination.Settings && !overlayOpen && !updatesOpen &&
+                        !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open &&
+                        !drawerState.isAnimationRunning && !mainBack.exiting.value) {
+                        focus.clearFocus(); keyboard?.hide(); proxyOpen = true
+                    } }) }
                 }
+            }
             }
             }
             }
@@ -396,6 +420,10 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
             // back modifier moves their opaque surface, exposing this still-live destination.
             if (overlayOpen) Box(Modifier.fillMaxSize()) {
                 when {
+                    shortcutPage == "memory" -> AgentMemoryPage(workbench.ai.memory) { shortcutPage = null }
+                    // AiPage stays noninteractive underneath. This foreground destination owns
+                    // its approval host, so tool confirmation never requires destroying WebView.
+                    shortcutPage == "browser" -> AgentBrowserWorkspacePage(workbench) { shortcutPage = null }
                     shortcutPage == "capabilities" -> CapabilityPackageBindings(workbench, state.selectedId,
                         state.project?.name.orEmpty(), fullPage = true) { shortcutPage = null }
                     shortcutPage != null -> AiExtensionsPage(workbench, state,

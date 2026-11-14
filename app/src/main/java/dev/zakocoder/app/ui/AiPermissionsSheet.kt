@@ -23,9 +23,18 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
     var confirming by remember(state.projectId) { mutableStateOf<AiPolicy?>(null) }
     var confirmingPreset by remember(state.projectId) { mutableStateOf<AiPermissionPreset?>(null) }
     var advanced by remember(state.projectId) { mutableStateOf(false) }
+    var pendingSelection by remember(state.projectId) { mutableStateOf<AiPolicy?>(null) }
+    fun saveSelection(policy: AiPolicy) {
+        if (policy == state.policy) { dismiss(); return }
+        pendingSelection = policy
+        workbench.ai.setPolicy(policy)
+    }
+    LaunchedEffect(state.permissionsSaving, state.policy, pendingSelection) {
+        if (pendingSelection != null && !state.permissionsSaving && state.policy == pendingSelection) dismiss()
+    }
     val enabled = !state.permissionsLoading && !state.permissionsSaving && !state.restoring
     val currentPreset = AiPermissionPresets.matching(state.policy)
-    fun choose(policy: AiPolicy, dangerous: Boolean) { if (dangerous) confirming = policy else workbench.ai.setPolicy(policy) }
+    fun choose(policy: AiPolicy, dangerous: Boolean) { if (dangerous) confirming = policy else saveSelection(policy) }
     WorkbenchSheet(stringResource(R.string.ai_permissions), dismiss) {
         Text(projectName, style = MaterialTheme.typography.titleSmall)
         Text(stringResource(R.string.ai_permission_scope), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -34,15 +43,17 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
             AiPermissionPreset.Normal -> R.string.ai_permission_preset_normal
             AiPermissionPreset.Elevated -> R.string.ai_permission_preset_elevated
             AiPermissionPreset.Yolo -> R.string.ai_permission_preset_yolo
+            AiPermissionPreset.ReadOnly -> R.string.ai_permission_preset_readonly
             null -> R.string.ai_permission_preset_custom
         })), style = MaterialTheme.typography.titleSmall)
         AiPermissionPreset.entries.forEach { preset ->
             PermissionPresetRow(preset, currentPreset == preset, enabled) {
+                if (currentPreset == preset) { dismiss(); return@PermissionPresetRow }
                 val policy = AiPermissionPresets.apply(state.policy, preset)
-                if (preset != AiPermissionPreset.Normal) {
+                if (preset != AiPermissionPreset.ReadOnly) {
                     confirmingPreset = preset
                     confirming = policy
-                } else workbench.ai.setPolicy(policy)
+                } else saveSelection(policy)
             }
         }
         val denied = AiTool.entries.filter { it != AiTool.LoadSkill }.count { state.policy.permission(it) == AiPermission.Deny }
@@ -57,16 +68,20 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
             PermissionRow(stringResource(R.string.ai_default_permission), state.policy.default, null, enabled) { permission ->
                 val value = permission ?: AiPermission.Ask
                 confirmingPreset = null
-                choose(state.policy.copy(default = value, yolo = false), value == AiPermission.Allow)
+                choose(state.policy.copy(default = value, yolo = false, mode = null), value == AiPermission.Allow)
             }
             HorizontalDivider()
             AiTool.entries.filter { it != AiTool.LoadSkill }.forEach { tool ->
                 PermissionRow(stringResource(tool.label), state.policy.overrides[tool], state.policy.permission(tool), enabled) { value ->
                     val overrides = state.policy.overrides.toMutableMap().apply { if (value == null) remove(tool) else put(tool, value) }
                     confirmingPreset = null
-                    choose(state.policy.copy(overrides = overrides, yolo = false), tool.writes && (value ?: state.policy.default) == AiPermission.Allow)
+                    choose(state.policy.copy(overrides = overrides, yolo = false, mode = null), tool.writes && (value ?: state.policy.default) == AiPermission.Allow)
                 }
             }
+        }
+        if (pendingSelection != null && !state.permissionsSaving && state.policy != pendingSelection && state.error.isNotBlank()) {
+            Text(stringResource(R.string.ai_permission_save_error), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error)
         }
         Text(stringResource(R.string.ai_permission_running_note), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = dismiss) { Text(stringResource(R.string.close)) }
@@ -74,10 +89,11 @@ internal fun AiPermissionsSheet(workbench: Workbench, projectName: String, dismi
     confirming?.let { policy -> WorkbenchAlertDialog(onDismissRequest = { confirming = null }, title = { Text(stringResource(if (confirmingPreset == AiPermissionPreset.Yolo) R.string.ai_permission_yolo_confirm_title else R.string.ai_auto_allow_title)) },
         text = { Text(text = when (confirmingPreset) {
             AiPermissionPreset.Yolo -> stringResource(R.string.ai_permission_yolo_warning, projectName)
+            AiPermissionPreset.Normal -> stringResource(R.string.ai_permission_normal_warning, projectName)
             AiPermissionPreset.Elevated -> stringResource(R.string.ai_permission_preset_warning, projectName)
             else -> stringResource(R.string.ai_auto_allow_warning)
         }) },
-        confirmButton = { TextButton(enabled = enabled, onClick = { confirming = null; workbench.ai.setPolicy(policy) }) { Text(stringResource(R.string.ai_auto_allow_confirm)) } },
+        confirmButton = { TextButton(enabled = enabled, onClick = { confirming = null; saveSelection(policy) }) { Text(stringResource(R.string.ai_auto_allow_confirm)) } },
         dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
@@ -88,23 +104,42 @@ private fun PermissionPresetRow(preset: AiPermissionPreset, selected: Boolean, e
         border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RadioButton(selected = selected, onClick = null, enabled = enabled)
+            WorkbenchIcon(permissionModeGlyph(preset), Modifier.size(20.dp), tint = permissionModeTint(preset))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(stringResource(when (preset) {
                     AiPermissionPreset.Normal -> R.string.ai_permission_preset_normal
                     AiPermissionPreset.Elevated -> R.string.ai_permission_preset_elevated
                     AiPermissionPreset.Yolo -> R.string.ai_permission_preset_yolo
+                    AiPermissionPreset.ReadOnly -> R.string.ai_permission_preset_readonly
                 }),
                     style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(when (preset) {
                     AiPermissionPreset.Normal -> R.string.ai_permission_preset_normal_desc
                     AiPermissionPreset.Elevated -> R.string.ai_permission_preset_elevated_desc
                     AiPermissionPreset.Yolo -> R.string.ai_permission_preset_yolo_desc
+                    AiPermissionPreset.ReadOnly -> R.string.ai_permission_preset_readonly_desc
                 }),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            RadioButton(selected = selected, onClick = null, enabled = enabled)
         }
     }
+}
+
+internal fun permissionModeGlyph(preset: AiPermissionPreset?): Glyph = when (preset) {
+    AiPermissionPreset.Normal -> Glyph.ShieldAsk
+    AiPermissionPreset.Elevated -> Glyph.ShieldAuto
+    AiPermissionPreset.Yolo -> Glyph.Unlocked
+    AiPermissionPreset.ReadOnly -> Glyph.ReadOnly
+    null -> Glyph.Shield
+}
+
+internal fun permissionModeLabel(preset: AiPermissionPreset?): Int = when (preset) {
+    AiPermissionPreset.Normal -> R.string.ai_permission_preset_normal
+    AiPermissionPreset.Elevated -> R.string.ai_permission_preset_elevated
+    AiPermissionPreset.Yolo -> R.string.ai_permission_preset_yolo
+    AiPermissionPreset.ReadOnly -> R.string.ai_permission_preset_readonly
+    null -> R.string.ai_permission_preset_custom
 }
 
 @Composable
@@ -123,5 +158,16 @@ private fun PermissionRow(title: String, choice: AiPermission?, effective: AiPer
                 AiPermission.entries.forEach { permission -> DropdownMenuItem(text = { Text(stringResource(permission.label)) }, onClick = { menu = false; update(permission) }) }
             }
         }
+    }
+}
+
+@Composable
+internal fun permissionModeTint(preset: AiPermissionPreset?): androidx.compose.ui.graphics.Color {
+    val palette = dev.zakocoder.app.ui.theme.LocalWorkbenchPalette.current
+    return when (preset) {
+        AiPermissionPreset.Elevated -> palette.successText
+        AiPermissionPreset.Yolo -> dev.zakocoder.app.ui.theme.PermissionModeColors.fullAccess(LocalWorkbenchDark.current)
+        AiPermissionPreset.ReadOnly -> dev.zakocoder.app.ui.theme.PermissionModeColors.readOnly(LocalWorkbenchDark.current)
+        else -> palette.textSecondary
     }
 }

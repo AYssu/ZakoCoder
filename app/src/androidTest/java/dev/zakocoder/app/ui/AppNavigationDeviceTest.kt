@@ -1,20 +1,32 @@
 package dev.zakocoder.app.ui
 
+import android.content.ContextWrapper
+import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.WindowManager
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.setContent
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zakocoder.app.AiDeviceTest
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
+import dev.zakocoder.app.Workbench
+import dev.zakocoder.app.ai.AiPermissionStore
 import dev.zakocoder.app.warmDeviceActivity
+import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 
-/** Real application navigation. Does not create projects, edit drafts, or send model requests. */
+/** Actual root navigation with isolated files, preferences, history and model transport. */
+@SdkSuppress(minSdkVersion = 30)
 class AppNavigationDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
@@ -53,93 +65,194 @@ class AppNavigationDeviceTest {
             bounds.center.x > 0 && bounds.center.x < context.resources.displayMetrics.widthPixels
     }
 
-    private fun await(label: String, timeout: Long = 12_000, predicate: () -> Boolean) {
+    private fun await(label: String, timeout: Long = 20_000, predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + timeout
         while (!predicate()) {
             if (SystemClock.uptimeMillis() >= deadline) throw AssertionError(label)
-            Thread.sleep(10)
+            Thread.sleep(30)
         }
     }
+
+    private fun has(label: String) = nodes { all -> all.any { matches(it, label) && visible(it) } }
 
     private fun click(label: String, destinationOnly: Boolean = false) {
         fun eligible(node: SemanticsNode) = matches(node, label) && visible(node) &&
             (!destinationOnly || drawerItem(node) != null)
-        await("Visible enabled action: $label") { nodes { all -> all.any(::eligible) } }
+        await("Visible action: $label") { nodes { all -> all.any(::eligible) } }
         nodes { all ->
-            val target = requireNotNull(clickable(all.first(::eligible)))
+            val target = requireNotNull(clickable(all.asReversed().first(::eligible)))
             assertNull("Enabled: $label", target.config.getOrNull(SemanticsProperties.Disabled))
             assertTrue("Click: $label", target.config[SemanticsActions.OnClick].action?.invoke() == true)
         }
     }
 
-    private fun drawerClosed() = nodes { all ->
-        all.none { matches(it, context.getString(R.string.app_navigation_close)) && visible(it) }
-    }
-
+    private fun drawerClosed() = !has(context.getString(R.string.conversation_search_title))
     private fun ensureActivityResumed(scenario: ActivityScenario<MainActivity>) {
-        assertEquals("Back must keep the application Activity", Lifecycle.State.RESUMED, scenario.state)
-        scenario.onActivity { assertFalse("Activity must not finish", it.isFinishing) }
+        assertEquals("Back keeps the application Activity", Lifecycle.State.RESUMED, scenario.state)
+        scenario.onActivity { assertFalse(it.isFinishing) }
     }
 
-    @Test(timeout = 120_000)
-    fun actualDrawerOpeningBackStableBackAndAllFiveDestinations() {
-        // Only wake the screen; do not alter lock credentials, app permissions, or saved configuration.
-        listOf("input keyevent KEYCODE_WAKEUP", "wm dismiss-keyguard").forEach { command ->
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(
-                instrumentation.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
+    private fun capture(name: String) {
+        instrumentation.waitForIdleSync()
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(context.cacheDir, "ui-review/navigation/$name.png").apply { parentFile!!.mkdirs() }
+                .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally { bitmap.recycle() }
+    }
+
+    @Test(timeout = 240_000)
+    fun isolatedDrawerOpeningBackSixShortcutsAndCancelledPageBackPreserveDraft(): Unit = runBlocking {
+        val fixture = withContext(Dispatchers.IO) { AiDeviceTest.Fixture(context) }
+        val preferences = mutableSetOf<String>()
+        val isolated = object : ContextWrapper(context) {
+            override fun getFilesDir() = File(fixture.root, "files").apply { mkdirs() }
+            override fun getNoBackupFilesDir() = File(fixture.root, "private").apply { mkdirs() }
+            override fun getCacheDir() = File(fixture.root, "cache").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int): android.content.SharedPreferences {
+                val key = "${fixture.token}-$name"
+                synchronized(preferences) { preferences += key }
+                return context.getSharedPreferences(key, mode)
+            }
+            override fun stopService(service: android.content.Intent) = false
         }
-        warmDeviceActivity()
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { it.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+        var owned: Workbench? = null
+        try {
+            warmDeviceActivity()
+            withContext(Dispatchers.Main) {
+                owned = Workbench(isolated, fixture.transport, fixture.config, AiPermissionStore(isolated), fixture.history)
+            }
+            val workbench = requireNotNull(owned)
+            await("isolated workbench initialized") { !workbench.state.value.loading &&
+                !workbench.ai.models.state.value.loading && workbench.capabilityPackages.state.value.loaded }
+            withContext(Dispatchers.Main) { workbench.completeOnboarding(); workbench.create("导航验收工作区") }
+            await("fixture onboarding completed and workspace created") {
+                !workbench.state.value.onboarding.required && !workbench.state.value.busy &&
+                    workbench.state.value.projects.size == 1
+            }
+            val fixtureProject = workbench.state.value.projects.single()
+            withContext(Dispatchers.Main) { workbench.ai.select(fixtureProject.id) }
+            await("fixture AI workspace selected before root mounts") {
+                workbench.ai.state.value.projectId == fixtureProject.id &&
+                    !workbench.ai.state.value.restoring && !workbench.ai.state.value.permissionsLoading
+            }
+            val projectId = workbench.ai.state.value.projectId
+            val conversationId = workbench.ai.state.value.conversationId
             val menu = context.getString(R.string.app_navigation_open)
-            val close = context.getString(R.string.app_navigation_close)
-            click(menu)
-            // Observe the actual drawer moving into the screen; no fixed wait that hides the race.
-            await("Drawer must be observed before its opening animation settles", timeout = 3_000) {
-                nodes { all -> all.filter { matches(it, context.getString(R.string.nav_workspace)) }
-                    .mapNotNull(::drawerItem).any {
-                        // boundsInWindow is clipped at the screen edge. Position and measured
-                        // size preserve the negative translation during the drawer animation.
-                        val left = it.positionInWindow.x
-                        left < 0 && left + it.size.width > 0 && it.size.width > 0
-                    } }
-            }
-            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-            await("Back during drawer opening closes the drawer") { drawerClosed() }
-            ensureActivityResumed(scenario)
-
-            click(menu)
-            var lastLeft = Float.NaN
-            var unchangedSince = SystemClock.uptimeMillis()
-            await("Drawer reaches stable fully visible position") {
-                val left = nodes { all -> all.filter { matches(it, context.getString(R.string.nav_workspace)) }
-                    .mapNotNull(::drawerItem).firstOrNull { it.positionInWindow.x >= 0 && visible(it) }
-                    ?.positionInWindow?.x }
-                if (left == null || left != lastLeft) {
-                    lastLeft = left ?: Float.NaN
-                    unchangedSince = SystemClock.uptimeMillis()
-                    false
-                } else SystemClock.uptimeMillis() - unchangedSince >= 80
-            }
-            // A stable frame is verified from geometry, not inferred from a fixed sleep.
-            instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
-            await("Back on a fully opened drawer closes it") { drawerClosed() }
-            ensureActivityResumed(scenario)
-
-            listOf(R.string.nav_workspace, R.string.nav_environment, R.string.nav_terminal,
-                R.string.nav_ai, R.string.nav_settings).forEach { destination ->
-                click(menu)
-                val label = context.getString(destination)
-                click(label, destinationOnly = true)
-                await("Destination closes navigation: $label") { drawerClosed() }
-                ensureActivityResumed(scenario)
-                click(menu)
-                await("Correct selected destination: $label") {
-                    nodes { all -> all.filter { matches(it, label) && visible(it) }.mapNotNull(::drawerItem)
-                        .any { it.config.getOrNull(SemanticsProperties.Selected) == true } }
+            val search = context.getString(R.string.conversation_search_title)
+            val draft = "NAVIGATION_DRAFT_MUST_SURVIVE"
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    activity.setContent { ZakoCoderApp(workbench) }
                 }
-                click(close)
-                await("Explicit drawer close: $label") { drawerClosed() }
+                await("assistant root ready") { has(menu) && nodes { all -> all.any {
+                    it.config.getOrNull(SemanticsActions.SetText) != null && visible(it)
+                } } }
+                nodes { all ->
+                    val input = all.last { it.config.getOrNull(SemanticsActions.SetText) != null && visible(it) }
+                    assertTrue(input.config[SemanticsActions.SetText].action?.invoke(AnnotatedString(draft)) == true)
+                }
+                fun assertDraft() {
+                    await("assistant draft survives navigation") { nodes { all -> all.any {
+                        visible(it) && it.config.getOrNull(SemanticsProperties.EditableText)?.text == draft
+                    } } }
+                    assertEquals(projectId, workbench.ai.state.value.projectId)
+                    assertEquals(conversationId, workbench.ai.state.value.conversationId)
+                    assertFalse(workbench.ai.state.value.active)
+                }
+                fun keyBack() { instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK) }
+
+                // Back while the real drawer is opening must only close navigation.
+                click(menu)
+                await("drawer header is visible") { has(search) }
+                keyBack()
+                await("Back closes the opening drawer") { drawerClosed() }
+                ensureActivityResumed(scenario)
+                assertDraft()
+
+                val shortcuts = listOf(R.string.nav_settings, R.string.nav_environment, R.string.nav_terminal,
+                    R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title)
+                for (destination in shortcuts) {
+                    click(menu)
+                    await("drawer visible") { has(search) }
+                    await("all six shortcuts finish sliding into view") {
+                        shortcuts.all { resource -> nodes { all -> all.any {
+                            matches(it, context.getString(resource)) && visible(it) && drawerItem(it) != null
+                        } } }
+                    }
+                    val label = context.getString(destination)
+                    click(label, destinationOnly = true)
+                    await("destination closes drawer: $label") { drawerClosed() }
+                    ensureActivityResumed(scenario)
+                    // This exercises the active page handler, including Skill, MCP and capabilities.
+                    // These injected AndroidX events prove state/cancellation, not OEM gesture support.
+                    scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackStarted(
+                        BackEventCompat(0f, 600f, 0f, BackEventCompat.EDGE_LEFT)) }
+                    delay(80)
+                    scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackProgressed(
+                        BackEventCompat(0f, 600f, .35f, BackEventCompat.EDGE_LEFT)) }
+                    delay(100)
+                    if (destination == R.string.mcp_title) capture("mcp-back-progress")
+                    scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
+                    delay(650)
+                    ensureActivityResumed(scenario)
+                    if (destination == R.string.mcp_title) capture("mcp-back-cancelled")
+                    if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title)) {
+                        // Standalone shortcuts cover the app header, so there is no menu button
+                        // until Back. Check the retained drawer's selected semantics directly.
+                        await("cancel retains standalone page: $label") { has(label) }
+                        assertTrue("cancel retains shortcut selection: $label", nodes { all ->
+                            all.filter { matches(it, label) }.mapNotNull(::drawerItem)
+                                .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
+                        })
+                    } else {
+                        click(menu)
+                        await("cancel retains selected destination: $label") { nodes { all ->
+                            all.filter { matches(it, label) && visible(it) }.mapNotNull(::drawerItem)
+                                .any { it.config.getOrNull(SemanticsProperties.Selected) == true }
+                        } }
+                        keyBack()
+                        await("stable drawer Back closes navigation") { drawerClosed() }
+                    }
+                    keyBack()
+                    await("page Back restores assistant") { has(menu) && nodes { all -> all.any {
+                        visible(it) && it.config.getOrNull(SemanticsProperties.EditableText)?.text == draft
+                    } } }
+                    assertDraft()
+                }
+
+                click(menu)
+                fun windowCount(): Int {
+                    val result = java.util.concurrent.atomic.AtomicInteger()
+                    instrumentation.runOnMainSync { result.set(android.view.inspector.WindowInspector.getGlobalWindowViews().size) }
+                    return result.get()
+                }
+                val windowsBeforeSearch = windowCount()
+                click(search)
+                await("real conversation search sheet opens") { has(context.getString(R.string.conversation_search_hint)) }
+                keyBack()
+                await("search sheet closes without navigation") { !has(context.getString(R.string.conversation_search_hint)) }
+                await("search dialog finishes dismissal before drawer Back") { windowCount() <= windowsBeforeSearch }
+                await("Activity regains focus after search dismissal") {
+                    val focused = java.util.concurrent.atomic.AtomicBoolean()
+                    scenario.onActivity { focused.set(it.hasWindowFocus()) }
+                    focused.get()
+                }
+                instrumentation.waitForIdleSync()
+                // The six destination checks above cover native Back. This final cleanup
+                // verifies page/draft restoration without racing the departing dialog's
+                // asynchronous WindowManager focus transfer or an input method callback.
+                if (!drawerClosed()) scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                await("search return restores assistant") { drawerClosed() }
+                assertDraft()
+                assertEquals("Navigation never sends a model request", 0, fixture.server.requestCount)
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) { owned?.stopAll(); owned?.browser?.close() }
+            withContext(NonCancellable + Dispatchers.IO) {
+                fixture.close()
+                synchronized(preferences) { preferences.forEach(context::deleteSharedPreferences) }
             }
         }
     }

@@ -25,6 +25,8 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
     onBack: () -> Unit, onFiles: () -> Unit, onTerminal: () -> Unit, onAi: () -> Unit, backEnabled: Boolean = true) {
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val navigate by rememberUpdatedState(onAi)
+    val pageInteractive = LocalWorkbenchPageInteractive.current
+    val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     var pendingId by remember(project.id) { mutableStateOf<String?>(null) }
     var previousId by remember(project.id) { mutableStateOf("") }
     var actionFailed by remember(project.id) { mutableStateOf(false) }
@@ -36,9 +38,11 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
     val switching = pendingId != null
     val mutable = ready && !switching && !ai.active && !ai.restoring && !ai.permissionsSaving && !ai.historyError
     val bound = workbench.projects.isBound(project.id)
-    val back = rememberWorkbenchBackMotion(enabled = backEnabled, onBack = onBack)
+    val back = rememberWorkbenchBackMotion(enabled = backEnabled && LocalWorkbenchPageInteractive.current, onBack = onBack)
 
-    LaunchedEffect(pendingId, ai.conversationId, ai.permissionsLoading, ai.restoring, ai.historyError, ai.error, ready) {
+    LaunchedEffect(pendingId, ai.conversationId, ai.permissionsLoading, ai.restoring, ai.historyError, ai.error, ready, pageInteractive, back.exiting.value) {
+        // A preserved parent must not complete an old navigation over its foreground child.
+        if (!pageInteractive || back.exiting.value) { pendingId = null; return@LaunchedEffect }
         val target = pendingId ?: return@LaunchedEffect
         val current = workbench.ai.state.value
         if (current.permissionsLoading || current.restoring || state.busy) return@LaunchedEffect
@@ -49,6 +53,7 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
             if (current.error.isNotBlank()) actionFailed = true
         } else if ((target == "new" && current.conversationId != previousId) || current.conversationId == target) {
             pendingId = null
+            clearNavigationFocus()
             navigate()
         } else {
             pendingId = null; actionFailed = true
@@ -61,7 +66,7 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
                 IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.workspace_threads_back)) }
                 Text(project.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge)
                 Box {
-                    IconButton(onClick = { commandMenu = true }, enabled = ready) {
+                    IconButton(onClick = { commandMenu = true }, enabled = ready && !switching) {
                         WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more))
                     }
                     DropdownMenu(expanded = commandMenu, onDismissRequest = { commandMenu = false }) {
@@ -81,8 +86,8 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
                             Text(stringResource(if (bound) R.string.workspace_flow_local else R.string.workspace_flow_work), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                             Text(stringResource(if (bound) R.string.workspace_flow_local_hint else R.string.workspace_flow_work_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                WorkbenchSecondaryButton(onClick = onFiles, enabled = ready, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.workspace_threads_files)) }
-                                WorkbenchSecondaryButton(onClick = onTerminal, enabled = ready, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.workspace_threads_terminal)) }
+                                WorkbenchSecondaryButton(onClick = { clearNavigationFocus(); onFiles() }, enabled = ready && !switching, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.workspace_threads_files)) }
+                                WorkbenchSecondaryButton(onClick = { clearNavigationFocus(); onTerminal() }, enabled = ready && !switching, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.workspace_threads_terminal)) }
                             }
                         }
                     }
@@ -124,7 +129,7 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
                     items(ai.conversations, key = { it.id }) { conversation ->
                         val selected = conversation.id == ai.conversationId
                         WorkbenchCard(onClick = {
-                            if (selected) onAi() else {
+                            if (selected) { clearNavigationFocus(); onAi() } else {
                                 actionFailed = false; previousId = ai.conversationId; pendingId = conversation.id
                                 workbench.ai.conversation(conversation.id)
                             }

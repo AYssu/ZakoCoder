@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -75,13 +77,23 @@ internal fun AiPlanPanel(plan: List<AiPlanStep>, active: Boolean, panel: Int) {
 }
 
 @Composable
-internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTerminal: () -> Unit = {}) {
-    var expanded by remember(event.id) { mutableStateOf(false) }
+internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTerminal: () -> Unit = {},
+    revealRequest: String? = null, highlighted: Boolean = false) {
+    var expanded by remember(event.id) { mutableStateOf(revealRequest != null) }
+    val resultLocation = remember(event.id) { BringIntoViewRequester() }
+    LaunchedEffect(revealRequest) {
+        if (revealRequest != null) {
+            expanded = true
+            kotlinx.coroutines.delay(240)
+            if (expanded) resultLocation.bringIntoView()
+        }
+    }
     val expandAction = stringResource(if (expanded) R.string.ai_tool_collapse else R.string.ai_tool_details)
     val expandState = stringResource(if (expanded) R.string.mobile_expanded else R.string.mobile_collapsed)
     val color = if (event.status == AiToolStatus.Failed) MaterialTheme.colorScheme.error
         else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().then(if (event.output.isEmpty()) Modifier.bringIntoViewRequester(resultLocation) else Modifier).background(if (highlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = .25f)
+        else androidx.compose.ui.graphics.Color.Transparent), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .semantics { stateDescription = expandState }
             .clickable(role = Role.Button, onClickLabel = expandAction) { expanded = !expanded }
@@ -128,7 +140,7 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
                 if (event.preview.isNotEmpty()) CodeDetail(event.preview)
                 if (event.output.isNotEmpty()) {
                     Text(stringResource(R.string.ai_tool_output), style = MaterialTheme.typography.labelSmall)
-                    CodeDetail(event.output)
+                    CodeDetail(event.output, Modifier.bringIntoViewRequester(resultLocation))
                 }
                 if (event.truncated) Text(stringResource(R.string.ai_output_truncated),
                     style = MaterialTheme.typography.labelSmall)
@@ -148,8 +160,8 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
 }
 
 @Composable
-internal fun CodeDetail(text: String) {
+internal fun CodeDetail(text: String, modifier: Modifier = Modifier) {
     androidx.compose.foundation.text.selection.SelectionContainer {
-        Text(text, Modifier.fillMaxWidth().heightIn(max = 240.dp).background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 17.sp)
+        Text(text, modifier.fillMaxWidth().heightIn(max = 240.dp).background(MaterialTheme.colorScheme.background, RoundedCornerShape(6.dp)).verticalScroll(rememberScrollState()).padding(8.dp), fontFamily = FontFamily.Monospace, fontSize = 11.sp, lineHeight = 17.sp)
     }
 }

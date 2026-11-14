@@ -22,7 +22,7 @@ import dev.zakocoder.app.R
 /** Compact contextual actions beside the selected message; no always-visible action strip. */
 @Composable
 internal fun MessageCopyPopup(onDismiss: () -> Unit, onCopy: () -> Unit, onEdit: (() -> Unit)? = null,
-    onRetry: (() -> Unit)? = null, onRequests: (() -> Unit)? = null) {
+    onRetry: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null) {
     if (!LocalWorkbenchPageInteractive.current) return
     val gap = with(LocalDensity.current) { 8.dp.roundToPx() }
     Popup(popupPositionProvider = object : PopupPositionProvider {
@@ -38,6 +38,7 @@ internal fun MessageCopyPopup(onDismiss: () -> Unit, onCopy: () -> Unit, onEdit:
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column(Modifier.widthIn(min = 152.dp, max = 240.dp).padding(vertical = 4.dp)) {
                 MessageAction(R.string.ai_copy_user, Glyph.Copy, onCopy)
+                onQuote?.let { MessageAction(R.string.ai_quote_message, Glyph.File, it) }
                 onEdit?.let { MessageAction(R.string.ai_message_edit, Glyph.File, it) }
                 onRetry?.let { MessageAction(R.string.ai_message_retry, Glyph.Refresh, it) }
                 onRequests?.let { MessageAction(R.string.ai_message_requests, Glyph.Info, it) }

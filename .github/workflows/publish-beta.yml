@@ -29,6 +29,8 @@ concurrency:
 
 env:
   JAVA_VERSION: '17'
+  PROXY_KERNEL_GOPROXY: https://proxy.golang.org,direct
+  PROXY_KERNEL_GOSUMDB: sum.golang.org
 
 jobs:
   resolve:

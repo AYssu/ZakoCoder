@@ -77,6 +77,90 @@ class McpFailureUiDeviceTest {
     }
     @Test(timeout = 120000) fun lightErrorsRetainDraftShowCauseAndCopy() = review(false)
     @Test(timeout = 120000) fun darkErrorsRetainDraftShowCauseAndCopy() = review(true)
+    @Test(timeout = 120000) fun lightImportedServerEnableAndConnectConfirmations() = reviewEnable(false)
+    @Test(timeout = 120000) fun darkImportedServerEnableAndConnectConfirmations() = reviewEnable(true)
+
+    /** Enabling an imported server opens the actual production dialog before any network request. */
+    private fun reviewEnable(dark: Boolean) = runBlocking {
+        val root = File(context.cacheDir, "mcp-enable-ui-${UUID.randomUUID()}").apply { check(mkdirs()) }
+        val alias = "mcp-enable-ui-${UUID.randomUUID()}"
+        val isolated = object : ContextWrapper(context) { override fun getNoBackupFilesDir() = root }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        val controller = McpController(isolated, scope, keyAlias = alias)
+        try {
+            withTimeout(10000) { while (controller.state.value.loading || controller.state.value.busy) delay(10) }
+            MockWebServer().use { http ->
+                http.start()
+                controller.importJson("""{"mcpServers":{"Imported MCP":{"type":"http","url":"${http.url("/mcp")}"}}}""").join()
+                assertEquals("", controller.state.value.error)
+                val imported = controller.state.value.servers.single()
+                assertFalse(imported.enabled)
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    scenario.onActivity { activity -> activity.setContent {
+                        CompositionLocalProvider(LocalWorkbenchDark provides dark) {
+                            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                                Surface(Modifier.fillMaxSize()) {
+                                    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+                                        McpManagementPanel(controller, null, true, Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    } }
+                    val enableTitle = context.getString(R.string.mcp_enable_confirm)
+                    val switchLabel = context.getString(R.string.mcp_switch, imported.name)
+                    tapDescription(switchLabel)
+                    await("Imported server enable confirmation") { has(enableTitle) }
+                    // Forces measuring the dialog: the former nested scroll container crashed here.
+                    instrumentation.waitForIdleSync()
+                    capture(scenario, dark, "imported-enable")
+                    click(context.getString(R.string.mcp_cancel))
+                    await("Cancelled enable dialog removed") { !has(enableTitle) }
+                    assertFalse(controller.state.value.servers.single().enabled)
+
+                    tapDescription(switchLabel)
+                    await("Enable confirmation reopened") { has(enableTitle) }
+                    click(context.getString(R.string.mcp_confirm))
+                    await("Server enabled") { controller.state.value.servers.single().enabled && !controller.state.value.busy }
+                    assertEquals("", controller.state.value.error)
+                    assertEquals("Enable must not connect to the server", 0, http.requestCount)
+                    controller.load().join()
+                    assertTrue("Enabled state survives reloading encrypted storage", controller.state.value.servers.single().enabled)
+
+                    click(context.getString(R.string.mcp_connect))
+                    val connectTitle = context.getString(R.string.mcp_connect_confirm)
+                    await("Connection confirmation") { has(connectTitle) }
+                    instrumentation.waitForIdleSync()
+                    capture(scenario, dark, "imported-connect")
+                    click(context.getString(R.string.mcp_cancel))
+                    await("Cancelled connect dialog removed") { !has(connectTitle) }
+                    assertEquals("Cancelled test must not send requests", 0, http.requestCount)
+
+                    tapDescription(switchLabel)
+                    await("Server disabled") { !controller.state.value.servers.single().enabled && !controller.state.value.busy }
+                    assertFalse(has(enableTitle))
+                }
+            }
+        } finally {
+            controller.closeAll().join(); scope.cancel()
+            withContext(Dispatchers.IO) {
+                root.deleteRecursively()
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null); if (containsAlias(alias)) deleteEntry(alias) }
+            }
+        }
+    }
+
+    /** Exercise the Miuix switch's real pointer handler, which need not expose OnClick semantics. */
+    private fun tapDescription(description: String) {
+        await("Switch: $description") { nodes { all -> all.any { description in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() } } }
+        val point = nodes { all ->
+            val target = all.last { description in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+            target.boundsInWindow.center
+        }
+        instrumentation.uiAutomation.executeShellCommand("input tap ${point.x.toInt()} ${point.y.toInt()}").use { fd ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
+        }
+    }
 
     private fun review(dark: Boolean) = runBlocking {
         val root = File(context.cacheDir, "mcp-ui-${UUID.randomUUID()}").apply { check(mkdirs()) }

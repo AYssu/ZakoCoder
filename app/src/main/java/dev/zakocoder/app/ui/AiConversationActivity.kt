@@ -20,6 +20,14 @@ internal data class AiDisplayActivity(
     val preparation: Map<String, List<AiEntry>>,
 )
 
+/** Resolve retained timeline identities through the groups actually displayed by the conversation. */
+internal fun AiDisplayActivity.focusRow(state: AiState, entryId: String): String? {
+    val tool = state.timeline.firstOrNull { it.id == entryId }?.toolId
+    return tools.entries.firstOrNull { (_, events) -> events.any { it.id == tool } }?.key
+        ?: entries.firstOrNull { it.id == entryId }?.id
+        ?: preparation.entries.firstOrNull { (_, notices) -> notices.any { it.id == entryId } }?.key
+}
+
 /** Fold consecutive completed tools and known preparation notices; active work and decisions stay explicit. */
 internal fun aiDisplayActivity(state: AiState, preparationTexts: Set<String>): AiDisplayActivity {
     val events = state.events.associateBy { it.id }
@@ -89,8 +97,11 @@ internal fun AiPreparationActivity(entries: List<AiEntry>) {
 }
 
 @Composable
-internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry> = emptyList()) {
-    var expanded by remember(events.first().id) { mutableStateOf(false) }
+internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry> = emptyList(),
+    revealToolId: String? = null, revealRequest: String? = null, highlightTool: Boolean = false) {
+    val matched = revealToolId?.takeIf { id -> events.any { it.id == id } }
+    var expanded by remember(events.first().id) { mutableStateOf(matched != null) }
+    LaunchedEffect(revealRequest, matched) { if (revealRequest != null && matched != null) expanded = true }
     val parts = buildList {
         val reads = events.filter { it.tool == AiTool.ReadFile }.map { it.target }.distinct().size
         val searches = events.count { it.tool == AiTool.SearchFiles }
@@ -113,7 +124,9 @@ internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry
         if (expanded) {
             preparation.forEach { Text(it.text, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            events.forEach { AiToolCard(it) }
+            events.forEach { event -> AiToolCard(event,
+                revealRequest = revealRequest.takeIf { event.id == matched },
+                highlighted = highlightTool && event.id == matched) }
         }
     }
 }

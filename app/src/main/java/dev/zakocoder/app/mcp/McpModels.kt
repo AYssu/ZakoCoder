@@ -18,7 +18,12 @@ data class McpServer(
 data class McpState(
     val servers: List<McpServer> = emptyList(), val loading: Boolean = true,
     val busy: Boolean = false, val running: Boolean = false, val error: String = "", val probeResult: String = "", val probeServerId: String = "", val probeProjectId: String = "",
+    /** Transient connection checks, never persisted as configuration or permission. */
+    val connections: Map<String, McpConnection> = emptyMap(),
 )
+
+enum class McpConnectionStatus { Checking, Ready, Failed }
+data class McpConnection(val status: McpConnectionStatus, val detail: String = "")
 
 enum class McpProblem { InvalidConfig, Storage, Disabled, Unavailable, Protocol, Limit, Timeout, Closed }
 class McpException(val problem: McpProblem, val reason: McpFailureReason? = null, val httpStatus: Int? = null) :

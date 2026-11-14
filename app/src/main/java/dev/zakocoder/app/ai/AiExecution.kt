@@ -20,22 +20,41 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     CloseTerminal("close_terminal", R.string.ai_terminal_close, R.string.ai_terminal_close_desc, true),
     SshRemote("ssh_remote", R.string.ai_ssh_tool, R.string.ai_ssh_tool_desc, true),
     AndroidTest("android_test", R.string.ai_screen_test_tool, R.string.ai_screen_test_tool_desc, true),
+    Browser("browser", R.string.browser_title, R.string.browser_tool_description, true),
+    SearchMemory("search_memory", R.string.memory_search_tool, R.string.memory_search_tool_desc),
+    ProposeMemory("propose_memory", R.string.memory_propose_tool, R.string.memory_propose_tool_desc, true),
     UseMcp("use_mcp", R.string.ai_tool_mcp, R.string.ai_tool_mcp_desc, true),
     AskUser("ask_user", R.string.ai_tool_ask_user, R.string.ai_tool_ask_user_desc),
     DelegateReadOnly("delegate_readonly", R.string.ai_tool_delegate, R.string.ai_tool_delegate_desc),
+    SetTaskMode("set_task_mode", R.string.ai_tool_task_mode, R.string.ai_tool_task_mode_desc),
     UpdatePlan("update_plan", R.string.ai_tool_plan, R.string.ai_tool_plan_desc);
     companion object { fun named(name: String) = entries.singleOrNull { it.wire == name } }
 }
 enum class AiPermission(val label: Int) { Allow(R.string.ai_permission_allow), Ask(R.string.ai_permission_ask), Deny(R.string.ai_permission_deny) }
-data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }, val yolo: Boolean = false) {
+data class AiPolicy(val default: AiPermission = AiPermission.Ask, val overrides: Map<AiTool, AiPermission> = AiTool.entries.filterNot { it.writes || it == AiTool.ReadTerminal || it == AiTool.ReadCommandLog }.associateWith { AiPermission.Allow }, val yolo: Boolean = false, val mode: AiPermissionPreset? = null) {
     // YOLO is a separately confirmed project choice. It grants app tool execution only;
     // capability packages, target leases and Android/SSH system authorization still apply.
     fun permission(tool: AiTool): AiPermission = if (tool == AiTool.LoadSkill) permission(AiTool.ReadFile) else if (yolo) AiPermission.Allow else overrides[tool] ?: (if (tool == AiTool.EditFile) overrides[AiTool.WriteFile] else null) ?: default
-    fun source(tool: AiTool): Int = if (tool == AiTool.LoadSkill) source(AiTool.ReadFile) else if (yolo) R.string.ai_permission_yolo_rule else if (tool in overrides) R.string.ai_permission_tool_rule else if (tool == AiTool.EditFile && AiTool.WriteFile in overrides) R.string.ai_edit_inherited_permission else R.string.ai_permission_default_rule
+    fun source(tool: AiTool): Int = if (tool == AiTool.LoadSkill) source(AiTool.ReadFile) else if (yolo) R.string.ai_permission_yolo_rule else if (mode != null && permission(tool) != AiPermission.Deny) R.string.ai_permission_mode_rule else if (tool in overrides) R.string.ai_permission_tool_rule else if (tool == AiTool.EditFile && AiTool.WriteFile in overrides) R.string.ai_edit_inherited_permission else R.string.ai_permission_default_rule
 }
-/** Tool grants never replace an explicit task/device scope confirmation. */
-internal fun AiPolicy.skipsToolApproval(tool: AiTool, taskGranted: Boolean, forceConfirmation: Boolean): Boolean =
-    !forceConfirmation && permission(tool) != AiPermission.Deny && (yolo || permission(tool) == AiPermission.Allow || taskGranted)
+/** Selected modes apply to a validated individual call; unknown scripts and external actions ask. */
+internal fun AiPolicy.permission(tool: AiTool, risk: AiPermissionRisk): AiPermission {
+    val ordinary = permission(tool)
+    if (ordinary == AiPermission.Deny || yolo || mode == null) return ordinary
+    return when (risk) {
+        AiPermissionRisk.Read -> AiPermission.Allow
+        AiPermissionRisk.WorkspaceWrite -> if (mode == AiPermissionPreset.ReadOnly) AiPermission.Ask else AiPermission.Allow
+        AiPermissionRisk.NetworkRead -> if (mode == AiPermissionPreset.Elevated) AiPermission.Allow else AiPermission.Ask
+        AiPermissionRisk.Unknown -> AiPermission.Ask
+    }
+}
+
+/** Full Access skips app confirmations, never OS grants or an unavailable capability. */
+internal fun AiPolicy.skipsToolApproval(tool: AiTool, taskGranted: Boolean, forceConfirmation: Boolean,
+    risk: AiPermissionRisk? = null): Boolean {
+    val effective = if (risk == null) permission(tool) else permission(tool, risk)
+    return effective != AiPermission.Deny && (yolo || (!forceConfirmation && (effective == AiPermission.Allow || taskGranted)))
+}
 
 enum class AiToolStatus(val label: Int) {
     Queued(R.string.ai_status_queued), Waiting(R.string.ai_status_waiting), Running(R.string.ai_status_running),

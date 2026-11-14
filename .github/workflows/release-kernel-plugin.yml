@@ -30,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
+      PROXY_KERNEL_GOPROXY: https://proxy.golang.org,direct
+      PROXY_KERNEL_GOSUMDB: sum.golang.org
       GH_TOKEN: ${{ github.token }}
       MAIN_RELEASE_TAG: ${{ inputs.main_release_tag }}
       SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}

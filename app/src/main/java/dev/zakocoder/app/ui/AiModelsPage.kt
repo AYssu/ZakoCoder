@@ -1,6 +1,7 @@
 package dev.zakocoder.app.ui
 
 import androidx.activity.compose.BackHandler
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,11 +40,10 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
     LaunchedEffect(startAdding) { if (startAdding) onStartAddingConsumed() }
     var profile by remember { mutableStateOf<AiProfile?>(null) }
     var deleting by remember { mutableStateOf<AiProfile?>(null) }
-    if (editing) {
-        AiModelEditor(ai, profile) { editing = false }
-        return
-    }
-    val back = rememberWorkbenchBackMotion(onBack = close)
+    val interactive = LocalWorkbenchPageInteractive.current
+    val back = rememberWorkbenchBackMotion(enabled = interactive && !editing, onBack = close)
+    Box(Modifier.fillMaxSize()) {
+    WorkbenchRetainedPage(covered = editing) {
     Column(Modifier.fillMaxSize().then(back.modifier)) {
         ModelNavigation(stringResource(R.string.ai_settings), back.close) {
             TextButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active && !state.loading && !state.saving && state.catalog.profiles.size < 32) {
@@ -89,6 +89,9 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
                 }
             }
         }
+    }
+    }
+    if (editing) AiModelEditor(ai, profile) { editing = false }
     }
     deleting?.let { item -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_models_delete_title)) },
         text = { Text(stringResource(R.string.ai_models_delete_hint, item.name) + if (item.id == "legacy") "\n" + stringResource(R.string.ai_models_legacy_retained) else "") }, confirmButton = { TextButton(onClick = { deleting = null; ai.models.delete(item.id) }) { Text(stringResource(R.string.file_delete)) } },
@@ -148,12 +151,16 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     }
     fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
     fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt)
-    fun leave() { if (state.saving) return; if (dirty) discard = true else close() }
+    val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
+    fun leave() { if (state.saving) return; clearNavigationFocus(); if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
-    BackHandler { leave() }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ModelNavigation(stringResource(if (original == null) R.string.ai_models_add else R.string.ai_models_edit_title), ::leave) {
+    val back = rememberWorkbenchBackMotion(enabled = LocalWorkbenchPageInteractive.current && !state.saving,
+        resetKey = discard, animateExit = !dirty && !state.saving, onBack = ::leave)
+    // Saving must consume Back rather than falling through to the host Activity.
+    BackHandler(enabled = LocalWorkbenchPageInteractive.current && state.saving) { }
+    Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)) {
+        ModelNavigation(stringResource(if (original == null) R.string.ai_models_add else R.string.ai_models_edit_title), back.close) {
             TextButton(onClick = { savingRevision = state.revision; ai.models.save(draft()) }, enabled = editable && !state.loading && valid) { Text(stringResource(R.string.editor_save)) }
         }
         if (state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())

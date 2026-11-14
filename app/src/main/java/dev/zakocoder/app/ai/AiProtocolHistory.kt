@@ -8,6 +8,7 @@ internal object AiProtocolHistory {
     fun messages(source: JSONArray, protocol: AiApiProtocol): JSONArray = JSONArray().apply {
         repeat(source.length()) { index ->
             val message = JSONObject(source.getJSONObject(index).toString())
+            message.remove("zako_memory_snapshot") // Local task ownership must never become a provider field.
             if (protocol != AiApiProtocol.Responses && message.remove(RESPONSES_OUTPUT_KEY) != null)
                 message.remove("reasoning_content")
             val metadata = message.optJSONObject(PROVIDER_OUTPUT_KEY)

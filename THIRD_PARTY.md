@@ -171,7 +171,7 @@ CommonMark Java `org.commonmark:commonmark:0.32.0` 与 `commonmark-ext-gfm-table
 
 ## 内置手机 Skill 指令
 
-APK `assets/skills/` 的 13 个中文指令文件是 ZakoCoder 自有实现，版本 `1.0.0-zakocoder`，按本项目 Apache-2.0 许可提供。它们按用户选定的任务用途重新编写，不分发电脑端同名 Skill 原文、第三方参考 checklist、脚本、hook 或插件。未引入新第三方代码、库或云服务。参考材料标识、精确 SHA-256 及实际 APK 输入摘要见 [来源清单](docs/builtin-skills-provenance.json)，行为及权限边界见 [AI 任务工作流](docs/AI_WORKFLOW.md)。同名表示用途，不宣称是上游官方手机版或完整移植。
+APK `assets/skills/` 的 48 个中文指令文件是 ZakoCoder 自有实现，指令包版本 `1.1.0-zakocoder`（保留既有文件版本），按本项目 Apache-2.0 许可提供。它们按用户选定的任务用途重新编写，不分发电脑端同名 Skill 原文、第三方参考 checklist、脚本、hook 或插件。未引入新第三方代码、库或云服务。参考材料标识、精确 SHA-256 及实际 APK 输入摘要见 [来源清单](docs/builtin-skills-provenance.json)，行为及权限边界见 [AI 任务工作流](docs/AI_WORKFLOW.md)。同名表示用途，不宣称是上游官方手机版或完整移植。
 
 ## 可选 ARM64 Android NDK
 
@@ -207,3 +207,7 @@ Miuix UI 0.9.4 (`top.yukonga.miuix.kmp:miuix-ui`), upstream https://github.com/c
 ## 侧栏快捷图标
 
 Lucide 0.468.0，来源 https://github.com/lucide-icons/lucide/tree/0.468.0/icons 。使用 book-open-check、plug、blocks、container、square-terminal、settings-2，SVG 转换为 Android VectorDrawable，路径几何保持原意；无运行时网络或新增库依赖。ISC 许可证及上游版权声明保存在 `app/src/main/assets/licenses/Lucide-ISC.txt`。
+
+## 品牌图片
+
+应用全彩图标与 README 角色插画由维护者提供。分发文件使用固定路径 `app/src/main/res/drawable-nodpi/ic_launcher_art.webp` 和 `docs/assets/brand/`，经过尺寸适配及无损 WebP 编码，透明插画保留透明通道。未加入其余宣传画报。系统单色主题与通知使用本项目绘制的简化鱼形编码标记。

@@ -96,6 +96,21 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 check(performGlobalAction(GLOBAL_ACTION_BACK)) { getString(R.string.screen_test_action_failed) }
                 ScreenTestResult("{\"requested\":\"back\",\"verified\":false,\"next\":\"observe\"}")
             }
+            "scroll" -> {
+                val node = observedNode(root, args)
+                require(node.isScrollable)
+                val direction = when (args.getString("direction")) {
+                    // Directions follow the existing swipe gesture, e.g. up reveals lower content.
+                    "up" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id
+                    "down" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id
+                    "left" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id
+                    "right" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id
+                    else -> error(getString(R.string.screen_test_action_failed))
+                }
+                snapshot = null
+                check(node.performAction(direction)) { getString(R.string.screen_test_action_failed) }
+                ScreenTestResult("{\"requested\":\"scroll\",\"verified\":false,\"next\":\"observe\"}")
+            }
             "swipe" -> {
                 val node = observedNode(root, args)
                 val bounds = Rect().also(node::getBoundsInScreen)
@@ -180,7 +195,7 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 .put("description", if (node.sensitive) "[redacted]" else node.description)
                 .put("class", node.className).put("bounds", JSONArray(listOf(node.bounds.left, node.bounds.top, node.bounds.right, node.bounds.bottom)))
                 .put("clickable", node.clickable).put("longClickable", node.longClickable)
-                .put("editable", node.editable).put("enabled", node.enabled).put("sensitive", node.sensitive)
+                .put("editable", node.editable).put("scrollable", node.scrollable).put("enabled", node.enabled).put("sensitive", node.sensitive)
         }
         val bounded = boundedScreenObservation(target, token, nodeJson, collected.truncated)
         snapshot = Snapshot(token, android.os.SystemClock.elapsedRealtime(), root.packageName?.toString().orEmpty(), root.windowId, collected.nodes.take(bounded.exposedCount))
@@ -199,7 +214,7 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
                 if (sensitive) "" else node.text?.toString().orEmpty().take(160),
                 if (sensitive) "" else node.contentDescription?.toString().orEmpty().take(160),
                 node.className?.toString().orEmpty().take(120), bounds, node.isClickable,
-                node.isLongClickable, node.isEditable, node.isEnabled)
+                node.isLongClickable, node.isEditable, node.isEnabled, node.isScrollable)
             for (index in 0 until node.childCount.coerceAtMost(300)) {
                 if (visited >= 300) { truncated = true; break }
                 node.getChild(index)?.let { visit(it, path + index, sensitive) }
@@ -346,7 +361,8 @@ class ScreenTestAccessibilityService : AccessibilityService(), ScreenTestBackend
 
     private data class Node(val id: String, val path: List<Int>, val fingerprint: String, val sensitive: Boolean,
         val text: String, val description: String, val className: String, val bounds: Rect,
-        val clickable: Boolean, val longClickable: Boolean, val editable: Boolean, val enabled: Boolean)
+        val clickable: Boolean, val longClickable: Boolean, val editable: Boolean, val enabled: Boolean,
+        val scrollable: Boolean)
     private data class Collected(val nodes: List<Node>, val truncated: Boolean)
     private data class Snapshot(val token: String, val createdAt: Long, val packageName: String, val windowId: Int, val nodes: List<Node>)
 

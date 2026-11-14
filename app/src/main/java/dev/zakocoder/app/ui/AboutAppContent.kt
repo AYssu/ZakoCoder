@@ -37,7 +37,7 @@ internal fun installedAppVersion(): String {
 internal fun AboutAppContent(version: String, onSshLicense: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(color = BrandFill, shape = RoundedCornerShape(12.dp)) {
-            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { WorkbenchBrandMark(Modifier.size(28.dp)) }
+            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { WorkbenchBrandMark(Modifier.fillMaxSize()) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium)

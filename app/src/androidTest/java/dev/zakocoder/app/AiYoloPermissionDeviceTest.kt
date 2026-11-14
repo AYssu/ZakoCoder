@@ -80,7 +80,7 @@ class AiYoloPermissionDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun yoloStillRequiresExplicitCurrentTaskDeviceScopeConsent() = runBlocking {
+    @Test(timeout = 120000) fun fullAccessAutomaticallyCreatesTaskDeviceScopeWithoutAnotherAppPrompt() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
             var selectedLease: String? = null
             var authorizations = 0; var operations = 0
@@ -93,10 +93,7 @@ class AiYoloPermissionDeviceTest {
             f.enqueue("Device operation approved for this task")
             try {
                 main { assertTrue(ai.send("Observe the current screen")) }
-                await("YOLO device consent") { ai.state.value.approval != null }
-                assertEquals(0, authorizations); assertEquals(0, operations)
-                main { ai.approve(AiDecision.Once) }
-                await("device consent handled") { ai.state.value.approval == null || !ai.state.value.active }; done(ai)
+                done(ai)
                 assertEquals(1, authorizations); assertEquals(2, operations)
             } finally { main { ai.stop() }; await("cleanup") { !ai.state.value.active } }
         }
@@ -117,7 +114,7 @@ class AiYoloPermissionDeviceTest {
                 preset(ai, AiPermissionPreset.Yolo)
                 withTimeout(45000) { entered.await() }
                 assertNull(ai.state.value.approval)
-                preset(ai, AiPermissionPreset.Normal)
+                preset(ai, AiPermissionPreset.ReadOnly)
                 release.complete(Unit)
                 await("next tool asks after revocation") { ai.state.value.approval != null }
                 assertEquals(AiTool.WriteFile, ai.state.value.events.last().tool)
@@ -144,12 +141,12 @@ class AiYoloPermissionDeviceTest {
         }
     }
 
-    @Test(timeout = 120000) fun yoloCannotFollowReplacementLeaseDuringDeviceScopeConsent() = runBlocking {
+    @Test(timeout = 120000) fun approvalModeCannotFollowReplacementLeaseDuringDeviceScopeConsent() = runBlocking {
         AiDeviceTest.Fixture(base).use { f ->
             var lease: String? = null; var authorizations = 0
             lateinit var ai: AiController
             main { ai = controller(f, lease = { lease }, authorize = { authorizations++; "new-lease" }); ai.select("yolo-device-race") }
-            ready(ai); preset(ai, AiPermissionPreset.Yolo)
+            ready(ai); preset(ai, AiPermissionPreset.ReadOnly)
             f.enqueue(calls = listOf(call("android_test", "observe")))
             f.enqueue("Replacement preserved")
             try {
@@ -172,8 +169,14 @@ class AiYoloPermissionDeviceTest {
                 .toString())
             val store = AiPermissionStore(isolated, "yolo-persistence")
             assertFalse(store.load("legacy").yolo)
+            assertNull("Legacy policies keep their exact previous rules", store.load("legacy").mode)
             assertFalse("Only a native persisted boolean enables YOLO", store.load("invalid-string").yolo)
             assertEquals(AiPolicy(), store.load("other"))
+            AiPermissionPreset.entries.forEach { mode ->
+                val selected = AiPermissionPresets.apply(AiPolicy(), mode)
+                store.save("mode-$mode", selected)
+                assertEquals(selected, AiPermissionStore(isolated, "yolo-persistence").load("mode-$mode"))
+            }
             val yolo = AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Yolo)
             store.save("chosen", yolo)
             val reopened = AiPermissionStore(isolated, "yolo-persistence")

@@ -83,7 +83,7 @@ internal fun boundedScreenObservation(
 /** Includes artifact hashing and multiple bounded root commands; never retries input or installation. */
 internal fun screenActionTimeoutMillis(action: String): Long = when (action) {
     "install", "launch" -> 60_000L
-    "observe", "assert_text", "click", "long_click", "input_text", "swipe", "back", "screenshot" -> 60_000L
+    "observe", "assert_text", "wait_until", "click", "long_click", "input_text", "swipe", "scroll", "back", "screenshot" -> 60_000L
     else -> 20_000L
 }
 

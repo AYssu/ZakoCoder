@@ -72,7 +72,7 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
                 content()
             }
         }
-    } else AiFullScreen(stringResource(R.string.app_permissions_title), onBack, content)
+    } else AiFullScreen(stringResource(R.string.app_permissions_title), onBack, content = content)
 }
 
 /** Pure presentation for both themes and large-font layout checks. No system queries or grants. */

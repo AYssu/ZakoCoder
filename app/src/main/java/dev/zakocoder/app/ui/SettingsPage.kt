@@ -69,7 +69,8 @@ internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> U
 
 @Composable
 internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: (() -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick).heightIn(min = 48.dp) else Modifier)
+    val click = rememberWorkbenchClickFeedback { onClick?.invoke() }
+    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = click).heightIn(min = 48.dp) else Modifier)
         .padding(horizontal = Space.lg, vertical = Space.md), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(title, Modifier.weight(1f), style = Type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -98,10 +99,11 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 @Composable
 private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
     val tone = if (enabled) 1f else .45f
+    val click = rememberWorkbenchClickFeedback { onClick?.invoke() }
     BasicComponent(
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
         insideMargin = PaddingValues(horizontal = Space.lg, vertical = Space.md),
-        enabled = enabled, onClick = onClick, role = if (onClick != null) Role.Button else null,
+        enabled = enabled, onClick = click.takeIf { onClick != null }, role = if (onClick != null) Role.Button else null,
         startAction = {
             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
@@ -125,7 +127,7 @@ private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Setti
 private fun SettingsDivider() { HorizontalDivider(Modifier.padding(start = 60.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant) }
 
 @Composable
-internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}, onProxy: () -> Unit = {}, onSetup: () -> Unit = {}) {
+internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels: () -> Unit, onExtensions: () -> Unit = {}, onUpdates: () -> Unit = {}, onProxy: () -> Unit = {}, onSetup: () -> Unit = {}, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}) {
     val context = LocalContext.current
     val installedVersion = installedAppVersion()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
@@ -207,6 +209,10 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             SettingsDivider()
             SettingsRow(stringResource(R.string.ai_usage_dashboard), stringResource(R.string.ai_usage_dashboard_hint), glyph = Glyph.History,
                 onClick = { usageOpen = true })
+            SettingsDivider()
+            SettingsRow(stringResource(R.string.agent_memory_title), stringResource(R.string.agent_memory_intro), glyph = Glyph.History, onClick = onMemory)
+            SettingsDivider()
+            SettingsRow(stringResource(R.string.browser_title), stringResource(R.string.browser_tool_description), glyph = Glyph.Globe, onClick = onBrowser)
             SettingsDivider()
             SettingsRow(stringResource(R.string.ai_extensions), stringResource(R.string.ai_extensions_types), glyph = Glyph.Extensions, onClick = onExtensions)
             SettingsDivider()

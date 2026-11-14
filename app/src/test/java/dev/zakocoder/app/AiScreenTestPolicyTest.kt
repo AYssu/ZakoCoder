@@ -38,12 +38,13 @@ class AiScreenTestPolicyTest {
             assertEquals(AiPermission.Ask, AiPermissionPresets.apply(AiPolicy(), preset).permission(AiTool.AndroidTest))
         }
     }
-    @Test fun deviceScopeConsentCannotBeSkippedByYoloAllowOrOldTaskGrant() {
-        listOf(AiPolicy(AiPermission.Allow, emptyMap()), AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Yolo)).forEach { policy ->
-            assertFalse(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = true))
-            assertFalse(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = true, forceConfirmation = true))
-            assertTrue(policy.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = false))
-        }
+    @Test fun onlyExplicitFullAccessSkipsAppDeviceScopeConfirmation() {
+        val customAllow = AiPolicy(AiPermission.Allow, emptyMap())
+        assertFalse(customAllow.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = true))
+        assertFalse(customAllow.skipsToolApproval(AiTool.AndroidTest, taskGranted = true, forceConfirmation = true))
+        assertTrue(customAllow.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = false))
+        val full = AiPermissionPresets.apply(AiPolicy(), AiPermissionPreset.Yolo)
+        assertTrue(full.skipsToolApproval(AiTool.AndroidTest, taskGranted = false, forceConfirmation = true))
         assertFalse(AiPolicy(AiPermission.Deny, emptyMap()).skipsToolApproval(AiTool.AndroidTest, true, false))
     }
 }

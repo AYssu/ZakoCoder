@@ -44,6 +44,7 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
         if (details == CapabilityPackage.Screen && !screenOn || details == CapabilityPackage.Ssh && !sshOn) details = null
     }
     when (details) {
+        CapabilityPackage.Browser -> AgentBrowserPage(workbench.browser) { details = null }
         CapabilityPackage.Screen -> ScreenTestSheet(workbench.screenTests, projectId, projectName) { details = null }
         CapabilityPackage.Ssh -> {
             val profile = ssh.profiles.singleOrNull { it.id == projectId }
@@ -88,10 +89,12 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
                 onDismiss = { details = null })
         }
         null -> CapabilityPackagesSheet(CapabilityPackagesUiModel(projectName, projectId != null, screenOn, sshOn,
-            !packages.loaded || packages.busy, packages.error),
+            !packages.loaded || packages.busy, packages.error, packages.browserEnabled),
             onScreenEnabled = workbench.capabilityPackages::setScreenEnabled,
             onSshEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Ssh, enabled) } },
             onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
-            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh }, onDismiss = onDismiss, fullPage = fullPage)
+            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh },
+            onBrowserEnabled = workbench.capabilityPackages::setBrowserEnabled,
+            onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage)
     }
 }

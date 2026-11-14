@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import androidx.core.graphics.drawable.toDrawable
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +12,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Path
@@ -26,6 +29,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.*
+import kotlinx.coroutines.launch
 
 @Suppress("DEPRECATION")
 @Composable
@@ -134,19 +138,45 @@ private fun DiagnosticCode(text: String) {
         }
     }
 }
+private fun skillCategoryLabel(category: AiSkillCategory): Int = when (category) {
+    AiSkillCategory.Coding -> R.string.ai_skills_coding
+    AiSkillCategory.Environment -> R.string.ai_skills_category_environment
+    AiSkillCategory.Security -> R.string.ai_skills_category_security
+    AiSkillCategory.ReverseEngineering -> R.string.ai_skills_category_reverse
+    AiSkillCategory.Graphics -> R.string.ai_skills_category_graphics
+    AiSkillCategory.Research -> R.string.ai_skills_category_research
+    AiSkillCategory.SkillManagement -> R.string.ai_skills_category_management
+    AiSkillCategory.Expression -> R.string.ai_skills_expression
+    AiSkillCategory.Project -> R.string.ai_skills_global_custom
+}
+
 @Composable
 internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: Modifier = Modifier) {
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     var viewing by remember { mutableStateOf<AiSkill?>(null) }
+    var deleting by remember { mutableStateOf<AiSkill?>(null) }
+    var deleteBusy by remember { mutableStateOf(false) }
+    var deleteFailed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var confirmingReset by remember { mutableStateOf(false) }
     val canRetry = !state.active && !state.permissionsLoading && !state.skillsLoading
     val editable = canRetry && !state.historyError && !state.skillError
-    val filtered = state.skills.filter { query.isBlank() || it.name.contains(query, true) || it.description.contains(query, true) }
+    val refreshLabel = stringResource(R.string.ai_skills_refresh)
+    val normalizedQuery = query.trim()
+    val categoryLabels = AiSkillCategory.entries.associateWith { stringResource(skillCategoryLabel(it)) }
+    val filtered = remember(state.skills, normalizedQuery, categoryLabels) {
+        state.skills.filter { normalizedQuery.isBlank() || it.name.contains(normalizedQuery, true) ||
+            it.description.contains(normalizedQuery, true) || categoryLabels.getValue(it.category).contains(normalizedQuery, true) }
+    }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_skills_selected, state.enabledSkills.size, AiSkills.MAX_ENABLED), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { controller.refreshGlobalSkills() }, enabled = canRetry,
+                        modifier = Modifier.semantics { contentDescription = refreshLabel }) {
+                        Text(stringResource(R.string.refresh))
+                    }
                     TextButton(onClick = { controller.recommendedGlobalSkills() }, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
                 }
                 Text(stringResource(R.string.ai_skills_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -161,12 +191,19 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                 }
                 AiCustomSkillActions(state, controller)
                 val searchLabel = stringResource(R.string.ai_skills_search)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    WorkbenchTextField(value = query, onValueChange = { query = it }, label = searchLabel, singleLine = true,
-                        modifier = Modifier.weight(1f).semantics { contentDescription = searchLabel })
-                    IconButton(onClick = { controller.refreshGlobalSkills() }, enabled = canRetry) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.ai_skills_refresh)) }
+                WorkbenchTextField(value = query, onValueChange = { query = it.take(200) }, label = searchLabel, singleLine = true,
+                    leadingIcon = { WorkbenchIcon(Glyph.Search, description = null) },
+                    trailingIcon = if (query.isNotEmpty()) ({
+                        IconButton(onClick = { query = "" }) {
+                            WorkbenchIcon(Glyph.Close, description = stringResource(R.string.ai_skills_clear_search))
+                        }
+                    }) else null,
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = searchLabel })
+                if (state.skillsLoading) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.ai_skills_loading_local), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
-                if (state.skillsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (state.skillError) {
                     Text(stringResource(R.string.ai_skills_global_error), color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)
@@ -186,11 +223,8 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             if (skills.isNotEmpty()) {
                 item(key = category.name) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(when (category) {
-                            AiSkillCategory.Coding -> R.string.ai_skills_coding
-                            AiSkillCategory.Expression -> R.string.ai_skills_expression
-                            AiSkillCategory.Project -> R.string.ai_skills_global_custom
-                    }), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.ai_skills_category_count, categoryLabels.getValue(category), skills.size),
+                            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (category == AiSkillCategory.Project) Text(stringResource(R.string.ai_skills_global_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -208,6 +242,10 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                         }
                         IconButton(onClick = { viewing = skill }, enabled = skill.valid) {
                             WorkbenchIcon(Glyph.Info, Modifier.size(18.dp), description = stringResource(R.string.ai_skill_view, skill.name))
+                        }
+                        if (!skill.builtIn) IconButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
+                            WorkbenchIcon(Glyph.Trash, Modifier.size(18.dp), description = stringResource(R.string.ai_skill_delete_named, skill.name),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     HorizontalDivider(Modifier.padding(start = 48.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -227,7 +265,8 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
         var text by remember(skill.path) { mutableStateOf<String?>(null) }
         var failed by remember(skill.path) { mutableStateOf(false) }
         LaunchedEffect(skill.path) {
-            try { text = controller.globalSkillText(skill.path) }
+            // Frontmatter belongs to the Skill metadata already shown above, not Markdown.
+            try { text = controller.skillText(skill.path) }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { failed = true }
         }
@@ -235,28 +274,56 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(if (skill.builtIn) R.string.ai_skill_builtin_source else R.string.ai_skill_global_source), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(skill.description, style = MaterialTheme.typography.bodyMedium)
-                HorizontalDivider()
+                if (!skill.builtIn) TextButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
+                    Text(stringResource(R.string.ai_skill_delete), color = MaterialTheme.colorScheme.error)
+                }
                 if (failed) Text(stringResource(R.string.ai_skill_invalid), color = MaterialTheme.colorScheme.error)
                 else if (text == null) LinearProgressIndicator(Modifier.fillMaxWidth())
                 else AiMarkdown(text.orEmpty()) {}
             }
         }
     }
+    deleting?.let { skill -> WorkbenchAlertDialog(onDismissRequest = { if (!deleteBusy) deleting = null }, dismissible = !deleteBusy,
+        title = { Text(stringResource(R.string.ai_skill_delete)) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(stringResource(R.string.ai_skill_delete_confirm, skill.name))
+            if (deleteFailed) Text(stringResource(R.string.ai_skill_delete_error), color = MaterialTheme.colorScheme.error)
+            if (deleteBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        } },
+        confirmButton = { TextButton(enabled = editable && !deleteBusy, onClick = {
+            deleteBusy = true; deleteFailed = false
+            scope.launch {
+                try {
+                    if (controller.deleteGlobalSkill(skill.path)) {
+                        if (viewing?.path == skill.path) viewing = null
+                        deleting = null
+                    } else deleteFailed = true
+                } finally { deleteBusy = false }
+            }
+        }) { Text(stringResource(R.string.ai_skill_delete_action), color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(enabled = !deleteBusy, onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 @Composable
-internal fun AiFullScreen(title: String, close: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+internal fun AiFullScreen(title: String, close: () -> Unit, animateExit: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    var requestDismiss by remember { mutableStateOf(close) }
+    Dialog(onDismissRequest = { requestDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val view = androidx.compose.ui.platform.LocalView.current
         val dark = LocalWorkbenchDark.current
-        SideEffect {
+        DisposableEffect(view, dark) {
             (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { window ->
+                // Reveal the actual retained parent page as this full-screen surface moves.
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                window.setDimAmount(0f)
+                window.setBackgroundDrawable(android.graphics.Color.TRANSPARENT.toDrawable())
                 androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !dark
                     isAppearanceLightNavigationBars = !dark
                 }
             }
+            onDispose { }
         }
-        val back = rememberWorkbenchBackMotion(onBack = close)
+        val back = rememberWorkbenchBackMotion(dialogWindow = true, animateExit = animateExit, onBack = close)
+        SideEffect { requestDismiss = back.close }
         Surface(Modifier.fillMaxSize().then(back.modifier), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -280,7 +347,7 @@ private fun requestElapsed(request: AiRequestLog): Long {
 
 @Composable
 internal fun AiSectionTab(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    TextButton(onClick = onClick, modifier = modifier, colors = ButtonDefaults.textButtonColors(contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
+    TextButton(onClick = rememberWorkbenchClickFeedback(onClick), modifier = modifier, colors = ButtonDefaults.textButtonColors(contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(IntrinsicSize.Max)) {
             Text(label, maxLines = 1, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))

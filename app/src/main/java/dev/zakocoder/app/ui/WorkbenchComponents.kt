@@ -324,8 +324,9 @@ internal fun WorkbenchPrimaryButton(onClick: () -> Unit, modifier: Modifier = Mo
     colors: ButtonColors = ButtonDefaults.buttonColors(containerColor = LocalWorkbenchPalette.current.primaryFill, contentColor = LocalWorkbenchPalette.current.onPrimary),
     contentPadding: PaddingValues = PaddingValues(horizontal = Space.xl, vertical = Space.md), content: @Composable RowScope.() -> Unit) {
     val foreground = if (enabled) colors.contentColor else colors.disabledContentColor
+    val click = rememberWorkbenchClickFeedback(onClick)
     top.yukonga.miuix.kmp.basic.Button(
-        onClick = onClick, modifier = modifier.heightIn(min = ControlSize.button).clip(shape), enabled = enabled,
+        onClick = click, modifier = modifier.heightIn(min = ControlSize.button).clip(shape), enabled = enabled,
         cornerRadius = Radius.md, minHeight = ControlSize.button, insideMargin = contentPadding,
         colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
             color = colors.containerColor, disabledColor = colors.disabledContainerColor,

@@ -1,11 +1,15 @@
 <resources>
     <string name="ai_permission_preset_current">当前：%1$s</string>
-    <string name="ai_permission_preset_normal">普通权限</string>
-    <string name="ai_permission_preset_elevated">高权限</string>
+    <string name="ai_permission_preset_normal">请求审批</string>
+    <string name="ai_permission_preset_elevated">智能批准</string>
     <string name="ai_permission_preset_custom">自定义规则</string>
-    <string name="ai_permission_preset_normal_desc">安全只读工具自动允许，文件修改、命令和 MCP 等操作询问。</string>
-    <string name="ai_permission_preset_elevated_desc">项目工具自动执行；MCP、屏幕测试和 SSH 仍询问，已有禁止项保留。可在高级规则中单独设为允许；目标授权和系统权限仍需满足。</string>
+    <string name="ai_permission_preset_normal_desc">读取与工作区内文件修改自动执行；联网、外部操作及无法判断影响的命令先询问。</string>
+    <string name="ai_permission_preset_elevated_desc">自动执行可判定为低风险的操作，包括打开网页；可能危险或无法确定影响时询问。已有禁止项保留。</string>
     <string name="ai_permission_advanced_show">展开高级工具规则</string>
     <string name="ai_permission_advanced_hide">收起高级工具规则</string>
-    <string name="ai_permission_preset_warning">将为项目“%1$s”保存高权限，重启后仍生效。除禁止项、MCP、屏幕测试与 SSH 外，工具可自动修改文件、运行命令和管理终端。高级规则可单独调整工具授权；不会代替目标应用授权或系统许可。命令能访问 Ubuntu 及其他挂载项目；PRoot 不是安全沙箱。高权限不代表 Android root，也不会绕过路径保护或文件冲突检查。确认只在信任项目与任务时开启。</string>
+    <string name="ai_permission_preset_warning">将为「%1$s」启用智能批准，低风险工作区操作可自动执行；无法确定影响的命令、脚本及外部操作仍需审批。已有禁止规则保留。风险判断不等于安全沙箱，系统授权和 SSH 主机信任仍独立管理。</string>
+    <string name="ai_permission_preset_readonly">只读</string>
+    <string name="ai_permission_preset_readonly_desc">自动读取工作区；修改文件、执行命令或联网前询问。</string>
+    <string name="ai_permission_normal_warning">将为「%1$s」自动批准读取和工作区内文件修改；联网、外部操作及无法确定影响的命令仍需审批。已有禁止规则保留。</string>
+    <string name="ai_permission_mode_rule">权限模式规则</string>
 </resources>
