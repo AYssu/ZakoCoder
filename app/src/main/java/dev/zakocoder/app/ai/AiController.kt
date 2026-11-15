@@ -1949,7 +1949,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             return context.getString(R.string.ai_tool_unsupported)
         }
         requireCapability(tool)
-        if (mutable.value.planningMode && !AiPlanning.allows(tool)) {
+        if (mutable.value.planningMode && !AiPlanning.allows(tool, args.optString("action"))) {
             val detail = context.getString(R.string.ai_planning_tool_blocked)
             updateEvent(event.id) { it.copy(status = AiToolStatus.Denied, output = detail, finished = now()) }
             return detail
@@ -2032,6 +2032,12 @@ class AiController(private val context: Context, root: (String) -> File, private
         check(mutable.value.policy.permission(tool) != AiPermission.Deny)
         if (preparingScreen && screenTestLease(id) != approvedScreenLease)
             throw AiTerminalException(context.getString(R.string.ai_screen_test_session_changed))
+        // Authorization can suspend; a newly active read-only mode still restricts this action.
+        if (mutable.value.planningMode && !AiPlanning.allows(tool, args.optString("action"))) {
+            val detail = context.getString(R.string.ai_planning_tool_blocked)
+            updateEvent(event.id) { it.copy(status = AiToolStatus.Denied, output = detail, finished = now()) }
+            return detail
+        }
         beforeExecute()
         updateEvent(event.id) { it.copy(status = AiToolStatus.Running, started = now()) }
         mutable.update { it.copy(phase = AiPhase.Executing) }

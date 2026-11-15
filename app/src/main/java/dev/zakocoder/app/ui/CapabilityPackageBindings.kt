@@ -72,8 +72,11 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
                 } },
                 onTest = { launchOperation {
                     val id = requireNotNull(projectId)
-                    val key = workbench.ssh.probeHost(id)
-                    if (key.fingerprint == profile?.hostFingerprint) {
+                    if (profile?.hostFingerprint == null) {
+                        workbench.ssh.probeHost(id)
+                    } else {
+                        // Authentication verifies the pinned key itself. An extra unauthenticated
+                        // probe doubles connections and can hit server pre-auth rate limits.
                         val result = workbench.ssh.execute(id, JSONObject().put("action", "status"))
                         tmuxAvailable = result.optBoolean("tmux_available")
                         connected = true; status = successText

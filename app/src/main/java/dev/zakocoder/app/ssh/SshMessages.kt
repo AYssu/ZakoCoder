@@ -12,6 +12,12 @@ fun sshError(context: Context, code: String?): String? = code?.let {
         "credential_missing" -> R.string.ssh_error_credential
         "private_key_invalid" -> R.string.ssh_error_key
         "connection_failed", "connection_or_auth_failed" -> R.string.ssh_error_connect
+        "dns_failed" -> R.string.ssh_error_dns
+        "network_unreachable", "tcp_failed" -> R.string.ssh_error_tcp
+        "connection_timeout" -> R.string.ssh_error_connection_timeout
+        "algorithm_negotiation_failed", "crypto_unavailable" -> R.string.ssh_error_crypto
+        "authentication_failed" -> R.string.ssh_error_authentication
+        "handshake_failed" -> R.string.ssh_error_handshake
         "command_timeout" -> R.string.ssh_error_timeout
         "profile_missing" -> R.string.ssh_error_missing
         "invalid_path", "unsafe_path", "not_regular_file", "not_directory" -> R.string.ssh_error_path

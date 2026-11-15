@@ -36,6 +36,32 @@ class AiPlanningTest {
         }
     }
 
+    @Test fun planningAllowsOnlyExplicitSshReadActions() {
+        assertFalse("Mixed SSH tools require an action", AiPlanning.allows(AiTool.SshRemote))
+        assertEquals(setOf("status", "list_files", "read_file"), AiPlanning.sshReadActions)
+        AiPlanning.sshReadActions.forEach { action ->
+            assertTrue("Planning should admit the bounded SSH read $action", AiPlanning.allows(AiTool.SshRemote, action))
+        }
+        listOf("", "exec", "write_file", "edit_file", "tmux_run", "tmux_list", "tmux_capture",
+            "tmux_input", "tmux_close", "unknown", "READ_FILE", "read_file ").forEach { action ->
+            assertFalse("Planning must reject SSH action $action", AiPlanning.allows(AiTool.SshRemote, action))
+        }
+    }
+
+    @Test fun sshReadEligibilityDoesNotGrantPermissionOrAdmitOtherExternalTools() {
+        val denied = AiPolicy(default = AiPermission.Deny, overrides = emptyMap())
+        val yolo = AiPolicy(yolo = true)
+        AiPlanning.sshReadActions.forEach { action ->
+            assertTrue(AiPlanning.allows(AiTool.SshRemote, action))
+            assertEquals(AiPermission.Deny, denied.permission(AiTool.SshRemote))
+            listOf(AiTool.AndroidTest, AiTool.Browser, AiTool.UseMcp, AiTool.RunCommand).forEach { tool ->
+                assertFalse("SSH read names cannot admit ${tool.wire}", AiPlanning.allows(tool, action))
+            }
+        }
+        assertEquals(AiPermission.Allow, yolo.permission(AiTool.SshRemote))
+        assertFalse("YOLO cannot make a remote shell read-only", AiPlanning.allows(AiTool.SshRemote, "exec"))
+    }
+
     @Test fun taskModeStartsExecutionAndAcceptsOnlyCurrentDirectUserInput() {
         val mode = AiPlanning.TaskMode("先分析，不修改")
         assertFalse(mode.readOnly)
