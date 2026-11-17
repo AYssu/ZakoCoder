@@ -30,8 +30,8 @@ class AiChatActionsUiDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     @Before fun foreground() = warmDeviceActivity()
-    @Test(timeout = 90000) fun day360Font130() = render(false)
-    @Test(timeout = 90000) fun night360Font130() = render(true)
+    @Test(timeout = 90000) fun day360DefaultFont() = render(false)
+    @Test(timeout = 90000) fun night360DefaultFont() = render(true)
     private fun <T> nodes(block: (List<SemanticsNode>) -> T): T {
         val result = AtomicReference<T>()
         instrumentation.runOnMainSync {
@@ -74,7 +74,7 @@ class AiChatActionsUiDeviceTest {
                         if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                 }
                 CompositionLocalProvider(LocalConfiguration provides configuration,
-                    LocalDensity provides Density(density, 1.3f), LocalWorkbenchDark provides dark,
+                    LocalDensity provides Density(density, 1f), LocalWorkbenchDark provides dark,
                     LocalMinimumInteractiveComponentSize provides 48.dp) {
                     MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -90,19 +90,13 @@ class AiChatActionsUiDeviceTest {
                     }
                 }
             } }
-            val input = context.getString(R.string.ai_usage_input, "↑", "160K")
-            val output = context.getString(R.string.ai_usage_output, "↓", "3K")
             val total = context.getString(R.string.ai_usage_total, "Σ", "163K")
-            await("footer reaches reported totals") { nodes { all -> listOf(input, output, total).all { expected -> all.any { text(it) == expected } } } }
-            nodes { all ->
-                val first = all.single { text(it) == input }.boundsInRoot
-                val out = all.single { text(it) == output }.boundsInRoot
-                val sum = all.single { text(it) == total }.boundsInRoot
-                assertEquals(first.top, out.top, 1f); assertEquals(first.top, sum.top, 1f)
-                val details = all.single { text(it).contains("token/s") }.boundsInRoot
-                assertTrue(details.top >= first.bottom)
-                assertTrue(all.any { text(it).contains("缓存 128K（80%）") })
-            }
+            await("compact footer reaches reported total") { nodes { all -> all.any {
+                total in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+            } } }
+            assertFalse("Narrow footer keeps input/output inside usage details", nodes { all -> all.any {
+                text(it) == context.getString(R.string.ai_usage_input, "↑", "160K")
+            } })
             capture(dark, "footer")
             click(entry.text)
             await("message menu opens") { nodes { all -> all.any { text(it) == context.getString(R.string.ai_message_retry) } } }

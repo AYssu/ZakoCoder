@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_slash_help">查看命令和说明</string>
+    <string name="ai_slash_new">在当前工作区新建对话</string>
+    <string name="ai_slash_sessions">浏览、切换历史对话</string>
+    <string name="ai_slash_rename">修改当前对话名称</string>
+    <string name="ai_slash_compact">压缩上下文，可附加需要保留的要求</string>
+    <string name="ai_slash_context">查看上下文占用、上限与压缩情况</string>
+    <string name="ai_slash_model">选择或添加模型配置</string>
+    <string name="ai_slash_thinking">调整当前模型的思考强度</string>
+    <string name="ai_slash_skill">查看技能，或用 /skill:技能名 指定本次使用</string>
+    <string name="ai_slash_mcp">查看连接状态、管理 MCP 服务</string>
+    <string name="ai_slash_permissions">选择当前工具权限模式</string>
+    <string name="ai_slash_stop">停止当前任务</string>
+    <string name="ai_slash_help_title">对话命令</string>
+    <string name="ai_slash_help_hint">在输入框键入 / 搜索并选择命令，也可以直接输入命令后发送。命令由应用处理，不会作为普通消息发给模型。</string>
+    <string name="ai_slash_empty">没有匹配的命令，输入 /help 查看全部命令</string>
+    <string name="ai_slash_skill_empty">没有匹配的可用技能，可通过 /skill 管理技能</string>
+    <string name="ai_slash_skill_source">来源：%1$s</string>
+    <string name="ai_slash_unknown">未知命令。输入 /help 查看支持的命令。</string>
+    <string name="ai_slash_compact_title">压缩当前上下文？</string>
+    <string name="ai_slash_compact_message">将较早内容整理为摘要，保留完整对话记录。压缩需要向当前模型发送请求，可能产生费用。</string>
+    <string name="ai_slash_compact_keep_hint">希望压缩后保留的内容（可选）</string>
+    <string name="ai_slash_rename_title">修改对话名称</string>
+    <string name="ai_slash_rename_hint">对话名称</string>
+    <string name="ai_slash_busy">当前任务仍在进行。请等待完成，或使用 /stop 停止后再操作。</string>
+    <string name="ai_slash_model_required">请先选择可用的模型配置</string>
+    <string name="ai_slash_skill_not_found">找不到这个可用技能。输入 /skill: 后选择技能。</string>
+    <string name="ai_slash_skill_ambiguous">存在同名技能，请按来源选择本次使用的技能</string>
+    <string name="ai_slash_skill_task_hint">在技能名称后输入本次任务；临时指定不会修改全局技能开关。</string>
+    <string name="ai_slash_context_summary">上下文占用、模型上限及压缩记录以当前对话的实际请求为准。</string>
+</resources>

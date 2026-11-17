@@ -94,10 +94,8 @@ class AiPermissionModesUiDeviceTest {
             }
             suspend fun composer(preset: AiPermissionPreset) {
                 ui.await("Selection automatically closes the permission sheet") { !sheet }
-                ui.await("Mode is announced by the icon without a visible label") {
-                    ui.has(context.getString(permissionModeLabel(preset)) + " · " + context.getString(
-                        R.string.ai_permission_current, context.getString(permissionModeLabel(preset)), workbench.ai.state.value.policy.overrides.size)) &&
-                        !ui.has(permissionModeLabel(preset))
+                ui.await("Compact mode retains its full spoken permission name") {
+                    ui.has(permissionModeLabel(preset))
                 }
                 ui.capture("permission-modes/$theme-composer-${preset.name.lowercase()}")
                 main { sheet = true }

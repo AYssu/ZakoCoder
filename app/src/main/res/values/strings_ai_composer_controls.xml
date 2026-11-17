@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_composer_permission_ask" translatable="false">ask</string>
+    <string name="ai_composer_permission_auto" translatable="false">auto</string>
+    <string name="ai_composer_permission_full" translatable="false">full</string>
+    <string name="ai_composer_permission_only" translatable="false">only</string>
+    <string name="ai_composer_permission_custom" translatable="false">custom</string>
+</resources>

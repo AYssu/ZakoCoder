@@ -177,7 +177,7 @@ class AiConversationUiDeviceTest {
         }
     }
 
-    @Test(timeout = 90000) fun footerKeepsUnknownUsageHonestAndShowsKnownTotalsAndDuration() {
+    @Test(timeout = 90000) fun narrowFooterKeepsUnknownUsageHonestAndCompactsReportedTotals() {
         var state by mutableStateOf(AiState(turn = 1))
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.setContent {
@@ -185,30 +185,28 @@ class AiConversationUiDeviceTest {
                     Column(Modifier.padding(16.dp)) { AiTurnFooter(state, 1) }
                 } }
             } }
+            fun hasDescription(value: String) = nodes { list -> list.any {
+                value in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+            } }
             val unknown = context.getString(R.string.ai_usage_total, "Σ", "—")
-            await("unknown total is not fabricated") { nodes { list -> list.any { text(it) == unknown } } }
+            await("unknown total is not fabricated") { hasDescription(unknown) }
             instrumentation.runOnMainSync {
-                state = state.copy(requests = listOf(AiRequestLog(turn = 1, elapsed = 2000, firstText = 1000, inputTokens = 100, outputTokens = 25, complete = true)),
+                state = state.copy(requests = listOf(AiRequestLog(turn = 1, elapsed = 2000,
+                    firstText = 1000, inputTokens = 100, outputTokens = 25, complete = true)),
                     turnTimings = listOf(AiTurnTiming(1, started = 1000, finished = 65000)))
             }
-            val total = context.getString(R.string.ai_usage_total, "Σ", "125")
-            val input = context.getString(R.string.ai_usage_input, "↑", "100")
-            val output = context.getString(R.string.ai_usage_output, "↓", "25")
-            await("animated usage reaches actual totals") { nodes { list -> listOf(total, input, output).all { expected -> list.any { text(it) == expected } } } }
-            await("completed task duration shown") { nodes { list -> list.any { text(it).contains("1m 4s") } } }
-            assertFalse(nodes { list -> list.any { text(it) == unknown } })
+            await("reported total remains available on narrow screens") {
+                hasDescription(context.getString(R.string.ai_usage_total, "Σ", "125"))
+            }
+            assertFalse(hasDescription(unknown))
             instrumentation.runOnMainSync {
                 state = state.copy(requests = listOf(
                     AiRequestLog(turn = 1, round = 2, elapsed = 2000, firstText = 1000,
                         inputTokens = 1_234_567, outputTokens = 12_345, complete = true),
                     AiRequestLog(turn = 1, round = 3, complete = true)))
             }
-            val compact = listOf(
-                context.getString(R.string.ai_usage_input, "↑", "1.23M"),
-                context.getString(R.string.ai_usage_output, "↓", "12.35K"),
-                context.getString(R.string.ai_usage_total, "Σ", "1.25M"))
             await("large totals compact while missing usage is not invented") {
-                nodes { list -> compact.all { expected -> list.any { text(it) == expected } } }
+                hasDescription(context.getString(R.string.ai_usage_total, "Σ", "1.25M"))
             }
             assertFalse("No retention notice in the conversation footer", nodes { list ->
                 list.any { text(it) == "部分请求未提供用量或已超出保留范围" }

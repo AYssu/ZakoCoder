@@ -304,12 +304,8 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
             val activeDetail = shownDetail == (if (detail == "tools") "permissions" else detail)
             Box(Modifier.fillMaxSize().then(if (activeDetail) Modifier else blockPreview)) {
             when (shownDetail) {
-                "models" -> Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Box(Modifier.fillMaxSize().systemBarsPadding()) { AiModelsPage(workbench.ai, close = { detail = "" }) }
-                }
-                "skills" -> Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    Box(Modifier.fillMaxSize().systemBarsPadding()) { AiExtensionsPage(workbench, state) { detail = "" } }
-                }
+                "models" -> AiModelsPage(workbench.ai, contentPadding = WindowInsets.systemBars.asPaddingValues(), close = { detail = "" })
+                "skills" -> AiExtensionsPage(workbench, state, contentPadding = WindowInsets.systemBars.asPaddingValues()) { detail = "" }
                 "permissions" -> {
                     AppPermissionsPage(rootGranted = screen.rootGranted, rootBusy = rootBusy, rootError = rootError,
                         onRequestRoot = {

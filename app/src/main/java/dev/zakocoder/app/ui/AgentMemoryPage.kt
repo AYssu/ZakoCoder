@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 
 /** Installation-wide settings; deliberately has no workspace parameter. */
 @Composable
-internal fun AgentMemoryPage(controller: MemoryController, close: () -> Unit) {
+internal fun AgentMemoryPage(controller: MemoryController, contentPadding: PaddingValues = PaddingValues(0.dp), close: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val back = rememberWorkbenchBackMotion(onBack = close)
@@ -49,7 +49,8 @@ internal fun AgentMemoryPage(controller: MemoryController, close: () -> Unit) {
         else -> state.visible
     }
     LaunchedEffect(controller) { controller.load() }
-    Column(Modifier.fillMaxSize().then(back.modifier), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().then(back.modifier).padding(contentPadding)
+        .consumeWindowInsets(contentPadding).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = back.close, modifier = Modifier.size(48.dp)) {
                 WorkbenchIcon(Glyph.Back, description = stringResource(R.string.agent_memory_back))

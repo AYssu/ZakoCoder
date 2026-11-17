@@ -1,6 +1,4 @@
 <resources>
-    <string name="ai_usage_cache">缓存 %1$s（%2$s）</string>
-    <string name="ai_usage_cache_unknown">缓存 —</string>
     <string name="ai_message_edit">编辑并重新生成</string>
     <string name="ai_message_retry">重新生成</string>
     <string name="ai_message_requests">查看会话请求</string>

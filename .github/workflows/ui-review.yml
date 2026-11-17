@@ -68,7 +68,7 @@ jobs:
           adb -s emulator-5554 install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           adb -s emulator-5554 shell cmd uimode night no
           adb -s emulator-5554 shell am start -W -n dev.zakocoder.app.runtimecheck/dev.zakocoder.app.MainActivity
-          classes='dev.zakocoder.app.ui.AppNavigationDeviceTest,dev.zakocoder.app.ui.RouteReturnDeviceTest,dev.zakocoder.app.ui.AiPresentationDeviceTest,dev.zakocoder.app.ui.LiveToolTransitionDeviceTest,dev.zakocoder.app.ui.ConversationEndFollowerDeviceTest,dev.zakocoder.app.ui.ArrivalTextDeviceTest,dev.zakocoder.app.ui.AiMessageStreamingDeviceTest'
+          classes='dev.zakocoder.app.ui.AppNavigationDeviceTest,dev.zakocoder.app.ui.RouteReturnDeviceTest,dev.zakocoder.app.ui.AiPresentationDeviceTest,dev.zakocoder.app.ui.LiveToolTransitionDeviceTest,dev.zakocoder.app.ui.ConversationEndFollowerDeviceTest,dev.zakocoder.app.ui.ArrivalTextDeviceTest,dev.zakocoder.app.ui.AiMessageStreamingDeviceTest,dev.zakocoder.app.ui.AiReadingBehaviorDeviceTest,dev.zakocoder.app.ui.AiSlashMenuDeviceTest,dev.zakocoder.app.ui.AiTurnUsageFooterDeviceTest,dev.zakocoder.app.ui.AiComposerUsageUiDeviceTest,dev.zakocoder.app.ui.AiPermissionModesUiDeviceTest,dev.zakocoder.app.ui.ModelBackPreviewDeviceTest,dev.zakocoder.app.ui.OnboardingNavigationDeviceTest'
           adb -s emulator-5554 shell am instrument -w -r -e class "$classes" dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/instrumentation.txt
           grep -Eq '^OK \([0-9]+ tests?\)' out/ui-review/instrumentation.txt
           adb -s emulator-5554 shell cmd uimode night yes

@@ -1,6 +1,9 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +48,21 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
     LaunchedEffect(screenOn, sshOn) {
         if (details == CapabilityPackage.Screen && !screenOn || details == CapabilityPackage.Ssh && !sshOn) details = null
     }
+    val packagesContent: @Composable () -> Unit = {
+        CapabilityPackagesSheet(CapabilityPackagesUiModel(projectName, projectId != null, screenOn, sshOn,
+            !packages.loaded || packages.busy, packages.error, packages.browserEnabled),
+            onScreenEnabled = workbench.capabilityPackages::setScreenEnabled,
+            onSshEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Ssh, enabled) } },
+            onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
+            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh },
+            onBrowserEnabled = workbench.capabilityPackages::setBrowserEnabled,
+            onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage, contentPadding = contentPadding)
+    }
+    Box(if (fullPage) Modifier.fillMaxSize() else Modifier) {
+    // Preserve the full capability list, including its viewport, under its child window.
+    // Replacing the list would expose the unrelated page below the capability destination.
+    if (fullPage) WorkbenchRetainedPage(covered = details != null, content = packagesContent)
+    else if (details == null) packagesContent()
     when (details) {
         CapabilityPackage.Browser -> AgentBrowserPage(workbench.browser) { details = null }
         CapabilityPackage.Screen -> ScreenTestSheet(workbench.screenTests, projectId, projectName) { details = null }
@@ -90,13 +108,7 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
                 onForgetHost = { launchOperation { workbench.ssh.forgetHost(requireNotNull(projectId)); connected = false } },
                 onDismiss = { details = null })
         }
-        null -> CapabilityPackagesSheet(CapabilityPackagesUiModel(projectName, projectId != null, screenOn, sshOn,
-            !packages.loaded || packages.busy, packages.error, packages.browserEnabled),
-            onScreenEnabled = workbench.capabilityPackages::setScreenEnabled,
-            onSshEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Ssh, enabled) } },
-            onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
-            onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh },
-            onBrowserEnabled = workbench.capabilityPackages::setBrowserEnabled,
-            onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage, contentPadding = contentPadding)
+        null -> Unit
+    }
     }
 }

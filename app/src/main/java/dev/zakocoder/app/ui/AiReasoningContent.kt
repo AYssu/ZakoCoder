@@ -11,6 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -25,17 +29,21 @@ import kotlinx.coroutines.launch
 /** Only publicly returned provider reasoning, never inferred or reconstructed hidden thoughts. */
 @Composable
 internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, streaming: Boolean = false, displayedReasoning: String = entry.reasoning,
-    onReadingInteraction: () -> Unit = {}, revealRequest: String? = null, trailingActions: (@Composable () -> Unit)? = null) {
+    onReadingInteraction: () -> Unit = {}, revealRequest: String? = null, trailingActions: (@Composable () -> Unit)? = null,
+    onReadingResume: () -> Unit = {}) {
     if (entry.reasoning.isEmpty() && !entry.reasoningTruncated) return
     var expanded by remember(entry.id) { mutableStateOf(streaming || revealRequest != null) }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var follow by remember(entry.id) { mutableStateOf(true) }
     var pausedPreview by remember(entry.id) { mutableStateOf<String?>(null) }
+    var resumeAtEnd by remember(entry.id) { mutableStateOf(false) }
+    var resumedPreview by remember(entry.id) { mutableStateOf<String?>(null) }
+    var revealingLatest by remember(entry.id) { mutableStateOf(false) }
     val preview = remember(displayedReasoning, streaming) { AiReasoningPreview.of(displayedReasoning, streaming) }
     val currentPreview by rememberUpdatedState(preview)
     val readingInteraction by rememberUpdatedState(onReadingInteraction)
-    var automaticScroll by remember { mutableStateOf(false) }
+    val readingResume by rememberUpdatedState(onReadingResume)
     val dragged by scroll.interactionSource.collectIsDraggedAsState()
     val awayFromEnd by remember { derivedStateOf { scroll.value < scroll.maxValue } }
     fun pauseReading() {
@@ -46,7 +54,7 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
             follow = false
         }
     }
-    LaunchedEffect(streaming) { expanded = streaming; pausedPreview = null; follow = true }
+    LaunchedEffect(streaming) { expanded = streaming; pausedPreview = null; follow = true; resumeAtEnd = false }
     LaunchedEffect(revealRequest) {
         if (revealRequest != null) {
             expanded = true
@@ -56,22 +64,33 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
         }
     }
     LaunchedEffect(dragged) { if (dragged) pauseReading() }
-    LaunchedEffect(scroll, entry.id) {
-        var userScrolled = false
-        // Observe the origin in the same snapshot as the scroll event. Looking up automaticScroll
-        // later can misclassify a delivered programmatic event after its finally block has run.
-        snapshotFlow { scroll.isScrollInProgress to automaticScroll }.collect { (scrolling, automatic) ->
-            if (scrolling && !automatic) { userScrolled = true; pauseReading() }
-            if (!scrolling && userScrolled) {
-                if (scroll.value >= scroll.maxValue) { pausedPreview = null; follow = true }
-                userScrolled = false
+    val userScroll = remember(scroll, entry.id) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Pause before the scroll mutation, not after a flow/recomposition observes it.
+                // A concurrently arriving chunk must never win the race to the bottom.
+                if (source == NestedScrollSource.UserInput && available.y != 0f) {
+                    pauseReading()
+                    resumeAtEnd = available.y < 0f
+                }
+                return Offset.Zero
             }
         }
     }
-    LaunchedEffect(streaming, expanded, displayedReasoning.length, scroll.maxValue) {
+    // Reaching the live edge during a drag is not permission to replace the text under
+    // the finger. Resume only after both the gesture and its fling have settled there.
+    LaunchedEffect(dragged, scroll.isScrollInProgress, resumeAtEnd) {
+        if (!dragged && !scroll.isScrollInProgress && resumeAtEnd && !follow && !scroll.canScrollForward) {
+            resumeAtEnd = false
+            resumedPreview = currentPreview
+            pausedPreview = null
+            follow = true
+            readingResume()
+        }
+    }
+    LaunchedEffect(streaming, expanded, follow, displayedReasoning.length, scroll.maxValue) {
         if (streaming && expanded && follow && !dragged && !scroll.isScrollInProgress) {
-            automaticScroll = true
-            try { scroll.scrollTo(scroll.maxValue) } finally { automaticScroll = false }
+            scroll.scrollTo(scroll.maxValue)
         }
     }
     val clipboard = LocalClipboardManager.current
@@ -97,9 +116,11 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (entry.reasoning.isNotEmpty()) SelectionContainer {
-                    ArrivalText(pausedPreview ?: preview, Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(scroll).padding(vertical = 12.dp),
+                    ArrivalText(pausedPreview ?: preview, Modifier.fillMaxWidth().heightIn(max = 320.dp).nestedScroll(userScroll).verticalScroll(scroll).padding(vertical = 12.dp),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 17.sp), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        animated = pausedPreview == null && LocalTextArrival.current)
+                        // The jump to latest is navigation, not newly arriving output. Show that
+                        // snapshot immediately; only subsequent chunks should reveal gradually.
+                        animated = pausedPreview == null && !revealingLatest && preview != resumedPreview && LocalTextArrival.current, maxPendingLines = 2)
                 }
                 if (entry.reasoning.length > AiReasoningPreview.MAX_CHARS) Text(stringResource(
                     if (streaming && pausedPreview != null) R.string.ai_reading_reasoning_paused_preview
@@ -109,14 +130,17 @@ internal fun AiReasoningContent(entry: AiEntry, modifier: Modifier = Modifier, s
                 if (streaming && !follow && (awayFromEnd || pausedPreview != null)) TextButton(onClick = {
                     readingInteraction()
                     scope.launch {
-                        automaticScroll = true
+                        revealingLatest = true
+                        resumedPreview = currentPreview
                         pausedPreview = null
                         try {
                             // Allow the latest bounded preview to be measured before targeting its end.
                             withFrameNanos { }
                             scroll.animateScrollTo(scroll.maxValue)
+                            resumedPreview = currentPreview
                             follow = true
-                        } finally { automaticScroll = false }
+                            readingResume()
+                        } finally { revealingLatest = false }
                     }
                 }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.ai_reading_reasoning_latest)) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {

@@ -7,9 +7,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -142,6 +147,52 @@ internal fun permissionModeLabel(preset: AiPermissionPreset?): Int = when (prese
     null -> R.string.ai_permission_preset_custom
 }
 
+internal fun permissionModeShortLabel(preset: AiPermissionPreset?): Int = when (preset) {
+    AiPermissionPreset.Normal -> R.string.ai_composer_permission_ask
+    AiPermissionPreset.Elevated -> R.string.ai_composer_permission_auto
+    AiPermissionPreset.Yolo -> R.string.ai_composer_permission_full
+    AiPermissionPreset.ReadOnly -> R.string.ai_composer_permission_only
+    null -> R.string.ai_composer_permission_custom
+}
+
+/** Keep the compact mode visible without reducing its touch target or spoken explanation. */
+@Composable
+internal fun AiComposerPermissionButton(
+    preset: AiPermissionPreset?,
+    overridesCount: Int,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(permissionModeLabel(preset))
+    val state = stringResource(R.string.ai_permission_current, label, overridesCount)
+    val tint = permissionModeTint(preset)
+    TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(0.dp),
+        modifier = modifier.widthIn(min = 60.dp).heightIn(min = 48.dp).clearAndSetSemantics {
+            contentDescription = label
+            stateDescription = state
+            role = Role.Button
+            if (!enabled) disabled()
+            onClick { if (enabled) { onClick(); true } else false }
+        }) {
+        Surface(shape = androidx.compose.foundation.shape.CircleShape,
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            border = androidx.compose.foundation.BorderStroke(1.dp,
+                if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF333B45)
+                else MaterialTheme.colorScheme.outlineVariant)) {
+            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                WorkbenchIcon(permissionModeGlyph(preset), Modifier.size(14.dp),
+                    tint = tint.copy(alpha = if (enabled) 1f else .38f))
+                Text(stringResource(permissionModeShortLabel(preset)), fontSize = 10.sp,
+                    lineHeight = 14.sp, maxLines = 1,
+                    color = tint.copy(alpha = if (enabled) 1f else .38f))
+            }
+        }
+    }
+}
+
 @Composable
 private fun PermissionRow(title: String, choice: AiPermission?, effective: AiPermission?, enabled: Boolean, update: (AiPermission?) -> Unit) {
     var menu by remember { mutableStateOf(false) }
@@ -166,8 +217,12 @@ internal fun permissionModeTint(preset: AiPermissionPreset?): androidx.compose.u
     val palette = dev.zakocoder.app.ui.theme.LocalWorkbenchPalette.current
     return when (preset) {
         AiPermissionPreset.Elevated -> palette.successText
-        AiPermissionPreset.Yolo -> dev.zakocoder.app.ui.theme.PermissionModeColors.fullAccess(LocalWorkbenchDark.current)
-        AiPermissionPreset.ReadOnly -> dev.zakocoder.app.ui.theme.PermissionModeColors.readOnly(LocalWorkbenchDark.current)
+        AiPermissionPreset.ReadOnly -> if (LocalWorkbenchDark.current)
+            androidx.compose.ui.graphics.Color(0xFFC6C6CD)
+        else androidx.compose.ui.graphics.Color(0xFF6B6B73)
+        AiPermissionPreset.Yolo -> if (LocalWorkbenchDark.current)
+            dev.zakocoder.app.ui.theme.PermissionModeColors.readOnly(true)
+        else androidx.compose.ui.graphics.Color(0xFF8C6D0D)
         else -> palette.textSecondary
     }
 }
