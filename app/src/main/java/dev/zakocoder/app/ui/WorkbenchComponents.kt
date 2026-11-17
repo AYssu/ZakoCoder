@@ -53,6 +53,11 @@ import dev.zakocoder.app.ui.theme.statusContainer
  */
 internal val LocalWorkbenchDark = staticCompositionLocalOf { false }
 
+/** Sheet actions must finish the exit animation before removing their owning state. */
+internal val LocalWorkbenchSheetDismiss = staticCompositionLocalOf<() -> Unit> {
+    error("Sheet dismissal is only available inside WorkbenchSheet")
+}
+
 // ——————————————————————————————————————————————————————————————
 // 兼容性别名：这些公开名字被几十处业务代码直接引用，一律保留，
 // 内部改成读语义 token。新代码请直接用 LocalWorkbenchPalette.current.xxx。
@@ -213,7 +218,9 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
                 }
             }
             subtitle?.let { Text(it, style = Type.meta, color = p.textSecondary) }
-            content()
+            CompositionLocalProvider(LocalWorkbenchSheetDismiss provides dismiss) {
+                content()
+            }
         }
     }
 }

@@ -1003,6 +1003,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         if (current.checkpointId == null) return false
         sessionGeneration++; epoch++; grants.clear(); toolGrants.clear(); screenTaskOwner = null
         mutable.update { it.copy(active = true, interrupted = false, phase = AiPhase.Requesting, error = "", retryNotice = "", failureKind = null, taskDiagnostic = "") }
+        // Acquire the user-started foreground service before any persistence/network suspension.
+        activityChanged()
         // First operation inside launchTask saves the answer. No request happens if storage fails.
         launchTask(project, current.taskPrompt, emptyList(), emptyList(), continuation)
         return true
@@ -1094,6 +1096,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         fun owns(): Boolean = sessionGeneration == generation && epoch == requestEpoch && mutable.value.projectId == project &&
             mutable.value.conversationId == conversation && mutable.value.configurationRevision == configRevision
         mutable.update { it.copy(active = true, phase = AiPhase.Compacting, error = "", failureKind = null, taskDiagnostic = "", retryNotice = "") }
+        activityChanged()
         task = scope.launch {
             val session = AiTaskSession(taskLimits)
             var committed = false
@@ -1186,6 +1189,8 @@ class AiController(private val context: Context, root: (String) -> File, private
         val references = mutable.value.references.toList()
         mutable.update { it.copy(references = emptyList(), pendingImages = emptyList()) }
         grants.clear(); toolGrants.clear(); epoch++; screenTaskOwner = null
+        // Promotion belongs to the initiating foreground interaction, not a later disk callback.
+        activityChanged()
         launchTask(id, text, references, images, explicitSkill = explicitSkill)
         return true
     }

@@ -21,22 +21,41 @@ internal fun runningNotificationStatus(permission: Boolean, appEnabled: Boolean,
         else -> RunningNotificationStatus.Available
     }
 
-/** Read-only capability check. Does not create channels, post notifications or change permission. */
-class DevelopmentNotifications(private val context: Context, private val channelId: String = CHANNEL) {
+internal data class NotificationChannelAvailability(val id: String, val channelEnabled: Boolean, val groupEnabled: Boolean)
+
+internal fun runningNotificationStatus(permission: Boolean, appEnabled: Boolean,
+    channels: List<NotificationChannelAvailability>): RunningNotificationStatus =
+    runningNotificationStatus(permission, appEnabled, channels.all { it.channelEnabled }, channels.all { it.groupEnabled })
+
+/** An explicit channel keeps single-channel semantics; aggregate settings point to a blocked channel. */
+internal fun notificationSettingsChannel(channelId: String?, channels: List<NotificationChannelAvailability>): String? =
+    if (channelId != null) channels.firstOrNull { it.id == channelId }?.id
+    else channels.firstOrNull { !it.channelEnabled || !it.groupEnabled }?.id
+
+/** Read-only capability check. Missing channels are not created or treated as user-disabled. */
+class DevelopmentNotifications(private val context: Context, private val channelId: String? = null) {
     companion object { const val CHANNEL = "development" }
-    fun status(): RunningNotificationStatus = try {
+    private fun channels(): List<NotificationChannelAvailability> {
         val manager = context.getSystemService(NotificationManager::class.java)
-        val channel = manager.getNotificationChannel(channelId)
-        val groupEnabled = if (Build.VERSION.SDK_INT >= 28) channel?.group?.let { manager.getNotificationChannelGroup(it)?.isBlocked != true } ?: true else true
+        val ids = channelId?.let(::listOf) ?: listOf(CHANNEL, BackgroundTaskNotifications.CHANNEL)
+        return ids.mapNotNull { id ->
+            val channel = manager.getNotificationChannel(id) ?: return@mapNotNull null
+            val groupEnabled = if (Build.VERSION.SDK_INT >= 28)
+                channel.group?.let { manager.getNotificationChannelGroup(it)?.isBlocked != true } ?: true else true
+            NotificationChannelAvailability(id, channel.importance != NotificationManager.IMPORTANCE_NONE, groupEnabled)
+        }
+    }
+
+    fun status(): RunningNotificationStatus = try {
         runningNotificationStatus(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
-            NotificationManagerCompat.from(context).areNotificationsEnabled(), channel?.importance != NotificationManager.IMPORTANCE_NONE, groupEnabled)
+            NotificationManagerCompat.from(context).areNotificationsEnabled(), channels())
     } catch (_: RuntimeException) { RunningNotificationStatus.Unknown }
 
     /** Explicit settings navigation only; an unavailable vendor screen falls back to app details. */
     fun openSettings(): Boolean {
         val intents = buildList {
-            val exists = try { context.getSystemService(NotificationManager::class.java).getNotificationChannel(channelId) != null } catch (_: RuntimeException) { false }
-            if (exists) add(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, channelId))
+            val targetChannel = try { notificationSettingsChannel(channelId, channels()) } catch (_: RuntimeException) { null }
+            if (targetChannel != null) add(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, targetChannel))
             add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
             add(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
         }

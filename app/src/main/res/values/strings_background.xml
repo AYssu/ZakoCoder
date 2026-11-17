@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="background_results_channel">助手任务提醒</string>
+    <string name="background_completed_title">助手任务已完成</string>
+    <string name="background_completed_body">点击返回对话，查看结果与验证记录。</string>
+    <string name="background_failed_title">助手任务需要处理</string>
+    <string name="background_failed_body">任务未完成，进度已保留。点击查看原因。</string>
+    <string name="background_approval_title">助手正在等待审批</string>
+    <string name="background_approval_body">请返回对话核对操作，再决定是否允许。</string>
+    <string name="background_answer_title">助手正在等待回答</string>
+    <string name="background_answer_body">请返回对话选择或填写回答，继续当前任务。</string>
+    <string name="background_progress">第 %1$d 轮 · 已调用 %2$d 次工具</string>
+    <string name="background_service_interrupted">后台运行服务意外退出。任务仍在当前进程执行，请保持应用开启；返回后将尝试恢复后台服务。</string>
+    <string name="background_service_unavailable">后台服务启动失败，请保持应用开启以继续任务。</string>
+    <string name="background_chip_thinking">思考中</string>
+    <string name="background_chip_receiving">回复中</string>
+    <string name="background_chip_executing">执行中</string>
+    <string name="background_chip_compacting">整理中</string>
+    <string name="background_chip_running">运行中</string>
+</resources>

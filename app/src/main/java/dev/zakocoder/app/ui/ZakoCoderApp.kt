@@ -160,6 +160,53 @@ fun ZakoCoderApp(workbench: Workbench) {
     val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen || browserOpen
     val baseCovered = overlayOpen || drawerUtility != null
     val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
+    val backgroundNavigation by workbench.backgroundNavigation.collectAsStateWithLifecycle()
+    val navigationContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(backgroundNavigation?.requestId) {
+        val request = backgroundNavigation ?: return@LaunchedEffect
+        try {
+            val opened = withTimeoutOrNull(20_000) {
+                workbench.state.first { !it.loading }
+                if (workbench.state.value.projects.none { it.id == request.projectId }) return@withTimeoutOrNull false
+                val current = workbench.ai.state.value
+                val alreadySelected = current.projectId == request.projectId && current.conversationId == request.conversationId
+                val exists = alreadySelected || try {
+                    workbench.ai.listConversations(request.projectId).any { it.id == request.conversationId }
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    false
+                }
+                // A stale notification must not change the selected workspace before failing.
+                if (!exists) return@withTimeoutOrNull false
+                if (!workbench.openWorkspace(request.projectId)) return@withTimeoutOrNull false
+                combine(workbench.state, workbench.ai.state) { app, ai ->
+                    !app.busy && !ai.permissionsLoading && !ai.restoring
+                }.first { it }
+                val ready = workbench.ai.state.value
+                if (ready.projectId != request.projectId || ready.historyError ||
+                    (ready.active && ready.conversationId != request.conversationId)) return@withTimeoutOrNull false
+                if (ready.conversationId != request.conversationId &&
+                    ready.conversations.none { it.id == request.conversationId }) return@withTimeoutOrNull false
+                workbench.ai.conversation(request.conversationId)
+                val result = workbench.ai.state.first { !it.permissionsLoading && !it.restoring }
+                if (result.projectId != request.projectId || result.conversationId != request.conversationId ||
+                    result.historyError) return@withTimeoutOrNull false
+                cancelDrawerNavigation()
+                focus.clearFocus(); keyboard?.hide()
+                modelsOpen = false; modelsAdd = false; extensionsOpen = false; shortcutPage = null
+                browserOpen = false; proxyOpen = false; updatesOpen = false; setupOpen = false
+                drawerUtility = null; openedProjectId = null; terminalOpen = false
+                workspaceId = request.projectId; page = AppDestination.Ai
+                drawerState.close()
+                true
+            } ?: false
+            if (!opened) android.widget.Toast.makeText(navigationContext,
+                R.string.background_task_unavailable, android.widget.Toast.LENGTH_LONG).show()
+        } finally {
+            workbench.consumeBackgroundNavigation(request.requestId)
+        }
+    }
     LaunchedEffect(assistantNavigation?.requestId) {
         val request = assistantNavigation ?: return@LaunchedEffect
         val ai = workbench.ai.state.value
@@ -343,7 +390,6 @@ fun ZakoCoderApp(workbench: Workbench) {
                             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                                 Text(stringResource(destination.label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                                IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open)) }
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) {
                                 when (destination) {

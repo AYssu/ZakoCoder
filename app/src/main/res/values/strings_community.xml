@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="community_title">加入我们</string>
+    <string name="community_group_name">ZakoCoder 官方群</string>
+    <string name="community_group_number" translatable="false">1125542242</string>
+    <string name="community_group_url" translatable="false">https://qm.qq.com/q/zq8b647rzi</string>
+    <string name="community_group_number_label">QQ群：%1$s</string>
+    <string name="community_join">加入官方群</string>
+    <string name="community_copy_number">复制群号</string>
+    <string name="community_copied">群号已复制</string>
+    <string name="community_open_failed">暂时无法打开邀请链接，请复制群号后在 QQ 中搜索。</string>
+    <string name="community_copy_failed">暂时无法复制，请手动在 QQ 中搜索上方群号。</string>
+    <string name="settings_about_entry">关于 ZakoCoder</string>
+</resources>

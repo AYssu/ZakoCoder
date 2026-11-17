@@ -13,6 +13,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,6 +34,9 @@ import kotlinx.coroutines.sync.withLock
 
 /** One-shot UI navigation, always scoped to the screen session that requested it. */
 data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
+    val requestId: String = java.util.UUID.randomUUID().toString())
+
+data class BackgroundConversationNavigation(val projectId: String, val conversationId: String,
     val requestId: String = java.util.UUID.randomUUID().toString())
 
 private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean, val onboarding: OnboardingProgress)
@@ -58,6 +63,16 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val assistantNavigation = mutableAssistantNavigation.asStateFlow()
     fun ackAssistantNavigation(requestId: String) {
         mutableAssistantNavigation.update { if (it?.requestId == requestId) null else it }
+    }
+    private val mutableBackgroundNavigation = MutableStateFlow<BackgroundConversationNavigation?>(null)
+    val backgroundNavigation = mutableBackgroundNavigation.asStateFlow()
+    /** Intent identifiers are validated again against loaded workspaces and conversations by the UI. */
+    fun openBackgroundConversation(projectId: String, conversationId: String) {
+        if (projectId.length !in 1..128 || conversationId.length !in 1..128) return
+        mutableBackgroundNavigation.value = BackgroundConversationNavigation(projectId, conversationId)
+    }
+    fun consumeBackgroundNavigation(requestId: String) {
+        mutableBackgroundNavigation.update { if (it?.requestId == requestId) null else it }
     }
     internal val gitCredentials = dev.zakocoder.app.git.GitCredentialStore(context)
     private val gitCredentialAccess = dev.zakocoder.app.git.GitCredentialAccess(gitCredentials, runtime.root)
@@ -133,7 +148,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     fun consumeBrowserNavigation(request: String) { if (mutableBrowserNavigation.value == request) mutableBrowserNavigation.value = null }
     val ai: dev.zakocoder.app.ai.AiController = dev.zakocoder.app.ai.AiController(context, projects::directory,
         { id, path -> editor.isOpen(id, path) },
-        { id, script -> executeAiCommand(id, script) {} }, { if (aiActive()) service() else releaseService() },
+        { id, script -> executeAiCommand(id, script) {} }, ::syncAiService,
         { mutable.update { it.copy(fileRevision = it.fileRevision + 1) }; refreshDependencies() }, aiTransport, aiConfig,
         permissionStore = aiPermissions, streamingCommand = ::executeAiCommand, history = aiHistory,
         projectCommandContext = { id -> projectTasks.modelContext(id, ai.state.value.policy.permission(dev.zakocoder.app.ai.AiTool.ReadFile) == dev.zakocoder.app.ai.AiPermission.Allow,
@@ -270,6 +285,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private fun aiRestoring() = ai.state.value.restoring
     private fun aiActive(): Boolean = ai.state.value.active
     private var operation: Job? = null
+    private val taskNotifications = BackgroundTaskNotifications(context)
+    private val taskNotificationTracker = AiBackgroundTaskTracker()
+    private val backgroundDiagnostics = BackgroundTaskDiagnostics(context)
+    private fun backgroundEvent(event: BackgroundTaskEvent, task: AiBackgroundTask? = null) {
+        scope.launch { backgroundDiagnostics.record(event, task) }
+    }
     val terminal: TerminalManager = TerminalManager(context) {
         // Callbacks originate on Android's main looper.
         mutable.update { it.copy(sessions = terminalItems(), terminalRevision = it.terminalRevision + 1) }
@@ -316,7 +337,16 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }.collect { update -> update?.let { (project, lease, text) -> screenTests.updateOverlayConversation(project, lease, text) } }
         }
         scope.launch {
-            ai.state.collect { foregroundService?.setTaskActive(taskNeedsCpu()) }
+            ai.state.map(AiBackgroundTask::from).distinctUntilChanged().collect { task ->
+                // Main.immediate collector observes active=true before its first persistence/network suspension.
+                syncAiService()
+                foregroundService?.updateAssistant(task)
+                backgroundEvent(BackgroundTaskEvent.TaskPhase, task)
+                val notice = taskNotificationTracker.update(task)
+                if (task.active && !task.hasApproval && task.phase != dev.zakocoder.app.ai.AiPhase.AwaitingAnswer)
+                    taskNotifications.clear(task.conversationId)
+                if (notice != null && !activityVisible) taskNotifications.show(task, notice)
+            }
         }
         val initialSsh = scope.launch {
             try { ssh.load() }
@@ -379,7 +409,22 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     /** Only initialize from a visible activity, after startup data has been published to the UI. */
     fun activityVisibilityChanged(visible: Boolean) {
         activityVisible = visible
-        if (visible) initializeBundledRuntimeIfNeeded()
+        if (visible) {
+            serviceRecoveryDeferred = false
+            if (serviceNeeded()) try { service() }
+            catch (_: SecurityException) { }
+            catch (_: IllegalStateException) { }
+            taskNotifications.clear(ai.state.value.conversationId)
+            initializeBundledRuntimeIfNeeded()
+        } else {
+            val task = AiBackgroundTask.from(ai.state.value)
+            val waiting = when {
+                task.hasApproval -> BackgroundTaskNotice.Approval
+                task.phase == dev.zakocoder.app.ai.AiPhase.AwaitingAnswer && task.questionId != null -> BackgroundTaskNotice.Answer
+                else -> null
+            }
+            if (waiting != null) taskNotifications.show(task, waiting)
+        }
     }
 
     private fun initializeBundledRuntimeIfNeeded() {
@@ -441,41 +486,65 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private var foregroundService: DevelopmentService? = null
     private var serviceRequested = false
+    private var serviceRecoveryDeferred = false
+    private fun syncAiService() {
+        if (aiActive()) try { service() }
+        catch (_: SecurityException) { }
+        catch (_: IllegalStateException) { }
+        else releaseService()
+    }
     private fun service() {
         foregroundService?.let { it.setTaskActive(taskNeedsCpu()); return }
-        if (serviceRequested) return
+        if (serviceRequested || serviceRecoveryDeferred) return
         serviceRequested = true
+        backgroundEvent(BackgroundTaskEvent.ServiceRequested)
         try { ContextCompat.startForegroundService(context, Intent(context, DevelopmentService::class.java)) }
         catch (error: Exception) {
             serviceRequested = false
-            mutable.update { it.copy(backgroundServiceError = true) }
+            serviceRecoveryDeferred = true
+            backgroundEvent(BackgroundTaskEvent.ServiceStartRejected)
+            mutable.update { it.copy(backgroundServiceError = true,
+                message = context.getString(R.string.background_service_unavailable), messageIsError = true) }
             throw error
         }
     }
     fun serviceReady(service: DevelopmentService) {
         serviceRequested = false
         foregroundService = service
+        serviceRecoveryDeferred = false
+        backgroundEvent(BackgroundTaskEvent.ServiceReady)
         mutable.update { it.copy(backgroundServiceRunning = true, backgroundServiceError = false) }
+        service.updateAssistant(AiBackgroundTask.from(ai.state.value))
         service.setTaskActive(taskNeedsCpu())
         releaseService()
     }
     fun serviceDestroyed(service: DevelopmentService) {
         if (foregroundService === service) {
             foregroundService = null
-            mutable.update { it.copy(backgroundServiceRunning = false) }
-            if (screenTestActive() || mutable.value.busy || git.state.value.busy || mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }) stopAll()
+            serviceRequested = false
+            val interrupted = serviceNeeded()
+            serviceRecoveryDeferred = interrupted
+            backgroundEvent(BackgroundTaskEvent.ServiceDestroyedUnexpectedly, AiBackgroundTask.from(ai.state.value))
+            // A service callback is not a user cancellation. Never replay tools or stop unrelated work.
+            // The surviving Application retains ownership; a visible Activity can explicitly re-promote it.
+            mutable.update { it.copy(backgroundServiceRunning = false, backgroundServiceError = interrupted,
+                message = if (interrupted) context.getString(R.string.background_service_interrupted) else it.message,
+                messageIsError = if (interrupted) true else it.messageIsError) }
         }
     }
     private fun screenTestActive() = screenTests.state.value.let { it.active || it.busy }
-    private fun taskNeedsCpu() = mutable.value.busy || git.state.value.busy || projectTasksActive() || ai.state.value.let { it.active && it.approval == null } || screenTests.state.value.busy
+    private fun taskNeedsCpu() = mutable.value.busy || git.state.value.busy || projectTasksActive() || AiBackgroundTask.from(ai.state.value).needsCpu || screenTests.state.value.busy
+    private fun serviceNeeded() = screenTestActive() || mutable.value.busy || git.state.value.busy ||
+        mcp.state.value.running || projectTasksActive() || aiActive() || terminal.sessions.any { it.session.isRunning }
     private fun releaseService() {
         foregroundService?.setTaskActive(taskNeedsCpu())
-        if (!screenTestActive() && !mutable.value.busy && !git.state.value.busy && !mcp.state.value.running && !projectTasksActive() && !aiActive() && terminal.sessions.none { it.session.isRunning }) {
+        if (!serviceNeeded()) {
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null
             mutable.update { it.copy(backgroundServiceRunning = false) }
             ready.setTaskActive(false)
+            backgroundEvent(BackgroundTaskEvent.ServiceReleased)
             ready.stopSelf()
         }
     }

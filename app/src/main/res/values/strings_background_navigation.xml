@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="background_task_unavailable">暂时无法打开这条对话。请确认工作区和对话仍存在，或先结束当前任务。</string>
+</resources>
