@@ -151,12 +151,13 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     if (profiles && project != null) {
         var kinds by remember(project.id, project.kinds) { mutableStateOf(project.kinds) }
         WorkbenchSheet(stringResource(R.string.configure_project), { profiles = false }, stringResource(R.string.profile_help)) {
+            val dismissSheet = LocalWorkbenchSheetDismiss.current
             ProjectKind.entries.forEach { kind -> Row(Modifier.fillMaxWidth().clickable { kinds = if (kind in kinds) kinds - kind else kinds + kind }, verticalAlignment = Alignment.CenterVertically) {
                 WorkbenchCheckbox(kind in kinds, onCheckedChange = { checked -> kinds = if (checked) kinds + kind else kinds - kind })
                 Text(stringResource(kind.label))
             } }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false; workbench.kinds(kinds) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save_settings)) }
-            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }
     if (repair) WorkbenchAlertDialog(onDismissRequest = { repair = false }, title = { Text(stringResource(R.string.repair_packages)) },

@@ -185,6 +185,7 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
         val sdkReady = "android" in ids || checks.any { it.id == "android-sdk" && it.status == ToolStatus.Ready }
         val canInstallNdk = "android-ndk" !in ids || sdkReady
         WorkbenchSheet(stringResource(R.string.install_selected_bundles), { confirmation = null }) {
+            val dismissSheet = LocalWorkbenchSheetDismiss.current
             Text(ids.map { id -> stringResource(ToolBundles.catalog.single { it.id == id }.title) }.joinToString(stringResource(R.string.type_separator)))
             if (packages.isNotEmpty()) Text(stringResource(R.string.package_confirmation, packages.joinToString(", ")), style = MaterialTheme.typography.bodyMedium)
             else Text(stringResource(R.string.android_managed_repair), style = MaterialTheme.typography.bodyMedium)
@@ -210,7 +211,7 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
                 }
             }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null; onInstalled(); workbench.installToolBundles(ids, androidLicense) }, enabled = !state.busy && !state.checkingTools && (packages.isNotEmpty() || ids.any { it == "android" || it == "android-ndk" || it == "flutter" }) && canInstallNdk && ("android" !in ids || androidLicense), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.install)) }
-            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { confirmation = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+            WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }
     }
 }

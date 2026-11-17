@@ -230,6 +230,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     if (picker) {
         var query by remember { mutableStateOf("") }
         WorkbenchSheet(stringResource(R.string.ai_models_picker), { picker = false; ai.models.cancelProbe() }) {
+        val dismissSheet = LocalWorkbenchSheetDismiss.current
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ModelField(query, { query = it }, R.string.ai_models_search)
             if (state.probe == AiProbe.Models) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -244,7 +245,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                     }
                 }
             }
-            TextButton(onClick = { picker = false; ai.models.cancelProbe() }) { Text(stringResource(R.string.ai_models_keep_manual)) }
+            TextButton(onClick = dismissSheet) { Text(stringResource(R.string.ai_models_keep_manual)) }
         }
         }
     }

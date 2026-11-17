@@ -291,12 +291,10 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 onClick = { appPermissionsOpen = true })
             SettingsDivider()
             SettingsRow(stringResource(R.string.running_notifications), stringResource(notificationStatus.label()), glyph = Glyph.Bell, onClick = { editing = "notifications" })
+            SettingsDivider()
+            SettingsRow(stringResource(R.string.settings_about_entry), stringResource(R.string.settings_version_footer, installedVersion),
+                glyph = Glyph.Info, onClick = { editing = "about" })
         } }
-        item {
-            TextButton(onClick = { editing = "about" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-                Text(stringResource(R.string.settings_version_footer, installedVersion), fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal, color = TertiaryText)
-            }
-        }
     }
     }
     if (confirmZsh) WorkbenchAlertDialog(onDismissRequest = { confirmZsh = false }, title = { Text(stringResource(R.string.install_zsh)) },
@@ -311,6 +309,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         val title = stringResource(when (field) { "shell" -> R.string.terminal_shell; "path" -> R.string.extra_path; "dns" -> R.string.dns_short; "proxy" -> R.string.proxy_short; "source" -> R.string.apt_source; "notifications" -> R.string.running_notifications; else -> R.string.about_title })
         val informational = field == "about" || field == "notifications"
         WorkbenchSheet(title, { editing = null }) {
+                val dismissSheet = LocalWorkbenchSheetDismiss.current
                 when (field) {
                     "shell" -> {
                         TerminalShell.entries.forEach { option ->
@@ -355,14 +354,14 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
                 if (informational) {
-                    editing = null
+                    dismissSheet()
                 } else {
                     val candidate = when (field) { "shell" -> settings.copy(terminalShell = shell); "source" -> settings.copy(aptSource = source); "path" -> settings.copy(additionalPath = draft); "dns" -> settings.copy(dns = draft); else -> settings.copy(proxy = draft) }
-                    try { workbench.validateSettings(candidate); workbench.saveSettings(candidate); editing = null }
+                    try { workbench.validateSettings(candidate); workbench.saveSettings(candidate); dismissSheet() }
                     catch (invalid: IllegalArgumentException) { error = invalid.message }
                 }
             }, enabled = informational || !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (informational) R.string.close else R.string.save_settings)) }
-            if (!informational) WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { editing = null }, modifier = Modifier.fillMaxWidth()) {
+            if (!informational) WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(if (informational) R.string.close else R.string.cancel))
             }
         }

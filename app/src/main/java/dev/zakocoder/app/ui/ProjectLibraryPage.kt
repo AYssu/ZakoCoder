@@ -148,6 +148,7 @@ PageHeading(stringResource(R.string.projects_title)) {
         onBind = { adding = false; binding = true })
     if (binding) LocalProjectBindingSheet(!state.busy, { binding = false }, workbench::bindLocalProject)
     if (creating) WorkbenchSheet(stringResource(R.string.create_project), { creating = false }, stringResource(R.string.library_description)) {
+        val dismissSheet = LocalWorkbenchSheetDismiss.current
         // A restored saveable may name a template that no longer exists; fall back to Other everywhere.
         val selectedTemplate = ProjectTemplates.entries.firstOrNull { it.name == templateName } ?: ProjectTemplate.Other
         WorkbenchTextField(name, { name = it }, label = stringResource(R.string.project_name), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -167,7 +168,7 @@ PageHeading(stringResource(R.string.projects_title)) {
             creating = false; onOpened(null); workbench.create(name, selectedTemplate); name = ""; templateName = ProjectTemplate.Other.name
         }, enabled = name.isNotBlank() && !state.busy,
             modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
-        TextButton(onClick = { creating = false }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
+        TextButton(onClick = dismissSheet, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
     }
     if (cloning) GitCloneSheet(enabled = !state.busy && state.installed,
         close = { cloning = false }, onClone = { projectName, url, username, token ->
@@ -475,10 +476,11 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             dismissButton = { TextButton(onClick = { fileOperation = null }) { Text(stringResource(R.string.cancel)) } })
     }
     if (creatingFile) WorkbenchSheet(stringResource(R.string.create_file), { creatingFile = false }) {
+        val dismissSheet = LocalWorkbenchSheetDismiss.current
         WorkbenchTextField(fileName, { fileName = it }, modifier = Modifier.fillMaxWidth(), label = stringResource(R.string.file_name), singleLine = true)
         WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false; workbench.createFile(project.id, directory, fileName); fileName = "" },
             enabled = !state.busy && fileName.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
-        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
     }
 
 }

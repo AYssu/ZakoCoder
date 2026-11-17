@@ -20,7 +20,7 @@
   <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
-<img align="right" src="docs/assets/brand/mascots/05-welcome.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
+<img align="right" src="docs/assets/brand/mascots/06-idea.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
 
 ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
@@ -49,11 +49,11 @@ Full 仍需按项目安装 Node.js、Python、Java 等开发工具，并自行�
 
 ## 界面预览
 
-以下为 Android 应用的实际开发演示与测试截图，使用装饰性手机外框展示；具体布局以安装版本为准。
+以下为 0.1.4 对应的 Android 原生界面截图，使用隔离演示数据及装饰性手机外框；具体布局以安装版本为准。
 
 <table>
   <tr>
-    <td align="center"><img src="docs/assets/product/assistant-day.webp" alt="助手对话中的工具执行、回复和模型选择入口" width="240" /></td>
+    <td align="center"><img src="docs/assets/product/assistant-day.webp" alt="助手对话中的 Markdown 回复、单行用量与模型选择入口" width="240" /></td>
     <td align="center"><img src="docs/assets/product/skills-day.webp" alt="全局 Skill 开关、自定义与导入入口" width="240" /></td>
     <td align="center"><img src="docs/assets/product/drawer-day.webp" alt="侧边栏按工作区展开对话列表，底部提供常用功能入口" width="240" /></td>
   </tr>
