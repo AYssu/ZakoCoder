@@ -19,6 +19,7 @@ okhttp = "5.5.1"
 jsch = "2.28.8"
 
 [libraries]
+json-test = { module = "org.json:json", version = "20240303" }
 navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.2.0" }
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version = "0.9.4" }
 lsp4j = { module = "org.eclipse.lsp4j:org.eclipse.lsp4j", version = "1.0.0" }

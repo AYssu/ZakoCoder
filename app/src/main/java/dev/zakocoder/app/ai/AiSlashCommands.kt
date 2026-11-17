@@ -2,7 +2,7 @@ package dev.zakocoder.app.ai
 
 /** Stable application actions; none of these tokens is a shell command or model instruction. */
 internal enum class AiSlashCommandId {
-    Help, New, Sessions, Rename, Compact, Context, Model, Thinking, Skill, Mcp, Permissions, Stop,
+    Help, New, Sessions, Rename, Compact, Context, Model, Thinking, Skill, Mcp, Permissions, Stop, Export, Import, Recap,
 }
 
 internal data class AiSlashCommandEntry(val id: AiSlashCommandId, val token: String)
@@ -31,6 +31,9 @@ internal object AiSlashCommands {
         AiSlashCommandEntry(AiSlashCommandId.Mcp, "mcp"),
         AiSlashCommandEntry(AiSlashCommandId.Permissions, "permissions"),
         AiSlashCommandEntry(AiSlashCommandId.Stop, "stop"),
+        AiSlashCommandEntry(AiSlashCommandId.Export, "export"),
+        AiSlashCommandEntry(AiSlashCommandId.Import, "import"),
+        AiSlashCommandEntry(AiSlashCommandId.Recap, "recap"),
     )
 
     /** Accepts either a token prefix or a leading slash, retaining the stable catalog order. */

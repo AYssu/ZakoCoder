@@ -47,6 +47,9 @@ internal fun AiSlashPanels(
                     }
                 }
             }
+            AiSlashCommandId.Export, AiSlashCommandId.Import, AiSlashCommandId.Recap ->
+                AiConversationTransferSheet(workbench.ai, state, action,
+                    workbench.state.collectAsStateWithLifecycle().value.projects.firstOrNull { it.id == state.projectId }?.name.orEmpty(), onDismiss)
             AiSlashCommandId.Rename -> SlashRenamePanel(workbench, state, argument, onDismiss)
             AiSlashCommandId.Compact -> SlashCompactPanel(workbench, state, argument, onDismiss)
             AiSlashCommandId.Context -> SlashContextPanel(workbench, state, onDismiss)

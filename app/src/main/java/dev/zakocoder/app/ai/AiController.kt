@@ -486,6 +486,109 @@ class AiController(private val context: Context, root: (String) -> File, private
         withContext(Dispatchers.IO) { history.listConversations(projectId) }
     }
 
+    /** Export a stable visible transcript, without moving the selected-conversation pointer. */
+    suspend fun exportConversation(projectId: String, conversationId: String,
+        format: AiConversationTransfer.Format): String = withContext(Dispatchers.Main.immediate) {
+        val owner = mutable.value
+        check(conversationTransferReady(owner))
+        val generation = sessionGeneration
+        mutable.update { it.copy(permissionsSaving = true) }
+        try {
+            historyMutex.withLock {
+                check(sessionGeneration == generation && conversationTransferReady(mutable.value, saving = true))
+                val snapshot = if (owner.projectId == projectId && owner.conversationId == conversationId) owner else
+                    withContext(Dispatchers.IO) { history.load(projectId, conversationId).state }
+                require(snapshot?.conversationId == conversationId)
+                val title = (if (owner.projectId == projectId) owner.conversations else emptyList())
+                    .firstOrNull { it.id == conversationId }?.title ?: snapshot.conversations.firstOrNull { it.id == conversationId }?.title
+                    ?: withContext(Dispatchers.IO) { history.listConversations(projectId).firstOrNull { it.id == conversationId }?.title }
+                    .orEmpty()
+                withContext(Dispatchers.Default) {
+                    AiConversationTransfer.encode(AiConversationTransfer.fromState(snapshot, title), format)
+                }
+            }
+        } finally {
+            if (sessionGeneration == generation) mutable.update { it.copy(permissionsSaving = false) }
+        }
+    }
+
+    suspend fun previewConversationImport(uri: android.net.Uri): TransferDocument =
+        AiConversationDocuments(context).read(uri)
+
+    suspend fun writeConversationDocument(uri: android.net.Uri, content: String) =
+        AiConversationDocuments(context).write(uri, content)
+
+    suspend fun prepareConversationExport(content: String): String = AiConversationDocuments(context).prepare(content)
+
+    suspend fun writePreparedConversationDocument(uri: android.net.Uri, token: String) =
+        AiConversationDocuments(context).writePrepared(uri, token)
+
+    suspend fun discardConversationExport(token: String) = AiConversationDocuments(context).discard(token)
+
+    /** Explicit confirmation creates a new local conversation; imported history never executes itself. */
+    suspend fun importConversation(projectId: String, document: TransferDocument): Boolean =
+        withContext(Dispatchers.Main.immediate) {
+            val current = mutable.value
+            if (current.projectId != projectId || !conversationTransferReady(current)) return@withContext false
+            if (current.conversations.size >= 20) {
+                mutable.update { it.copy(error = context.getString(R.string.ai_history_limit)) }
+                return@withContext false
+            }
+            retainDraftReferences()
+            val generation = ++sessionGeneration
+            mutable.update { it.copy(permissionsLoading = true) }
+            try {
+                historyMutex.withLock {
+                    if (sessionGeneration != generation || mutable.value.projectId != projectId) return@withLock false
+                    val imported = withContext(Dispatchers.Default) {
+                        // Validate even a programmatically constructed preview before it becomes stored history.
+                        val checked = AiConversationTransfer.decode(
+                            AiConversationTransfer.encode(document, AiConversationTransfer.Format.Json).toByteArray(Charsets.UTF_8),
+                            "conversation.json").copy(source = document.source)
+                        AiConversationTransfer.importedState(checked, projectId)
+                    }.copy(enabledSkills = current.enabledSkills, skillsInitialized = current.skillsInitialized)
+                    currentCoroutineContext().ensureActive()
+                    // Once disk commit starts, publish its result even if the document picker/page is dismissed.
+                    withContext(NonCancellable) {
+                        val loaded = withContext(Dispatchers.IO) {
+                            val originals = history.save(projectId, current)
+                            require(originals.size < 20)
+                            val titled = imported.copy(conversations = originals + AiConversation(imported.conversationId,
+                                document.title, System.currentTimeMillis(), imported.turn))
+                            try {
+                                AiHistoryStore.Loaded(titled, history.save(projectId, titled))
+                            } catch (error: Exception) {
+                                // Only the newly allocated record may be removed; existing transcripts are untouched.
+                                try { history.delete(projectId, imported.conversationId) }
+                                catch (cleanup: Exception) { error.addSuppressed(cleanup) }
+                                try { history.select(projectId, current.conversationId) }
+                                catch (cleanup: Exception) { error.addSuppressed(cleanup) }
+                                throw error
+                            }
+                        }
+                        if (sessionGeneration != generation || mutable.value.projectId != projectId) false else {
+                            grants.clear(); toolGrants.clear(); decision = null
+                            threads.remove(projectId)
+                            restore(loaded, current.policy)
+                            true
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (sessionGeneration == generation && mutable.value.projectId == projectId)
+                    mutable.update { it.copy(error = context.getString(R.string.ai_history_save_error)) }
+                false
+            } finally {
+                if (sessionGeneration == generation && mutable.value.projectId == projectId)
+                    mutable.update { it.copy(permissionsLoading = false) }
+            }
+        }
+
+    private fun conversationTransferReady(state: AiState, saving: Boolean = false): Boolean =
+        !state.active && !state.restoring && !state.permissionsLoading &&
+            (saving || !state.permissionsSaving) && !state.historyError && !state.imagesLoading
+
     /** Renaming never changes selection or invents a conversation outside this owner. */
     suspend fun renameConversation(name: String): Boolean = withContext(Dispatchers.Main.immediate) {
         val current = mutable.value

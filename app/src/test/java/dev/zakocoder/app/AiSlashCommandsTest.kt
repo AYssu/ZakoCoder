@@ -15,6 +15,16 @@ class AiSlashCommandsTest {
         }
     }
 
+    @Test fun conversationTransferCommandsUseEnglishTokensAndStayLocal() {
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Export, ""), AiSlashCommands.parse("/export"))
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Import, ""), AiSlashCommands.parse("/import"))
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Recap, ""), AiSlashCommands.parse("/recap"))
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Recap, ""), AiSlashCommands.parse("/RECAP"))
+        assertEquals(AiSlashParseResult.Unknown("导出摘要"), AiSlashCommands.parse("/导出摘要"))
+        assertTrue(AiSlashCommands.suggestions("/导出").isEmpty())
+        assertEquals(listOf(AiSlashCommandId.Recap), AiSlashCommands.suggestions("/rec").map { it.id })
+    }
+
     @Test fun ordinaryMessagesUrlsAndAbsolutePathsStayOrdinaryText() {
         listOf("", " \r\n", "帮我 /compact", "https://example.com/help", "/usr/local/bin/node",
             "/home/user/project\n继续分析", "//server/share").forEach {
