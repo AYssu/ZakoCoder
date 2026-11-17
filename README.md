@@ -20,7 +20,7 @@
   <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
-<img align="right" src="docs/assets/brand/mascots/06-idea.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
+<img align="right" src="docs/assets/brand/mascots/01-readme.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
 
 ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
@@ -99,7 +99,7 @@ Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不
 
 ## 反馈与参与
 
-遇到问题，请在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、订阅令牌或私人源码。
+遇到问题，可先在助手输入 `/doctor`，保存脱敏诊断包；再在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、订阅令牌或私人源码。
 
 欢迎贡献修复、翻译和功能建议。应用采用 Kotlin + Jetpack Compose 原生方案；源码构建、架构和协作流程分别见[开发文档](docs/DEVELOPMENT.md)、[架构说明](docs/ARCHITECTURE.md)和[贡献指南](CONTRIBUTING.md)。发布变化见[更新记录](CHANGELOG.md)。
 

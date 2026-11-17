@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="doctor_command_description">导出日志与诊断，协助排查问题</string>
+    <string name="doctor_title">诊断与日志</string>
+    <string name="doctor_intro">遇到任务卡住、连接失败或后台中断时，保存诊断包并随问题反馈提供。</string>
+    <string name="doctor_included">包含设备与应用版本、任务阶段、请求统计、错误类别和脱敏事件。</string>
+    <string name="doctor_privacy">不包含聊天正文、思考正文、项目源码、密钥或请求头。诊断包只保存到你选择的位置，不会自动上传。</string>
+    <string name="doctor_scope">可在任务运行中导出；记录为导出当时的状态，不会停止任务。</string>
+    <string name="doctor_export">导出诊断包</string>
+    <string name="doctor_preparing">正在整理诊断…</string>
+    <string name="doctor_choose_destination">请选择保存位置</string>
+    <string name="doctor_saving">正在保存诊断包…</string>
+    <string name="doctor_saved">诊断包已保存，可随问题描述发送给维护者。</string>
+    <string name="doctor_failed">未能导出诊断包，请重试或更换保存位置。</string>
+    <string name="doctor_cancelled">已取消保存，任务不受影响。</string>
+    <plurals name="doctor_warning_count">
+        <item quantity="other">%d 项排查提示，详见诊断包。</item>
+    </plurals>
+</resources>

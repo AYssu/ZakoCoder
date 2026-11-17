@@ -7,21 +7,37 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import dev.zakocoder.app.ui.ZakoCoderApp
 import dev.zakocoder.app.settings.BackgroundTaskNotifications
+import dev.zakocoder.app.diagnostics.DiagnosticEvent
+import dev.zakocoder.app.diagnostics.DiagnosticEvents
+import dev.zakocoder.app.diagnostics.DiagnosticId
+import dev.zakocoder.app.diagnostics.DiagnosticOutcome
+import dev.zakocoder.app.diagnostics.DiagnosticStage
 
 
 class MainActivity : ComponentActivity() {
+    private val diagnosticId = DiagnosticId.create()
+    private fun recordVisibility(visible: Boolean) {
+        DiagnosticEvents.get(this).record(DiagnosticEvent(
+            DiagnosticStage.Startup, DiagnosticOutcome.Changed, diagnosticId, active = visible,
+        ))
+    }
     override fun onResume() {
         super.onResume()
+        recordVisibility(true)
         (application as ZakoApplication).workbench.activityVisibilityChanged(true)
     }
 
     override fun onPause() {
+        recordVisibility(false)
         (application as ZakoApplication).workbench.activityVisibilityChanged(false)
         super.onPause()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DiagnosticEvents.get(this).record(DiagnosticEvent(
+            DiagnosticStage.Startup, DiagnosticOutcome.Started, diagnosticId,
+        ))
         enableEdgeToEdge()
         val workbench = (application as ZakoApplication).workbench
         openTaskNotification(intent)

@@ -25,6 +25,12 @@ class AiSlashCommandsTest {
         assertEquals(listOf(AiSlashCommandId.Recap), AiSlashCommands.suggestions("/rec").map { it.id })
     }
 
+    @Test fun diagnosticsCommandIsLocalAndSuggestedWithoutAnAiTask() {
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Doctor, ""), AiSlashCommands.parse("/doctor"))
+        assertEquals(AiSlashParseResult.Command(AiSlashCommandId.Doctor, ""), AiSlashCommands.parse(" /DOCTOR \t"))
+        assertEquals(listOf(AiSlashCommandId.Doctor), AiSlashCommands.suggestions("/doc").map { it.id })
+    }
+
     @Test fun ordinaryMessagesUrlsAndAbsolutePathsStayOrdinaryText() {
         listOf("", " \r\n", "帮我 /compact", "https://example.com/help", "/usr/local/bin/node",
             "/home/user/project\n继续分析", "//server/share").forEach {

@@ -14,6 +14,7 @@ import com.termux.view.TerminalViewClient
 import dev.zakocoder.app.runtime.RuntimeCommand
 import dev.zakocoder.app.runtime.OwnedProcesses
 import dev.zakocoder.app.R
+import dev.zakocoder.app.diagnostics.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -26,6 +27,7 @@ data class TerminalItem(val id: String, val projectId: String, val projectName: 
 data class TerminalModifiers(val control: Boolean = false, val alt: Boolean = false)
 
 class TerminalManager(private val context: Context, private val changed: () -> Unit) {
+    private val diagnosticIds = mutableMapOf<TerminalSession, DiagnosticId>()
     @Volatile private var terminalTypeface: Typeface? = null
     /** Load the packaged, unmodified font on IO before attaching any terminal view. */
     fun prepareTypeface() {
@@ -69,6 +71,9 @@ class TerminalManager(private val context: Context, private val changed: () -> U
         val session = TerminalSession(command.executable, context.filesDir.absolutePath,
             (listOf(command.executable) + command.arguments).toTypedArray(),
             command.environment.map { "${it.key}=${it.value}" }.toTypedArray(), 4000, client)
+        val diagnostic = DiagnosticId.create()
+        diagnosticIds[session] = diagnostic
+        DiagnosticEvents.get(context).record(DiagnosticEvent(DiagnosticStage.Terminal, DiagnosticOutcome.Started, diagnostic))
         return TerminalItem(UUID.randomUUID().toString(), projectId, name, session, nextNumber++).also {
             sessions += it
             // Start before exposing a closable session: an uninitialized upstream
@@ -119,6 +124,9 @@ class TerminalManager(private val context: Context, private val changed: () -> U
         val item = sessions.singleOrNull { it.id == id } ?: return
         withContext(Dispatchers.IO) { if (item.session.pid > 0) OwnedProcesses.terminate(item.session.pid) }
         if (item.session.pid > 0) item.session.finishIfRunning()
+        diagnosticIds.remove(item.session)?.let { diagnostic ->
+            DiagnosticEvents.get(context).record(DiagnosticEvent(DiagnosticStage.Terminal, DiagnosticOutcome.Cancelled, diagnostic))
+        }
         sessions.remove(item); appearances.remove(item.id)
         mutablePreviews.update { it - item.id }
         changed()
@@ -147,7 +155,12 @@ class TerminalManager(private val context: Context, private val changed: () -> U
     private val client = object : TerminalSessionClient {
         override fun onTextChanged(session: TerminalSession) { attached.get()?.takeIf { it.currentSession === session }?.onScreenUpdated(); refreshPreviews() }
         override fun onTitleChanged(session: TerminalSession) = changed()
-        override fun onSessionFinished(session: TerminalSession) { onTextChanged(session); changed() }
+        override fun onSessionFinished(session: TerminalSession) {
+            diagnosticIds.remove(session)?.let { diagnostic -> DiagnosticEvents.get(context).record(
+                DiagnosticEvent(DiagnosticStage.Terminal,
+                    if (session.exitStatus == 0) DiagnosticOutcome.Succeeded else DiagnosticOutcome.Failed, diagnostic)) }
+            onTextChanged(session); changed()
+        }
         override fun onCopyTextToClipboard(session: TerminalSession, text: String?) { /* OSC 52 does not write the system clipboard automatically. */ }
         override fun onPasteTextFromClipboard(session: TerminalSession?) = Unit
         override fun onBell(session: TerminalSession) = Unit

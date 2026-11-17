@@ -82,6 +82,7 @@ class AiSlashMenuDeviceTest {
     }
     private fun click(label: Int) = clickText(context.getString(label))
     private fun input(value: String) {
+        instrumentation.waitForIdleSync()
         nodes { all ->
             val editor = all.first { it.config.contains(SemanticsProperties.EditableText) && it.config.contains(SemanticsActions.SetText) }
             assertTrue(editor.config[SemanticsActions.SetText].action?.invoke(AnnotatedString(value)) == true)
@@ -188,6 +189,82 @@ class AiSlashMenuDeviceTest {
 
     @Test(timeout = 150000) fun actualSlashCommandsOpenLocalPanelsAndNeverSendUnknownCommands() = commands(false)
     @Test(timeout = 150000) fun actualSlashCommandsOpenLocalPanelsAndNeverSendUnknownCommandsNight() = commands(true)
+
+    @Test(timeout = 150000) fun doctorOpensWithoutWorkspaceOrProvider() = doctor(false)
+    @Test(timeout = 150000) fun doctorOpensWithoutWorkspaceOrProviderNight() = doctor(true)
+
+    private fun doctor(dark: Boolean) = runBlocking {
+        val base = context
+        val root = File(base.cacheDir, "slash-doctor-${UUID.randomUUID()}")
+        val preferences = mutableSetOf<String>()
+        val isolated = object : ContextWrapper(base) {
+            override fun getFilesDir() = File(root, "files").apply { mkdirs() }
+            override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
+            override fun getNoBackupFilesDir() = File(root, "no-backup").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = base.getSharedPreferences("${root.name}-$name".also { preferences += it }, mode)
+        }
+        var workbench: Workbench? = null
+        try {
+            AiDeviceTest.Fixture(isolated).use { fixture ->
+                // Intentionally omit the configured fixture store: diagnostics must work without a provider.
+                val wb = withContext(Dispatchers.Main) { Workbench(isolated,
+                    aiTransport = fixture.transport, aiHistory = fixture.history) }
+                workbench = wb
+                await("empty diagnostic workbench initialized") {
+                    !wb.state.value.loading && !wb.ai.models.state.value.loading && !wb.ai.models.state.value.saving &&
+                        !wb.ai.state.value.restoring && !wb.ai.state.value.permissionsLoading && !wb.ai.state.value.permissionsSaving
+                }
+                assertNull(wb.state.value.project)
+                assertFalse(wb.ai.state.value.configured)
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    scenario.onActivity { it.setContent { Theme(dark) {
+                        val state by wb.state.collectAsState()
+                        AiPage(wb, state, onModels = {}, onProjects = {}, onTerminal = {})
+                    } } }
+                    await("workspace-free composer available for diagnostics") { has(R.string.ai_prompt) }
+                    // Initial model/history observers may recompose the keyed composer after
+                    // its placeholder first appears. Wait for the session and editor identity
+                    // to settle before SetText; focus can be owned by an ancestor semantics node.
+                    instrumentation.waitForIdleSync()
+                    var previousIdentity: Triple<String?, String, Int>? = null
+                    var unchangedSince = SystemClock.uptimeMillis()
+                    await("workspace-free doctor composer identity settles") {
+                        val state = wb.ai.state.value
+                        val editorId = nodes { all -> all.firstOrNull {
+                            it.config.contains(SemanticsProperties.EditableText) &&
+                                it.config.contains(SemanticsActions.SetText) &&
+                                !it.config.contains(SemanticsProperties.Disabled)
+                        }?.id }
+                        val identity = editorId?.let { Triple(state.projectId, state.conversationId, it) }
+                        if (identity != previousIdentity) {
+                            previousIdentity = identity
+                            unchangedSince = SystemClock.uptimeMillis()
+                        }
+                        identity != null && !state.restoring && !state.permissionsLoading &&
+                            !state.permissionsSaving && SystemClock.uptimeMillis() - unchangedSince >= 200
+                    }
+                    input("/doctor")
+                    await("local doctor suggestion available") { has("/doctor") }
+                    clickText("/doctor")
+                    await("diagnostics open without selecting workspace or model") {
+                        has(R.string.doctor_title) && has(R.string.doctor_export) && has(R.string.doctor_privacy)
+                    }
+                    assertNull(wb.ai.state.value.projectId)
+                    assertFalse(wb.ai.state.value.configured)
+                    assertFalse(wb.ai.state.value.active)
+                    assertEquals("Doctor must never call a model", 0, fixture.server.requestCount)
+                    capture(dark, "doctor")
+                    dismiss(R.string.doctor_title)
+                }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main) { workbench?.stopAll() }
+                withTimeout(15000) { while (workbench?.ai?.state?.value?.active == true) delay(20) }
+                withContext(Dispatchers.IO) { root.deleteRecursively(); preferences.forEach(base::deleteSharedPreferences) }
+            }
+        }
+    }
 
     @Test(timeout = 150000) fun skillCommandLoadsGlobalCatalogWithoutCreatingWorkspace() = runBlocking {
         val base = context

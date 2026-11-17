@@ -129,4 +129,5 @@ internal fun slashCommandLabel(id: AiSlashCommandId): Int = when (id) {
     AiSlashCommandId.Export -> R.string.conversation_export
     AiSlashCommandId.Import -> R.string.conversation_import
     AiSlashCommandId.Recap -> R.string.conversation_recap
+    AiSlashCommandId.Doctor -> R.string.doctor_command_description
 }

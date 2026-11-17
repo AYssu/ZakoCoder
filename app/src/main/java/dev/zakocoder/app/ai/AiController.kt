@@ -4,6 +4,7 @@ import android.content.Context
 import dev.zakocoder.app.capabilities.CapabilityPackage
 import dev.zakocoder.app.R
 import dev.zakocoder.app.editor.FileBaseline
+import dev.zakocoder.app.diagnostics.*
 import dev.zakocoder.app.runtime.CommandResult
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -40,7 +41,7 @@ data class AiState(val projectId: String? = null, val checkpointId: String? = nu
 
 class AiController(private val context: Context, root: (String) -> File, private val editorOpen: (String, String) -> Boolean,
     private val command: suspend (String, String) -> CommandResult, private val activityChanged: () -> Unit, private val filesChanged: () -> Unit,
-    private val transport: ChatTransport = ChatTransport(), private val config: AiConfigStore = AiConfigStore(context),
+    transport: ChatTransport = ChatTransport(), private val config: AiConfigStore = AiConfigStore(context),
     private val permissionStore: AiPermissionStore = AiPermissionStore(context),
     private val streamingCommand: (suspend (String, String, (String) -> Unit) -> CommandResult)? = null,
     private val history: AiHistoryStore = AiHistoryStore(context),
@@ -73,6 +74,10 @@ class AiController(private val context: Context, root: (String) -> File, private
     /** Shared project operations keep ownership between individual process executions. */
     private val canStartTask: () -> Boolean = { true }) {
     internal var taskLimits = AiTaskLimits()
+    private val diagnostics = DiagnosticEvents.get(context)
+    private val transport = transport.withDiagnostics(diagnostics)
+    private var diagnosticTask = DiagnosticId.create()
+    private val diagnosticToolIds = linkedMapOf<String, DiagnosticId>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     internal val memory = dev.zakocoder.app.memory.MemoryController(context, scope).also { it.load() }
     private val mutable = MutableStateFlow(AiState())
@@ -861,6 +866,9 @@ class AiController(private val context: Context, root: (String) -> File, private
         val request = mutable.value.requests.lastOrNull { it.turn == mutable.value.turn }
         val message = context.getString(kind.label) + (request?.status?.let { " (HTTP $it)" } ?: "") + (request?.id?.let { " · ${it.take(8)}" } ?: "")
         mutable.update { it.copy(error = if (it.historyError) it.error else message, failureKind = kind, taskDiagnostic = diagnostic.take(2048), phase = if (kind == AiFailure.Cancelled) AiPhase.Cancelled else AiPhase.Failed, reasoningEntryId = null, retryNotice = "") }
+        diagnostics.record(DiagnosticEvent(DiagnosticStage.Task, DiagnosticOutcome.Changed, diagnosticTask,
+            phase = mutable.value.phase, failure = kind, active = mutable.value.active,
+            turn = mutable.value.turn, round = mutable.value.round, events = mutable.value.toolCount))
     }
 
     fun setPolicy(policy: AiPolicy) {
@@ -1300,6 +1308,9 @@ class AiController(private val context: Context, root: (String) -> File, private
 
     private fun launchTask(id: String, text: String, references: List<AiReference>, images: List<AiImageAttachment>, continuation: AiQuestionContinuation? = null, explicitSkill: String? = null) {
         task = scope.launch {
+            diagnosticTask = DiagnosticId.create()
+            diagnostics.record(DiagnosticEvent(DiagnosticStage.Task, DiagnosticOutcome.Started, diagnosticTask,
+                phase = mutable.value.phase, active = true, turn = mutable.value.turn))
             var paused = false
             var checkpoint: Job? = null
             try {
@@ -1368,6 +1379,14 @@ class AiController(private val context: Context, root: (String) -> File, private
                     }
                     screenTaskOwner = null
                     mutable.update { it.copy(active = false, retryNotice = "") }; grants.clear(); toolGrants.clear(); activityChanged()
+                    val ended = mutable.value
+                    diagnostics.record(DiagnosticEvent(DiagnosticStage.Task, when (ended.phase) {
+                        AiPhase.Completed -> DiagnosticOutcome.Succeeded
+                        AiPhase.Cancelled -> DiagnosticOutcome.Cancelled
+                        AiPhase.AwaitingAnswer -> DiagnosticOutcome.Waiting
+                        else -> DiagnosticOutcome.Failed
+                    }, diagnosticTask, phase = ended.phase, failure = ended.failureKind, active = false,
+                        turn = ended.turn, round = ended.round, events = ended.toolCount))
                 }
             }
             if (!paused && mutable.value.phase == AiPhase.Completed && !mutable.value.historyError) {
@@ -2093,7 +2112,26 @@ class AiController(private val context: Context, root: (String) -> File, private
             if (mutable.compareAndSet(owner, owner.copy(events = boundedEvents(events)))) {
                 // The final event may already be absent from the bounded display history.
                 // Publish metadata only after this exact owner's state transition succeeds.
-                observed?.let { observeUsage(it, owner) }
+                observed?.let { changed ->
+                    observeUsage(changed, owner)
+                    if (owner.events.firstOrNull { it.id == id }?.status != changed.status) {
+                        val diagnosticId = synchronized(diagnosticToolIds) {
+                            diagnosticToolIds.getOrPut(id) { DiagnosticId.create() }.also {
+                                while (diagnosticToolIds.size > 512) diagnosticToolIds.remove(diagnosticToolIds.keys.first())
+                            }
+                        }
+                        diagnostics.record(DiagnosticEvent(DiagnosticStage.Tool, when (changed.status) {
+                            AiToolStatus.Running -> DiagnosticOutcome.Started
+                            AiToolStatus.Waiting -> DiagnosticOutcome.Waiting
+                            AiToolStatus.Succeeded -> DiagnosticOutcome.Succeeded
+                            AiToolStatus.Cancelled -> DiagnosticOutcome.Cancelled
+                            AiToolStatus.Failed, AiToolStatus.Denied, AiToolStatus.Incomplete -> DiagnosticOutcome.Failed
+                            AiToolStatus.Queued -> DiagnosticOutcome.Changed
+                        }, diagnosticId, owner = diagnosticTask, tool = changed.tool, toolStatus = changed.status,
+                            turn = changed.turn, round = owner.round,
+                            elapsedMillis = changed.started?.let { ((changed.finished ?: now()) - it).coerceAtLeast(0) }))
+                    }
+                }
                 return
             }
         }
