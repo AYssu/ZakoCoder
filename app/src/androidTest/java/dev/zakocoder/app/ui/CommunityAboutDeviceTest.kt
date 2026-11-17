@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewRootForTest
@@ -57,7 +59,8 @@ class CommunityAboutDeviceTest {
                     CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark) {
                         WorkbenchMiuixTheme(dark) {
                             Surface(Modifier.fillMaxSize()) {
-                                SettingsPage(workbench, workbench.state.value, onModels = {})
+                                val state by workbench.state.collectAsStateWithLifecycle()
+                                SettingsPage(workbench, state, onModels = {})
                             }
                         }
                     }
@@ -69,9 +72,8 @@ class CommunityAboutDeviceTest {
                     all.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
                         ?.config?.getOrNull(SemanticsActions.ScrollBy)?.action?.invoke(0f, 1600f)
                 }
-                shown(entry)
+                shown(entry) && hasClickAction(entry)
             }
-            assertTrue("About row has an explicit action", hasClickAction(entry))
             settleAndCapture(dark, "settings")
             click(entry)
             val groupName = context.getString(R.string.community_group_name)
@@ -133,7 +135,7 @@ class CommunityAboutDeviceTest {
     private fun hasClickAction(text: String) = nodes { clickableNode(it, text) != null }
 
     private fun click(text: String) {
-        await("Visible action: $text") { shown(text) }
+        await("Visible and actionable: $text") { shown(text) && hasClickAction(text) }
         nodes { all ->
             val action = requireNotNull(clickableNode(all, text)).config[SemanticsActions.OnClick].action
             assertTrue(action?.invoke() == true)
