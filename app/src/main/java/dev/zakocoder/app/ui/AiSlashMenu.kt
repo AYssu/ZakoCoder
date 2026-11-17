@@ -126,4 +126,7 @@ internal fun slashCommandLabel(id: AiSlashCommandId): Int = when (id) {
     AiSlashCommandId.Mcp -> R.string.ai_slash_mcp
     AiSlashCommandId.Permissions -> R.string.ai_slash_permissions
     AiSlashCommandId.Stop -> R.string.ai_slash_stop
+    AiSlashCommandId.Export -> R.string.conversation_export
+    AiSlashCommandId.Import -> R.string.conversation_import
+    AiSlashCommandId.Recap -> R.string.conversation_recap
 }

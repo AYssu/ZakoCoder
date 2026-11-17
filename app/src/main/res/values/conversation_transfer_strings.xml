@@ -1,0 +1,27 @@
+<resources>
+    <string name="conversation_export">导出对话</string>
+    <string name="conversation_import">导入对话</string>
+    <string name="conversation_recap">导出摘要</string>
+    <string name="conversation_export_hint">选择导出格式。文件可能包含项目源码、路径与工具输出，分享前请检查内容。</string>
+    <string name="conversation_export_markdown">Markdown · 完整记录</string>
+    <string name="conversation_export_markdown_hint">给其他 Agent 阅读，包含对话与工具结果。</string>
+    <string name="conversation_export_json">JSON · 可恢复记录</string>
+    <string name="conversation_export_json_hint">可在 ZakoCoder 中导入为新对话，不含源码文件、图片附件或授权。</string>
+    <string name="conversation_recap_hint">从已有需求、计划、回复与工具记录整理交接摘要，不额外请求模型。较长内容会注明省略；接手前仍需核对源码与当前环境。</string>
+    <string name="conversation_save_recap">保存交接摘要</string>
+    <string name="conversation_import_hint">选择 ZakoCoder JSON、Markdown 或文本。JSON 恢复可见记录；Markdown 和文本作为交接资料。导入不会执行历史命令，也不会恢复旧权限。</string>
+    <string name="conversation_import_target">导入工作区：%1$s</string>
+    <string name="conversation_choose_file">选择文件</string>
+    <string name="conversation_choose_again">重新选择</string>
+    <string name="conversation_preview">内容预览</string>
+    <string name="conversation_preview_partial">仅预览开头，导入内容以文件为准。</string>
+    <string name="conversation_import_confirm">导入为新对话</string>
+    <string name="conversation_import_confirm_hint">不会覆盖已有对话。文件内容会作为历史参考，之后发送消息时可能传给当前模型；接手任务还需对应源码。</string>
+    <string name="conversation_saved">已保存导出文件</string>
+    <string name="conversation_transfer_failed">操作失败，请检查文件及所选位置是否可读写，然后重试。</string>
+    <string name="conversation_transfer_invalid">文件损坏或格式不支持。请选择 ZakoCoder 导出的 JSON、Markdown 或文本文件。</string>
+    <string name="conversation_transfer_large">内容过大，最多支持 8 MiB。可先导出摘要再交接。</string>
+    <string name="conversation_transfer_version">该文件来自不支持的格式版本，请更新应用后重试。</string>
+    <string name="conversation_import_failed">未能导入。请确认当前任务已结束、工作区可用且对话数未达到上限；原对话仍保留。</string>
+    <string name="conversation_transfer_busy">正在处理…</string>
+</resources>

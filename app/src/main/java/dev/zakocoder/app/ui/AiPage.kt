@@ -319,7 +319,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }
-        var slashAction by remember { mutableStateOf<AiSlashCommandId?>(null) }
+        var slashAction by rememberSaveable { mutableStateOf<AiSlashCommandId?>(null) }
         var slashArgument by remember { mutableStateOf("") }
         var slashError by remember { mutableStateOf<Int?>(null) }
         var explicitSkillPath by remember { mutableStateOf<String?>(null) }
@@ -356,10 +356,10 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     if (parsed.arguments.isNotBlank() && id !in setOf(AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Skill)) {
                         slashError = R.string.ai_command_no_arguments; return
                     }
-                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Thinking) && commandBusy) {
+                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Thinking, AiSlashCommandId.Export, AiSlashCommandId.Import, AiSlashCommandId.Recap) && commandBusy) {
                         slashError = R.string.ai_slash_busy; return
                     }
-                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Sessions, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Permissions) && project == null) {
+                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Sessions, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Permissions, AiSlashCommandId.Export, AiSlashCommandId.Import, AiSlashCommandId.Recap) && project == null) {
                         slashError = R.string.select_project_first; return
                     }
                     if (id in setOf(AiSlashCommandId.Thinking, AiSlashCommandId.Compact) && !state.configured) {

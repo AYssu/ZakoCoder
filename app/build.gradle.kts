@@ -292,6 +292,7 @@ dependencies {
     implementation(libs.xz)
     implementation(libs.lifecycle.compose)
     testImplementation(libs.junit)
+    testImplementation(libs.json.test)
     androidTestImplementation(libs.test.runner)
     androidTestImplementation(libs.test.core)
     androidTestImplementation(libs.junit)
