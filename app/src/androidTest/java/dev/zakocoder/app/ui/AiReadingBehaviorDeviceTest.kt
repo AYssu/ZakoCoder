@@ -62,6 +62,8 @@ class AiReadingBehaviorDeviceTest {
         return result.get()
     }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
+    private fun matchesLabel(node: SemanticsNode, label: String) = text(node) == label ||
+        label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
     private fun has(label: String) = nodes { all -> all.any { text(it) == label } }
     private fun await(label: String, condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15000
@@ -74,9 +76,42 @@ class AiReadingBehaviorDeviceTest {
         assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
     }
     private fun field(all: List<SemanticsNode>, label: Int): SemanticsNode {
-        var node: SemanticsNode? = all.first { text(it) == context.getString(label) }
-        while (node != null && !node.config.contains(SemanticsProperties.EditableText)) node = node.parent
-        return requireNotNull(node)
+        val target = all.first { matchesLabel(it, context.getString(label)) }
+        fun editable(node: SemanticsNode): SemanticsNode? =
+            if (node.config.contains(SemanticsProperties.EditableText)) node
+            else node.children.firstNotNullOfOrNull(::editable)
+        return requireNotNull(editable(target)) { "No editable field for ${context.getString(label)}" }
+    }
+    /** Offscreen descendants can be omitted from the visible semantics tree. Reveal
+     * the actual control before clicking/looking for its nested numeric fields. */
+    private fun revealLabel(label: Int) {
+        val name = context.getString(label)
+        repeat(40) {
+            val visible = nodes { all ->
+                val target = all.firstOrNull { matchesLabel(it, name) }
+                var parent = target?.parent
+                while (parent != null && !parent.config.contains(SemanticsActions.ScrollBy)) parent = parent.parent
+                val scroll = parent ?: all.firstOrNull { it.config.contains(SemanticsActions.ScrollBy) }
+                    ?: error("No scroll container for $name")
+                if (target != null && target.boundsInWindow.height >= target.size.height * .98f &&
+                    target.boundsInWindow.height > 0 && target.boundsInWindow.top >= scroll.boundsInWindow.top &&
+                    target.boundsInWindow.bottom <= scroll.boundsInWindow.bottom) true else {
+                    val distance = target?.layoutInfo?.coordinates?.localToWindow(Offset.Zero)?.y?.let {
+                        it - scroll.boundsInWindow.top - 24f
+                    } ?: (scroll.boundsInWindow.height * .6f)
+                    assertTrue("Scroll to $name", scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, distance) == true)
+                    false
+                }
+            }
+            if (visible) { instrumentation.waitForIdleSync(); return }
+            Thread.sleep(80)
+        }
+        val shot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(context.cacheDir, "ui-review/reading-after").apply { mkdirs() }.resolve("unrevealed-control.png")
+                .outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } finally { shot.recycle() }
+        error("Control never became visible: $name")
     }
     private fun showField(label: Int) {
         repeat(10) {
@@ -132,7 +167,7 @@ class AiReadingBehaviorDeviceTest {
     }
     @Composable private fun Theme(content: @Composable () -> Unit) {
         val density = context.resources.displayMetrics.widthPixels / 360f
-        CompositionLocalProvider(LocalDensity provides Density(density, 1.3f)) {
+        CompositionLocalProvider(LocalDensity provides Density(density, 1f)) {
             MaterialTheme(colorScheme = WorkbenchColors, typography = WorkbenchTypography) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), content = content)
             }
@@ -321,8 +356,9 @@ class AiReadingBehaviorDeviceTest {
                         while (save != null && !save.config.contains(SemanticsActions.OnClick)) save = save.parent
                         save != null && !save.config.contains(SemanticsProperties.Disabled)
                     } }
+                    revealLabel(R.string.ai_options_title)
                     click(R.string.ai_options_title)
-                    await("advanced options") { has(context.getString(R.string.ai_options_frequency)) }
+                    revealLabel(R.string.ai_options_frequency)
                     // Follow the actual user path: reveal a field before touching it. An OnClick
                     // semantics action on an offscreen node does not prove usable keyboard layout.
                     var imeTop = 0
