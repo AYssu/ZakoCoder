@@ -6,7 +6,6 @@ import dev.zakocoder.app.ai.*
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
-import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -97,13 +96,12 @@ class AiPlanningDeviceTest {
     }
 
     @Test fun planningToolSchemasDropUnknownAndSideEffectToolsWithoutChangingExecutionSchemas() {
-        val schemas = JSONArray().apply {
-            AiTool.entries.forEach { put(JSONObject().put("type", "function").put("function", JSONObject().put("name", it.wire))) }
+        val schemas = AiToolRegistry.schemas(screen = true, ssh = true, skills = true, delegation = true, browser = true).apply {
             put(JSONObject().put("type", "function").put("function", JSONObject().put("name", "new_unknown_mutating_tool")))
         }
         val selected = AiPlanning.schemas(schemas, true)
         val names = (0 until selected.length()).map { selected.getJSONObject(it).getJSONObject("function").getString("name") }.toSet()
-        assertEquals(AiTool.entries.filter(AiPlanning::allows).map { it.wire }.toSet(), names)
+        assertEquals(AiTool.entries.filter(AiPlanning::allows).map { it.wire }.toSet() + "ssh_remote", names)
         assertFalse("Unknown tools must not become planning-capable", "new_unknown_mutating_tool" in names)
         assertSame("Execution mode must retain the original schemas", schemas, AiPlanning.schemas(schemas, false))
         assertEquals(AiTool.entries.size + 1, schemas.length())

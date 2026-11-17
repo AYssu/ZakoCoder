@@ -12,6 +12,7 @@ import dev.zakocoder.app.terminal.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -203,7 +204,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         },
         finishScreenTestTask = { id, lease -> screenTests.finishTask(id, lease) }, stopScreenTest = { screenTests.stop() },
         shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() },
-        canStartTask = { !mutable.value.busy && !git.state.value.busy && !projectTasksActive() })
+        canStartTask = { !mutable.value.loading && !mutable.value.busy && !git.state.value.busy && !projectTasksActive() })
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -317,7 +318,13 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         scope.launch {
             ai.state.collect { foregroundService?.setTaskActive(taskNeedsCpu()) }
         }
-        scope.launch { ssh.load() }
+        val initialSsh = scope.launch {
+            try { ssh.load() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: dev.zakocoder.app.ssh.SshException) {
+                // Optional SSH storage failure is already exposed by its controller; local work stays available.
+            }
+        }
         scope.launch { mcp.state.collect { if (it.running) service() else releaseService() } }
         // A Git operation spans several commands and credential cleanup. Keep ownership
         // and the foreground service through the gaps between individual guest processes.
@@ -348,6 +355,10 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                 val staleKernelProxy = kernelPort > 0 && parsedProxy?.host == "127.0.0.1" && parsedProxy.port == kernelPort
                 if (kernelPort > 0) kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
                 if (staleKernelProxy) withContext(Dispatchers.IO) { settingsRepository.save(data.settings.copy(proxy = "")) }
+                // The first AI task freezes these identities. Publish readiness only after
+                // their parallel disk loads finish, never with a transient empty/unconfigured lease.
+                initialSsh.join()
+                capabilityPackages.state.first { it.loaded }
                 mutable.update { it.copy(loading = false, onboarding = data.onboarding, projects = data.projects,
                     settings = if (staleKernelProxy) data.settings.copy(proxy = "") else data.settings,
                     proxyDisplay = if (staleKernelProxy) "" else data.proxyDisplay, installed = data.installed,

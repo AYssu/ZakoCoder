@@ -106,13 +106,16 @@ class SshController(context: Context) {
         val profile = entry(id).profile
         val repository = PinnedHostRepository(profile, null)
         val jsch = JSch().apply { setHostKeyRepository(repository) }
-        val session = session(jsch, profile, token)
+        val diagnostic = ConnectionDiagnostic("probe")
+        val session = session(jsch, profile, token, diagnostic)
         try {
             try { session.connect(15_000) } catch (error: Exception) {
-                if (repository.observed == null) throw SshException("connection_failed", error)
+                ensureCurrent(token)
+                if (repository.observed == null) throw SshException(diagnostic.failed(error), error)
             }
             ensureCurrent(token)
             val observed = repository.observed ?: throw SshException("host_key_missing")
+            diagnostic.reached("host_key_observed")
             pending = profile to observed
             mutableState.update { it.copy(pendingHostKey = observed) }
             observed
@@ -207,7 +210,27 @@ class SshController(context: Context) {
         }
     }
 
-    private fun session(jsch: JSch, profile: SshProfile, token: Long): Session {
+    private class ConnectionDiagnostic(private val operation: String) {
+        var stage = "resolve"
+        fun failed(error: Throwable): String {
+            val code = SshConnectionFailure.code(error, stage)
+            val types = generateSequence(error) { it.cause }.take(8)
+                .map { it.javaClass.simpleName.replace(Regex("[^A-Za-z0-9_]"), "").take(64) }.joinToString(",")
+            val errno = generateSequence(error) { it.cause }.take(12)
+                .filterIsInstance<android.system.ErrnoException>().firstOrNull()?.errno
+            val errnoName = errno?.let { android.system.OsConstants.errnoName(it) } ?: "none"
+            val authMethods = SshConnectionFailure.authenticationMethods(error)
+            // Intentionally no exception message/stack, host, username, profile ID or credentials.
+            android.util.Log.w("ZakoSsh", "sdk=${android.os.Build.VERSION.SDK_INT} jsch=${JSch.VERSION} operation=$operation stage=$stage error=$code errno=$errnoName errno_code=${errno ?: 0} auth_methods=$authMethods types=$types")
+            return code
+        }
+        fun reached(value: String) {
+            stage = value
+            android.util.Log.i("ZakoSsh", "operation=$operation stage=$value")
+        }
+    }
+
+    private fun session(jsch: JSch, profile: SshProfile, token: Long, diagnostic: ConnectionDiagnostic): Session {
         val session = jsch.getSession(profile.username, profile.host, profile.port)
         session.setConfig("StrictHostKeyChecking", "yes")
         session.setConfig("PreferredAuthentications", "none")
@@ -219,10 +242,13 @@ class SshController(context: Context) {
                 val socket = Socket()
                 synchronized(sessionsLock) { ensureCurrent(token); sockets[session] = socket }
                 try {
+                    diagnostic.reached("resolve")
                     val address = InetSocketAddress(host, port)
                     ensureCurrent(token)
+                    diagnostic.reached("tcp_connect")
                     socket.connect(address, 15_000)
                     ensureCurrent(token)
+                    diagnostic.reached("ssh_handshake")
                     return socket
                 } catch (error: Exception) {
                     socket.close()
@@ -237,7 +263,8 @@ class SshController(context: Context) {
         return session
     }
     private fun authenticated(entry: SshStore.Entry, token: Long): Session {
-        val repository = PinnedHostRepository(entry.profile, entry.profile.hostFingerprint)
+        val diagnostic = ConnectionDiagnostic("connect")
+        val repository = PinnedHostRepository(entry.profile, entry.profile.hostFingerprint) { diagnostic.reached("authentication") }
         val jsch = JSch().apply { setHostKeyRepository(repository) }
         val secret = entry.credential
         if (entry.profile.auth == SshAuth.PrivateKey) {
@@ -247,7 +274,7 @@ class SshController(context: Context) {
             catch (error: Exception) { throw SshException("private_key_invalid", error) }
             finally { bytes.fill(0); passphrase.fill(0) }
         }
-        val session = session(jsch, entry.profile, token)
+        val session = session(jsch, entry.profile, token, diagnostic)
         try {
             if (entry.profile.auth == SshAuth.Password) {
                 session.setConfig("PreferredAuthentications", "password")
@@ -261,7 +288,7 @@ class SshController(context: Context) {
             release(session)
             ensureCurrent(token)
             throw SshException(if (repository.observed?.fingerprint != null && repository.observed?.fingerprint != entry.profile.hostFingerprint)
-                "host_key_changed" else "connection_or_auth_failed", error)
+                "host_key_changed" else diagnostic.failed(error), error)
         } finally { jsch.removeAllIdentity() }
     }
     private fun release(session: Session) {
@@ -493,13 +520,16 @@ class SshController(context: Context) {
         store.write(rows)
     }
 
-    private class PinnedHostRepository(private val profile: SshProfile, private val pinned: String?) : HostKeyRepository {
+    private class PinnedHostRepository(private val profile: SshProfile, private val pinned: String?, private val onTrusted: () -> Unit = {}) : HostKeyRepository {
         var observed: SshHostKey? = null
             private set
         override fun check(host: String, key: ByteArray): Int {
             val observed = SshHostKey(profile.id, profile.host, profile.port, HostKey(host, key).type, SshSafety.fingerprint(key))
             this.observed = observed
-            return if (pinned == null) HostKeyRepository.NOT_INCLUDED else if (pinned == observed.fingerprint) HostKeyRepository.OK else HostKeyRepository.CHANGED
+            return if (pinned == null) HostKeyRepository.NOT_INCLUDED else if (pinned == observed.fingerprint) {
+                onTrusted()
+                HostKeyRepository.OK
+            } else HostKeyRepository.CHANGED
         }
         override fun add(hostkey: HostKey?, ui: UserInfo?) = Unit
         override fun remove(host: String?, type: String?) = Unit

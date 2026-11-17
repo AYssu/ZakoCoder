@@ -58,6 +58,11 @@
 # invoke their zero-argument constructors reflectively. This is the exact set of
 # built-in config targets, not a keep-all for SSH classes or their members.
 # Source: Maven com.github.mwiede:jsch:2.28.8, JSch.java static config block.
+# Some algorithm classes and constructors are package-private. Their reflective
+# callers must remain in the same package after R8 repackaging; preserving only
+# the algorithm names still causes IllegalAccessException in Release builds.
+# Class/member shrinking, optimization and non-reflective renaming remain enabled.
+-keeppackagenames com.jcraft.jsch,com.jcraft.jsch.**
 -keep,allowoptimization class com.jcraft.jsch.CipherNone { <init>(); }
 -keep,allowoptimization class com.jcraft.jsch.DH25519 { <init>(); }
 -keep,allowoptimization class com.jcraft.jsch.DH25519MLKEM768 { <init>(); }
