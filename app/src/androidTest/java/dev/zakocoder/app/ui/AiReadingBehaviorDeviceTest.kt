@@ -2,6 +2,7 @@ package dev.zakocoder.app.ui
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.MotionEvent
@@ -34,6 +35,10 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 import java.util.UUID
 import kotlinx.coroutines.*
+import okhttp3.mockwebserver.MockResponse
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 /** Real native gestures and clipboard/IME. Synthetic content and isolated config; no external API. */
 @SdkSuppress(minSdkVersion = 30)
@@ -57,6 +62,8 @@ class AiReadingBehaviorDeviceTest {
         return result.get()
     }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
+    private fun matchesLabel(node: SemanticsNode, label: String) = text(node) == label ||
+        label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
     private fun has(label: String) = nodes { all -> all.any { text(it) == label } }
     private fun await(label: String, condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 15000
@@ -69,9 +76,42 @@ class AiReadingBehaviorDeviceTest {
         assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
     }
     private fun field(all: List<SemanticsNode>, label: Int): SemanticsNode {
-        var node: SemanticsNode? = all.first { text(it) == context.getString(label) }
-        while (node != null && !node.config.contains(SemanticsProperties.EditableText)) node = node.parent
-        return requireNotNull(node)
+        val target = all.first { matchesLabel(it, context.getString(label)) }
+        fun editable(node: SemanticsNode): SemanticsNode? =
+            if (node.config.contains(SemanticsProperties.EditableText)) node
+            else node.children.firstNotNullOfOrNull(::editable)
+        return requireNotNull(editable(target)) { "No editable field for ${context.getString(label)}" }
+    }
+    /** Offscreen descendants can be omitted from the visible semantics tree. Reveal
+     * the actual control before clicking/looking for its nested numeric fields. */
+    private fun revealLabel(label: Int) {
+        val name = context.getString(label)
+        repeat(40) {
+            val visible = nodes { all ->
+                val target = all.firstOrNull { matchesLabel(it, name) }
+                var parent = target?.parent
+                while (parent != null && !parent.config.contains(SemanticsActions.ScrollBy)) parent = parent.parent
+                val scroll = parent ?: all.firstOrNull { it.config.contains(SemanticsActions.ScrollBy) }
+                    ?: error("No scroll container for $name")
+                if (target != null && target.boundsInWindow.height >= target.size.height * .98f &&
+                    target.boundsInWindow.height > 0 && target.boundsInWindow.top >= scroll.boundsInWindow.top &&
+                    target.boundsInWindow.bottom <= scroll.boundsInWindow.bottom) true else {
+                    val distance = target?.layoutInfo?.coordinates?.localToWindow(Offset.Zero)?.y?.let {
+                        it - scroll.boundsInWindow.top - 24f
+                    } ?: (scroll.boundsInWindow.height * .6f)
+                    assertTrue("Scroll to $name", scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, distance) == true)
+                    false
+                }
+            }
+            if (visible) { instrumentation.waitForIdleSync(); return }
+            Thread.sleep(80)
+        }
+        val shot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(context.cacheDir, "ui-review/reading-after").apply { mkdirs() }.resolve("unrevealed-control.png")
+                .outputStream().use { shot.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } finally { shot.recycle() }
+        error("Control never became visible: $name")
     }
     private fun showField(label: Int) {
         repeat(10) {
@@ -127,7 +167,7 @@ class AiReadingBehaviorDeviceTest {
     }
     @Composable private fun Theme(content: @Composable () -> Unit) {
         val density = context.resources.displayMetrics.widthPixels / 360f
-        CompositionLocalProvider(LocalDensity provides Density(density, 1.3f)) {
+        CompositionLocalProvider(LocalDensity provides Density(density, 1f)) {
             MaterialTheme(colorScheme = WorkbenchColors, typography = WorkbenchTypography) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), content = content)
             }
@@ -186,6 +226,51 @@ class AiReadingBehaviorDeviceTest {
         event(MotionEvent.ACTION_DOWN, startY)
         repeat(16) { step -> Thread.sleep(16); event(MotionEvent.ACTION_MOVE, startY + (endY - startY) * (step + 1) / 16f) }
         event(MotionEvent.ACTION_UP, endY)
+    }
+
+    @Test(timeout = 120000) fun reasoningDoesNotResumeFollowUnderAnActiveFinger() {
+        val source = mutableStateOf((1..180).joinToString("\n") { "分析 $it：保留当前阅读位置，不在手势中恢复跟随。" })
+        val pauses = java.util.concurrent.atomic.AtomicInteger()
+        val resumes = java.util.concurrent.atomic.AtomicInteger()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { it.setContent { Theme {
+                Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
+                    AiReasoningContent(AiEntry("finger-stream", "", reasoning = source.value), streaming = true,
+                        onReadingInteraction = { pauses.incrementAndGet() }, onReadingResume = { resumes.incrementAndGet() })
+                }
+            } } }
+            fun body() = nodes { all -> all.first { text(it).contains("不在手势中恢复跟随。") && text(it).length > 1000 } }
+            await("streamed reasoning laid out") { runCatching { body().boundsInWindow.height > 200 }.getOrDefault(false) }
+            Thread.sleep(500)
+            val bounds = body().boundsInWindow
+            val x = bounds.center.x
+            val startY = bounds.center.y
+            val start = SystemClock.uptimeMillis()
+            fun pointer(action: Int, y: Float) {
+                val event = MotionEvent.obtain(start, SystemClock.uptimeMillis(), action, x, y, 0)
+                try { instrumentation.sendPointerSync(event) } finally { event.recycle() }
+            }
+            pointer(MotionEvent.ACTION_DOWN, startY)
+            try {
+                // Reverse direction within one gesture and reach the live edge. The old code
+                // resumes inside onPostScroll, before the finger is released.
+                repeat(10) { step ->
+                    Thread.sleep(24)
+                    pointer(MotionEvent.ACTION_MOVE, startY + 10f * (step + 1))
+                }
+                assertTrue("The native gesture paused reading", pauses.get() > 0)
+                val frozen = text(body())
+                repeat(24) { step ->
+                    instrumentation.runOnMainSync { source.value += "\n新片段 $step：持续接收服务返回的分析内容。" }
+                    Thread.sleep(24)
+                    pointer(MotionEvent.ACTION_MOVE, startY + 100f - 10f * (step + 1))
+                    assertEquals("Follow must stay paused for the entire gesture, including a reversal at the live edge", 0, resumes.get())
+                    assertEquals("Incoming chunks must not replace text under the active finger", frozen, text(body()))
+                }
+            } finally { pointer(MotionEvent.ACTION_UP, startY - 140f) }
+            await("releasing the gesture at the live edge resumes following") { resumes.get() == 1 }
+            assertFalse("The resume control disappears only after release", has(context.getString(R.string.ai_reading_reasoning_latest)))
+        }
     }
 
     @Test(timeout = 120000) fun reasoningUserScrollPausesFollowAndLatestRestoresIt() {
@@ -271,8 +356,9 @@ class AiReadingBehaviorDeviceTest {
                         while (save != null && !save.config.contains(SemanticsActions.OnClick)) save = save.parent
                         save != null && !save.config.contains(SemanticsProperties.Disabled)
                     } }
+                    revealLabel(R.string.ai_options_title)
                     click(R.string.ai_options_title)
-                    await("advanced options") { has(context.getString(R.string.ai_options_frequency)) }
+                    revealLabel(R.string.ai_options_frequency)
                     // Follow the actual user path: reveal a field before touching it. An OnClick
                     // semantics action on an offscreen node does not prove usable keyboard layout.
                     var imeTop = 0
@@ -414,6 +500,149 @@ class AiReadingBehaviorDeviceTest {
                 withContext(Dispatchers.IO) { root.deleteRecursively(); preferences.forEach(base::deleteSharedPreferences) }
             }
         }
+    }
+
+    @Test(timeout = 150000) fun actualConversationReasoningDragRetainsPositionDuringContinuousStream() = reasoningContinuousStream(false)
+    @Test(timeout = 150000) fun actualConversationReasoningDragRetainsPositionDuringContinuousStreamNight() = reasoningContinuousStream(true)
+
+    private fun reasoningContinuousStream(dark: Boolean) = runBlocking {
+        val base = context
+        val root = File(base.cacheDir, "reasoning-stream-${UUID.randomUUID()}")
+        val preferences = mutableSetOf<String>()
+        val isolated = object : ContextWrapper(base) {
+            override fun getFilesDir() = File(root, "files").apply { mkdirs() }
+            override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
+            override fun getNoBackupFilesDir() = File(root, "no-backup").apply { mkdirs() }
+            override fun getSharedPreferences(name: String, mode: Int) = base.getSharedPreferences("${root.name}-$name".also { preferences += it }, mode)
+        }
+        var workbench: Workbench? = null
+        fun reasoningNode(all: List<SemanticsNode>) = all.first {
+            text(it).contains("保留用户当前阅读位置。") && text(it).length > 1000
+        }
+        fun reasoningRange() = nodes { all ->
+            var body: SemanticsNode? = reasoningNode(all)
+            while (body != null && !body.config.contains(SemanticsProperties.VerticalScrollAxisRange)) body = body.parent
+            requireNotNull(body).config[SemanticsProperties.VerticalScrollAxisRange].let { it.value() to it.maxValue() }
+        }
+        fun outerRange() = nodes { all ->
+            all.first { it.config.contains(SemanticsProperties.CollectionInfo) && it.config.contains(SemanticsProperties.VerticalScrollAxisRange) }
+                .config[SemanticsProperties.VerticalScrollAxisRange].let { it.value() to it.maxValue() }
+        }
+        try {
+            AiDeviceTest.Fixture(isolated, responseOnly = true, timeoutSeconds = 90).use { fixture ->
+                val wb = withContext(Dispatchers.Main) { Workbench(isolated, aiTransport = fixture.transport,
+                    aiConfig = fixture.config, aiHistory = fixture.history) }
+                workbench = wb
+                await("isolated reasoning workbench initialized") { !wb.state.value.loading }
+                withContext(Dispatchers.Main) { wb.create("连续思考滚动测试") }
+                await("isolated reasoning project created") { !wb.state.value.busy && wb.state.value.project != null }
+                val project = requireNotNull(wb.state.value.project)
+                withContext(Dispatchers.Main) { wb.ai.select(project.id) }
+                await("isolated reasoning history and configuration ready") {
+                    wb.ai.state.value.projectId == project.id && !wb.ai.state.value.restoring &&
+                        !wb.ai.state.value.permissionsLoading && wb.ai.state.value.configured && !wb.ai.models.state.value.loading
+                }
+                val body = buildString {
+                    repeat(1200) { index ->
+                        val delta = JSONObject().put("reasoning_content", "分析 $index：检查项目中的实现与验证记录，保留用户当前阅读位置。\n")
+                        append("data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", delta)))}\n\n")
+                    }
+                    append("data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject().put("content", "检查完成。"))))}\n\n")
+                    append("data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", "stop")))}\n\n")
+                    append("data: [DONE]\n\n")
+                }
+                fixture.enqueueResponse(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body)
+                    .throttleBody(500, 40, TimeUnit.MILLISECONDS))
+                ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                    scenario.onActivity { it.setContent { ReasoningTheme(dark) {
+                        val state by wb.state.collectAsState()
+                        // The actual page includes the outer LazyColumn, text arrival animation,
+                        // and the nested reasoning scroll area; no replacement follow logic.
+                        AiPage(wb, state, onModels = {}, onProjects = {}, onTerminal = {})
+                    } } }
+                    withContext(Dispatchers.Main) { assertTrue(wb.ai.send("持续输出分析，检查滚动阅读。")) }
+                    await("streaming reasoning has a scrollable viewport") {
+                        runCatching { reasoningRange().let { it.second > 200 && it.first >= it.second - 2 } }.getOrDefault(false)
+                    }
+                    val receivedBeforeDrag = wb.ai.state.value.timeline.sumOf { it.reasoning.length }
+                    dragDown(nodes { all -> reasoningNode(all).boundsInWindow })
+                    await("native inner gesture pauses live follow") { has(context.getString(R.string.ai_reading_reasoning_latest)) }
+                    var stableSince = SystemClock.uptimeMillis()
+                    var previousOffset = reasoningRange().first
+                    await("gesture fling settles while response continues") {
+                        val offset = reasoningRange().first
+                        if (offset != previousOffset) { previousOffset = offset; stableSince = SystemClock.uptimeMillis() }
+                        SystemClock.uptimeMillis() - stableSince >= 300
+                    }
+                    val frozen = nodes { all -> text(reasoningNode(all)) }
+                    val innerOffset = reasoningRange().first
+                    val outerOffset = outerRange().first
+                    delay(700)
+                    assertTrue("Actual reasoning chunks arrive throughout the gesture and pause", wb.ai.state.value.timeline.sumOf { it.reasoning.length } > receivedBeforeDrag)
+                    assertTrue("The model response remains active during the reading assertion", wb.ai.state.value.active)
+                    assertEquals("Continuous reasoning cannot replace the text under the user's finger", frozen, nodes { all -> text(reasoningNode(all)) })
+                    assertEquals("Continuous reasoning cannot pull the inner viewport to the bottom", innerOffset, reasoningRange().first, 3f)
+                    assertEquals("Inner reading also pauses the real outer conversation", outerOffset, outerRange().first, .02f)
+                    reasoningCapture(dark, "paused")
+                    click(R.string.ai_reading_reasoning_latest)
+                    await("explicit latest restores live reasoning content") {
+                        !has(context.getString(R.string.ai_reading_reasoning_latest)) &&
+                            reasoningRange().let { it.first >= it.second - 2 } && nodes { all -> text(reasoningNode(all)) != frozen }
+                    }
+                    val resumedLength = wb.ai.state.value.timeline.sumOf { it.reasoning.length }
+                    delay(400)
+                    assertTrue("More packets arrive after resuming", wb.ai.state.value.timeline.sumOf { it.reasoning.length } > resumedLength)
+                    assertFalse("Automatic following does not become a new reading pause", has(context.getString(R.string.ai_reading_reasoning_latest)))
+                    reasoningCapture(dark, "resumed")
+                }
+                withContext(Dispatchers.Main) { wb.ai.stop() }
+                await("synthetic stream cancelled after proof") { !wb.ai.state.value.active }
+            }
+        } finally {
+            withContext(NonCancellable) {
+                withContext(Dispatchers.Main) { workbench?.stopAll() }
+                withContext(Dispatchers.IO) { root.deleteRecursively(); preferences.forEach(base::deleteSharedPreferences) }
+            }
+        }
+    }
+
+    @Composable private fun ReasoningTheme(dark: Boolean, content: @Composable () -> Unit) {
+        val density = LocalDensity.current.density
+        val configuration = Configuration(LocalConfiguration.current).apply {
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+        }
+        CompositionLocalProvider(LocalDensity provides Density(density, 1f), LocalConfiguration provides configuration, LocalWorkbenchDark provides dark) {
+            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+                Surface(Modifier.fillMaxSize().safeDrawingPadding(), content = content)
+            }
+        }
+    }
+
+    private fun reasoningCapture(dark: Boolean, state: String) {
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            if (state == "resumed") {
+                val bounds = nodes { all -> all.first {
+                    text(it).contains("保留用户当前阅读位置。") && text(it).length > 1000
+                }.boundsInWindow }
+                val left = bounds.left.toInt().coerceIn(0, bitmap.width - 1)
+                val right = bounds.right.toInt().coerceIn(left + 1, bitmap.width)
+                val top = bounds.top.toInt().coerceIn(0, bitmap.height - 1)
+                val bottom = bounds.bottom.toInt().coerceIn(top + 1, bitmap.height)
+                var ink = 0
+                for (y in top until bottom) {
+                    val background = bitmap.getPixel(left, y)
+                    for (x in left until right) {
+                        val pixel = bitmap.getPixel(x, y)
+                        if (kotlin.math.abs(android.graphics.Color.red(pixel) - android.graphics.Color.red(background)) > 30) ink++
+                    }
+                }
+                assertTrue("The resumed reasoning viewport must contain painted text, not just unpainted semantic text: ink=$ink bounds=$bounds", ink > 100)
+            }
+            val target = File(context.cacheDir, "ui-review/reasoning-scroll/${if (dark) "night" else "day"}-$state.png")
+            target.parentFile!!.mkdirs()
+            target.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally { bitmap.recycle() }
     }
 
     @Test(timeout = 120000) fun oversizedMessageCodeCopyIsExplicitlyOnlyPreview() {

@@ -38,7 +38,8 @@ private val TerminalMuted = TerminalSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedId: String?, onSelect: (String) -> Unit, onBack: () -> Unit) {
+internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedId: String?, onSelect: (String) -> Unit,
+    onBack: () -> Unit, contentPadding: PaddingValues = PaddingValues(0.dp)) {
     val darkAppearance = LocalWorkbenchDark.current
     val current = state.sessions.singleOrNull { it.id == selectedId } ?: state.sessions.lastOrNull()
     var view by remember { mutableStateOf<TerminalView?>(null) }
@@ -52,7 +53,8 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
     val leaveTerminal = { view?.let(workbench.terminal::hideKeyboard); onBack() }
     if (previewing && current != null) TerminalPreviewSheet(current, { workbench.terminal.previewAddresses(current.id) }, { previewing = false; view?.requestFocus() })
     val back = rememberWorkbenchBackMotion(onBack = leaveTerminal)
-    Column(Modifier.fillMaxSize().then(back.modifier).background(TerminalBackground)) {
+    Column(Modifier.fillMaxSize().then(back.modifier).background(TerminalBackground)
+        .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding()) {
         Surface(color = TerminalChrome, contentColor = TerminalText) {
             Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_terminals), tint = TerminalText) }

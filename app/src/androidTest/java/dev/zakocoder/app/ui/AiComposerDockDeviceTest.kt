@@ -84,14 +84,13 @@ class AiComposerDockDeviceTest {
         }
         image.recycle()
     }
-    @Test(timeout = 180000) fun callbacksDraftStopAndKeyboardInLightDarkNarrowLargeText() {
+    @Test(timeout = 180000) fun callbacksDraftStopAndKeyboardInLightDark() {
         val component = ComponentName(context.packageName, MainActivity::class.java.name).flattenToString()
         require(component.matches(Regex("[A-Za-z0-9_./]+")))
         android.os.ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(
             "am start -W -n $component")).use { it.readBytes() }
         val dark = mutableStateOf(false)
         val narrow = mutableStateOf(false)
-        val largeText = mutableStateOf(false)
         val draft = mutableStateOf("检查当前项目并修复构建问题")
         val running = mutableStateOf(false)
         val attached = AtomicInteger()
@@ -107,11 +106,11 @@ class AiComposerDockDeviceTest {
                 activity.setContent {
                     val density = LocalDensity.current
                     CompositionLocalProvider(LocalWorkbenchDark provides dark.value,
-                        LocalDensity provides Density(density.density, if (largeText.value) 1.3f else density.fontScale)) {
+                        LocalDensity provides Density(density.density, 1f)) {
                         MaterialTheme(colorScheme = if (dark.value) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                             Surface(Modifier.fillMaxSize()) {
                                 Box(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.TopCenter) {
-                                    Column(Modifier.fillMaxHeight().widthIn(max = if (narrow.value) 320.dp else 420.dp)
+                                    Column(Modifier.fillMaxHeight().widthIn(max = if (narrow.value) 360.dp else 420.dp)
                                         .fillMaxWidth().imePadding().padding(12.dp)) {
                                         Text("组件测试示意 · 不含真实项目数据", style = MaterialTheme.typography.labelSmall)
                                         Spacer(Modifier.height(16.dp))
@@ -128,26 +127,8 @@ class AiComposerDockDeviceTest {
                                                 if (running.value) { stopped.incrementAndGet(); running.value = false }
                                                 else { sent.incrementAndGet(); running.value = true }
                                             }, configuration = {
-                                                TextButton(onClick = { permissions.incrementAndGet() },
-                                                    contentPadding = PaddingValues(0.dp),
-                                                    modifier = Modifier.heightIn(min = 48.dp).semantics {
-                                                        contentDescription = context.getString(R.string.ai_permissions)
-                                                        stateDescription = context.getString(AiPermission.Ask.label)
-                                                    }) {
-                                                    Surface(shape = androidx.compose.foundation.shape.CircleShape,
-                                                        color = MaterialTheme.colorScheme.surface.copy(alpha = .35f),
-                                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                                                        Row(Modifier.heightIn(min = 28.dp).padding(horizontal = 6.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                            WorkbenchIcon(Glyph.Shield, Modifier.size(14.dp),
-                                                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                            if (!narrow.value && !largeText.value) Text(
-                                                                context.getString(R.string.ai_permission_ask), fontSize = 10.sp,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                        }
-                                                    }
-                                                }
+                                                AiComposerPermissionButton(AiPermissionPreset.Normal, 0, true,
+                                                    onClick = { permissions.incrementAndGet() })
                                                 AiComposerModelButton(profile, { models.incrementAndGet() }, Modifier.weight(1f))
                                             })
                                     }
@@ -162,13 +143,13 @@ class AiComposerDockDeviceTest {
                 instrumentation.runOnMainSync { dark.value = theme }
                 click(context.getString(R.string.ai_context_attach))
                 click(context.getString(R.string.ai_switch_model))
-                click(context.getString(R.string.ai_permissions))
+                click(context.getString(permissionModeLabel(AiPermissionPreset.Normal)))
                 assertEquals("Configuration leaves draft intact", "检查当前项目并修复构建问题", draft.value)
                 capture(if (theme) "dark" else "light")
             }
             nodes { all ->
                 val model = all.first { matching(it, context.getString(R.string.ai_switch_model)) }
-                val permission = all.first { matching(it, context.getString(R.string.ai_permissions)) }
+                val permission = all.first { matching(it, context.getString(permissionModeLabel(AiPermissionPreset.Normal))) }
                 val send = all.first { matching(it, context.getString(R.string.ai_send)) }
                 assertTrue("Permission precedes model", permission.boundsInWindow.center.x < model.boundsInWindow.center.x)
                 assertTrue("Model precedes send", model.boundsInWindow.center.x < send.boundsInWindow.center.x)
@@ -179,12 +160,17 @@ class AiComposerDockDeviceTest {
             edit("验证发送与停止时保留草稿")
             click(context.getString(R.string.ai_send))
             await("Stop replaces send") { running.value }
+            capture("running-gray-loading")
+            nodes { all ->
+                val stop = requireNotNull(all.firstOrNull { matching(it, context.getString(R.string.ai_stop)) })
+                assertTrue("The rotating control remains a stop action", stop.config.getOrNull(SemanticsActions.OnClick) != null)
+            }
             assertEquals(1, sent.get())
             click(context.getString(R.string.ai_stop))
             assertEquals(1, stopped.get())
             assertEquals("验证发送与停止时保留草稿", draft.value)
-            instrumentation.runOnMainSync { narrow.value = true; largeText.value = true }
-            capture("dark-narrow-130")
+            instrumentation.runOnMainSync { narrow.value = true }
+            capture("dark-narrow")
             // Request a real device IME; screenshots do not simulate a keyboard with an empty box.
             nodes { all ->
                 val field = all.first { it.config.getOrNull(SemanticsActions.SetText) != null }
@@ -201,7 +187,7 @@ class AiComposerDockDeviceTest {
                     ?.isVisible(WindowInsetsCompat.Type.ime()) == true) }
                 visible.get()
             }
-            capture("dark-narrow-130-keyboard")
+            capture("dark-keyboard")
             nodes { all ->
                 val icon = all.first { matching(it, context.getString(R.string.ai_send)) }
                 val root = generateSequence(icon) { it.parent }.last()

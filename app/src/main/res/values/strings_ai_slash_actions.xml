@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_command_invalid">命令格式不正确。输入 /help 查看用法；带空格的技能名称请用引号括起。</string>
+    <string name="ai_command_no_arguments">此命令不接受附加文字。输入 /help 查看用法。</string>
+    <string name="ai_command_unavailable">暂时无法执行，请检查模型、技能及当前任务状态后重试。</string>
+    <string name="ai_command_not_running">当前没有正在运行的任务</string>
+</resources>

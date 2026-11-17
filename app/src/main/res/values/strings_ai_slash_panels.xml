@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_slash_panel_rename_failed">名称未保存，请检查当前对话状态后重试。</string>
+    <string name="ai_slash_panel_rename_limit">最多 80 个字符，不支持换行或控制字符。</string>
+    <string name="ai_slash_panel_compact_action">压缩上下文</string>
+    <string name="ai_slash_panel_compact_limit">保留要求最多 2,000 个字符。</string>
+    <string name="ai_slash_panel_compact_failed">当前无法开始压缩，请检查模型配置和对话状态。</string>
+    <string name="ai_slash_panel_compact_empty">当前还没有需要压缩的上下文。</string>
+    <string name="ai_slash_panel_context_title">当前上下文</string>
+    <string name="ai_slash_panel_context_usage">本地估算 %1$s / %2$s Token</string>
+    <string name="ai_slash_panel_context_unknown">本地估算 %1$s Token · 上下文上限尚未确定，请先选择模型配置。</string>
+    <string name="ai_slash_panel_context_reserve">输出预留 %1$s Token</string>
+    <string name="ai_slash_panel_context_compactions">已压缩 %1$d 次</string>
+    <string name="ai_slash_panel_context_hint">此处是输入预算估算，不是服务商计费用量；实际用量可查看请求详情。</string>
+    <string name="ai_slash_panel_summary_title">当前续接摘要</string>
+    <string name="ai_slash_panel_summary_empty">尚未生成压缩摘要</string>
+    <string name="ai_slash_panel_thinking_title">思考设置</string>
+    <string name="ai_slash_panel_thinking_hint">修改当前模型配置，对后续请求生效；是否支持由所选模型服务决定。</string>
+    <string name="ai_slash_panel_thinking_missing">当前没有可调整的模型，请先选择模型配置。</string>
+    <string name="ai_slash_panel_skill_title">本次使用技能</string>
+    <string name="ai_slash_panel_skill_hint">选择后在输入框补充任务，仅本次使用，不改变全局开关。</string>
+    <string name="ai_slash_panel_skill_manage">管理技能</string>
+    <string name="ai_slash_panel_skill_error">技能暂时无法读取，可进入管理页刷新。</string>
+    <string name="ai_slash_panel_model_error_retry">清除错误后重试</string>
+</resources>

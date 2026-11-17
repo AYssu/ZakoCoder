@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="turn_usage_details_title">本次用量</string>
+    <string name="turn_usage_duration">用时</string>
+    <string name="turn_usage_speed">速度</string>
+    <string name="turn_usage_cache">提示缓存</string>
+    <string name="turn_usage_summary">续接摘要</string>
+    <string name="turn_usage_summary_triggered">已触发</string>
+    <string name="turn_usage_summary_none">未触发</string>
+    <string name="turn_usage_summary_unrecorded">未记录</string>
+    <string name="turn_usage_context">上下文</string>
+    <string name="turn_usage_context_budget">上下文额度</string>
+    <string name="turn_usage_context_unknown">上下文占用未知</string>
+    <string name="turn_usage_context_description">预估 %1$s / %2$s token，%3$s</string>
+    <string name="turn_usage_context_capacity">%1$s / %2$s</string>
+    <string name="turn_usage_context_remaining">剩余 %1$s</string>
+    <string name="turn_usage_context_exceeded">超出 %1$s</string>
+    <string name="turn_usage_context_note">上下文为本轮最后一次对话请求的预估值。较早的对话可压缩为续接摘要，摘要请求仍计入用量。</string>
+    <string name="turn_usage_partial_note">部分请求用量未记录或未返回，以上仅汇总已知数据。</string>
+</resources>

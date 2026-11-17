@@ -17,7 +17,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.zakocoder.app.ai.AiSlashCommandId
+import dev.zakocoder.app.ai.AiSlashCommands
+import dev.zakocoder.app.ai.AiSlashParseResult
 import dev.zakocoder.app.ai.AiRole
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -36,14 +43,17 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 
 @Composable
-internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}) {
+internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}, onSkills: () -> Unit = onExtensions, onMcp: () -> Unit = onExtensions) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
     var quotedMessage by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf("") }
     var quotedTurn by rememberSaveable(state.projectId, state.conversationId) { mutableIntStateOf(0) }
     var quotedUser by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
     val usageStatistics by workbench.ai.usageStatistics.collectAsStateWithLifecycle()
+    val globalSkills by workbench.ai.globalSkills.collectAsStateWithLifecycle()
+    val slashSkills = if (globalSkills.skillsInitialized) globalSkills.skills else state.skills
     val changeReads = remember(state.projectId, state.conversationId, state.workspaceRevision,
         state.checkpointId, state.turn, state.active, state.restoring, state.permissionsLoading) {
         AiConversationChangesCache(workbench.ai::checkpointList, workbench.ai::checkpointChanges)
@@ -70,19 +80,38 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     var inspecting by remember { mutableStateOf<dev.zakocoder.app.ai.AiReview?>(null) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     var follow by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(true) }
+    var readingPaused by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf(false) }
     var automaticScroll by remember { mutableStateOf(false) }
     val dragging by listState.interactionSource.collectIsDraggedAsState()
     val uiScope = rememberCoroutineScope()
     val atBottom by remember { derivedStateOf { !listState.canScrollForward } }
+    val readingScroll = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && available.y != 0f) {
+                    readingPaused = true
+                    follow = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
     LaunchedEffect(listState, state.conversationId) {
+        var userDragged = false
         snapshotFlow { Triple(dragging, listState.isScrollInProgress, listState.canScrollForward) }
             .collect { (drag, scrolling, canScroll) ->
-                if (drag) follow = false
-                else if (!scrolling && !canScroll) follow = true
+                if (drag) { userDragged = true; readingPaused = true; follow = false }
+                else if (!scrolling && userDragged) {
+                    // Only the conversation's actual gesture can resume it at the end. Inner
+                    // reasoning/layout changes must not undo an explicit reading pause.
+                    if (!canScroll) { readingPaused = false; follow = true }
+                    userDragged = false
+                }
             }
     }
     ConversationEndFollower(listState, state.projectId to state.conversationId,
-        enabled = follow && !dragging && !automaticScroll && state.timeline.isNotEmpty())
+        enabled = follow && !readingPaused && !dragging && !automaticScroll && state.timeline.isNotEmpty(),
+        canFollow = { follow && !readingPaused && !automaticScroll })
     var history by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(historyRequest) { if (historyRequest > 0) { history = true; onHistoryRequestConsumed() } }
     var deleting by remember { mutableStateOf<String?>(null) }
@@ -147,7 +176,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     }
                 }
             }
-            IconButton(onClick = { workbench.ai.conversation(); follow = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
+            IconButton(onClick = { workbench.ai.conversation(); readingPaused = false; follow = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
             Box {
                 IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
                 DropdownMenu(expanded = more && pageInteractive, onDismissRequest = { more = false }) {
@@ -193,7 +222,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.recoveryNotes.isNotEmpty() && !state.active) Text(stringResource(R.string.ai_recovery_available), style = MaterialTheme.typography.labelSmall)
         if (state.historyTrimmed) Text(stringResource(R.string.ai_history_trimmed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().nestedScroll(readingScroll), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
             if (state.timeline.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WorkbenchIcon(Glyph.Ai, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ai_ready_title), fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -211,7 +240,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     revealRequest = revealedRequest?.requestId, highlightTool = highlightedEntry == entry.id, active = state.active && entry.turn == state.turn, entrances = toolEntrances.events) }
                 else if (displayActivity.preparation.containsKey(entry.id)) AiPreparationActivity(requireNotNull(displayActivity.preparation[entry.id]))
                 else if (entry.toolId == null) Column(Modifier.fillMaxWidth()) {
-                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
+                    AiMessage(entry, state.projectId, onProjectPath = { path -> state.projectId?.let { onProjectPath(it, path) } }, onLink = { link = it }, imageLoader = workbench.ai::imageThumbnail, onReadingInteraction = { readingPaused = true; follow = false }, animateOnMount = animateOnMount, reasoningStreaming = state.active && state.reasoningEntryId == entry.id, responseStreaming = state.active && state.timeline.lastOrNull { it.role == AiRole.Assistant && it.toolId == null }?.id == entry.id,
+                        onReadingResume = { if (atBottom) { readingPaused = false; follow = true } },
                         onRetry = if (!state.active && state.questionContinuation == null && !state.restoring && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && state.configured && state.timeline.any { it.turn == entry.turn && it.role == AiRole.User }) ({
                             retryTarget = state.timeline.first { it.turn == entry.turn && it.role == AiRole.User }; editingMessage = false
                         }) else null,
@@ -269,6 +299,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         if (!follow && !atBottom) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = {
+                readingPaused = false
                 follow = true
                 uiScope.launch {
                     automaticScroll = true
@@ -288,7 +319,96 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
         composerState.SaveableStateProvider("${state.projectId}:${state.conversationId}") {
         var input by rememberSaveable { mutableStateOf("") }
-        if (state.active && state.questionContinuation == null && input.isNotBlank()) AiRunningInputActions(
+        var slashAction by remember { mutableStateOf<AiSlashCommandId?>(null) }
+        var slashArgument by remember { mutableStateOf("") }
+        var slashError by remember { mutableStateOf<Int?>(null) }
+        var explicitSkillPath by remember { mutableStateOf<String?>(null) }
+        var explicitSkillTask by remember { mutableStateOf("") }
+        val parsedInput = remember(input) { AiSlashCommands.parse(input) }
+        val commandInput = parsedInput != AiSlashParseResult.None
+        val commandBusy = state.active || state.restoring || state.permissionsLoading || state.permissionsSaving ||
+            state.questionContinuation != null || state.historyError || workbenchState.busy
+        fun quotedTask(text: String): String = if (quotedMessage.isBlank()) text else resources.getString(
+            R.string.ai_quote_context, quotedTurn, resources.getString(if (quotedUser) R.string.ai_quote_user else R.string.ai_quote_assistant), quotedMessage, text)
+        fun sent() { input = ""; quotedMessage = ""; explicitSkillPath = null; slashError = null; follow = true; readingPaused = false }
+        fun dispatchCommand(text: String) {
+            slashError = null
+            when (val parsed = AiSlashCommands.parse(text)) {
+                AiSlashParseResult.None -> Unit
+                is AiSlashParseResult.Unknown -> slashError = R.string.ai_slash_unknown
+                is AiSlashParseResult.Invalid -> slashError = R.string.ai_command_invalid
+                is AiSlashParseResult.Skill -> {
+                    if (commandBusy) { slashError = R.string.ai_slash_busy; return }
+                    if (project == null) { slashError = R.string.select_project_first; return }
+                    if (!state.configured) { slashError = R.string.ai_slash_model_required; return }
+                    val matches = slashSkills.filter { it.valid && it.name == parsed.name }
+                    val selected = matches.singleOrNull() ?: matches.singleOrNull { it.path == explicitSkillPath }
+                    when {
+                        matches.isEmpty() -> slashError = R.string.ai_slash_skill_not_found
+                        selected == null -> { slashArgument = parsed.name; explicitSkillTask = parsed.task; slashAction = AiSlashCommandId.Skill; slashError = R.string.ai_slash_skill_ambiguous }
+                        parsed.task.isBlank() -> { input = slashSkillCommand(selected.name); explicitSkillPath = selected.path; slashError = R.string.ai_slash_skill_task_hint }
+                        workbench.ai.sendWithSkill(quotedTask(parsed.task), selected.path) -> sent()
+                        else -> slashError = R.string.ai_command_unavailable
+                    }
+                }
+                is AiSlashParseResult.Command -> {
+                    val id = parsed.id
+                    if (parsed.arguments.isNotBlank() && id !in setOf(AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Skill)) {
+                        slashError = R.string.ai_command_no_arguments; return
+                    }
+                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Thinking) && commandBusy) {
+                        slashError = R.string.ai_slash_busy; return
+                    }
+                    if (id in setOf(AiSlashCommandId.New, AiSlashCommandId.Sessions, AiSlashCommandId.Rename, AiSlashCommandId.Compact, AiSlashCommandId.Permissions) && project == null) {
+                        slashError = R.string.select_project_first; return
+                    }
+                    if (id in setOf(AiSlashCommandId.Thinking, AiSlashCommandId.Compact) && !state.configured) {
+                        slashError = R.string.ai_slash_model_required; return
+                    }
+                    when (id) {
+                        AiSlashCommandId.New -> {
+                            if (state.conversations.size >= 20) { slashError = R.string.ai_history_limit; return }
+                            workbench.ai.conversation()
+                        }
+                        AiSlashCommandId.Sessions -> history = true
+                        AiSlashCommandId.Model -> modelPicker = true
+                        AiSlashCommandId.Mcp -> onMcp()
+                        AiSlashCommandId.Permissions -> permissions = true
+                        AiSlashCommandId.Stop -> {
+                            if (!state.active && state.questionContinuation == null) { slashError = R.string.ai_command_not_running; return }
+                            workbench.ai.stop()
+                        }
+                        else -> { slashArgument = parsed.arguments; explicitSkillTask = ""; slashAction = id }
+                    }
+                    input = ""
+                }
+            }
+        }
+        if (slashError != null) Text(stringResource(requireNotNull(slashError)), fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+        val skillDiscovery = slashAction == AiSlashCommandId.Skill || input.trimStart().startsWith("/skill", ignoreCase = true)
+        LaunchedEffect(skillDiscovery) { if (skillDiscovery && !globalSkills.skillsInitialized) workbench.ai.refreshGlobalSkills() }
+        AiSlashMenu(input, slashSkills, onChoose = { value ->
+            if (value.startsWith("/skill:")) { input = value; explicitSkillPath = null; slashError = null }
+            else dispatchCommand(value)
+        }, modifier = Modifier.padding(bottom = 6.dp), onSkillChoose = { skill ->
+            input = slashSkillCommand(skill.name); explicitSkillPath = skill.path; slashError = null
+        })
+        if (pageInteractive) slashAction?.let { action ->
+            AiSlashPanels(workbench, state.copy(skills = slashSkills,
+                skillsLoading = globalSkills.skillsLoading || (!globalSkills.skillsInitialized && state.skillsLoading),
+                skillError = if (globalSkills.skillsInitialized) globalSkills.skillError else state.skillError), action, slashArgument, onDismiss = { slashAction = null },
+                onSkills = { slashAction = null; onSkills() }, onSkillChosen = { skill ->
+                    slashAction = null
+                    explicitSkillPath = skill.path
+                    if (explicitSkillTask.isNotBlank()) {
+                        input = slashSkillCommand(skill.name) + explicitSkillTask
+                        dispatchCommand(input)
+                    } else { input = slashSkillCommand(skill.name); slashError = R.string.ai_slash_skill_task_hint }
+                    explicitSkillTask = ""
+                })
+        }
+        if (state.active && state.questionContinuation == null && input.isNotBlank() && !commandInput) AiRunningInputActions(
             enabled = input.isNotBlank() && !state.historyError && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping &&
                 state.queuedMessages.count { it.status == dev.zakocoder.app.ai.AiQueuedStatus.Pending } < dev.zakocoder.app.ai.AiTaskQueue.MAX_PENDING,
             onSteer = { if (workbench.ai.enqueue(input, dev.zakocoder.app.ai.AiQueuedKind.Steer)) input = "" else messageActionError = true },
@@ -303,31 +423,18 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         val outgoing = if (quotedMessage.isBlank()) input else stringResource(R.string.ai_quote_context, quotedTurn,
             stringResource(if (quotedUser) R.string.ai_quote_user else R.string.ai_quote_assistant), quotedMessage, input)
-        AiComposerDock(input, { if (it.length <= 16000 - (outgoing.length - input.length)) input = it },
+        AiComposerDock(input, { if (it.length <= 16000 - (outgoing.length - input.length)) { input = it; slashError = null } },
             modifier = Modifier.padding(bottom = 4.dp),
             inputEnabled = state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             awaitingAnswer = state.questionContinuation != null,
             attachEnabled = project != null && !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
-            running = state.active || state.questionContinuation != null,
-            sendEnabled = if (state.active || state.questionContinuation != null) !state.restoring && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && outgoing.length <= 16000 && !workbenchState.busy,
+            running = (state.active || state.questionContinuation != null) && !commandInput,
+            sendEnabled = if (commandInput) !state.restoring && !state.permissionsLoading && !state.permissionsSaving else if (state.active || state.questionContinuation != null) !state.restoring && state.phase != dev.zakocoder.app.ai.AiPhase.Stopping else project != null && !state.restoring && state.configured && !models.loading && !models.saving && !state.permissionsLoading && !state.permissionsSaving && !state.historyError && (input.isNotBlank() || state.pendingImages.isNotEmpty()) && outgoing.length <= 16000 && !workbenchState.busy,
             onAttach = { attaching = true },
-            onSend = { if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(outgoing)) { input = ""; quotedMessage = ""; follow = true } }) {
+            onSend = { if (commandInput) dispatchCommand(input) else if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(outgoing)) sent() }) {
             val permissionPreset = dev.zakocoder.app.ai.AiPermissionPresets.matching(state.policy)
-            val permissionLabel = stringResource(permissionModeLabel(permissionPreset))
-            val permissionState = stringResource(R.string.ai_permission_current, permissionLabel, state.policy.overrides.size)
-            TextButton(onClick = { permissions = true }, enabled = project != null,
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.size(48.dp).semantics { stateDescription = permissionState; contentDescription = permissionLabel + " · " + permissionState }) {
-                val permissionTint = permissionModeTint(permissionPreset)
-                Surface(shape = RoundedCornerShape(50), color = androidx.compose.ui.graphics.Color.Transparent,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF333B45) else MaterialTheme.colorScheme.outlineVariant)) {
-                    Row(Modifier.width(40.dp).heightIn(min = 28.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center) {
-                        WorkbenchIcon(permissionModeGlyph(permissionPreset), Modifier.size(14.dp), description = stringResource(R.string.ai_permissions),
-                            tint = permissionTint)
-                    }
-                }
-            }
+            AiComposerPermissionButton(permissionPreset, state.policy.overrides.size,
+                enabled = project != null, onClick = { permissions = true })
             AiComposerModelButton(models.catalog.active, onClick = { modelPicker = true }, modifier = Modifier.weight(1f))
 
         }
@@ -469,7 +576,8 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
 @Suppress("DEPRECATION")
 @Composable
 internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}, onRetry: (() -> Unit)? = null,
-    onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null, revealRequest: String? = null, actions: (@Composable RowScope.() -> Unit)? = null) {
+    onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null, revealRequest: String? = null, actions: (@Composable RowScope.() -> Unit)? = null,
+    onReadingResume: () -> Unit = {}) {
     val clipboard = LocalClipboardManager.current
     val visibleResponse = entry.text
     val visibleReasoning = entry.reasoning
@@ -508,6 +616,7 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
         }
         AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(Modifier.padding(top = if (entry.text.isNotEmpty()) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction, revealRequest = revealRequest,
+                onReadingResume = onReadingResume,
                 trailingActions = if (!reasoningStreaming && entry.text.isEmpty() && (onRetry != null || onRequests != null || onQuote != null)) {
                     { AiMessageMore(entry, onRetry, onRequests, onQuote) }
                 } else null)

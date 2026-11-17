@@ -80,6 +80,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     var extensionsOpen by rememberSaveable { mutableStateOf(false) }
     var extensionsTab by rememberSaveable { mutableIntStateOf(0) }
     var shortcutPage by rememberSaveable { mutableStateOf<String?>(null) }
+    var browserOpen by rememberSaveable { mutableStateOf(false) }
     var drawerUtility by rememberSaveable { mutableStateOf<AppDestination?>(null) }
     var utilityTerminalId by rememberSaveable { mutableStateOf<String?>(null) }
     val closeShortcut: () -> Unit = {
@@ -143,9 +144,11 @@ fun ZakoCoderApp(workbench: Workbench) {
     val browserNavigation by workbench.browserNavigation.collectAsStateWithLifecycle()
     LaunchedEffect(browserNavigation) {
         browserNavigation?.let { request ->
-            focus.clearFocus(); keyboard?.hide(); modelsOpen = false; extensionsOpen = false
-            shortcutPage = "browser"
-            if (drawerUtility == null) drawerState.close()
+            focus.clearFocus(); keyboard?.hide()
+            // The browser is a child window, not a replacement for the capability/settings
+            // page that opened it. Keep that origin, including its drawer and viewport.
+            browserOpen = true
+            if (drawerUtility == null && shortcutPage == null && !modelsOpen && !extensionsOpen) drawerState.close()
             workbench.consumeBrowserNavigation(request)
         }
     }
@@ -154,7 +157,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     LaunchedEffect(page, drawerUtility) {
         if ((drawerUtility ?: page) != AppDestination.Settings) proxyOpen = false
     }
-    val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen
+    val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen || browserOpen
     val baseCovered = overlayOpen || drawerUtility != null
     val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
     LaunchedEffect(assistantNavigation?.requestId) {
@@ -222,7 +225,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     CompositionLocalProvider(LocalWorkbenchDark provides dark, LocalMinimumInteractiveComponentSize provides 48.dp) {
     WorkbenchMiuixTheme(dark) {
-    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && page != AppDestination.Project && page != AppDestination.Ai && !(page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()) &&
+    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && !browserOpen && page != AppDestination.Project && page != AppDestination.Ai && !(page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()) &&
         !modelsOpen && !extensionsOpen && !updatesOpen && !proxyOpen && !drawerState.isOpen &&
         drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning && !setupOpen && !state.onboarding.required) {
         page = AppDestination.Ai
@@ -325,15 +328,19 @@ fun ZakoCoderApp(workbench: Workbench) {
                             }
                         }
             drawerUtility?.let { destination ->
+                val terminalDetail = destination == AppDestination.Terminal &&
+                    state.sessions.any { it.id == utilityTerminalId }
                 val utilityBack = rememberWorkbenchBackMotion(resetKey = destination,
-                    enabled = !overlayOpen && !updatesOpen && !proxyOpen && !setupOpen && utilityTerminalId == null) {
+                    enabled = !overlayOpen && !updatesOpen && !proxyOpen && !setupOpen && !terminalDetail) {
                     drawerUtility = null; utilityTerminalId = null
                 }
                 CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!overlayOpen && !updatesOpen && !proxyOpen && !setupOpen)) {
+                    Box(Modifier.fillMaxSize()) {
+                    WorkbenchRetainedPage(covered = terminalDetail || overlayOpen) {
                     Surface(Modifier.fillMaxSize().then(utilityBack.modifier).then(if (overlayOpen) blockBackground else Modifier), color = MaterialTheme.colorScheme.background) {
                         Column(Modifier.fillMaxSize().padding(foregroundPadding)
                             .consumeWindowInsets(foregroundPadding).imePadding()) {
-                            if (utilityTerminalId == null) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                                 Text(stringResource(destination.label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                                 IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open)) }
@@ -347,9 +354,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                                             onProjects = { drawerUtility = null; openedProjectId = null; page = AppDestination.Project },
                                             onAi = { drawerUtility = null; page = AppDestination.Ai })
                                     }
-                                    AppDestination.Terminal -> if (utilityTerminalId != null && state.sessions.any { it.id == utilityTerminalId }) {
-                                        TerminalPage(workbench, state, utilityTerminalId, { utilityTerminalId = it }, { utilityTerminalId = null })
-                                    } else TerminalLibraryPage(workbench, state,
+                                    AppDestination.Terminal -> TerminalLibraryPage(workbench, state,
                                         onOpen = { utilityTerminalId = it },
                                         onEnvironment = { drawerUtility = AppDestination.Environment },
                                         onProjects = { drawerUtility = null; page = AppDestination.Project })
@@ -358,28 +363,33 @@ fun ZakoCoderApp(workbench: Workbench) {
                             }
                         }
                     }
+                    }
+                    if (terminalDetail) TerminalPage(workbench, state, utilityTerminalId,
+                        { utilityTerminalId = it }, { utilityTerminalId = null }, contentPadding = foregroundPadding)
+                    }
                 }
             }
             // Child pages draw over the entire base column, including its app header. Their own
             // back modifier moves their opaque surface, exposing this still-live destination.
             if (overlayOpen) {
-                val pageOwnsInsets = extensionsOpen || shortcutPage in listOf("skill", "mcp", "capabilities")
-                Box(Modifier.fillMaxSize().then(if (pageOwnsInsets) Modifier else
-                    Modifier.background(MaterialTheme.colorScheme.background).padding(foregroundPadding)
-                        .consumeWindowInsets(foregroundPadding).imePadding())) {
+                // Every destination owns its opaque surface and safe-area padding. A fixed
+                // background here would cover the retained parent as the child slides away.
+                Box(Modifier.fillMaxSize()) {
+                WorkbenchRetainedPage(covered = browserOpen) {
                 when {
-                    shortcutPage == "memory" -> AgentMemoryPage(workbench.ai.memory) { closeShortcut() }
-                    // AiPage stays noninteractive underneath. This foreground destination owns
-                    // its approval host, so tool confirmation never requires destroying WebView.
-                    shortcutPage == "browser" -> AgentBrowserWorkspacePage(workbench) { closeShortcut() }
+                    shortcutPage == "memory" -> AgentMemoryPage(workbench.ai.memory, contentPadding = foregroundPadding) { closeShortcut() }
                     shortcutPage == "capabilities" -> CapabilityPackageBindings(workbench, state.selectedId,
                         state.project?.name.orEmpty(), fullPage = true, contentPadding = foregroundPadding) { closeShortcut() }
                     shortcutPage != null -> AiExtensionsPage(workbench, state,
                         initialTab = if (shortcutPage == "mcp") 1 else 0, standalone = true, contentPadding = foregroundPadding) { closeShortcut() }
                     extensionsOpen -> AiExtensionsPage(workbench, state, initialTab = extensionsTab, contentPadding = foregroundPadding) { extensionsOpen = false }
                     modelsOpen -> AiModelsPage(workbench.ai, startAdding = modelsAdd,
-                        onStartAddingConsumed = { modelsAdd = false }) { modelsOpen = false; modelsAdd = false }
+                        onStartAddingConsumed = { modelsAdd = false }, contentPadding = foregroundPadding) { modelsOpen = false; modelsAdd = false }
                 }
+                }
+                // AiPage stays noninteractive underneath. This foreground destination owns
+                // its approval host, so tool confirmation never requires destroying WebView.
+                if (browserOpen) AgentBrowserWorkspacePage(workbench) { browserOpen = false }
                 }
             }
             if (state.message.isNotEmpty()) Surface(Modifier.align(Alignment.TopCenter).padding(foregroundPadding).padding(start = 20.dp, end = 20.dp, top = 12.dp),
@@ -416,6 +426,8 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                         }
                     }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
                         onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true },
+                        onSkills = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "skill" },
+                        onMcp = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "mcp" },
                         onProjectPath = { projectId, path ->
                             workbench.select(projectId); referencedPath = path; openedProjectId = projectId; workspaceId = projectId
                             focus.clearFocus(); keyboard?.hide(); page = AppDestination.Project

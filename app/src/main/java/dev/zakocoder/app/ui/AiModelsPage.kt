@@ -32,7 +32,8 @@ import dev.zakocoder.app.ai.*
 import java.net.URI
 
 @Composable
-internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStartAddingConsumed: () -> Unit = {}, close: () -> Unit) {
+internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStartAddingConsumed: () -> Unit = {},
+    contentPadding: PaddingValues = PaddingValues(0.dp), close: () -> Unit) {
     val state by ai.models.state.collectAsStateWithLifecycle()
     val task by ai.state.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf(startAdding) }
@@ -44,7 +45,8 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
     val back = rememberWorkbenchBackMotion(enabled = interactive && !editing, onBack = close)
     Box(Modifier.fillMaxSize()) {
     WorkbenchRetainedPage(covered = editing) {
-    Column(Modifier.fillMaxSize().then(back.modifier)) {
+    Column(Modifier.fillMaxSize().then(back.modifier).padding(contentPadding)
+        .consumeWindowInsets(contentPadding).imePadding()) {
         ModelNavigation(stringResource(R.string.ai_settings), back.close) {
             TextButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active && !state.loading && !state.saving && state.catalog.profiles.size < 32) {
                 WorkbenchIcon(Glyph.Add, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
@@ -91,7 +93,7 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
         }
     }
     }
-    if (editing) AiModelEditor(ai, profile) { editing = false }
+    if (editing) AiModelEditor(ai, profile, contentPadding = contentPadding) { editing = false }
     }
     deleting?.let { item -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_models_delete_title)) },
         text = { Text(stringResource(R.string.ai_models_delete_hint, item.name) + if (item.id == "legacy") "\n" + stringResource(R.string.ai_models_legacy_retained) else "") }, confirmButton = { TextButton(onClick = { deleting = null; ai.models.delete(item.id) }) { Text(stringResource(R.string.file_delete)) } },
@@ -111,7 +113,7 @@ private fun ModelNavigation(title: String, back: () -> Unit, actions: @Composabl
 }
 
 @Composable
-internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> Unit) {
+internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPadding: PaddingValues = PaddingValues(0.dp), close: () -> Unit) {
     val state by ai.models.state.collectAsStateWithLifecycle()
     val task by ai.state.collectAsStateWithLifecycle()
     var name by remember(original?.id) { mutableStateOf(original?.name.orEmpty()) }
@@ -156,10 +158,13 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, close: () -> 
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
     LaunchedEffect(state.revision) { if (savingRevision != null && state.revision > savingRevision!!) { key = ""; close() } }
     val back = rememberWorkbenchBackMotion(enabled = LocalWorkbenchPageInteractive.current && !state.saving,
-        resetKey = discard, animateExit = !dirty && !state.saving, onBack = ::leave)
+        // A local function reference compares equal across captured dirty-state changes.
+        // Use a lambda so the remembered callback sees the current unsaved draft.
+        resetKey = discard, animateExit = !dirty && !state.saving, onBack = { leave() })
     // Saving must consume Back rather than falling through to the host Activity.
     BackHandler(enabled = LocalWorkbenchPageInteractive.current && state.saving) { }
-    Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)) {
+    Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
+        .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding()) {
         ModelNavigation(stringResource(if (original == null) R.string.ai_models_add else R.string.ai_models_edit_title), back.close) {
             TextButton(onClick = { savingRevision = state.revision; ai.models.save(draft()) }, enabled = editable && !state.loading && valid) { Text(stringResource(R.string.editor_save)) }
         }

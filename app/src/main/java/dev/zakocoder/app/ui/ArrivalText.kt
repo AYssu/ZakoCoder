@@ -33,7 +33,7 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
     lineHeight: TextUnit = TextUnit.Unspecified, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true,
     style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current,
-    durationMillis: Int = TEXT_REVEAL_MS) {
+    durationMillis: Int = TEXT_REVEAL_MS, maxPendingLines: Int = Int.MAX_VALUE) {
     val cursor = remember { Animatable(if (animated) 0f else text.length.toFloat()) }
     var previous by remember { mutableStateOf(text.text) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -55,7 +55,12 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
     }
     Text(text, modifier.drawWithContent {
         val result = layout
-        val position = if (animated) cursor.value.coerceIn(0f, text.length.toFloat()) else text.length.toFloat()
+        // A following viewport can already be at the measured end while a busy stream
+        // outruns the drawing cursor. Bound the hidden tail for that viewport so it cannot
+        // become entirely blank. Ordinary text keeps the unrestricted arrival animation.
+        val visibleFloor = if (animated && maxPendingLines != Int.MAX_VALUE && result?.layoutInput?.text == text)
+            result.getLineStart((result.lineCount - maxPendingLines.coerceAtLeast(1)).coerceAtLeast(0)).toFloat() else 0f
+        val position = if (animated) maxOf(cursor.value, visibleFloor).coerceIn(0f, text.length.toFloat()) else text.length.toFloat()
         if (result == null || result.layoutInput.text != text || position >= text.length || !animated) {
             drawContent()
         } else if (position > 0f && boundaries.size > 1) {
@@ -91,6 +96,6 @@ internal fun ArrivalText(text: String, modifier: Modifier = Modifier,
     lineHeight: TextUnit = TextUnit.Unspecified, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true,
     style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current,
-    durationMillis: Int = TEXT_REVEAL_MS) =
+    durationMillis: Int = TEXT_REVEAL_MS, maxPendingLines: Int = Int.MAX_VALUE) =
     ArrivalText(AnnotatedString(text), modifier, color, fontSize, fontFamily, fontWeight,
-        lineHeight, maxLines, overflow, softWrap, style, animated, durationMillis)
+        lineHeight, maxLines, overflow, softWrap, style, animated, durationMillis, maxPendingLines)

@@ -13,6 +13,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,21 +37,23 @@ internal fun AiComposerModelButton(profile: AiProfile?, onClick: () -> Unit, mod
     val window = profile?.context?.contextWindowTokens?.toLong()?.let(::tokenWindowLabel)
     val summary = window?.let { stringResource(R.string.ai_composer_model_state, thinking, it) }
     val color = if (LocalWorkbenchDark.current) Color(0xFF9AA5B1) else MaterialTheme.colorScheme.onSurfaceVariant
-    Box(modifier.heightIn(min = 48.dp).clip(CircleShape).clickable(onClick = onClick).semantics {
-        contentDescription = description
-        stateDescription = listOfNotNull(model, summary).joinToString(" · ")
-    }, contentAlignment = Alignment.CenterStart) {
-        Surface(shape = CircleShape, color = Color.Transparent) {
-            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(model, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = color)
-                if (summary != null) {
-                    Text(thinking, maxLines = 1, fontSize = 10.sp, color = color)
-                    Text(requireNotNull(window), maxLines = 1, fontSize = 10.sp, color = color)
-                }
-                WorkbenchIcon(Glyph.ChevronDown, Modifier.size(10.dp), tint = color)
+    Box(modifier.heightIn(min = 48.dp), contentAlignment = Alignment.CenterEnd) {
+        Row(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(CircleShape)
+            .clickable(onClick = onClick).semantics(mergeDescendants = true) {
+                contentDescription = description
+                stateDescription = listOfNotNull(model, summary).joinToString(" · ")
+                role = Role.Button
+            }.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(model, Modifier.weight(1f, fill = false), maxLines = 1, softWrap = false,
+                overflow = TextOverflow.Ellipsis, fontSize = 11.sp, lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium, color = color)
+            if (summary != null) {
+                Text(thinking, maxLines = 1, softWrap = false, fontSize = 10.sp, color = color)
+                Text(requireNotNull(window), maxLines = 1, softWrap = false, fontSize = 10.sp, color = color)
             }
+            WorkbenchIcon(Glyph.ChevronDown, Modifier.size(10.dp), tint = color)
         }
     }
 }

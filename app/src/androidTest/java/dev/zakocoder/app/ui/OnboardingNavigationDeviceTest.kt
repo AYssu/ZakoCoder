@@ -63,7 +63,10 @@ class OnboardingNavigationDeviceTest {
 
     private fun <T> nodes(block: (List<SemanticsNode>) -> T): T = main {
         val all = mutableListOf<SemanticsNode>()
-        fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
+        fun collect(node: SemanticsNode) {
+            all += node
+            if (!node.config.isClearingSemantics) node.children.forEach(::collect)
+        }
         fun visit(view: View) {
             if (!view.isShown) return
             if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
@@ -322,21 +325,26 @@ class OnboardingNavigationDeviceTest {
         }
     }
 
+    private fun settingsList(all: List<SemanticsNode>) = all.last {
+        // Retained chat/drawer content and the foreground notice can also scroll. The settings
+        // destination is a lazy list, so select its index-scroll contract rather than any last
+        // vertical-scroll node in the window.
+        visible(it) && it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null &&
+            it.config.getOrNull(SemanticsActions.ScrollToIndex) != null
+    }
+
     private fun settingsScroll() = nodes { all ->
-        all.last { visible(it) && it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null }
-            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+        settingsList(all).config[SemanticsProperties.VerticalScrollAxisRange].value()
     }
 
     private fun scrollToSetup() {
-        repeat(20) {
-            if (shown(R.string.setup_reopen)) return
-            nodes { all ->
-                val scroll = all.last { visible(it) && it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null }
-                assertTrue(scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, 500f) == true)
-            }
-            Thread.sleep(180)
+        nodes { all ->
+            // Application settings is the sixth top-level SettingsPage group. Scroll directly
+            // to that group once; repeated animated ScrollBy calls can interrupt one another.
+            assertTrue("Settings list accepts application-group navigation",
+                settingsList(all).config[SemanticsActions.ScrollToIndex].action?.invoke(5) == true)
         }
-        assertTrue("Initialization entry must become visible", shown(R.string.setup_reopen))
+        await("Initialization entry must become visible") { shown(R.string.setup_reopen) }
     }
 
     private fun assertSettingsVisibleAtExposedEdge(reference: Bitmap, actual: Bitmap) {
@@ -361,8 +369,10 @@ class OnboardingNavigationDeviceTest {
     }
 
     @Test(timeout = 180000) fun reopenedSetupRevealsAndRestoresActualScrolledSettingsInBothThemes() = isolatedSetup { host, _ ->
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            for (dark in listOf(false, true)) {
+        // A fresh Activity also clears the prior theme's saveable navigation/drawer state.
+        for (dark in listOf(false, true)) ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var stage = "assistant-entry"
+            try {
                 scenario.onActivity { activity -> activity.setContent {
                     val configuration = Configuration(LocalConfiguration.current).apply {
                         uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
@@ -372,10 +382,13 @@ class OnboardingNavigationDeviceTest {
                 } }
                 await("Navigation control missing") { shown(R.string.app_navigation_open) }
                 click(R.string.app_navigation_open)
+                stage = "drawer-entry"
                 await("Settings shortcut missing") { shown(R.string.nav_settings) }
                 click(R.string.nav_settings)
+                stage = "settings-entry"
                 await("Settings page missing") { shown(R.string.settings_device_hint) }
                 settle()
+                stage = "settings-scroll"
                 scrollToSetup()
                 settle()
                 val savedScroll = settingsScroll()
@@ -384,6 +397,7 @@ class OnboardingNavigationDeviceTest {
                 val originalWindows = windowCount()
                 val reference = capture(dark, "settings-before-reopen")
                 try {
+                    stage = "setup-entry"
                     click(R.string.setup_reopen)
                     await("Reopened setup must start at its first step") { shown(R.string.setup_purpose_title) && host.state.value.onboarding.step == 0 }
                     settle()
@@ -394,6 +408,7 @@ class OnboardingNavigationDeviceTest {
                     }
                     cancel(scenario)
                     assertTrue("Cancellation must keep setup open", shown(R.string.setup_purpose_title))
+                    stage = "settings-return"
                     progress(scenario)
                     commit(scenario)
                     await("Root gesture must return to settings", condition = { shown(R.string.setup_reopen) && !shown(R.string.setup_purpose_title) })
@@ -403,6 +418,12 @@ class OnboardingNavigationDeviceTest {
                     capture(dark, "settings-restored-after-setup").recycle()
                     assertEquals(originalWindows, windowCount())
                 } finally { reference.recycle() }
+            } catch (failure: Throwable) {
+                // Keep the exact visible entry/return state when an assertion fails. These are
+                // isolated fixture screens; screenshots never include real profiles or secrets.
+                runCatching { capture(dark, "failure-$stage").recycle() }
+                    .exceptionOrNull()?.let(failure::addSuppressed)
+                throw failure
             }
         }
     }

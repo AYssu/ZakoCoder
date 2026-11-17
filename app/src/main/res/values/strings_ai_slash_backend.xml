@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_manual_compact_empty">当前对话还没有可压缩的上下文</string>
+    <string name="ai_manual_compact_failed">上下文压缩失败，原始上下文已保留</string>
+    <string name="ai_manual_compact_stopped">已停止压缩，原始上下文已保留</string>
+</resources>
