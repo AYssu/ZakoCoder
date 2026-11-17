@@ -1,6 +1,7 @@
 package dev.zakocoder.app.ai
 
 import dev.zakocoder.app.settings.NetworkProxy
+import dev.zakocoder.app.diagnostics.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -22,6 +23,19 @@ import kotlin.coroutines.resumeWithException
 // A single response must leave room for the user request and other entries in 512k history.
 internal const val AI_RESPONSE_TEXT_LIMIT = 256000
 
+/** Map only fixed local failure labels; never persist an exception/provider message. */
+private fun diagnosticCode(value: String): DiagnosticCode? = when (value) {
+    "dns_resolution_failed" -> DiagnosticCode.NameResolutionFailed
+    "tls_failed" -> DiagnosticCode.TlsFailed
+    "connect_failed" -> DiagnosticCode.ConnectFailed
+    "network_read_or_connect_timeout", "request_timeout" -> DiagnosticCode.Timeout
+    "stream_eof", "missing_done", "missing_completion" -> DiagnosticCode.StreamIncomplete
+    "malformed_json", "invalid_response_structure", "missing_body" -> DiagnosticCode.MalformedResponse
+    "invalid_request_configuration", "invalid_proxy" -> DiagnosticCode.InvalidConfiguration
+    "network_io_failed" -> DiagnosticCode.Io
+    else -> null
+}
+
 data class AiCall(val id: String, val name: String, val arguments: String)
 /** Provider reasoning is opaque protocol context, never an assistant's displayed answer. */
 data class AiReply(val text: String, val calls: List<AiCall>, val reasoningContent: String? = null, val responsesOutput: String? = null, val providerOutput: String? = null, val providerProtocol: String? = null, val chatReasoningDetails: String? = null) {
@@ -34,6 +48,52 @@ data class AiReply(val text: String, val calls: List<AiCall>, val reasoningConte
         chatReasoningDetails?.let { put(CHAT_REASONING_DETAILS_KEY, JSONArray(it)) }
         responsesOutput?.let { put(RESPONSES_OUTPUT_KEY, JSONArray(it)) }
         providerOutput?.let { put(PROVIDER_OUTPUT_KEY, JSONObject().put("protocol", requireNotNull(providerProtocol)).put("output", JSONArray(it))) }
+    }
+}
+
+/** Count-only projection, independent of the request/response previews retained in local history. */
+internal class RequestDiagnosticTrace(
+    private val events: DiagnosticEvents?, private val group: DiagnosticId,
+    private val protocol: AiApiProtocol, private val attempt: Int
+) {
+    private val id = DiagnosticId.create()
+    private val started = System.nanoTime()
+    private var record: AiRequestLog? = null
+    private var headers = false
+    private var firstByte = false
+    private var finished = false
+    private var lastProgress = 0L
+    init { publish(DiagnosticOutcome.Started) }
+
+    @Synchronized fun update(value: AiRequestLog) {
+        if (finished) return
+        record = value
+        if (!headers && value.status != null) { headers = true; publish(DiagnosticOutcome.Headers) }
+        if (!firstByte && (value.firstEvent != null || value.bytes > 0)) {
+            firstByte = true; publish(DiagnosticOutcome.FirstByte)
+        }
+        if (value.complete) {
+            finish(when (value.failure) { null -> DiagnosticOutcome.Succeeded; AiFailure.Cancelled -> DiagnosticOutcome.Cancelled; else -> DiagnosticOutcome.Failed }, value.failure, diagnosticCode(value.diagnostic))
+        } else if (firstByte && value.elapsed - lastProgress >= 1_000) {
+            lastProgress = value.elapsed
+            publish(DiagnosticOutcome.Progress)
+        }
+    }
+
+    @Synchronized fun finish(outcome: DiagnosticOutcome, failure: AiFailure? = null, code: DiagnosticCode? = null) {
+        if (finished) return
+        finished = true
+        publish(outcome, failure, code)
+    }
+
+    private fun publish(outcome: DiagnosticOutcome, failure: AiFailure? = null, code: DiagnosticCode? = null) {
+        val value = record
+        events?.record(DiagnosticEvent(DiagnosticStage.Request, outcome, id, owner = group,
+            protocol = protocol, attempt = attempt, failure = failure, code = code, httpStatus = value?.status,
+            bytes = value?.bytes, events = value?.events,
+            elapsedMillis = maxOf(value?.elapsed ?: 0L, (System.nanoTime() - started) / 1_000_000),
+            requestBytes = value?.requestBytes, inputTokens = value?.inputTokens,
+            outputTokens = value?.outputTokens, cachedTokens = value?.cachedTokens))
     }
 }
 class AiTransportException(val status: Int? = null, val kind: AiFailure = AiFailure.Protocol, val diagnostic: String = "invalid_response", val retryAfterMillis: Long? = null) : IOException("AI request failed: ${kind.name}") {
@@ -53,6 +113,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     private val proxyLock = Any()
     private var proxyRaw: String? = null
     private var proxyClient: OkHttpClient? = null
+    private var diagnostics: DiagnosticEvents? = null
+
+    /** Controller-owned copy also covers model probes without changing transport test construction. */
+    internal fun withDiagnostics(events: DiagnosticEvents): ChatTransport =
+        ChatTransport(client, retryDelay, maxAttempts).also { it.diagnostics = events }
 
     /**
      * Returns the base client when no proxy is configured (never mutating it), or a derived client
@@ -88,6 +153,7 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         var attempt = 1
         var precedingDelay = 0L
         var precedingReason = ""
+        val diagnosticGroup = DiagnosticId.create()
         while (true) {
             currentCoroutineContext().ensureActive()
             var replacementStarted = false
@@ -95,28 +161,36 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                 if (attempt > 1 && !replacementStarted) { onRetryReset(); replacementStarted = true }
             }
             beforeAttempt()
+            val trace = RequestDiagnosticTrace(diagnostics, diagnosticGroup, frozenConfig.protocol, attempt)
             try {
                 val reply = requestAttempt(frozenConfig, JSONArray(frozenMessages), JSONArray(frozenTools), forceTool, proxy,
                     imageData, { drafts ->
                         if (drafts.any { it.name.isNotEmpty() || it.arguments.isNotEmpty() }) beginReplacement()
                         if (attempt == 1 || replacementStarted) toolDelta(drafts)
                     },
-                    observe,
+                    { record -> trace.update(record); observe(record) },
                     { fragment -> if (fragment.isNotEmpty()) beginReplacement(); reasoningDelta(fragment) },
                     group, attempt, precedingDelay, precedingReason, cacheKey,
                     { fragment -> if (fragment.isNotEmpty()) beginReplacement(); delta(fragment) })
                 // A successful empty replacement must not leave an earlier failed answer visible.
                 beginReplacement()
+                trace.finish(DiagnosticOutcome.Succeeded)
                 return@withContext reply
-            } catch (cancelled: CancellationException) { throw cancelled }
+            } catch (cancelled: CancellationException) { trace.finish(DiagnosticOutcome.Cancelled, AiFailure.Cancelled); throw cancelled }
             catch (error: AiTransportException) {
+                trace.finish(DiagnosticOutcome.Failed, error.kind, diagnosticCode(error.diagnostic))
                 currentCoroutineContext().ensureActive()
                 val wait = if (attempt >= maxAttempts) null else AiRetryPolicy.delayMillis(attempt, error, kotlin.random.Random.nextLong(251))
                 if (wait == null) throw error
+                diagnostics?.record(DiagnosticEvent(DiagnosticStage.Request, DiagnosticOutcome.Retry, diagnosticGroup,
+                    protocol = frozenConfig.protocol, failure = error.kind, attempt = attempt + 1, httpStatus = error.status, delayMillis = wait))
                 onRetry(AiRetryEvent(attempt + 1, maxAttempts, wait, error.diagnostic, error.status))
                 retryDelay(wait)
                 currentCoroutineContext().ensureActive()
                 precedingDelay = wait; precedingReason = error.diagnostic; attempt++
+            } catch (error: Exception) {
+                trace.finish(DiagnosticOutcome.Failed, AiFailure.Internal)
+                throw error
             }
         }
         @Suppress("UNREACHABLE_CODE")

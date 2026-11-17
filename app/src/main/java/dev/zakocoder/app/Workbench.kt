@@ -296,6 +296,11 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         mutable.update { it.copy(sessions = terminalItems(), terminalRevision = it.terminalRevision + 1) }
         releaseService()
     }
+    val doctor = dev.zakocoder.app.diagnostics.DoctorController(context) {
+        withContext(Dispatchers.Main.immediate) {
+            dev.zakocoder.app.diagnostics.DoctorInput(ai.state.value, state.value, mcp.state.value, ssh.state.value)
+        }
+    }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
         screenTests.bindOverlayActions(returnToApp = { projectId, lease ->
@@ -553,13 +558,20 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         if (mutable.value.busy || mutable.value.loading || projectTasksActive() || git.state.value.busy) return
         mutable.update { it.copy(busy = true, showProgress = showProgress, operation = context.getString(title), message = "", messageIsError = false, log = "") }
         operation = scope.launch {
+            val diagnostic = if (recheckTools) dev.zakocoder.app.diagnostics.DiagnosticId.create() else null
+            fun record(outcome: dev.zakocoder.app.diagnostics.DiagnosticOutcome) {
+                diagnostic?.let { id -> dev.zakocoder.app.diagnostics.DiagnosticEvents.get(context).record(
+                    dev.zakocoder.app.diagnostics.DiagnosticEvent(dev.zakocoder.app.diagnostics.DiagnosticStage.RuntimeInstall, outcome, id)) }
+            }
+            record(dev.zakocoder.app.diagnostics.DiagnosticOutcome.Started)
             try {
                 if (recheckTools) { toolCheckJob?.cancelAndJoin(); toolCheckPending = true }
                 if (foreground) service()
                 block()
+                record(dev.zakocoder.app.diagnostics.DiagnosticOutcome.Succeeded)
             }
-            catch (cancelled: CancellationException) { mutable.update { it.copy(message = context.getString(R.string.operation_cancelled)) }; throw cancelled }
-            catch (error: Exception) { android.util.Log.e("Workbench", "Operation failed: $title", error); mutable.update { it.copy(message = context.getString(R.string.operation_failed, error.message ?: error.javaClass.simpleName), messageIsError = true) } }
+            catch (cancelled: CancellationException) { record(dev.zakocoder.app.diagnostics.DiagnosticOutcome.Cancelled); mutable.update { it.copy(message = context.getString(R.string.operation_cancelled)) }; throw cancelled }
+            catch (error: Exception) { record(dev.zakocoder.app.diagnostics.DiagnosticOutcome.Failed); android.util.Log.e("Workbench", "Operation failed: $title", error); mutable.update { it.copy(message = context.getString(R.string.operation_failed, error.message ?: error.javaClass.simpleName), messageIsError = true) } }
             finally {
                 mutable.update { it.copy(busy = false) }; releaseService(); launchToolCheck()
             }

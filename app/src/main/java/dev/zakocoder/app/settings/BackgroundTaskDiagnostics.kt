@@ -2,6 +2,12 @@ package dev.zakocoder.app.settings
 
 import android.content.Context
 import android.util.AtomicFile
+import dev.zakocoder.app.diagnostics.DiagnosticCode
+import dev.zakocoder.app.diagnostics.DiagnosticEvent
+import dev.zakocoder.app.diagnostics.DiagnosticEvents
+import dev.zakocoder.app.diagnostics.DiagnosticId
+import dev.zakocoder.app.diagnostics.DiagnosticOutcome
+import dev.zakocoder.app.diagnostics.DiagnosticStage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -15,8 +21,23 @@ internal enum class BackgroundTaskEvent { ServiceRequested, ServiceReady, Servic
 internal class BackgroundTaskDiagnostics(context: Context) {
     private val file = AtomicFile(File(context.noBackupFilesDir, "background-task-diagnostic.log"))
     private val mutex = Mutex()
+    private val diagnostics = DiagnosticEvents.get(context)
+    private var diagnosticId = DiagnosticId.create()
     suspend fun record(event: BackgroundTaskEvent, task: AiBackgroundTask? = null) = withContext(Dispatchers.IO) {
         mutex.withLock {
+            if (event == BackgroundTaskEvent.ServiceRequested) diagnosticId = DiagnosticId.create()
+            val (outcome, code) = when (event) {
+                BackgroundTaskEvent.ServiceRequested -> DiagnosticOutcome.Started to null
+                BackgroundTaskEvent.ServiceReady -> DiagnosticOutcome.Succeeded to DiagnosticCode.Available
+                BackgroundTaskEvent.ServiceStartRejected -> DiagnosticOutcome.Failed to DiagnosticCode.Denied
+                BackgroundTaskEvent.ServiceDestroyedUnexpectedly -> DiagnosticOutcome.Failed to DiagnosticCode.Interrupted
+                BackgroundTaskEvent.ServiceReleased -> DiagnosticOutcome.Changed to DiagnosticCode.Disconnected
+                BackgroundTaskEvent.TaskPhase -> DiagnosticOutcome.Changed to null
+            }
+            diagnostics.record(DiagnosticEvent(
+                DiagnosticStage.Service, outcome, diagnosticId, code = code, phase = task?.phase,
+                active = task?.active, round = task?.round, events = task?.tools,
+            ))
             try {
                 val existing = if (file.baseFile.exists()) file.openRead().bufferedReader().useLines { lines ->
                     lines.takeLastBounded(127)

@@ -1,6 +1,12 @@
 package dev.zakocoder.app.ssh
 
 import android.content.Context
+import dev.zakocoder.app.diagnostics.DiagnosticCode
+import dev.zakocoder.app.diagnostics.DiagnosticEvent
+import dev.zakocoder.app.diagnostics.DiagnosticEvents
+import dev.zakocoder.app.diagnostics.DiagnosticId
+import dev.zakocoder.app.diagnostics.DiagnosticOutcome
+import dev.zakocoder.app.diagnostics.DiagnosticStage
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.HostKey
@@ -33,6 +39,7 @@ import org.json.JSONObject
 /** Native SSH client. Model commands run exclusively in the selected REMOTE account, never on Android. */
 class SshController(context: Context) {
     private val store = SshStore(context.applicationContext)
+    private val diagnostics = DiagnosticEvents.get(context)
     private val mutableState = MutableStateFlow(SshState())
     val state = mutableState.asStateFlow()
     private val operations = Mutex()
@@ -119,6 +126,9 @@ class SshController(context: Context) {
             pending = profile to observed
             mutableState.update { it.copy(pendingHostKey = observed) }
             observed
+        } catch (cancelled: CancellationException) {
+            diagnostic.cancelled()
+            throw cancelled
         } finally { release(session) }
     }
 
@@ -148,7 +158,10 @@ class SshController(context: Context) {
         }
     }
 
-    suspend fun execute(profileId: String, args: JSONObject, expectedConfiguration: String? = null): JSONObject = guarded(profileId) { token ->
+    suspend fun execute(profileId: String, args: JSONObject, expectedConfiguration: String? = null): JSONObject =
+        diagnosedCommand { executeCommand(profileId, args, expectedConfiguration) }
+
+    private suspend fun executeCommand(profileId: String, args: JSONObject, expectedConfiguration: String?): JSONObject = guarded(profileId) { token ->
         if (expectedConfiguration != null) SshSafety.check(configurationLease(profileId) == expectedConfiguration, "configuration_changed")
         val entry = entry(profileId)
         val profile = entry.profile
@@ -210,10 +223,24 @@ class SshController(context: Context) {
         }
     }
 
-    private class ConnectionDiagnostic(private val operation: String) {
+    private inner class ConnectionDiagnostic(private val operation: String) {
+        private val id = DiagnosticId.create()
+        private val started = android.os.SystemClock.elapsedRealtime()
         var stage = "resolve"
-        fun failed(error: Throwable): String {
-            val code = SshConnectionFailure.code(error, stage)
+        private fun typedStage() = when (stage) {
+            "resolve" -> DiagnosticStage.SshResolve
+            "tcp_connect" -> DiagnosticStage.SshConnect
+            "authentication" -> DiagnosticStage.SshAuthenticate
+            else -> DiagnosticStage.SshHandshake
+        }
+        fun succeeded() = diagnostics.record(DiagnosticEvent(typedStage(), DiagnosticOutcome.Succeeded, id,
+            elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+        fun cancelled() = diagnostics.record(DiagnosticEvent(typedStage(), DiagnosticOutcome.Cancelled, id,
+            code = DiagnosticCode.Interrupted, elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+        fun failed(error: Throwable, failureCode: String? = null): String {
+            val code = failureCode ?: SshConnectionFailure.code(error, stage)
+            diagnostics.record(DiagnosticEvent(typedStage(), DiagnosticOutcome.Failed, id,
+                code = connectionCode(code), elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
             val types = generateSequence(error) { it.cause }.take(8)
                 .map { it.javaClass.simpleName.replace(Regex("[^A-Za-z0-9_]"), "").take(64) }.joinToString(",")
             val errno = generateSequence(error) { it.cause }.take(12)
@@ -226,7 +253,43 @@ class SshController(context: Context) {
         }
         fun reached(value: String) {
             stage = value
+            diagnostics.record(DiagnosticEvent(typedStage(),
+                if (value == "host_key_observed") DiagnosticOutcome.Succeeded else DiagnosticOutcome.Started, id,
+                elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
             android.util.Log.i("ZakoSsh", "operation=$operation stage=$value")
+        }
+    }
+
+    private fun connectionCode(code: String): DiagnosticCode = when (code) {
+        "connection_timeout", "command_timeout" -> DiagnosticCode.Timeout
+        "authentication_failed", "connection_or_auth_failed" -> DiagnosticCode.AuthenticationFailed
+        "host_key_untrusted" -> DiagnosticCode.HostKeyUntrusted
+        "host_key_changed" -> DiagnosticCode.HostKeyChanged
+        "private_key_invalid", "profile_missing", "credential_missing", "unsupported_action", "invalid_command", "invalid_timeout" -> DiagnosticCode.InvalidConfiguration
+        "handshake_failed", "algorithm_negotiation_failed" -> DiagnosticCode.HandshakeFailed
+        "dns_failed" -> DiagnosticCode.NameResolutionFailed
+        "network_unreachable", "tcp_failed" -> DiagnosticCode.Io
+        else -> DiagnosticCode.Unavailable
+    }
+
+    private suspend fun diagnosedCommand(block: suspend () -> JSONObject): JSONObject {
+        val id = DiagnosticId.create()
+        val started = android.os.SystemClock.elapsedRealtime()
+        diagnostics.record(DiagnosticEvent(DiagnosticStage.SshCommand, DiagnosticOutcome.Started, id))
+        try {
+            val result = block()
+            diagnostics.record(DiagnosticEvent(DiagnosticStage.SshCommand, DiagnosticOutcome.Succeeded, id,
+                elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            return result
+        } catch (cancelled: CancellationException) {
+            diagnostics.record(DiagnosticEvent(DiagnosticStage.SshCommand, DiagnosticOutcome.Cancelled, id,
+                code = DiagnosticCode.Interrupted, elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            throw cancelled
+        } catch (failure: Exception) {
+            diagnostics.record(DiagnosticEvent(DiagnosticStage.SshCommand, DiagnosticOutcome.Failed, id,
+                code = connectionCode((failure as? SshException)?.code.orEmpty()),
+                elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            throw failure
         }
     }
 
@@ -283,12 +346,17 @@ class SshController(context: Context) {
             } else session.setConfig("PreferredAuthentications", "publickey")
             session.connect(15_000)
             ensureCurrent(token)
+            diagnostic.succeeded()
             return session
+        } catch (cancelled: CancellationException) {
+            release(session)
+            diagnostic.cancelled()
+            throw cancelled
         } catch (error: Exception) {
             release(session)
             ensureCurrent(token)
-            throw SshException(if (repository.observed?.fingerprint != null && repository.observed?.fingerprint != entry.profile.hostFingerprint)
-                "host_key_changed" else diagnostic.failed(error), error)
+            val changedKey = repository.observed?.fingerprint != null && repository.observed?.fingerprint != entry.profile.hostFingerprint
+            throw SshException(diagnostic.failed(error, if (changedKey) "host_key_changed" else null), error)
         } finally { jsch.removeAllIdentity() }
     }
     private fun release(session: Session) {

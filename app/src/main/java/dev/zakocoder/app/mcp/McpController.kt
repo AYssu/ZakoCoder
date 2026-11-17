@@ -1,6 +1,12 @@
 package dev.zakocoder.app.mcp
 
 import android.content.Context
+import dev.zakocoder.app.diagnostics.DiagnosticCode
+import dev.zakocoder.app.diagnostics.DiagnosticEvent
+import dev.zakocoder.app.diagnostics.DiagnosticEvents
+import dev.zakocoder.app.diagnostics.DiagnosticId
+import dev.zakocoder.app.diagnostics.DiagnosticOutcome
+import dev.zakocoder.app.diagnostics.DiagnosticStage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +28,7 @@ class McpController(
     private val mutable = MutableStateFlow(McpState())
     val state = mutable.asStateFlow()
     private val store = McpStore(context, keyAlias)
+    private val diagnostics = DiagnosticEvents.get(context)
     private val configuration = Mutex()
     private val execution = Mutex()
     private val monitor = Any()
@@ -129,6 +136,9 @@ class McpController(
         return pattern.replace(text) { "[redacted]" }.also { if (it.length > 2 * 1024 * 1024) throw McpException(McpProblem.Limit) }
     }
     fun probe(projectId: String, id: String): Job = operation(external = true) {
+        diagnosed(DiagnosticStage.McpConnect) { probeConnection(projectId, id) }
+    }
+    private suspend fun probeConnection(projectId: String, id: String) {
         val owner = epoch(projectId)
         val expected = synchronized(monitor) { revision }
         execution.withLock {
@@ -137,7 +147,7 @@ class McpController(
             val server = readyServer(id)
             val session = session(projectId, server, owner, expected)
             try {
-                val result = session.probe()
+                val result = diagnosed(DiagnosticStage.McpInitialize) { session.probe() }
                 val capabilities = result.getJSONObject("capabilities")
                 val summary = JSONObject()
                 listOf("tools", "resources", "prompts").forEach { if (capabilities.has(it)) summary.put(it, true) }
@@ -163,7 +173,10 @@ class McpController(
      * actual actions still pass through the ordinary AI approval path. This snapshot belongs
      * to one task and is invalidated by every configuration revision or task close.
      */
-    suspend fun prepareTask(projectId: String) {
+    suspend fun prepareTask(projectId: String) = diagnosed(DiagnosticStage.McpPrepare) {
+        prepareConnections(projectId)
+    }
+    private suspend fun prepareConnections(projectId: String) {
         currentCoroutineContext().ensureActive()
         val owner = epoch(projectId)
         val expected = synchronized(monitor) { revision }
@@ -190,7 +203,7 @@ class McpController(
                             checkIdentity(projectId, owner, expected)
                             val connection = session(projectId, server, owner, expected)
                             try {
-                                connection.probe()
+                                diagnosed(DiagnosticStage.McpInitialize) { connection.probe() }
                                 currentCoroutineContext().ensureActive()
                                 checkIdentity(projectId, owner, expected)
                                 synchronized(monitor) { ready += server.id; completed += server.id }
@@ -257,7 +270,10 @@ class McpController(
             throw failure
         }
     }
-    suspend fun request(projectId: String, id: String, action: String, arguments: JSONObject): JSONObject {
+    suspend fun request(projectId: String, id: String, action: String, arguments: JSONObject): JSONObject =
+        diagnosed(DiagnosticStage.McpCall) { performRequest(projectId, id, action, arguments) }
+
+    private suspend fun performRequest(projectId: String, id: String, action: String, arguments: JSONObject): JSONObject {
         // Snapshot before queueing: callers cannot mutate a pending approved JSON object.
         val params = JSONObject(arguments.toString())
         validateRequest(id, action, params)
@@ -281,6 +297,45 @@ class McpController(
         catch (_: Exception) { throw McpException(McpProblem.Unavailable) }
         finally { end(external = true) }
     }
+    /** Fixed categories only: never retain server identities, arguments, remote output or exception text. */
+    private suspend fun <T> diagnosed(stage: DiagnosticStage, block: suspend () -> T): T {
+        val id = DiagnosticId.create()
+        val started = android.os.SystemClock.elapsedRealtime()
+        diagnostics.record(DiagnosticEvent(stage, DiagnosticOutcome.Started, id))
+        try {
+            val result = block()
+            diagnostics.record(DiagnosticEvent(stage, DiagnosticOutcome.Succeeded, id,
+                elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            return result
+        } catch (cancelled: CancellationException) {
+            diagnostics.record(DiagnosticEvent(stage, DiagnosticOutcome.Cancelled, id,
+                code = if (cancelled is TimeoutCancellationException) DiagnosticCode.Timeout else DiagnosticCode.Interrupted,
+                elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            throw cancelled
+        } catch (failure: Exception) {
+            val typed = failure as? McpException
+            val code = when (typed?.problem) {
+                McpProblem.InvalidConfig -> DiagnosticCode.InvalidConfiguration
+                McpProblem.Timeout -> DiagnosticCode.Timeout
+                McpProblem.Protocol -> DiagnosticCode.InvalidResponse
+                McpProblem.Disabled -> DiagnosticCode.Denied
+                McpProblem.Closed -> DiagnosticCode.Disconnected
+                McpProblem.Storage -> DiagnosticCode.Storage
+                McpProblem.Limit -> DiagnosticCode.Limit
+                else -> when {
+                    typed?.httpStatus in setOf(401, 403) -> DiagnosticCode.Denied
+                    typed?.reason == McpFailureReason.Dns -> DiagnosticCode.NameResolutionFailed
+                    typed?.reason in setOf(McpFailureReason.Network, McpFailureReason.Connect) -> DiagnosticCode.Io
+                    typed?.reason == McpFailureReason.Tls -> DiagnosticCode.HandshakeFailed
+                    else -> DiagnosticCode.Unavailable
+                }
+            }
+            diagnostics.record(DiagnosticEvent(stage, DiagnosticOutcome.Failed, id, code = code,
+                httpStatus = typed?.httpStatus, elapsedMillis = android.os.SystemClock.elapsedRealtime() - started))
+            throw failure
+        }
+    }
+
     private suspend fun list(session: McpSession, method: String, initial: JSONObject): JSONObject {
         val key = when (method) { "tools/list" -> "tools"; "resources/list" -> "resources"; "resources/templates/list" -> "resourceTemplates"; "prompts/list" -> "prompts"; else -> throw McpException(McpProblem.Protocol) }
         val items = JSONArray(); val cursors = mutableSetOf<String>(); var params = initial; var pages = 0; var bytes = 0
