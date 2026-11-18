@@ -20,7 +20,7 @@
   <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
-<img align="right" src="docs/assets/brand/mascots/04-reading.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
+<img align="right" src="docs/assets/brand/mascots/05-welcome.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
 
 ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
