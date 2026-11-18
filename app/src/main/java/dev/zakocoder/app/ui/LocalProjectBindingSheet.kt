@@ -41,6 +41,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
     val legacy = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissionRevision++ }
     LaunchedEffect(authorized, permissionRevision) { if (authorized) browser.open(initialDirectory) }
     WorkbenchSheet(stringResource(R.string.local_browser_title), onDismiss, stringResource(R.string.local_browser_description)) {
+        val finish = LocalWorkbenchSheetAction.current
         if (!authorized) {
             WorkbenchCard(color = MaterialTheme.colorScheme.surfaceContainerLow) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -109,7 +110,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
             if (state.truncated) TextButton(onClick = browser::more, enabled = enabled && !state.loading) { Text(stringResource(R.string.local_browser_more)) }
             Text(stringResource(if (state.selectable) R.string.local_browser_original_notice else R.string.local_browser_choose_project),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            WorkbenchPrimaryButton(onClick = { state.current?.path?.let(onBind); onDismiss() },
+            WorkbenchPrimaryButton(onClick = { state.current?.path?.let { path -> finish { onBind(path) } } },
                 enabled = enabled && !state.loading && state.selectable, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.local_browser_use)) }
         }

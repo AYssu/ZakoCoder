@@ -185,8 +185,8 @@ internal fun AgentBrowserPage(controller: BrowserController, taskState: dev.zako
                 WorkbenchAlertDialog(onDismissRequest = { controller.confirmOrigin(origin, requestId, false) },
                     title = { Text(stringResource(R.string.browser_confirm_title)) },
                     text = { Text(stringResource(R.string.browser_confirm_body, origin)) },
-                    confirmButton = { TextButton(onClick = { controller.confirmOrigin(origin, requestId, true) }) { Text(stringResource(R.string.browser_allow)) } },
-                    dismissButton = { TextButton(onClick = { controller.confirmOrigin(origin, requestId, false) }) { Text(stringResource(R.string.browser_deny)) } })
+                    confirmButton = { WorkbenchDialogButton(onClick = { controller.confirmOrigin(origin, requestId, true) }) { Text(stringResource(R.string.browser_allow)) } },
+                    dismissButton = { WorkbenchDialogButton(onClick = { controller.confirmOrigin(origin, requestId, false) }) { Text(stringResource(R.string.browser_deny)) } })
             }
         }
         approvalHost()

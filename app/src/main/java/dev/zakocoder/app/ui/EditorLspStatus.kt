@@ -15,6 +15,7 @@ import dev.zakocoder.app.ai.AiLogRedactor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
@@ -49,6 +50,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
     TextButton(onClick = { expanded = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), shape = RoundedCornerShape(12.dp)) {
         Text(label, style = MaterialTheme.typography.labelSmall,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
             color = if (current.phase == LspPhase.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
     }
     if (expanded) WorkbenchSheet(stringResource(R.string.editor_lsp_title), { expanded = false }) {
@@ -112,8 +114,8 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
                 TextButton(onClick = { scriptExpanded = !scriptExpanded }) { Text(stringResource(if (scriptExpanded) R.string.editor_lsp_hide_script else R.string.editor_lsp_show_script)) }
                 if (scriptExpanded) SelectionContainer { Text(server.installScript, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
             }
-        }, confirmButton = { TextButton(onClick = { installing = false; expanded = false; onInstall(server) }) { Text(stringResource(R.string.editor_lsp_confirm_install)) } },
-        dismissButton = { TextButton(onClick = { installing = false }) { Text(stringResource(R.string.cancel)) } })
+        }, confirmButton = { WorkbenchDialogButton(onClick = { installing = false; expanded = false; onInstall(server) }) { Text(stringResource(R.string.editor_lsp_confirm_install)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { installing = false }) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable private fun lspStatusLabel(state: EditorLspState): String {

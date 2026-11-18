@@ -290,8 +290,8 @@ internal fun ScreenTestScreenshotConsent(onConfirm: () -> Unit, onDismiss: () ->
     WorkbenchAlertDialog(onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.screen_test_share_confirm_title)) },
         text = { Text(stringResource(R.string.screen_test_share_confirm_body)) },
-        confirmButton = { TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
+        confirmButton = { WorkbenchDialogButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.screen_test_share_confirm_action))
         } },
-        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { WorkbenchDialogButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) } })
 }

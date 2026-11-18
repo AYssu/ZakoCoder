@@ -140,13 +140,13 @@ private fun LicenseOriginalsEntry() {
                     if (listing.failed || available?.isEmpty() == true) Text(stringResource(R.string.about_license_read_failed), color = MaterialTheme.colorScheme.error)
                     else if (available == null) Text(stringResource(R.string.loading))
                     else available.forEach { file ->
-                        TextButton(onClick = { choosing = false; selected = file }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        WorkbenchDialogButton(onClick = { choosing = false; selected = file }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                             Text(file.removeSuffix(".txt"), modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { choosing = false }) { Text(stringResource(R.string.close)) } })
+            confirmButton = { WorkbenchDialogButton(onClick = { choosing = false }) { Text(stringResource(R.string.close)) } })
     }
     selected?.let { file ->
         val document by produceState(initialValue = LicenseDocument(), key1 = file) {

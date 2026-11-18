@@ -1,8 +1,12 @@
 package dev.zakocoder.app.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.view.KeyEvent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -27,64 +31,34 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.view.TerminalView
 import dev.zakocoder.app.R
-import dev.zakocoder.app.ui.theme.DarkPalette
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.terminal.TerminalItem
 
-private val TerminalChrome: Color @Composable get() = DarkPalette.surfaceSunken
+private val TerminalChrome = Color.Black
 private val TerminalText = TerminalForeground
 private val TerminalMuted = TerminalSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedId: String?, onSelect: (String) -> Unit,
-    onBack: () -> Unit, contentPadding: PaddingValues = PaddingValues(0.dp)) {
-    val darkAppearance = LocalWorkbenchDark.current
-    val current = state.sessions.singleOrNull { it.id == selectedId } ?: state.sessions.lastOrNull()
+    onBack: () -> Unit, contentPadding: PaddingValues = PaddingValues(0.dp),
+    requestedProjectId: String? = state.selectedId, onEnvironment: () -> Unit = {}) {
+    val current = state.sessions.singleOrNull { it.id == selectedId } ?: state.sessions.lastOrNull { it.projectId == requestedProjectId }
     var view by remember { mutableStateOf<TerminalView?>(null) }
     var menu by remember { mutableStateOf(false) }
     var previewing by remember(current?.id) { mutableStateOf(false) }
-    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
-    LaunchedEffect(current?.id) { while (true) { now = android.os.SystemClock.elapsedRealtime(); kotlinx.coroutines.delay(60_000) } }
     var switching by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf<TerminalItem?>(null) }
     val modifiers by workbench.terminal.modifiers.collectAsStateWithLifecycle()
     val leaveTerminal = { view?.let(workbench.terminal::hideKeyboard); onBack() }
     if (previewing && current != null) TerminalPreviewSheet(current, { workbench.terminal.previewAddresses(current.id) }, { previewing = false; view?.requestFocus() })
-    val back = rememberWorkbenchBackMotion(onBack = leaveTerminal)
-    Column(Modifier.fillMaxSize().then(back.modifier).background(TerminalBackground)
-        .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding()) {
-        Surface(color = TerminalChrome, contentColor = TerminalText) {
-            Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_terminals), tint = TerminalText) }
-                Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-                    Text(if (current == null) stringResource(R.string.nav_terminal) else stringResource(R.string.terminal_number, current.number),
-                        fontSize = 14.5.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Text(current?.let { it.projectName + " · " + terminalStatusLabel(it) + if (it.session.isRunning) " · " + stringResource(R.string.session_minutes, ((now - it.startedAt).coerceAtLeast(0) / 60_000).toInt()) else "" } ?: state.project?.name ?: stringResource(R.string.select_project_first),
-                        style = MaterialTheme.typography.bodySmall, color = TerminalMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                IconButton(onClick = { switching = true }) {
-                    BadgedBox(badge = { if (state.sessions.isNotEmpty()) Badge(containerColor = MaterialTheme.colorScheme.primary) { Text(state.sessions.size.toString()) } }) {
-                        WorkbenchIcon(Glyph.Swap, description = stringResource(R.string.switch_terminals), tint = TerminalText)
-                    }
-                }
-                IconButton(onClick = { view?.let(workbench.terminal::toggleKeyboard) }) {
-                    WorkbenchIcon(Glyph.Keyboard, description = stringResource(R.string.keyboard), tint = TerminalMuted)
-                }
-                Box {
-                    IconButton(onClick = { menu = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.terminal_actions), tint = TerminalText) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, properties = androidx.compose.ui.window.PopupProperties(focusable = false)) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.terminal_preview)) }, enabled = current != null,
-                            onClick = { menu = false; view?.let(workbench.terminal::hideKeyboard); previewing = true })
-                        DropdownMenuItem(text = { Text(stringResource(R.string.new_terminal)) }, enabled = state.installed && current != null && !state.busy && state.sessions.size < 4,
-                            onClick = { menu = false; workbench.startTerminal(current?.projectId) })
-                        DropdownMenuItem(text = { Text(stringResource(R.string.close_terminal), color = MaterialTheme.colorScheme.error) },
-                            enabled = current != null, onClick = { menu = false; closing = current })
-                    }
-                }
-            }
-        }
+    val back = rememberWorkbenchBackMotion(enabled = !menu && !previewing && !switching && closing == null, onBack = leaveTerminal)
+    BackHandler(enabled = menu) { menu = false }
+    TerminalSystemBars()
+    Column(Modifier.fillMaxSize().then(back.modifier).background(Color.Black)
+        .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding()
+        .padding(top = 8.dp)) {
         if (current == null) {
             Column(Modifier.fillMaxWidth().weight(1f).padding(28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.Center) {
                 WorkbenchIcon(Glyph.Terminal, modifier = Modifier.size(40.dp), tint = TerminalMuted)
@@ -94,41 +68,37 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
                 Text(stringResource(when { !state.installed -> R.string.terminal_needs_environment; state.project == null -> R.string.select_project_first; else -> R.string.terminal_direct_help }),
                     style = MaterialTheme.typography.bodyMedium, color = TerminalMuted)
                 Spacer(Modifier.height(24.dp))
-                WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.startTerminal(current?.projectId) }, enabled = state.installed && state.project != null && !state.busy) { Text(stringResource(R.string.new_terminal)) }
+                WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.startTerminal(requestedProjectId) }, enabled = state.installed && state.projects.any { it.id == requestedProjectId } && !state.busy && state.sessions.size < 4) { Text(stringResource(R.string.new_terminal)) }
+                if (!state.installed) TextButton(onClick = onEnvironment) { Text(stringResource(R.string.nav_environment), color = TerminalText) }
             }
         } else {
                 AndroidView(factory = { workbench.terminal.view(it, current, state.settings.terminalFontSp).also { created -> view = created } },
-                    modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 12.dp),
-                    update = { workbench.terminal.bind(it, current); workbench.terminal.appearance(it, current, darkAppearance); it.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, state.settings.terminalFontSp.toFloat(), it.resources.displayMetrics).toInt()); it.onScreenUpdated() },
+                    modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 4.dp),
+                    update = { workbench.terminal.bind(it, current); workbench.terminal.appearance(it, current); it.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, state.settings.terminalFontSp.toFloat(), it.resources.displayMetrics).toInt()); it.onScreenUpdated() },
                     onRelease = { workbench.terminal.detach(it); if (view === it) view = null })
             if (!current.session.isRunning) Text(stringResource(R.string.terminal_exit, current.session.exitStatus),
                 Modifier.fillMaxWidth().background(TerminalChrome).padding(12.dp), color = TerminalMuted, style = MaterialTheme.typography.bodySmall)
-            Surface(color = TerminalChrome, contentColor = TerminalText) {
-                val shortcutsLabel = stringResource(R.string.terminal_shortcuts)
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).semantics { contentDescription = shortcutsLabel }.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TerminalKey(stringResource(R.string.escape_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_ESCAPE) } }
-                    TerminalKey(stringResource(R.string.tab_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_TAB) } }
-                    TerminalKey(stringResource(R.string.control_key), Modifier.width(48.dp), modifiers.control) { workbench.terminal.toggleControl() }
-                    TerminalKey(stringResource(R.string.alt_key), Modifier.width(48.dp), modifiers.alt) { workbench.terminal.toggleAlt() }
-                    TerminalKey(stringResource(R.string.ctrl_c), Modifier.width(56.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_C, control = true) } }
-                    TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_UP) } }
-                    TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_DOWN) } }
-                    TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_LEFT) } }
-                    TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_DPAD_RIGHT) } }
-                    TerminalKey(stringResource(R.string.home_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_HOME) } }
-                    TerminalKey(stringResource(R.string.end_key), Modifier.width(48.dp)) { view?.let { workbench.terminal.key(it, KeyEvent.KEYCODE_MOVE_END) } }
-                }
-            }
+            TerminalControls(modifiers.control, modifiers.alt,
+                onKey = { key, control -> view?.let { workbench.terminal.key(it, key, control = control) } },
+                onControl = workbench.terminal::toggleControl, onAlt = workbench.terminal::toggleAlt,
+                onKeyboard = { view?.let(workbench.terminal::toggleKeyboard) }, onSwitch = { switching = true },
+                menu = menu, onMenu = { menu = it },
+                canCreate = state.installed && !state.busy && state.sessions.size < 4,
+                onPreview = { menu = false; view?.let(workbench.terminal::hideKeyboard); previewing = true },
+                onCreate = { menu = false; workbench.startTerminal(current.projectId) },
+                onClose = { menu = false; closing = current })
+
         }
     }
     if (switching) WorkbenchSheet(stringResource(R.string.switch_terminals), { switching = false },
         stringResource(R.string.terminal_session_count, state.sessions.size), darkBackdrop = true) {
+            val finish = LocalWorkbenchSheetAction.current
             state.sessions.forEach { item ->
                 WorkbenchCard(border = if (item.id == current?.id) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                     color = if (item.id == current?.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         val closeLabel = stringResource(R.string.close_terminal_number, item.number)
-                        Row(Modifier.weight(1f).combinedClickable(onClick = { onSelect(item.id); switching = false },
+                        Row(Modifier.weight(1f).combinedClickable(onClick = { finish { onSelect(item.id) } },
                             onLongClickLabel = closeLabel, onLongClick = { closing = item }).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             StatusDot(terminalStatusColor(item))
                             Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -141,7 +111,7 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
                     }
                 }
             }
-            WorkbenchSecondaryButton(onClick = { switching = false; workbench.startTerminal(current?.projectId) }, enabled = state.installed && state.project != null && !state.busy && state.sessions.size < 4,
+            WorkbenchSecondaryButton(onClick = { finish { workbench.startTerminal(requestedProjectId) } }, enabled = state.installed && state.project != null && !state.busy && state.sessions.size < 4,
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                 WorkbenchIcon(Glyph.Add, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.new_terminal))
@@ -152,29 +122,98 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
     }
     closing?.let { item -> WorkbenchAlertDialog(onDismissRequest = { closing = null }, title = { Text(stringResource(R.string.close_terminal_number, item.number)) },
         text = { Text(stringResource(R.string.close_terminal_confirmation)) },
-        confirmButton = { TextButton(onClick = { closing = null; if (state.sessions.size == 1) view?.let(workbench.terminal::hideKeyboard); workbench.closeTerminal(item.id) }) { Text(stringResource(R.string.close_terminal)) } },
-        dismissButton = { TextButton(onClick = { closing = null }) { Text(stringResource(R.string.cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { closing = null; if (state.sessions.size == 1) view?.let(workbench.terminal::hideKeyboard); workbench.closeTerminal(item.id) }) { Text(stringResource(R.string.close_terminal)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { closing = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
+/** Two fixed rows keep every frequent action reachable without horizontal scrolling. */
 @Composable
-private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = if (selected) BrandFill else DarkPalette.surfaceRaised,
-            border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else DarkPalette.borderHairline)) {
-            Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) {
-                Text(label, color = TerminalText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1)
+internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boolean) -> Unit,
+    onControl: () -> Unit, onAlt: () -> Unit, onKeyboard: () -> Unit, onSwitch: () -> Unit,
+    menu: Boolean, onMenu: (Boolean) -> Unit, canCreate: Boolean,
+    onPreview: () -> Unit, onCreate: () -> Unit, onClose: () -> Unit) {
+    Surface(color = TerminalChrome, contentColor = TerminalText) {
+        val shortcutsLabel = stringResource(R.string.terminal_shortcuts)
+        Column(Modifier.fillMaxWidth().semantics { contentDescription = shortcutsLabel }.padding(horizontal = 4.dp)) {
+            HorizontalDivider(color = Color(0xFF202020))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TerminalKey(stringResource(R.string.escape_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_ESCAPE, false) }
+                TerminalKey(stringResource(R.string.tab_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_TAB, false) }
+                TerminalKey(stringResource(R.string.home_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_MOVE_HOME, false) }
+                TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_UP, false) }
+                TerminalKey(stringResource(R.string.end_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_MOVE_END, false) }
+                TerminalIconKey(Glyph.Keyboard, stringResource(R.string.keyboard), Modifier.weight(1f), onClick = onKeyboard)
+                Box(Modifier.weight(1f)) {
+                    TerminalIconKey(Glyph.More, stringResource(R.string.terminal_actions), Modifier.fillMaxWidth()) { onMenu(true) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { onMenu(false) },
+                        properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+                        containerColor = Color(0xFF1C1C1C)) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.terminal_preview), color = TerminalText) }, onClick = onPreview)
+                        DropdownMenuItem(text = { Text(stringResource(R.string.new_terminal), color = if (canCreate) TerminalText else TerminalMuted) }, enabled = canCreate, onClick = onCreate)
+                        DropdownMenuItem(text = { Text(stringResource(R.string.close_terminal), color = Color(0xFFF2A5A5)) }, onClick = onClose)
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                TerminalKey(stringResource(R.string.control_key), Modifier.weight(1f), control, onControl)
+                TerminalKey(stringResource(R.string.alt_key), Modifier.weight(1f), alt, onAlt)
+                TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_LEFT, false) }
+                TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_DOWN, false) }
+                TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_RIGHT, false) }
+                TerminalKey(stringResource(R.string.terminal_slash_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_SLASH, false) }
+                TerminalIconKey(Glyph.Swap, stringResource(R.string.switch_terminals), Modifier.weight(1f), onClick = onSwitch)
             }
         }
     }
 }
 
 @Composable
+private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
+    Box(modifier.height(48.dp).padding(2.dp).background(if (selected) Color(0xFF2C2C2C) else Color.Transparent, RoundedCornerShape(4.dp))
+        .semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(label, color = TerminalText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+@Composable
 private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, onClick: () -> Unit) {
     Box(modifier.height(48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(7.dp),
-            color = DarkPalette.surfaceRaised, border = androidx.compose.foundation.BorderStroke(1.dp, DarkPalette.borderHairline)) {
-            Box(Modifier.height(28.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(glyph, Modifier.size(16.dp), description = label, tint = TerminalText) }
+        WorkbenchIcon(glyph, Modifier.size(18.dp), description = label, tint = TerminalText)
+    }
+}
+
+/** Keep the system clock and indicators visible on black; restore the actual parent's bar state. */
+@Composable
+private fun TerminalSystemBars() {
+    val activity = LocalActivity.current
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        val insets = window?.let { androidx.core.view.ViewCompat.getRootWindowInsets(it.decorView) }
+        val statusVisible = insets?.isVisible(WindowInsetsCompat.Type.statusBars()) != false
+        val navigationVisible = insets?.isVisible(WindowInsetsCompat.Type.navigationBars()) != false
+        val behavior = controller?.systemBarsBehavior
+        val lightStatus = controller?.isAppearanceLightStatusBars
+        val lightNavigation = controller?.isAppearanceLightNavigationBars
+        val contrast = if (android.os.Build.VERSION.SDK_INT >= 29) window?.isNavigationBarContrastEnforced else null
+        controller?.apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+            // Immersive navigation consumes the first Back on Android 15 to reveal bars.
+            // Keep the black navigation safe area visible so Back always reaches the page.
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            show(WindowInsetsCompat.Type.systemBars())
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 29) window?.isNavigationBarContrastEnforced = false
+        onDispose {
+            controller?.apply {
+                behavior?.let { systemBarsBehavior = it }
+                lightStatus?.let { isAppearanceLightStatusBars = it }
+                lightNavigation?.let { isAppearanceLightNavigationBars = it }
+                if (statusVisible) show(WindowInsetsCompat.Type.statusBars()) else hide(WindowInsetsCompat.Type.statusBars())
+                if (navigationVisible) show(WindowInsetsCompat.Type.navigationBars()) else hide(WindowInsetsCompat.Type.navigationBars())
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 29 && contrast != null) window?.isNavigationBarContrastEnforced = contrast
         }
     }
 }

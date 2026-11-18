@@ -61,15 +61,15 @@ internal fun AiToolApprovalHost(workbench: Workbench, state: AiState) {
             SelectionContainer { Text(details, fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
             if (event != null) {
                 Text(stringResource(R.string.ai_approval_scope), style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { decide(AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
-                TextButton(onClick = { decide(AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
+                WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
+                WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
                 Text(stringResource(R.string.ai_approve_tool_task_scope), style = MaterialTheme.typography.labelSmall)
                 TextButton(onClick = { if (current()) permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
             }
-            TextButton(onClick = { if (current()) workbench.ai.stop() }) { Text(stringResource(R.string.ai_stop)) }
+            WorkbenchDialogButton(onClick = { if (current()) workbench.ai.stop() }) { Text(stringResource(R.string.ai_stop)) }
         }
-    }, confirmButton = { TextButton(onClick = { decide(AiDecision.Once) }) { Text(stringResource(R.string.ai_approve_once)) } },
-        dismissButton = { TextButton(onClick = { decide(AiDecision.Reject) }) { Text(stringResource(R.string.ai_reject)) } })
+    }, confirmButton = { WorkbenchDialogButton(onClick = { decide(AiDecision.Once) }) { Text(stringResource(R.string.ai_approve_once)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { decide(AiDecision.Reject) }) { Text(stringResource(R.string.ai_reject)) } })
     inspecting?.let { review -> AiCodeReview(review, workbench.editor.languages) { inspecting = null } }
     if (permissions) {
         val workbenchState by workbench.state.collectAsStateWithLifecycle()

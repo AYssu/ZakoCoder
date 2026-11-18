@@ -168,7 +168,7 @@ internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PAR
                 Text(remoteOrigin(server.url), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.mcp_approval_boundary), style = MaterialTheme.typography.bodySmall)
             } },
-            confirmButton = { TextButton(onClick = {
+            confirmButton = { WorkbenchDialogButton(onClick = {
                 confirmation = null
                 if (probe) scope.launch {
                     connecting = server.id
@@ -179,12 +179,12 @@ internal fun McpManagementPanel(controller: McpController, @Suppress("UNUSED_PAR
                     } finally { connecting = null }
                 } else controller.setEnabled(server.id, true)
             }, enabled = canEdit) { Text(stringResource(R.string.mcp_confirm)) } },
-            dismissButton = { TextButton(onClick = { confirmation = null }) { Text(stringResource(R.string.mcp_cancel)) } })
+            dismissButton = { WorkbenchDialogButton(onClick = { confirmation = null }) { Text(stringResource(R.string.mcp_cancel)) } })
     }
     deleting?.let { server -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.mcp_delete_confirm, server.name)) },
         text = { Text(stringResource(R.string.mcp_delete_effect)) },
-        confirmButton = { TextButton(onClick = { controller.remove(server.id); deleting = null }, enabled = canEdit) { Text(stringResource(R.string.mcp_delete), color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.mcp_cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { controller.remove(server.id); deleting = null }, enabled = canEdit) { Text(stringResource(R.string.mcp_delete), color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { deleting = null }) { Text(stringResource(R.string.mcp_cancel)) } }) }
     viewing?.let { id -> AiFullScreen(stringResource(R.string.mcp_tools), { viewing = null }) {
         val result = state.probeResult.takeIf { state.probeProjectId == "global-network" && state.probeServerId == id }.orEmpty()
         val tools = remember(result) { runCatching {

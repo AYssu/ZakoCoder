@@ -71,7 +71,12 @@ class AppNavigationDeviceTest {
     private fun await(label: String, timeout: Long = 20_000, predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + timeout
         while (!predicate()) {
-            if (SystemClock.uptimeMillis() >= deadline) throw AssertionError(label)
+            if (SystemClock.uptimeMillis() >= deadline) {
+                capture("failed-wait")
+                throw AssertionError("$label; visible labels=" + nodes { all -> all.filter(::visible).mapNotNull {
+                    it.config.getOrNull(SemanticsProperties.Text)?.joinToString { text -> text.text }
+                }.distinct().joinToString(" | ") })
+            }
             Thread.sleep(30)
         }
     }
@@ -210,7 +215,9 @@ class AppNavigationDeviceTest {
                     ensureActivityResumed(scenario)
                     if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title))
                         capture("$captureKey-back-cancelled")
-                    await("cancel retains the foreground destination: $label") { has(label) && drawerClosed() }
+                    // The terminal is now headerless; its empty state identifies the retained page.
+                    val destinationLabel = if (destination == R.string.nav_terminal) context.getString(R.string.terminal_empty_title) else label
+                    await("cancel retains the foreground destination: $label") { has(destinationLabel) && drawerClosed() }
                     keyBack()
                     await("page Back restores the originating drawer: $label") { has(search) }
                     keyBack()

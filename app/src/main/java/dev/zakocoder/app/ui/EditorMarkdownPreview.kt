@@ -25,10 +25,10 @@ internal fun EditorMarkdownPreview(text: String, modifier: Modifier = Modifier) 
     link?.let { destination ->
         WorkbenchAlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
             text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
-            confirmButton = { TextButton(onClick = {
+            confirmButton = { WorkbenchDialogButton(onClick = {
                 try { handler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { }
                 finally { link = null }
             }) { Text(stringResource(R.string.ai_open_browser)) } },
-            dismissButton = { TextButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { WorkbenchDialogButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }

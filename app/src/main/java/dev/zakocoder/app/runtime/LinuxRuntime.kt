@@ -261,25 +261,9 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
                 HISTSIZE=5000
                 SAVEHIST=5000
                 setopt append_history
-                PROMPT='%F{#9AA7B8}%1~%f %F{#8AB4F8}›%f '
+                PROMPT='%F{#8FCFA0}zako%f%F{#9AA7B8}@ubuntu%f %F{#8AB4F8}›%f '
                 PROMPT_EOL_MARK='%F{#6B7684}↵%f'
                 if [[ -r /root/.zshrc ]]; then source /root/.zshrc; fi
-                # Named directories reject whitespace. Keep the label as prompt data instead.
-                # A user's custom prompt takes precedence over our managed default.
-                if [[ ${'$'}PROMPT == '%F{#9AA7B8}%1~%f %F{#8AB4F8}›%f ' ]]; then
-                    _ZAKOCODER_LAST_PROMPT=${'$'}PROMPT
-                    _zakocoder_prompt() {
-                        [[ ${'$'}PROMPT == "${'$'}_ZAKOCODER_LAST_PROMPT" ]] || return 0
-                        local location='%1~'
-                        if [[ -n ${'$'}ZAKOCODER_PROJECT_LABEL && ${'$'}PWD == "${'$'}ZAKOCODER_PROJECT_PATH" ]]; then
-                            location=${'$'}{ZAKOCODER_PROJECT_LABEL//\%/%%}
-                        fi
-                        PROMPT='%F{#9AA7B8}'"${'$'}location"'%f %F{#8AB4F8}›%f '
-                        _ZAKOCODER_LAST_PROMPT=${'$'}PROMPT
-                    }
-                    autoload -Uz add-zsh-hook
-                    add-zsh-hook precmd _zakocoder_prompt
-                fi
             """.trimIndent() + "\n")
             PrivateFiles.writeConfined(root, "root/.cache/zakocoder/.managed", "")
         }
@@ -337,8 +321,8 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             val label = projectName.orEmpty().map { if (it.isLetterOrDigit() || it in " ._-") it else '_' }
                 .joinToString("").take(24).ifBlank { "workspace" }
             args += listOf("ZAKOCODER_PROJECT_PATH=$cwd", "ZAKOCODER_PROJECT_LABEL=$label",
-                "PS1=${'$'}{PWD/#${'$'}ZAKOCODER_PROJECT_PATH/${'$'}ZAKOCODER_PROJECT_LABEL} \\$ ")
-        } else args += "PS1=\\w \\$ "
+                "PS1=\\[\\e[38;5;114m\\]zako\\[\\e[0m\\]@ubuntu \\$ ")
+        } else args += "PS1=\\[\\e[38;5;114m\\]zako\\[\\e[0m\\]@ubuntu \\$ "
         args += network
         if (androidReady) args += AndroidToolchain.environment(settings.proxy)
         if (ndkReady) args += AndroidNdkToolchain.environment()

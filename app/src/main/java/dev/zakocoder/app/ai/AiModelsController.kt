@@ -58,11 +58,18 @@ class AiModelsController(private val context: Context, private val store: AiConf
     }
     fun save(draft: AiModelDraft) = mutation { store.saveProfile(draft) }
     fun activate(id: String) = mutation { store.activate(id) }
+    fun selectModel(id: String, model: String) = mutation { store.selectModel(id, model) }
+    fun setReasoning(id: String, thinking: AiThinking, effort: AiReasoningEffort?) = mutation { store.setReasoning(id, thinking, effort) }
+    fun discoverSaved(id: String) {
+        val profile = mutable.value.catalog.profiles.singleOrNull { it.id == id } ?: return
+        probe(AiModelDraft(profile.id, profile.name, profile.endpoint, profile.model, null, profile.parameters,
+            profile.context, protocol = profile.protocol, systemPrompt = profile.systemPrompt, modelChoices = profile.modelChoices), false, persistChoices = true)
+    }
     fun delete(id: String) = mutation { store.delete(id) }
     fun clearError() { if (!mutable.value.loading && !mutable.value.saving) mutable.update { it.copy(error = "") } }
     fun discover(draft: AiModelDraft) = probe(draft, false)
     fun test(draft: AiModelDraft) = probe(draft, true)
-    private fun probe(draft: AiModelDraft, testing: Boolean) {
+    private fun probe(draft: AiModelDraft, testing: Boolean, persistChoices: Boolean = false) {
         if (taskActive() || mutable.value.loading || mutable.value.saving) return
         cancelProbe(); val owner = generation
         mutable.update { it.copy(probe = if (testing) AiProbe.Testing else AiProbe.Models,
@@ -71,7 +78,11 @@ class AiModelsController(private val context: Context, private val store: AiConf
             try {
                 val config = withContext(Dispatchers.IO) { store.resolve(draft, requireModel = testing) }
                 if (!testing) {
-                    val models = transport.models(config, proxy())
+                    val models = transport.models(config, proxy()).take(512)
+                    if (persistChoices && owner == generation && !taskActive()) {
+                        withContext(Dispatchers.IO) { store.updateModelChoices(requireNotNull(draft.id), models) }
+                        if (owner == generation) reload()
+                    }
                     if (owner == generation) mutable.update { it.copy(probe = AiProbe.Idle, available = models, probeMessage = context.getString(if (models.isEmpty()) R.string.ai_models_remote_empty else R.string.ai_models_fetched, models.size)) }
                 } else {
                     withTimeout(30000) {

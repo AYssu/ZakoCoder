@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -56,6 +59,9 @@ internal val LocalWorkbenchDark = staticCompositionLocalOf { false }
 /** Sheet actions must finish the exit animation before removing their owning state. */
 internal val LocalWorkbenchSheetDismiss = staticCompositionLocalOf<() -> Unit> {
     error("Sheet dismissal is only available inside WorkbenchSheet")
+}
+internal val LocalWorkbenchSheetAction = staticCompositionLocalOf<(() -> Unit) -> Unit> {
+    error("Sheet actions are only available inside WorkbenchSheet")
 }
 
 // ——————————————————————————————————————————————————————————————
@@ -187,12 +193,19 @@ internal fun PageHeading(title: String, action: @Composable RowScope.() -> Unit 
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: String? = null, darkBackdrop: Boolean = false, leading: (@Composable () -> Unit)? = null, status: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: String? = null, darkBackdrop: Boolean = false, leading: (@Composable () -> Unit)? = null, status: (@Composable () -> Unit)? = null, dismissible: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     val p = LocalWorkbenchPalette.current
     var shown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(true) }
-    val dismiss = { shown = false }
+    var pending by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<(() -> Unit)?>(null) }
+    val finished by androidx.compose.runtime.rememberUpdatedState(onDismiss)
+    val finish: (() -> Unit) -> Unit = { action -> if (shown) { pending = action; shown = false } }
+    val dismiss = { finish {} }
     top.yukonga.miuix.kmp.window.WindowBottomSheet(
-        show = shown, onDismissRequest = dismiss, onDismissFinished = onDismiss,
+        show = shown, onDismissRequest = { if (dismissible) dismiss() }, onDismissFinished = {
+            val action = pending; pending = null
+            finished()
+            action?.invoke()
+        },
         backgroundColor = p.surfaceRaised, cornerRadius = 24.dp,
         outsideMargin = androidx.compose.ui.unit.DpSize(12.dp, 0.dp),
         insideMargin = androidx.compose.ui.unit.DpSize(16.dp, 16.dp),
@@ -208,17 +221,21 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
             }
         }
         Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).imePadding()
-            .padding(bottom = Space.lg), verticalArrangement = Arrangement.spacedBy(Space.md)) {
+            .padding(bottom = Space.lg)
+            .then(if (!shown) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
+                awaitPointerEventScope { while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() } }
+            } else Modifier), verticalArrangement = Arrangement.spacedBy(Space.md)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                 leading?.invoke()
                 Text(title, Modifier.weight(1f), style = Type.section, color = p.textPrimary)
                 status?.invoke()
-                IconButton(onClick = dismiss, modifier = Modifier.size(Touch48)) {
+                IconButton(onClick = dismiss, enabled = dismissible, modifier = Modifier.size(Touch48)) {
                     WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close), size = IconSize.sm)
                 }
             }
             subtitle?.let { Text(it, style = Type.meta, color = p.textSecondary) }
-            CompositionLocalProvider(LocalWorkbenchSheetDismiss provides dismiss) {
+            CompositionLocalProvider(LocalWorkbenchSheetDismiss provides dismiss,
+                LocalWorkbenchSheetAction provides finish) {
                 content()
             }
         }

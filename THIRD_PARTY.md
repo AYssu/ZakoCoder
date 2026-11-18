@@ -12,6 +12,8 @@ ZakoCoder 自有代码使用根目录 Apache-2.0。第三方许可证不因本�
 
 JetBrains Mono Regular **2.304**，官方来源 https://github.com/JetBrains/JetBrainsMono ，标签 `v2.304` 对应固定提交 `cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9`，上游路径 `fonts/ttf/JetBrainsMono-Regular.ttf`。原始字体未修改，273,900 字节，SHA-256 `a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f`。
 
+JetBrains Mono Bold **2.304**，与 Regular 相同官方固定提交，上游路径 `fonts/ttf/JetBrainsMono-Bold.ttf`。原始字体未修改，277,828 字节，SHA-256 `5590990c82e097397517f275f430af4546e1c45cff408bde4255dad142479dcb`；随 APK 的 `assets/fonts/JetBrainsMono-Bold.ttf` 离线提供，用于终端默认字体。
+
 SIL Open Font License 1.1；原始版权与完整许可证保存在 APK 的 `assets/licenses/JetBrainsMono-OFL.txt`，摘要 `30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad`。字体本体在 `assets/fonts/JetBrainsMono-Regular.ttf`，随 APK 离线提供，不在运行时下载。终端按单元格绘制，不启用编程连字；不依赖 Nerd Font 图标。关于页列出字体与许可。
 
 ## Sora 原生代码编辑器

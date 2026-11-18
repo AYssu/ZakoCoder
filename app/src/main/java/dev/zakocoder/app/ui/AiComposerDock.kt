@@ -56,7 +56,7 @@ internal fun AiComposerDock(
                     }
                 })
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onAttach, enabled = attachEnabled, modifier = Modifier.size(48.dp)) {
+                IconButton(onClick = onAttach, enabled = attachEnabled, modifier = Modifier.width(44.dp).height(48.dp)) {
                     WorkbenchIcon(Glyph.Add, Modifier.offset(x = 4.dp).size(24.dp), description = stringResource(R.string.ai_context_attach),
                         tint = if (attachEnabled) hint else hint.copy(alpha = .38f))
                 }

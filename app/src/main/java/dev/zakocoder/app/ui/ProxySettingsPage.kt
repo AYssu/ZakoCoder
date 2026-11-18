@@ -504,7 +504,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
         title = { Text(stringResource(R.string.proxy_remove_title)) },
         text = { Text(stringResource(R.string.proxy_remove_message)) },
         confirmButton = {
-            TextButton(onClick = {
+            WorkbenchDialogButton(onClick = {
                 removing = false
                 unsupportedHint = false
                 pluginHint = false
@@ -517,7 +517,7 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
             }) { Text(stringResource(R.string.proxy_remove_confirm), color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = {
-            TextButton(onClick = { removing = false }) { Text(stringResource(R.string.proxy_action_cancel)) }
+            WorkbenchDialogButton(onClick = { removing = false }) { Text(stringResource(R.string.proxy_action_cancel)) }
         },
     )
 }

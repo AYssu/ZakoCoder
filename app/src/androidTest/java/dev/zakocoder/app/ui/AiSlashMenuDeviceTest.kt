@@ -75,10 +75,14 @@ class AiSlashMenuDeviceTest {
         val deadline = SystemClock.uptimeMillis() + 15000
         while (!condition()) { check(SystemClock.uptimeMillis() < deadline) { label }; Thread.sleep(40) }
     }
+    private fun clickTarget(node: SemanticsNode): SemanticsNode? =
+        generateSequence(node) { it.parent }.firstOrNull { it.config.contains(SemanticsActions.OnClick) }
+    private fun matches(node: SemanticsNode, value: String) =
+        text(node) == value || value in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
     private fun clickText(value: String) = nodes { all ->
-        var node: SemanticsNode? = all.last { text(it) == value || value in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
-        while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
-        assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+        val action = all.asReversed().filter { matches(it, value) }.firstNotNullOfOrNull(::clickTarget)
+        assertTrue("Clickable action: $value", requireNotNull(action) { "Missing clickable action: $value" }
+            .config[SemanticsActions.OnClick].action?.invoke() == true)
     }
     private fun click(label: Int) = clickText(context.getString(label))
     private fun input(value: String) {
@@ -103,7 +107,8 @@ class AiSlashMenuDeviceTest {
     }
     private fun dismiss(label: Int) {
         val beforeWindows = windowRoots()
-        val visibleClose = nodes { all -> all.any { context.getString(R.string.close) in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() || text(it) == context.getString(R.string.close) } }
+        // A reasoning-slider label can also say "关闭"; it is not a dismiss action.
+        val visibleClose = nodes { all -> all.any { matches(it, context.getString(R.string.close)) && clickTarget(it) != null } }
         if (visibleClose) click(R.string.close) else instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
         await("command sheet finishes exiting and removes its window") {
             !has(label) && beforeWindows.any { it !in windowRoots() }

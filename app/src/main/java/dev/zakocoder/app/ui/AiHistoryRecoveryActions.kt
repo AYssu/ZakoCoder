@@ -32,8 +32,8 @@ internal fun AiHistoryRecoveryActions(problem: AiHistoryProblem?, enabled: Boole
             Text(stringResource(R.string.ai_history_remove_unreadable_record, problem.conversationId),
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } },
-        confirmButton = { TextButton(onClick = { confirming = false; onRemove(problem) }, enabled = enabled) {
+        confirmButton = { WorkbenchDialogButton(onClick = { confirming = false; onRemove(problem) }, enabled = enabled) {
             Text(stringResource(R.string.ai_history_remove_unreadable_confirm), color = MaterialTheme.colorScheme.error)
         } },
-        dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { WorkbenchDialogButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel)) } })
 }

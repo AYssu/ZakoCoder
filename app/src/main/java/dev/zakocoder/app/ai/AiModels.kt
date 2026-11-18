@@ -51,7 +51,8 @@ object AiRequestHeaders {
 }
 data class AiProfile(val id: String, val name: String, val endpoint: String, val model: String, val hasKey: Boolean,
     val parameters: AiParameters, val context: AiContextOptions = AiContextOptions(), val headerNames: List<String> = emptyList(),
-    val protocol: AiApiProtocol = AiApiProtocol.ChatCompletions, val systemPrompt: String = "") {
+    val protocol: AiApiProtocol = AiApiProtocol.ChatCompletions, val systemPrompt: String = "",
+    val modelChoices: List<String> = emptyList()) {
     override fun toString() = "AiProfile(id=$id, name=$name, endpoint=$endpoint, model=$model, hasKey=$hasKey, parameters=$parameters, context=$context, headerNames=$headerNames, protocol=$protocol, systemPrompt=<redacted>)"
 }
 /** Provider-specific supplements cannot remove the app's tool and permission rules. */
@@ -69,7 +70,7 @@ data class AiCatalog(val activeId: String? = null, val profiles: List<AiProfile>
 data class AiModelDraft(val id: String?, val name: String, val endpoint: String, val model: String,
     val replacementKey: String?, val parameters: AiParameters = AiParameters(), val context: AiContextOptions = AiContextOptions(),
     val replacementHeaders: Map<String, String>? = null, val protocol: AiApiProtocol = AiApiProtocol.ChatCompletions,
-    val systemPrompt: String = "") {
+    val systemPrompt: String = "", val modelChoices: List<String> = emptyList()) {
     override fun toString() = "AiModelDraft(id=$id, key=<redacted>, headers=<redacted>)"
 }
 class AiOriginChanged : IllegalArgumentException("Credential origin changed")
