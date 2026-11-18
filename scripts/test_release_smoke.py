@@ -193,14 +193,52 @@ class SmokeSafetyTest(unittest.TestCase):
 
     def test_text_input_never_sends_back_or_infers_keyboard_visibility(self):
         device = release_smoke.Device('emulator-5554', self.root)
-        with patch.object(device, 'click') as click, patch.object(device, 'shell') as shell:
+        with patch.object(device, 'find') as find, patch.object(device, 'shell') as shell:
             device.text('ai_model', 'smoke-model', scroll=True)
-        click.assert_called_once_with('ai_model', scroll=True)
+        label = device.labels['ai_model']
+        self.assertEqual([unittest.mock.call(label, click=True, scroll=True, editable=True),
+                          unittest.mock.call(label, editable=True, focused=True, timeout=5)], find.call_args_list)
         self.assertEqual([
             unittest.mock.call('input', 'keycombination', 113, 29),
             unittest.mock.call('input', 'keyevent', 67),
             unittest.mock.call('input', 'text', 'smoke-model'),
         ], shell.call_args_list)
+
+    def test_text_input_scrolls_clipped_field_and_waits_for_its_editor_focus(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        label = device.labels['ai_model']
+        def tree(bottom, focused):
+            return ET.fromstring(f'<hierarchy><node content-desc="{label}" enabled="true" bounds="[0,100][300,{bottom}]">'
+                                 f'<node class="android.widget.EditText" enabled="true" focused="{focused}" bounds="[0,120][300,180]" />'
+                                 '</node></hierarchy>')
+        with patch.object(device, 'dump', side_effect=[tree(150, 'false'), tree(200, 'false'), tree(200, 'true')]), \
+                patch.object(device, 'shell', return_value='Physical size: 1080x2400') as shell, \
+                patch.object(release_smoke.time, 'sleep'):
+            device.text('ai_model', 'smoke-model', scroll=True)
+        self.assertEqual([
+            unittest.mock.call('wm', 'size'), unittest.mock.call('input', 'swipe', 540, 1776, 540, 840, 250),
+            unittest.mock.call('input', 'tap', 150, 150),
+            unittest.mock.call('input', 'keycombination', 113, 29),
+            unittest.mock.call('input', 'keyevent', 67), unittest.mock.call('input', 'text', 'smoke-model'),
+        ], shell.call_args_list)
+
+    def test_text_input_does_not_type_when_target_failed_to_take_focus(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        with patch.object(device, 'find', side_effect=[None, RuntimeError('focus missing')]), \
+                patch.object(device, 'shell') as shell:
+            with self.assertRaisesRegex(RuntimeError, 'focus missing'):
+                device.text('ai_model', 'smoke-model', scroll=True)
+        shell.assert_not_called()
+
+    def test_text_input_supports_compose_label_as_editor_sibling(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        label = device.labels['project_name']
+        tree = ET.fromstring(f'<hierarchy><node class="android.widget.EditText" enabled="true" focused="true" bounds="[0,100][300,180]" />'
+                             f'<node content-desc="{label}" enabled="true" bounds="[0,100][300,180]" /></hierarchy>')
+        with patch.object(device, 'dump', return_value=tree), patch.object(device, 'shell') as shell:
+            device.text('project_name', 'smoke-project')
+        shell.assert_any_call('input', 'tap', 150, 140)
+        shell.assert_any_call('input', 'text', 'smoke-project')
 
     def fake_emulator(self):
         device = MagicMock()

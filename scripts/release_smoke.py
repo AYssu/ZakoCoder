@@ -50,14 +50,31 @@ class Device:
         self.last_xml = self.shell('cat', '/sdcard/zako-beta-smoke.xml')
         return ET.fromstring(self.last_xml)
 
-    def find(self, label, *, click=False, scroll=False, timeout=45, description_only=False):
+    def find(self, label, *, click=False, scroll=False, timeout=45, description_only=False,
+             editable=False, focused=False):
         until = time.monotonic() + timeout
         while time.monotonic() < until:
             tree = self.dump()
             matches = [n for n in tree.iter('node') if
                        label in ((n.get('content-desc'),) if description_only else (n.get('text'), n.get('content-desc')))
                        and n.get('enabled') == 'true']
+            targets = []
             for node in matches:
+                if not editable:
+                    targets.append(node)
+                    continue
+                visible = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+                # Compose can expose a field's label beside its EditText in the
+                # accessibility tree. Associate their visible bounds, not ancestry.
+                for editor in tree.iter('node'):
+                    rect = list(map(int, re.findall(r'\d+', editor.get('bounds', ''))))
+                    if (editor.get('class') == 'android.widget.EditText' and editor.get('enabled') == 'true'
+                            and (not focused or editor.get('focused') == 'true')
+                            and len(visible) == len(rect) == 4
+                            and visible[0] <= rect[0] < rect[2] <= visible[2]
+                            and visible[1] <= rect[1] < rect[3] <= visible[3]):
+                        targets.append(editor)
+            for node in targets:
                 rect = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
                 if len(rect) != 4 or rect[2] <= rect[0] or rect[3] <= rect[1]:
                     continue
@@ -88,7 +105,9 @@ class Device:
         return self.click(resource)
 
     def text(self, resource, value, scroll=False):
-        self.click(resource, scroll=scroll)
+        label = self.labels.get(resource, resource)
+        self.find(label, click=True, scroll=scroll, editable=True)
+        self.find(label, editable=True, focused=True, timeout=5)
         self.shell('input', 'keycombination', 113, 29)  # Ctrl+A
         self.shell('input', 'keyevent', 67)
         self.shell('input', 'text', value)
