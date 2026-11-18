@@ -9,7 +9,6 @@ import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,11 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -140,7 +137,7 @@ internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boole
                 TerminalKey(stringResource(R.string.escape_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_ESCAPE, false) }
                 TerminalKey(stringResource(R.string.tab_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_TAB, false) }
                 TerminalKey(stringResource(R.string.home_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_MOVE_HOME, false) }
-                TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_UP, false) }
+                TerminalIconKey(Glyph.Up, stringResource(R.string.up_key), Modifier.weight(1f), repeat = true) { onKey(KeyEvent.KEYCODE_DPAD_UP, false) }
                 TerminalKey(stringResource(R.string.end_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_MOVE_END, false) }
                 TerminalIconKey(Glyph.Keyboard, stringResource(R.string.keyboard), Modifier.weight(1f), onClick = onKeyboard)
                 Box(Modifier.weight(1f)) {
@@ -157,9 +154,9 @@ internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boole
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TerminalKey(stringResource(R.string.control_key), Modifier.weight(1f), control, onControl)
                 TerminalKey(stringResource(R.string.alt_key), Modifier.weight(1f), alt, onAlt)
-                TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_LEFT, false) }
-                TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_DOWN, false) }
-                TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_DPAD_RIGHT, false) }
+                TerminalIconKey(Glyph.Left, stringResource(R.string.left_key), Modifier.weight(1f), repeat = true) { onKey(KeyEvent.KEYCODE_DPAD_LEFT, false) }
+                TerminalIconKey(Glyph.Down, stringResource(R.string.down_key), Modifier.weight(1f), repeat = true) { onKey(KeyEvent.KEYCODE_DPAD_DOWN, false) }
+                TerminalIconKey(Glyph.Right, stringResource(R.string.right_key), Modifier.weight(1f), repeat = true) { onKey(KeyEvent.KEYCODE_DPAD_RIGHT, false) }
                 TerminalKey(stringResource(R.string.terminal_slash_key), Modifier.weight(1f)) { onKey(KeyEvent.KEYCODE_SLASH, false) }
                 TerminalIconKey(Glyph.Swap, stringResource(R.string.switch_terminals), Modifier.weight(1f), onClick = onSwitch)
             }
@@ -169,15 +166,14 @@ internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boole
 
 @Composable
 private fun TerminalKey(label: String, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).padding(2.dp).background(if (selected) Color(0xFF2C2C2C) else Color.Transparent, RoundedCornerShape(4.dp))
-        .semantics { this.selected = selected }.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+    TerminalControlKey(modifier, selected = selected, onClick = onClick) {
         Text(label, color = TerminalText, fontFamily = FontFamily.Monospace, fontSize = 11.sp, maxLines = 1)
     }
 }
 
 @Composable
-private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick), contentAlignment = Alignment.Center) {
+private fun TerminalIconKey(glyph: Glyph, label: String, modifier: Modifier, repeat: Boolean = false, onClick: () -> Unit) {
+    TerminalControlKey(modifier, repeat = repeat, onClick = onClick) {
         WorkbenchIcon(glyph, Modifier.size(18.dp), description = label, tint = TerminalText)
     }
 }

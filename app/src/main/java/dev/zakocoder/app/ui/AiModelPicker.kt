@@ -83,8 +83,7 @@ internal fun AiModelPickerContent(state: AiModelsState, locked: Boolean,
     // Exit keeps the current layout and colors; only interaction stops, without a lock notice or disabled-color flash.
     val editable = !locked && !state.loading && !state.saving && !state.probing && state.error.isEmpty()
     val active = state.catalog.active
-    var query by remember { mutableStateOf("") }
-    val all = state.catalog.profiles.flatMap { p -> (p.modelChoices + p.model).distinct().map { p to it } }
+    val choices = active?.let { (it.modelChoices + it.model).distinct() }.orEmpty()
     Column(Modifier.padding(vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_choose_model),
@@ -99,22 +98,16 @@ internal fun AiModelPickerContent(state: AiModelsState, locked: Boolean,
             Text(state.error, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             TextButton(onClick = { if (!dismissing) onRetry() }, enabled = !state.loading && !state.saving) { Text(stringResource(R.string.editor_retry)) }
         }
-        if (all.size > 8) WorkbenchTextField(query, { query = it }, label = stringResource(R.string.ai_model_search), singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
-        LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 132.dp).testTag("ai-model-saved-list")) {
-            state.catalog.profiles.forEach { profile ->
-                val choices = (profile.modelChoices + profile.model).distinct().filter {
-                    query.isBlank() || it.contains(query, ignoreCase = true) || profile.name.contains(query, ignoreCase = true)
-                }
-                if (choices.isNotEmpty()) {
-                    items(choices, key = { "model:${profile.id}:$it" }) { model ->
-                        PickerRow(model, active?.id == profile.id && active.model == model, editable) { if (!dismissing) onSelect(profile.id, model) }
+        key(active?.id) {
+            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 132.dp).testTag("ai-model-saved-list")) {
+                if (active != null) {
+                    items(choices, key = { "model:${active.id}:$it" }) { model ->
+                        PickerRow(model, active.model == model, editable) { if (!dismissing) onSelect(active.id, model) }
                     }
                 }
+                if (choices.isEmpty()) item { Text(stringResource(R.string.ai_models_empty_hint), Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            if (all.isEmpty()) item { Text(stringResource(R.string.ai_models_empty_hint), Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
         if (active != null) ReasoningStrengthSlider(active, editable) { thinking, effort ->

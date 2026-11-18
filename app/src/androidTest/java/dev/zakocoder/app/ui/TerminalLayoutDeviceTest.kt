@@ -11,6 +11,15 @@ import android.view.ViewGroup
 import android.view.inspector.WindowInspector
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
@@ -21,9 +30,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
 import dev.zakocoder.app.*
+import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.AiPermissionStore
 import dev.zakocoder.app.ai.AiReasoningEffort
 import dev.zakocoder.app.ai.AiThinking
+import dev.zakocoder.app.ai.AiCatalog
+import dev.zakocoder.app.ai.AiModelsState
+import dev.zakocoder.app.ai.AiProfile
+import dev.zakocoder.app.ai.AiParameters
+import dev.zakocoder.app.terminal.TerminalManager
 import dev.zakocoder.app.runtime.RuntimeCommand
 import dev.zakocoder.app.settings.OnboardingProgress
 import dev.zakocoder.app.settings.OnboardingRepository
@@ -146,6 +161,146 @@ class TerminalLayoutDeviceTest {
         try { File(base.cacheDir, "ui-review/terminal-layout/$name.png").apply { parentFile!!.mkdirs() }
             .outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) } }
         finally { bitmap.recycle() }
+    }
+
+    @Test(timeout = 60_000) fun modelListBelongsToActiveProfileAndScrollsWithoutSearch(): Unit = runBlocking {
+        val profiles = listOf(
+            AiProfile("deepseek", "fixture DeepSeek", "http://127.0.0.1", "deepseek-00", false,
+                AiParameters(), modelChoices = (0..24).map { "deepseek-%02d".format(it) } + "shared-model"),
+            AiProfile("gpt", "fixture GPT", "http://127.0.0.1", "gpt-00", false,
+                AiParameters(), modelChoices = (0..24).map { "gpt-%02d".format(it) } + "shared-model"))
+        var state by mutableStateOf(AiModelsState(AiCatalog("deepseek", profiles), loading = false))
+        val chosen = AtomicReference<Pair<String, String>>()
+        fun visible(prefix: String) = nodes { all -> all.any { node ->
+            node.config.getOrNull(SemanticsProperties.Text)?.any { it.text.startsWith(prefix) } == true
+        } }
+        suspend fun scrollTo(index: Int) {
+            val action = nodes { all -> all.single { it.config.getOrNull(SemanticsProperties.TestTag) == "ai-model-saved-list" }
+                .config[SemanticsActions.ScrollToIndex].action!! }
+            withContext(Dispatchers.Main) { assertTrue(action(index)) }
+        }
+        warmDeviceActivity()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            for (dark in listOf(false, true)) {
+                main { state = state.copy(catalog = state.catalog.copy(activeId = "deepseek")) }
+                scenario.onActivity { activity -> activity.setContent {
+                    WorkbenchMiuixTheme(dark) {
+                        Surface(Modifier.fillMaxSize().systemBarsPadding()) {
+                            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomEnd) {
+                                Surface(Modifier.width(240.dp).heightIn(max = 360.dp)) {
+                                    AiModelPickerContent(state, false, onSelect = { id, model -> chosen.set(id to model) },
+                                        onReasoning = { _, _, _ -> }, onRetry = {}, onManage = {})
+                                }
+                            }
+                        }
+                    }
+                } }
+                await("only active provider models shown") { visible("deepseek-00") && !visible("gpt-") }
+                assertFalse("long lists must not introduce a search editor", nodes { all -> all.any { it.config.contains(SemanticsActions.SetText) } })
+                capture("model-list-deepseek-${if (dark) "night" else "day"}")
+                scrollTo(24)
+                await("late model reachable") { visible("deepseek-24") }
+                clickModel("deepseek-24")
+                assertEquals("deepseek" to "deepseek-24", chosen.get())
+                main { state = state.copy(catalog = state.catalog.copy(activeId = "gpt")) }
+                await("provider switch resets scroll and removes old choices") { visible("gpt-00") && !visible("deepseek-") }
+                capture("model-list-gpt-${if (dark) "night" else "day"}")
+                scrollTo(25)
+                await("shared name visible in active provider") { visible("shared-model") }
+                clickModel("shared-model")
+                assertEquals("gpt" to "shared-model", chosen.get())
+                main { state = state.copy(catalog = state.catalog.copy(activeId = "deepseek")) }
+                await("previous provider retains its saved models") { visible("deepseek-00") && !visible("gpt-") }
+                assertEquals(profiles, state.catalog.profiles)
+            }
+        }
+    }
+
+    @Test(timeout = 75_000) fun terminalInputRetainsFocusAndArrowHoldsRepeatUntilReleased(): Unit = runBlocking {
+        val manager = TerminalManager(base) {}
+        withContext(Dispatchers.IO) { manager.prepareTypeface() }
+        val command = RuntimeCommand("/system/bin/sh", listOf("-i"), mapOf("PATH" to "/system/bin", "TERM" to "xterm-256color", "PS1" to "$ "))
+        val first = main { manager.create("owned-input", "input fixture", command) }
+        val second = main { manager.create("owned-input", "input fixture", command) }
+        var current by mutableStateOf(first)
+        val counts = mutableMapOf<Int, Int>()
+        var native: TerminalView? = null
+        warmDeviceActivity()
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity -> activity.setContent {
+                    WorkbenchMiuixTheme(false) {
+                        Surface(Modifier.fillMaxSize().systemBarsPadding().imePadding(), color = androidx.compose.ui.graphics.Color.Black) {
+                            Column {
+                                AndroidView(factory = { manager.view(it, current, 9).also { view -> native = view } },
+                                    update = { manager.bind(it, current) }, onRelease = manager::detach,
+                                    modifier = Modifier.fillMaxWidth().weight(1f))
+                                TerminalControls(false, false,
+                                    onKey = { code, ctrl -> counts[code] = (counts[code] ?: 0) + 1; manager.key(checkNotNull(native), code, ctrl) },
+                                    onControl = {}, onAlt = {}, onKeyboard = { manager.toggleKeyboard(checkNotNull(native)) },
+                                    onSwitch = { current = if (current.id == first.id) second else first },
+                                    menu = false, onMenu = {}, canCreate = false, onPreview = {}, onCreate = {}, onClose = {})
+                            }
+                        }
+                    }
+                } }
+                await("native view focused") { main { native?.hasFocus() == true } }
+                val view = checkNotNull(native)
+                main { manager.hideKeyboard(view) }
+                assertTrue("hiding keyboard must preserve terminal input focus", main { view.hasFocus() })
+                // A helper key can also recover focus left by another control.
+                main { view.clearFocus(); manager.key(view, KeyEvent.KEYCODE_MOVE_END) }
+                assertTrue("helper keys restore native editor focus", main { view.hasFocus() })
+                repeat(3) { index ->
+                    click(R.string.switch_terminals)
+                    await("PTY switches in the same focused view") { main { view.currentSession === current.session && view.hasFocus() && view.hasWindowFocus() } }
+                    assertSame(view, native)
+                    // Deliver through Activity dispatch, not a direct InputConnection call that bypasses focus.
+                    instrumentation.sendStringSync("echo INPUT_AFTER_SWITCH_$index")
+                    instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_ENTER)
+                    try {
+                        await("physical input reaches selected PTY immediately") {
+                            main { current.session.emulator.screen.transcriptText.lineSequence().any { it.trim() == "INPUT_AFTER_SWITCH_$index" } }
+                        }
+                    } catch (failure: IllegalStateException) {
+                        println("OWNED_PTY_INPUT_FAILURE " + main { current.session.emulator.screen.transcriptText })
+                        throw failure
+                    }
+                }
+                // Use a real raw PTY reader so repeated arrows can be checked as bytes as well as callbacks.
+                main { current.session.write("stty raw -echo; printf 'RAW_READY\\r\\n'; while true; do dd bs=1 count=3 2>/dev/null | od -An -tx1; done\n") }
+                await("raw reader ready") { main { current.session.emulator.screen.transcriptText.lineSequence().any { it.trim() == "RAW_READY" } } }
+                for ((label, code, hex) in listOf(Triple(R.string.left_key, KeyEvent.KEYCODE_DPAD_LEFT, "1b 5b 44"),
+                    Triple(R.string.right_key, KeyEvent.KEYCODE_DPAD_RIGHT, "1b 5b 43"))) {
+                    val rect = nodes { all -> all.last { matches(it, label) }.boundsInWindow }
+                    val started = SystemClock.uptimeMillis()
+                    fun touch(action: Int, x: Float = rect.center.x, y: Float = rect.center.y) {
+                        val event = android.view.MotionEvent.obtain(started, SystemClock.uptimeMillis(), action, x, y, 0)
+                        try { instrumentation.uiAutomation.injectInputEvent(event, true) } finally { event.recycle() }
+                    }
+                    val before = main { counts[code] ?: 0 }
+                    touch(android.view.MotionEvent.ACTION_DOWN)
+                    try {
+                        delay(850)
+                        capture("terminal-held-${if (code == KeyEvent.KEYCODE_DPAD_LEFT) "left" else "right"}")
+                        assertTrue("long hold emits multiple direction keys", main { (counts[code] ?: 0) - before >= 3 })
+                    } finally { touch(android.view.MotionEvent.ACTION_UP) }
+                    val stopped = main { counts[code] ?: 0 }
+                    delay(220)
+                    assertEquals("release stops repeat without an extra click", stopped, main { counts[code] ?: 0 })
+                    await("repeat bytes reach actual PTY") { main { current.session.emulator.screen.transcriptText.contains(hex) } }
+                    touch(android.view.MotionEvent.ACTION_DOWN)
+                    touch(android.view.MotionEvent.ACTION_UP)
+                    await("short tap delivers exactly once") { main { (counts[code] ?: 0) == stopped + 1 } }
+                    touch(android.view.MotionEvent.ACTION_DOWN)
+                    touch(android.view.MotionEvent.ACTION_CANCEL)
+                    val cancelled = main { counts[code] ?: 0 }
+                    delay(600)
+                    assertEquals("cancelled touch must not repeat", cancelled, main { counts[code] ?: 0 })
+                }
+                capture("terminal-feedback-idle")
+            }
+        } finally { withContext(NonCancellable + Dispatchers.Main) { manager.closeAll() } }
     }
 
     @Test(timeout = 150_000) fun assistantEntryTwoRowsInputSwitchAndBackPreserveSessions(): Unit = runBlocking {

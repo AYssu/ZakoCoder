@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ai_model_search">搜索模型</string>
     <string name="ai_permission_more">更多权限设置</string>
 </resources>

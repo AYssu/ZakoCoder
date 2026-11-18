@@ -59,6 +59,13 @@ class TerminalManager(private val context: Context, private val changed: () -> U
         return LocalPreviewAddress.candidates(text)
     }
     private var attached = WeakReference<TerminalView>(null)
+    private var pendingInputRefresh: Pair<TerminalView, android.view.ViewTreeObserver.OnWindowFocusChangeListener>? = null
+    private fun cancelInputRefresh(view: TerminalView? = null) {
+        val pending = pendingInputRefresh ?: return
+        if (view != null && pending.first !== view) return
+        if (pending.first.viewTreeObserver.isAlive) pending.first.viewTreeObserver.removeOnWindowFocusChangeListener(pending.second)
+        pendingInputRefresh = null
+    }
     private val appearances = mutableSetOf<String>()
     private var nextNumber = 1
     private val mutableModifiers = MutableStateFlow(TerminalModifiers())
@@ -110,13 +117,34 @@ class TerminalManager(private val context: Context, private val changed: () -> U
     /** Keep the same View and window token while switching PTYs. */
     fun bind(view: TerminalView, item: TerminalItem) {
         if (view.currentSession === item.session) return
+        cancelInputRefresh()
+        val keyboardVisible = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
         clearModifiers()
         view.stopTextSelectionMode()
         view.attachSession(item.session)
         attached = WeakReference(view)
-        (view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).restartInput(view)
+        view.requestFocus()
+        val refresh = {
+            if (attached.get() === view && view.currentSession === item.session) {
+                val input = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                view.requestFocus()
+                input.restartInput(view)
+                if (!keyboardVisible) input.hideSoftInputFromWindow(view.windowToken, 0)
+            }
+        }
+        // The session sheet still owns window focus during its exit. Restarting IME then
+        // can revive a hidden keyboard when Android later restores the terminal window.
+        if (view.hasWindowFocus()) refresh() else {
+            val listener = android.view.ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+                if (focused) { cancelInputRefresh(view); refresh() }
+            }
+            pendingInputRefresh = view to listener
+            view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        }
     }
     fun detach(view: TerminalView) {
+        cancelInputRefresh(view)
         if (attached.get() === view) { attached.clear(); clearModifiers() }
         view.clearFocus()
     }
@@ -142,11 +170,13 @@ class TerminalManager(private val context: Context, private val changed: () -> U
     }
     fun hideKeyboard(view: TerminalView) {
         (view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(view.windowToken, 0)
-        view.clearFocus()
+        // Hiding the IME is not leaving the editor: clearing focus here strands physical
+        // keyboard events until another tap, notably after menus or session switching.
     }
     /** Route helper keys through the same emulator-aware path as physical keyboard events. */
     fun key(view: TerminalView, keyCode: Int, control: Boolean = false) {
         if (!view.currentSession.isRunning) return
+        view.requestFocus()
         // Dedicated Ctrl+C is an interrupt even if a one-shot modifier was armed.
         if (control) clearModifiers()
         val meta = if (control) KeyEvent.META_CTRL_ON else 0
