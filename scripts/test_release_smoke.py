@@ -89,7 +89,7 @@ class SmokeSafetyTest(unittest.TestCase):
         device.labels = {'bundle_ready': '已就绪'}
         report = {'checks': []}
         release_smoke.prepare_full_environment(device, 'full', report)
-        self.assertEqual([unittest.mock.call('nav_environment'), unittest.mock.call('drawer_manage_workspaces')], device.navigate.call_args_list)
+        self.assertEqual([unittest.mock.call('nav_environment'), unittest.mock.call('drawer_manage_workspaces', from_utility=True)], device.navigate.call_args_list)
         device.find.assert_called_once_with('已就绪', scroll='up', timeout=3)
         self.assertIn('full-bundled-ubuntu-ready-through-real-ui', report['checks'])
         device.reset_mock()
@@ -131,10 +131,20 @@ class SmokeSafetyTest(unittest.TestCase):
     def test_open_files_uses_workspace_conversations_instead_of_removed_card_button(self):
         device = MagicMock()
         release_smoke.open_workspace_files(device, 'owned-smoke-workspace')
-        self.assertEqual([unittest.mock.call.navigate('drawer_manage_workspaces'),
+        self.assertEqual([unittest.mock.call.navigate('drawer_manage_workspaces', from_utility=False),
                           unittest.mock.call.find('owned-smoke-workspace'),
                           unittest.mock.call.click('workspace_flow_open'),
                           unittest.mock.call.click('workspace_threads_files')], device.mock_calls)
+
+    def test_utility_navigation_closes_cover_before_selecting_retained_drawer(self):
+        device = release_smoke.Device('emulator-5554', self.root)
+        with patch.object(device, 'click') as click:
+            device.navigate('drawer_manage_workspaces', from_utility=True)
+        self.assertEqual([unittest.mock.call('close', description_only=True),
+                          unittest.mock.call('drawer_manage_workspaces')], click.call_args_list)
+        device = MagicMock()
+        release_smoke.open_workspace_files(device, 'saved-workspace', from_utility=True)
+        device.navigate.assert_called_once_with('drawer_manage_workspaces', from_utility=True)
 
     def test_environment_ready_search_scrolls_toward_hidden_first_card(self):
         device = release_smoke.Device('emulator-5554', self.root)
@@ -174,6 +184,7 @@ class SmokeSafetyTest(unittest.TestCase):
             release_smoke.verify_edition_switch(device, Path('lite.apk'), 'test-project', 'saved-source-marker', 'saved-profile', report)
         device.adb.assert_called_once_with('install', '-r', '--no-incremental', 'lite.apk')
         device.saved_model_card.assert_called_once_with('saved-profile')
+        device.navigate.assert_any_call('drawer_manage_workspaces', from_utility=True)
         self.assertIn('switch-to-lite-project-source-and-model-configuration-retained', report['checks'])
         device.last_xml = 'different source'
         with patch.object(release_smoke, 'apk_edition', return_value='lite'):

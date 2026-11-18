@@ -81,8 +81,10 @@ class Device:
     def click(self, resource, **kwargs):
         return self.find(self.labels.get(resource, resource), click=True, **kwargs)
 
-    def navigate(self, resource):
-        self.click('app_navigation_open', description_only=True)
+    def navigate(self, resource, *, from_utility=False):
+        # Settings/environment cover the retained drawer. Their public Close
+        # action restores that drawer; only primary pages expose Open navigation.
+        self.click('close' if from_utility else 'app_navigation_open', description_only=True)
         return self.click(resource)
 
     def text(self, resource, value, scroll=False):
@@ -136,8 +138,8 @@ def complete_onboarding(device, report):
     report['checks'].append('first-run-setup-completed-without-optional-downloads')
 
 
-def open_workspace_files(device, project):
-    device.navigate('drawer_manage_workspaces')
+def open_workspace_files(device, project, *, from_utility=False):
+    device.navigate('drawer_manage_workspaces', from_utility=from_utility)
     device.find(project)
     device.click('workspace_flow_open')
     device.click('workspace_threads_files')
@@ -154,7 +156,7 @@ def prepare_full_environment(device, edition, report):
         device.find(device.labels['bundle_ready'], scroll='up', timeout=180)
     report['checks'].append('full-bundled-ubuntu-ready-through-real-ui')
     device.shot('environment-ready')
-    device.navigate('drawer_manage_workspaces')
+    device.navigate('drawer_manage_workspaces', from_utility=True)
 
 
 def validate_edition_switch(original, alternate, aapt):
@@ -184,7 +186,7 @@ def verify_edition_switch(device, apk, project, marker, profile, report):
     device.click('ai_settings', scroll=True)
     device.saved_model_card(profile)
     device.click('ai_models_back')
-    open_workspace_files(device, project)
+    open_workspace_files(device, project, from_utility=True)
     device.click('main.py')
     device.dump()
     if marker not in device.last_xml:
@@ -303,7 +305,7 @@ def run(args):
         time.sleep(1)
         device.shot('models-day')
         device.click('ai_models_back')
-        open_workspace_files(device, name)
+        open_workspace_files(device, name, from_utility=True)
         device.click('main.py')
         device.dump()
         if marker not in device.last_xml:
