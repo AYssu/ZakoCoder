@@ -1,6 +1,8 @@
 package dev.zakocoder.app.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,79 +11,131 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
-import dev.zakocoder.app.ai.AiController
+import dev.zakocoder.app.ai.*
 
-/** Profile summaries only: opening this picker never reads keys or contacts a model service. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Anchored to the composer. Opening only reads nonsecret, locally saved profile summaries. */
 @Composable
-internal fun AiModelPicker(ai: AiController, close: () -> Unit, onAdd: () -> Unit, onManage: () -> Unit) {
+internal fun AiModelPicker(ai: AiController, close: () -> Unit, onManage: () -> Unit) {
     val state by ai.models.state.collectAsStateWithLifecycle()
     val task by ai.state.collectAsStateWithLifecycle()
-    val editable = !task.active && !task.restoring && !state.loading && !state.saving && state.error.isEmpty()
-    var selecting by remember { mutableStateOf<String?>(null) }
-    val windowHeight = LocalWindowInfo.current.containerSize.height
-    val maxHeight = with(LocalDensity.current) { windowHeight.toDp() * .8f }
-    WorkbenchPanelSheet(onDismiss = close) { requestDismiss ->
-        LaunchedEffect(state.catalog.activeId, state.saving) {
-            if (selecting != null && !state.saving && state.catalog.activeId == selecting) requestDismiss()
+    if (!LocalWorkbenchPageInteractive.current) return
+    val density = LocalDensity.current
+    val window = LocalWindowInfo.current.containerSize
+    val maxHeight = with(density) { (window.height * .4f).toDp() }
+    val width = with(density) { window.width.toDp() - 32.dp }.coerceAtMost(240.dp)
+    val gap = with(density) { 4.dp.roundToPx() }
+    val position = remember(gap) { object : PopupPositionProvider {
+        override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+            val edge = gap * 2
+            val x = (anchorBounds.right - popupContentSize.width + edge).coerceIn(gap, maxOf(gap, windowSize.width - popupContentSize.width - gap))
+            val above = anchorBounds.top - popupContentSize.height - gap
+            val y = (if (above >= gap) above else anchorBounds.bottom + gap).coerceIn(gap, maxOf(gap, windowSize.height - popupContentSize.height - gap))
+            return IntOffset(x, y)
         }
-        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).imePadding().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.ai_choose_model), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+    } }
+    var closing by remember { mutableStateOf(false) }
+    var navigate by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(closing) {
+        progress.animateTo(if (closing) 0f else 1f, tween(160))
+        if (closing) { close(); navigate?.invoke() }
+    }
+    Popup(popupPositionProvider = position, onDismissRequest = { closing = true }, properties = PopupProperties(focusable = true)) {
+        Box(Modifier.pointerInput(closing) {
+            if (closing) awaitPointerEventScope {
+                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
             }
-            if (task.active || task.restoring) Text(stringResource(R.string.ai_models_task_locked),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (state.error.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(state.error, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = ai.models::retry, enabled = !state.loading && !state.saving) { Text(stringResource(R.string.editor_retry)) }
+        }.graphicsLayer {
+            alpha = progress.value; scaleX = .97f + .03f * progress.value; scaleY = scaleX
+            translationY = (1 - progress.value) * 5.dp.toPx()
+        }.padding(8.dp)) {
+            Surface(Modifier.width(width).heightIn(max = maxHeight).testTag("ai-model-popover"),
+                color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), shadowElevation = 6.dp) {
+                AiModelPickerContent(state, task.active || task.restoring, dismissing = closing,
+                    onSelect = ai.models::selectModel, onReasoning = ai.models::setReasoning,
+                    onRetry = ai.models::retry, onManage = { navigate = onManage; closing = true })
             }
-            if (!state.loading && state.error.isEmpty() && state.catalog.profiles.isEmpty()) {
-                Text(stringResource(R.string.ai_models_empty_hint), Modifier.padding(vertical = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 8.dp)) {
-                items(state.catalog.profiles, key = { it.id }) { profile ->
-                    val active = profile.id == state.catalog.activeId
-                    WorkbenchCard(onClick = { if (active) requestDismiss() else { selecting = profile.id; ai.models.activate(profile.id) } },
-                        enabled = editable, modifier = Modifier.fillMaxWidth().semantics { role = Role.RadioButton; selected = active },
-                        cornerRadius = 12.dp, color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                        border = if (active) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(profile.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(profile.model, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                            if (active) WorkbenchIcon(Glyph.Check, description = stringResource(R.string.ai_models_current), tint = MaterialTheme.colorScheme.primary)
-                        }
+        }
+    }
+}
+
+@Composable
+internal fun AiModelPickerContent(state: AiModelsState, locked: Boolean,
+    onSelect: (String, String) -> Unit, onReasoning: (String, AiThinking, AiReasoningEffort?) -> Unit,
+    onRetry: () -> Unit, onManage: () -> Unit, dismissing: Boolean = false) {
+    // Exit keeps the current layout and colors; only interaction stops, without a lock notice or disabled-color flash.
+    val editable = !locked && !state.loading && !state.saving && !state.probing && state.error.isEmpty()
+    val active = state.catalog.active
+    var query by remember { mutableStateOf("") }
+    val all = state.catalog.profiles.flatMap { p -> (p.modelChoices + p.model).distinct().map { p to it } }
+    Column(Modifier.padding(vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.ai_choose_model),
+                fontSize = 12.sp, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+        }
+        Box(Modifier.fillMaxWidth().height(2.dp)) {
+            if (state.loading || state.saving || state.probing) LinearProgressIndicator(Modifier.fillMaxSize())
+        }
+        if (locked) Text(stringResource(R.string.ai_models_task_locked), Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.error.isNotEmpty()) Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(state.error, Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            TextButton(onClick = { if (!dismissing) onRetry() }, enabled = !state.loading && !state.saving) { Text(stringResource(R.string.editor_retry)) }
+        }
+        if (all.size > 8) WorkbenchTextField(query, { query = it }, label = stringResource(R.string.ai_model_search), singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp))
+        LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 132.dp).testTag("ai-model-saved-list")) {
+            state.catalog.profiles.forEach { profile ->
+                val choices = (profile.modelChoices + profile.model).distinct().filter {
+                    query.isBlank() || it.contains(query, ignoreCase = true) || profile.name.contains(query, ignoreCase = true)
+                }
+                if (choices.isNotEmpty()) {
+                    items(choices, key = { "model:${profile.id}:$it" }) { model ->
+                        PickerRow(model, active?.id == profile.id && active.model == model, editable) { if (!dismissing) onSelect(profile.id, model) }
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            FilledTonalButton(onClick = onAdd, enabled = editable && state.catalog.profiles.size < 32,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) {
-                WorkbenchIcon(Glyph.Add, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.ai_models_add))
-            }
-            TextButton(onClick = onManage, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.ai_manage_models))
-            }
+            if (all.isEmpty()) item { Text(stringResource(R.string.ai_models_empty_hint), Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
+        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+        if (active != null) ReasoningStrengthSlider(active, editable) { thinking, effort ->
+            if (!dismissing) onReasoning(active.id, thinking, effort)
+        }
+        TextButton(onClick = { if (!dismissing) onManage() }, enabled = !locked, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.ai_manage_models), fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun PickerRow(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 36.dp)
+        .semantics { this.selected = selected }
+        .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.weight(1f).padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (selected) WorkbenchIcon(Glyph.Check, size = 16.dp, tint = MaterialTheme.colorScheme.primary)
     }
 }

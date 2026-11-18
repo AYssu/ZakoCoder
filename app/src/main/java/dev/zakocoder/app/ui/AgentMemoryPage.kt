@@ -138,21 +138,22 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
             Text(stringResource(R.string.agent_memory_privacy), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } },
-        confirmButton = { TextButton(onClick = { info = false }) { Text(stringResource(R.string.close)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { info = false }) { Text(stringResource(R.string.close)) } })
     deleting?.let { entry ->
         val scope = rememberCoroutineScope()
-        WorkbenchAlertDialog(onDismissRequest = { if (!state.busy) deleting = null },
+        WorkbenchAlertDialog(onDismissRequest = { if (!state.busy) deleting = null }, dismissible = !state.busy,
             title = { Text(stringResource(R.string.agent_memory_delete_title)) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.agent_memory_delete_hint, entry.title))
                 state.error?.let { MemoryError(it) }
             } },
-            confirmButton = { TextButton(enabled = !state.busy, onClick = { scope.launch {
+            confirmButton = { val finish = LocalWorkbenchDialogAction.current
+                TextButton(enabled = !state.busy, onClick = { scope.launch {
                 controller.remove(entry.id).join()
-                if (controller.state.value.error == null) { deleting = null; detailId = null }
+                if (controller.state.value.error == null) finish { deleting = null; detailId = null }
             } }) { Text(stringResource(if (entry.pending) R.string.agent_memory_dismiss else R.string.agent_memory_delete),
                 color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(enabled = !state.busy, onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { WorkbenchDialogButton(enabled = !state.busy, onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }
 
@@ -266,8 +267,8 @@ private fun MemoryEditor(controller: MemoryController, entry: AgentMemory?, clos
     if (discard) WorkbenchAlertDialog(onDismissRequest = { discard = false },
         title = { Text(stringResource(R.string.agent_memory_discard_title)) },
         text = { Text(stringResource(R.string.agent_memory_discard_hint)) },
-        confirmButton = { TextButton(onClick = { discard = false; close() }) { Text(stringResource(R.string.agent_memory_discard)) } },
-        dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { discard = false; close() }) { Text(stringResource(R.string.agent_memory_discard)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { discard = false }) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable

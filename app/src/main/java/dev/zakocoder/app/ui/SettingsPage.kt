@@ -201,7 +201,6 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     val unavailable = stringResource(R.string.storage_unavailable)
     val notificationSettingsUnavailable = stringResource(R.string.notification_settings_unavailable)
     Column(Modifier.fillMaxSize()) {
-        PageHeading(stringResource(R.string.nav_settings))
         Text(stringResource(R.string.settings_device_hint), Modifier.padding(bottom = 16.dp), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 24.dp)) {
         item { SettingsGroup(stringResource(R.string.nav_ai)) {
@@ -235,7 +234,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 }
                 Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 10) {
+                        IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 9) {
                             WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(16.dp), description = stringResource(R.string.decrease_font))
                         }
                         Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 32.dp), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -299,8 +298,8 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     }
     if (confirmZsh) WorkbenchAlertDialog(onDismissRequest = { confirmZsh = false }, title = { Text(stringResource(R.string.install_zsh)) },
         text = { Text(stringResource(R.string.package_confirmation, ToolBundles.packages(setOf("zsh"), state.bundleTools).joinToString(", "))) },
-        confirmButton = { TextButton(onClick = { confirmZsh = false; editing = null; workbench.installToolBundles(setOf("zsh")) }) { Text(stringResource(R.string.run)) } },
-        dismissButton = { TextButton(onClick = { confirmZsh = false }) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { confirmZsh = false; editing = null; workbench.installToolBundles(setOf("zsh")) }) { Text(stringResource(R.string.run)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { confirmZsh = false }) { Text(stringResource(R.string.cancel)) } })
     editing?.let { field ->
         var draft by remember(field, settings) { mutableStateOf(when (field) { "path" -> settings.additionalPath; "dns" -> settings.dns; "proxy" -> settings.proxy; else -> "" }) }
         var source by remember(field, settings) { mutableStateOf(settings.aptSource) }

@@ -11,7 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -32,8 +34,8 @@ internal fun UpdateBindings(updates: AppUpdates, onOpen: () -> Unit) {
     if (state.prompt) WorkbenchAlertDialog(onDismissRequest = updates::dismissPrompt,
         title = { Text(stringResource(R.string.update_available, state.release?.tag.orEmpty())) },
         text = { Text(stringResource(R.string.update_security)) },
-        confirmButton = { TextButton(onClick = { updates.dismissPrompt(); onOpen() }) { Text(stringResource(R.string.update_view)) } },
-        dismissButton = { TextButton(onClick = updates::dismissPrompt) { Text(stringResource(R.string.update_later)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { updates.dismissPrompt(); onOpen() }) { Text(stringResource(R.string.update_view)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = updates::dismissPrompt) { Text(stringResource(R.string.update_later)) } })
 }
 
 @Composable
@@ -91,12 +93,30 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
                 Text(stringResource(R.string.update_download, StorageUsage.format(release.apk.size)))
             }
             Text(stringResource(R.string.update_notes), style = MaterialTheme.typography.labelLarge)
-            androidx.compose.foundation.text.selection.SelectionContainer {
-                Text(release.notes.ifBlank { stringResource(R.string.update_notes_empty) }, style = MaterialTheme.typography.bodyMedium)
+            key(release.tag, release.notes) {
+                UpdateReleaseNotes(release.notes)
             }
         }
         Text(stringResource(R.string.update_security), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         CopyHelp(stringResource(R.string.update_security_details_title), stringResource(R.string.update_security_details_body))
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** Release text uses the bounded native renderer, never a WebView or remote image loader. */
+@Composable
+internal fun UpdateReleaseNotes(notes: String) {
+    var link by remember { mutableStateOf<String?>(null) }
+    val handler = LocalUriHandler.current
+    if (notes.isBlank()) Text(stringResource(R.string.update_notes_empty), style = MaterialTheme.typography.bodyMedium)
+    else AiMarkdown(notes, bodyFontSize = 14.sp, onLink = { link = it })
+    link?.let { destination ->
+        WorkbenchAlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
+            text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
+            confirmButton = { WorkbenchDialogButton(onClick = {
+                try { handler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { }
+                finally { link = null }
+            }) { Text(stringResource(R.string.ai_open_browser)) } },
+            dismissButton = { WorkbenchDialogButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }

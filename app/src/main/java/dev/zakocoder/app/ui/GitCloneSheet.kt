@@ -31,6 +31,7 @@ internal fun GitCloneSheet(enabled: Boolean, close: () -> Unit,
     WorkbenchSheet(stringResource(R.string.git_clone), {
         token = ""; username = ""; close()
     }, stringResource(R.string.git_clone_credentials_help)) {
+        val finish = LocalWorkbenchSheetAction.current
         WorkbenchTextField(name, { if (it.length <= 80) name = it }, modifier = Modifier.fillMaxWidth(),
             label = stringResource(R.string.project_name), singleLine = true, enabled = enabled,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next), shape = RoundedCornerShape(12.dp))
@@ -56,8 +57,9 @@ internal fun GitCloneSheet(enabled: Boolean, close: () -> Unit,
         WorkbenchPrimaryButton(onClick = {
             val user = if (privateRepository) username else ""
             val credential = if (privateRepository) token else ""
-            try { onClone(name.trim(), publicCloneUrl(url), user, credential) }
-            finally { token = ""; username = "" }
+            val projectName = name.trim()
+            val cloneUrl = publicCloneUrl(url)
+            finish { onClone(projectName, cloneUrl, user, credential) }
         }, enabled = enabled && validName && validUrl && validCredential,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) {
             Text(stringResource(R.string.git_clone))

@@ -12,7 +12,7 @@ enum class TerminalShell(val executable: String) { Bash("/bin/bash"), Zsh("/usr/
 
 data class AppSettings(
     val aptSource: AptSource = AptSource.Tsinghua,
-    val terminalFontSp: Int = 11,
+    val terminalFontSp: Int = 9,
     val terminalShell: TerminalShell = TerminalShell.Bash,
     val additionalPath: String = "",
     val dns: String = "223.5.5.5,119.29.29.29",
@@ -43,7 +43,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     fun validate(settings: AppSettings) {
-        require(settings.terminalFontSp in 10..28) { context.getString(dev.zakocoder.app.R.string.invalid_font) }
+        require(settings.terminalFontSp in 9..28) { context.getString(dev.zakocoder.app.R.string.invalid_font) }
         require(settings.additionalPath.isEmpty() || settings.additionalPath.split(':').all {
             it.startsWith('/') && it.none { character -> character == '\u0000' || character == '\n' || character == '\r' }
         }) { context.getString(dev.zakocoder.app.R.string.invalid_path) }

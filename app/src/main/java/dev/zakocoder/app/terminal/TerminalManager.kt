@@ -31,7 +31,7 @@ class TerminalManager(private val context: Context, private val changed: () -> U
     @Volatile private var terminalTypeface: Typeface? = null
     /** Load the packaged, unmodified font on IO before attaching any terminal view. */
     fun prepareTypeface() {
-        if (terminalTypeface == null) terminalTypeface = Typeface.createFromAsset(context.assets, "fonts/JetBrainsMono-Regular.ttf")
+        if (terminalTypeface == null) terminalTypeface = Typeface.createFromAsset(context.assets, "fonts/JetBrainsMono-Bold.ttf")
     }
     val sessions = mutableListOf<TerminalItem>()
     private val mutablePreviews = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -59,7 +59,7 @@ class TerminalManager(private val context: Context, private val changed: () -> U
         return LocalPreviewAddress.candidates(text)
     }
     private var attached = WeakReference<TerminalView>(null)
-    private val appearances = mutableMapOf<String, Boolean>()
+    private val appearances = mutableSetOf<String>()
     private var nextNumber = 1
     private val mutableModifiers = MutableStateFlow(TerminalModifiers())
     val modifiers = mutableModifiers.asStateFlow()
@@ -79,7 +79,7 @@ class TerminalManager(private val context: Context, private val changed: () -> U
             // Start before exposing a closable session: an uninitialized upstream
             // TerminalSession has pid=0, which must never be passed to kill().
             session.updateSize(80, 24, 8, 16)
-            session.emulator.mColors.tryParseColor(com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND, "#0D1117")
+            session.emulator.mColors.tryParseColor(com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND, "#000000")
             session.emulator.mColors.tryParseColor(com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND, "#C9D1D9")
             changed()
             refreshPreviews()
@@ -94,15 +94,15 @@ class TerminalManager(private val context: Context, private val changed: () -> U
         setTerminalViewClient(viewClient(this))
         setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, fontSp.toFloat(), resources.displayMetrics).toInt())
         setTypeface(checkNotNull(terminalTypeface))
-        setBackgroundColor(android.graphics.Color.rgb(13, 17, 23))
+        setBackgroundColor(android.graphics.Color.BLACK)
         attachSession(item.session)
         attached = WeakReference(this)
         post { if (attached.get() === this) requestFocus() }
     }
-    /** Theme changes affect only the emulator palette and view paint, preserving PTY and IME ownership. */
-    fun appearance(view: TerminalView, item: TerminalItem, dark: Boolean) {
-        val background = if (dark) "#05080C" else "#0D1117"
-        if (appearances.put(item.id, dark) != dark) {
+    /** A fixed black canvas is independent of app theme, preserving PTY and IME ownership. */
+    fun appearance(view: TerminalView, item: TerminalItem) {
+        val background = "#000000"
+        if (appearances.add(item.id)) {
             item.session.emulator.mColors.tryParseColor(com.termux.terminal.TextStyle.COLOR_INDEX_BACKGROUND, background)
         }
         view.setBackgroundColor(background.toColorInt())

@@ -76,7 +76,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
             }
         }
     }
-    if (limits) WorkbenchAlertDialog(onDismissRequest = { limits = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = { Text(stringResource(R.string.ai_log_limits)) }, confirmButton = { TextButton(onClick = { limits = false }) { Text(stringResource(R.string.close)) } })
+    if (limits) WorkbenchAlertDialog(onDismissRequest = { limits = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = { Text(stringResource(R.string.ai_log_limits)) }, confirmButton = { WorkbenchDialogButton(onClick = { limits = false }) { Text(stringResource(R.string.close)) } })
     state.requests.find { it.id == selected }?.let { request ->
         AiFullScreen(stringResource(R.string.ai_request_details), { selected = null }) {
             val clipboard = LocalClipboardManager.current
@@ -256,11 +256,11 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
     if (confirmingReset) WorkbenchAlertDialog(onDismissRequest = { confirmingReset = false },
         title = { Text(stringResource(R.string.ai_skills_reset_configuration)) },
         text = { Text(stringResource(R.string.ai_skills_reset_explanation)) },
-        confirmButton = { TextButton(onClick = {
+        confirmButton = { WorkbenchDialogButton(onClick = {
             confirmingReset = false
             controller.resetGlobalSkillSelection()
         }, enabled = canRetry) { Text(stringResource(R.string.ai_skills_recommended)) } },
-        dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { WorkbenchDialogButton(onClick = { confirmingReset = false }) { Text(stringResource(R.string.cancel)) } })
     viewing?.let { skill ->
         var text by remember(skill.path) { mutableStateOf<String?>(null) }
         var failed by remember(skill.path) { mutableStateOf(false) }
@@ -290,18 +290,21 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             if (deleteFailed) Text(stringResource(R.string.ai_skill_delete_error), color = MaterialTheme.colorScheme.error)
             if (deleteBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
         } },
-        confirmButton = { TextButton(enabled = editable && !deleteBusy, onClick = {
+        confirmButton = { val finish = LocalWorkbenchDialogAction.current
+            TextButton(enabled = editable && !deleteBusy, onClick = {
             deleteBusy = true; deleteFailed = false
             scope.launch {
                 try {
                     if (controller.deleteGlobalSkill(skill.path)) {
-                        if (viewing?.path == skill.path) viewing = null
-                        deleting = null
+                        finish {
+                            if (viewing?.path == skill.path) viewing = null
+                            deleting = null
+                        }
                     } else deleteFailed = true
                 } finally { deleteBusy = false }
             }
         }) { Text(stringResource(R.string.ai_skill_delete_action), color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(enabled = !deleteBusy, onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
+        dismissButton = { WorkbenchDialogButton(enabled = !deleteBusy, onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 @Composable
 internal fun AiFullScreen(title: String, close: () -> Unit, animateExit: Boolean = true, content: @Composable ColumnScope.() -> Unit) {

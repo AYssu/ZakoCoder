@@ -96,8 +96,8 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
     if (editing) AiModelEditor(ai, profile, contentPadding = contentPadding) { editing = false }
     }
     deleting?.let { item -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_models_delete_title)) },
-        text = { Text(stringResource(R.string.ai_models_delete_hint, item.name) + if (item.id == "legacy") "\n" + stringResource(R.string.ai_models_legacy_retained) else "") }, confirmButton = { TextButton(onClick = { deleting = null; ai.models.delete(item.id) }) { Text(stringResource(R.string.file_delete)) } },
-        dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
+        text = { Text(stringResource(R.string.ai_models_delete_hint, item.name) + if (item.id == "legacy") "\n" + stringResource(R.string.ai_models_legacy_retained) else "") }, confirmButton = { WorkbenchDialogButton(onClick = { deleting = null; ai.models.delete(item.id) }) { Text(stringResource(R.string.file_delete)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
 @Composable
@@ -119,6 +119,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     var name by remember(original?.id) { mutableStateOf(original?.name.orEmpty()) }
     var endpoint by remember(original?.id) { mutableStateOf(original?.endpoint.orEmpty()) }
     var model by remember(original?.id) { mutableStateOf(original?.model.orEmpty()) }
+    var modelChoices by remember(original?.id) { mutableStateOf(original?.modelChoices.orEmpty()) }
     var protocol by remember(original?.id) { mutableStateOf(original?.protocol ?: AiApiProtocol.ChatCompletions) }
     var key by remember { mutableStateOf("") }
     var clearKey by remember { mutableStateOf(false) }
@@ -129,6 +130,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     var topEnabled by remember { mutableStateOf(original?.parameters?.topP != null) }
     var topP by remember { mutableStateOf(original?.parameters?.topP?.toString() ?: "1.0") }
     var picker by remember { mutableStateOf(false) }
+    LaunchedEffect(state.available, picker) { if (picker && state.available.isNotEmpty()) modelChoices = state.available }
     var templates by remember { mutableStateOf(false) }
     var discard by remember { mutableStateOf(false) }
     var savingRevision by remember { mutableStateOf<Int?>(null) }
@@ -141,7 +143,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     val modelValid = model.isNotBlank() && model.length <= 200 &&
         (protocol != AiApiProtocol.Gemini || normalized != null && runCatching { AiProviderRouting.requestAddress(normalized, protocol, model) }.isSuccess)
     val valid = name.isNotBlank() && name.length <= 80 && normalized != null && modelValid && parametersValid
-    val dirty = name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
+    val dirty = modelChoices != original?.modelChoices.orEmpty() || name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
     fun selectProtocol(value: AiApiProtocol) {
@@ -149,10 +151,10 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
         maxEnabled = next.maxTokens != null; next.maxTokens?.let { maxTokens = it.toString() }
         tempEnabled = next.temperature != null; next.temperature?.let { temperature = it.toString() }
         topEnabled = next.topP != null; next.topP?.let { topP = it.toString() }
-        protocol = value; changed()
+        protocol = value; modelChoices = emptyList(); changed()
     }
     fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
-    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt)
+    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt, modelChoices)
     val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     fun leave() { if (state.saving) return; clearNavigationFocus(); if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
@@ -185,7 +187,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                     Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ModelField(endpoint, { endpoint = it; changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
+                ModelField(endpoint, { endpoint = it; modelChoices = emptyList(); changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
                 AiServiceOptionsSection(protocol, options.service, editable, normalized ?: endpoint) { options.service = it; changed() }
                 if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model,
                     AiServicePresets.resolve(options.service, normalized, protocol).streaming)
@@ -250,12 +252,13 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
         }
     }
     if (templates) WorkbenchSheet(stringResource(R.string.ai_provider_choose), { templates = false }) {
+        val finish = LocalWorkbenchSheetAction.current
         AiProviderPresetList(editable) { preset ->
-            endpoint = preset.endpoint; selectProtocol(preset.protocol); templates = false
+            finish { endpoint = preset.endpoint; selectProtocol(preset.protocol) }
         }
     }
     if (discard) WorkbenchAlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },
-        confirmButton = { TextButton(onClick = { key = ""; close() }) { Text(stringResource(R.string.ai_models_discard)) } }, dismissButton = { TextButton(onClick = { discard = false }) { Text(stringResource(R.string.ai_models_keep_editing)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { key = ""; close() }) { Text(stringResource(R.string.ai_models_discard)) } }, dismissButton = { WorkbenchDialogButton(onClick = { discard = false }) { Text(stringResource(R.string.ai_models_keep_editing)) } })
 }
 
 private fun sameModelOrigin(first: String, second: String): Boolean =

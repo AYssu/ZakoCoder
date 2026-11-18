@@ -3,5 +3,5 @@
     <path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.3" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12 22v-5" />
     <path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.3" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M9 8V2" />
     <path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.3" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15 8V2" />
-    <path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.3" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FF000000" android:strokeWidth="1.3" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M17 8Q18 8 18 9V13A4 4 0 0 1 14 17H10A4 4 0 0 1 6 13V9Q6 8 7 8Z" />
 </vector>

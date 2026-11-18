@@ -33,12 +33,13 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
     val canReference = !state.active && state.references.size < 4
     WorkbenchSheet(stringResource(R.string.ai_context_attach), close,
         subtitle = stringResource(R.string.ai_attachment_subtitle)) {
+        val finish = LocalWorkbenchSheetAction.current
         // Three equal actions remain reachable at 360dp and use the same themed surfaces as the app.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (onImages != null) AttachmentAction(
                 stringResource(R.string.ai_images_add), null, false,
                 !state.active && !state.imagesLoading && state.pendingImages.size < AiImages.MAX_PER_TURN,
-                Modifier.weight(1f), onImages,
+                Modifier.weight(1f), { finish(onImages) },
             )
             AttachmentAction(stringResource(R.string.browse_files), Glyph.File, tab == 0, !state.active,
                 Modifier.weight(1f), { tab = 0 })
@@ -65,7 +66,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.ai_attachment_log_length, errorText.length),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                WorkbenchPrimaryButton(onClick = { ai.addReference(AiReference("build-output", errorText, "error")); close() },
+                WorkbenchPrimaryButton(onClick = { val text = errorText; finish { ai.addReference(AiReference("build-output", text, "error")) } },
                     enabled = errorText.isNotBlank() && canReference, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.ai_context_add))
                 }
@@ -117,7 +118,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
                                 modifier = Modifier.heightIn(min = 64.dp).clickable(
                                     enabled = if (isDirectory) !state.active else canReference, role = Role.Button,
                                 ) {
-                                    if (isDirectory) directory = path else { ai.addFileReference(path); close() }
+                                    if (isDirectory) directory = path else { finish { ai.addFileReference(path) } }
                                 },
                             )
                         }

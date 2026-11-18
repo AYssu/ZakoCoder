@@ -97,12 +97,23 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val decoded = JSONObject(decrypt(encrypted, json.getString("id") + ":headers"))
         return decoded.keys().asSequence().associateWith { decoded.getString(it) }.also(AiRequestHeaders::validate)
     }
+    private fun modelChoices(json: JSONObject): List<String> {
+        val models = json.optJSONArray("modelChoices") ?: return emptyList()
+        require(models.length() <= 512)
+        return checkedModelChoices((0 until models.length()).map { models.getString(it) })
+    }
+    private fun checkedModelChoices(models: List<String>): List<String> {
+        require(models.size <= 512)
+        return models.map(String::trim).distinct().also { values ->
+            require(values.all { it.isNotBlank() && it.length <= 200 && it.none(Char::isISOControl) })
+        }
+    }
     private fun summary(json: JSONObject): AiProfile {
         val names = json.optJSONArray("headerNames") ?: JSONArray()
         require(names.length() <= 16)
         val headerNames = (0 until names.length()).map { names.getString(it) }
         AiRequestHeaders.validate(headerNames.associateWith { "" })
-        return AiProfile(json.getString("id"), json.getString("name"), endpoint(json.getString("endpoint")), json.getString("model"), json.getBoolean("hasKey"), parameters(json), contextOptions(json), headerNames, protocol(json), systemPrompt(json))
+        return AiProfile(json.getString("id"), json.getString("name"), endpoint(json.getString("endpoint")), json.getString("model"), json.getBoolean("hasKey"), parameters(json), contextOptions(json), headerNames, protocol(json), systemPrompt(json), modelChoices(json))
     }
     private fun rawCatalog(): JSONObject {
         if (exists(catalogFile)) return read(catalogFile).also { json ->
@@ -173,6 +184,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
     @Synchronized fun saveProfile(draft: AiModelDraft) {
         require(draft.name.isNotBlank() && draft.name.length <= 80 && !draft.name.any(Char::isISOControl))
         val resolved = resolve(draft)
+        val choices = checkedModelChoices(draft.modelChoices)
         val json = rawCatalog(); val profiles = json.getJSONArray("profiles")
         require(draft.id != null || profiles.length() < 32)
         val id = draft.id ?: UUID.randomUUID().toString()
@@ -187,11 +199,48 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         resolved.parameters.seed?.let { item.put("seed", it) }
         item.put("context", JSONObject().put("contextWindowTokens", resolved.context.contextWindowTokens).put("maxContextChars", resolved.context.maxContextChars).put("autoCompress", resolved.context.autoCompress)
             .put("compressionThresholdPercent", resolved.context.compressionThresholdPercent).put("summaryMaxChars", resolved.context.summaryMaxChars))
+        item.put("modelChoices", JSONArray(choices))
         item.put("headerNames", JSONArray(resolved.requestHeaders.keys.toList()))
         item.put("requestHeaders", encrypt(JSONObject(), JSONObject(resolved.requestHeaders).toString(), id + ":headers", headerPayload = true))
         val index = (0 until profiles.length()).singleOrNull { profiles.getJSONObject(it).getString("id") == id }
         if (index == null) profiles.put(item) else profiles.put(index, item)
         if (json.isNull("activeId")) json.put("activeId", id)
+        write(catalogFile, json)
+    }
+    /** Update nonsecret choices in place, retaining encrypted credentials and all other options. */
+    @Synchronized fun updateModelChoices(id: String, models: List<String>) {
+        val choices = checkedModelChoices(models)
+        val json = rawCatalog(); val profiles = json.getJSONArray("profiles")
+        val profile = (0 until profiles.length()).map { profiles.getJSONObject(it) }.single { it.getString("id") == id }
+        profile.put("modelChoices", JSONArray(choices))
+        write(catalogFile, json)
+    }
+    @Synchronized fun selectModel(id: String, model: String) {
+        val json = rawCatalog(); val profiles = json.getJSONArray("profiles")
+        val profile = (0 until profiles.length()).map { profiles.getJSONObject(it) }.single { it.getString("id") == id }
+        require(model == profile.getString("model") || model in modelChoices(profile))
+        if (model != profile.getString("model")) {
+            val options = contextOptions(profile)
+            profile.put("model", model)
+            profile.put("context", JSONObject().put("contextWindowTokens", AiModelContextWindows.defaultTokens(model))
+                .put("maxContextChars", options.maxContextChars).put("autoCompress", options.autoCompress)
+                .put("compressionThresholdPercent", options.compressionThresholdPercent).put("summaryMaxChars", options.summaryMaxChars))
+        }
+        json.put("activeId", id)
+        write(catalogFile, json)
+    }
+    @Synchronized fun setReasoning(id: String, thinking: AiThinking, effort: AiReasoningEffort?) {
+        val json = rawCatalog(); val profiles = json.getJSONArray("profiles")
+        val profile = (0 until profiles.length()).map { profiles.getJSONObject(it) }.single { it.getString("id") == id }
+        require(thinking != AiThinking.Disabled || effort == null)
+        require(protocol(profile) != AiApiProtocol.Gemini || effort != AiReasoningEffort.Max)
+        profile.put("thinking", thinking.name)
+        if (effort == null) profile.remove("reasoningEffort") else profile.put("reasoningEffort", effort.name)
+        // Anthropic's explicit thinking has stricter sampling/output constraints.
+        if (protocol(profile) == AiApiProtocol.Anthropic && thinking == AiThinking.Enabled) {
+            profile.remove("temperature"); profile.remove("topP")
+            if (profile.has("maxTokens")) profile.put("maxTokens", profile.getInt("maxTokens").coerceAtLeast(2048))
+        }
         write(catalogFile, json)
     }
     @Synchronized fun activate(id: String) {

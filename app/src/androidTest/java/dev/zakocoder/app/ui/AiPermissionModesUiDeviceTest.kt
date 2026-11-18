@@ -1,6 +1,13 @@
 package dev.zakocoder.app.ui
 
 import android.content.ContextWrapper
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -50,6 +57,22 @@ class AiPermissionModesUiDeviceTest {
 
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
     private suspend fun await(ready: () -> Boolean) = withTimeout(45000) { while (!ready()) delay(25) }
+
+    private fun confirmationWindow(resource: Int): View {
+        var result: View? = null
+        instrumentation.runOnMainSync {
+            val label = context.getString(resource)
+            fun contains(node: SemanticsNode): Boolean =
+                node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true || node.children.any(::contains)
+            fun contains(view: View): Boolean {
+                if (!view.isShown) return false
+                if (view is ViewRootForTest && contains(view.semanticsOwner.unmergedRootSemanticsNode)) return true
+                return view is ViewGroup && (0 until view.childCount).any { contains(view.getChildAt(it)) }
+            }
+            result = WindowInspector.getGlobalWindowViews().firstOrNull { contains(it) }
+        }
+        return checkNotNull(result)
+    }
 
     private suspend fun review(dark: Boolean) {
         val fixture = withContext(Dispatchers.IO) { AiDeviceTest.Fixture(context) }
@@ -128,7 +151,9 @@ class AiPermissionModesUiDeviceTest {
                 ui.await("Normal grants require confirmation") { ui.has(R.string.ai_auto_allow_title) }
                 assertEquals(AiPermissionPreset.ReadOnly, AiPermissionPresets.matching(workbench.ai.state.value.policy))
                 ui.capture("permission-modes/$theme-normal-confirm")
+                val normalConfirmation = confirmationWindow(R.string.ai_auto_allow_title)
                 ui.click(R.string.cancel)
+                ui.await("Normal confirmation exit finishes") { !normalConfirmation.isAttachedToWindow }
                 persisted(AiPermissionPreset.ReadOnly)
                 ui.click(R.string.ai_permission_preset_normal)
                 ui.click(R.string.ai_auto_allow_confirm)
@@ -145,7 +170,9 @@ class AiPermissionModesUiDeviceTest {
                 ui.await("Full Access danger warning appears before change") { ui.has(R.string.ai_permission_yolo_confirm_title) }
                 assertFalse(workbench.ai.state.value.policy.yolo)
                 ui.capture("permission-modes/$theme-full-access-warning")
+                val yoloConfirmation = confirmationWindow(R.string.ai_permission_yolo_confirm_title)
                 ui.click(R.string.cancel)
+                ui.await("Yolo confirmation exit finishes") { !yoloConfirmation.isAttachedToWindow }
                 persisted(AiPermissionPreset.Elevated)
                 ui.click(R.string.ai_permission_preset_yolo)
                 ui.click(R.string.ai_auto_allow_confirm)

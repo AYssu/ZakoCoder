@@ -210,7 +210,9 @@ class AppNavigationDeviceTest {
                     ensureActivityResumed(scenario)
                     if (destination in listOf(R.string.ai_skills, R.string.mcp_title, R.string.capability_packages_title))
                         capture("$captureKey-back-cancelled")
-                    await("cancel retains the foreground destination: $label") { has(label) && drawerClosed() }
+                    // The terminal is now headerless; its empty state identifies the retained page.
+                    val destinationLabel = if (destination == R.string.nav_terminal) context.getString(R.string.terminal_empty_title) else label
+                    await("cancel retains the foreground destination: $label") { has(destinationLabel) && drawerClosed() }
                     keyBack()
                     await("page Back restores the originating drawer: $label") { has(search) }
                     keyBack()

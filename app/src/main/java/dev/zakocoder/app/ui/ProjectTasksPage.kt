@@ -72,8 +72,8 @@ import kotlinx.coroutines.CancellationException
             UnsavedValidationNotice(unsavedFiles)
             Text(command.shell() + "\n\n" + stringResource(R.string.project_command_effects))
         } },
-        confirmButton = { TextButton(onClick = execute) { Text(stringResource(R.string.project_command_execute)) } },
-        dismissButton = { TextButton(onClick = close) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = execute) { Text(stringResource(R.string.project_command_execute)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = close) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable

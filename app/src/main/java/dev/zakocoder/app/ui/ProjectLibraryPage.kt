@@ -149,6 +149,7 @@ PageHeading(stringResource(R.string.projects_title)) {
     if (binding) LocalProjectBindingSheet(!state.busy, { binding = false }, workbench::bindLocalProject)
     if (creating) WorkbenchSheet(stringResource(R.string.create_project), { creating = false }, stringResource(R.string.library_description)) {
         val dismissSheet = LocalWorkbenchSheetDismiss.current
+        val finish = LocalWorkbenchSheetAction.current
         // A restored saveable may name a template that no longer exists; fall back to Other everywhere.
         val selectedTemplate = ProjectTemplates.entries.firstOrNull { it.name == templateName } ?: ProjectTemplate.Other
         WorkbenchTextField(name, { name = it }, label = stringResource(R.string.project_name), singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -165,7 +166,8 @@ PageHeading(stringResource(R.string.projects_title)) {
             }
         }
         WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = {
-            creating = false; onOpened(null); workbench.create(name, selectedTemplate); name = ""; templateName = ProjectTemplate.Other.name
+            val projectName = name
+            finish { onOpened(null); workbench.create(projectName, selectedTemplate); name = ""; templateName = ProjectTemplate.Other.name }
         }, enabled = name.isNotBlank() && !state.busy,
             modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
         TextButton(onClick = dismissSheet, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
@@ -176,19 +178,20 @@ PageHeading(stringResource(R.string.projects_title)) {
             cloning = false
         })
     actions?.let { project -> WorkbenchSheet(project.name, { actions = null }) {
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onWorkspace(project.id) } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_flow_open)) }
-        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { actions = null; if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onOpened(project.id) } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+        val finish = LocalWorkbenchSheetAction.current
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { finish { if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onWorkspace(project.id) } } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.workspace_flow_open)) }
+        WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { finish { if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onOpened(project.id) } } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.browse_project, project.name))
         }
-        TextButton(onClick = { actions = null; removing = project },
+        TextButton(onClick = { finish { removing = project } },
             enabled = !state.busy && state.sessions.none { it.projectId == project.id && it.session.isRunning }) {
             Text(stringResource(R.string.remove_project), color = MaterialTheme.colorScheme.error)
         }
     } }
     removing?.let { project -> WorkbenchAlertDialog(onDismissRequest = { removing = null }, title = { Text(stringResource(R.string.remove_project)) },
         text = { Text(stringResource(if (workbench.projects.isBound(project.id)) R.string.local_project_unbind_confirmation else R.string.remove_confirmation, project.name)) },
-        confirmButton = { TextButton(onClick = { removing = null; onOpened(null); workbench.removeProject(project.id) }) { Text(stringResource(R.string.remove)) } },
-        dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { removing = null; onOpened(null); workbench.removeProject(project.id) }) { Text(stringResource(R.string.remove)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }) }
 }
 
 @Composable
@@ -421,7 +424,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     }
     if (tasks) ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }
     else if (git) ProjectGitPage(workbench, project.id, close = { git = false })
-    else if (editorOpen) CodeEditorPage(workbench.editor, lspEnabled = state.settings.editorLspEnabled,
+    else if (editorOpen) CodeEditorPage(workbench.editor, fullScreen = true, lspEnabled = state.settings.editorLspEnabled,
         onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
             workbench.installToolBundles(setOf(server.bundleId))
         }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
@@ -436,10 +439,11 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                 if (apkBusy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.apk_preparing)) }
                 apkFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             } },
-            confirmButton = { TextButton(enabled = !apkBusy, onClick = {
+            confirmButton = { val finish = LocalWorkbenchDialogAction.current
+                TextButton(enabled = !apkBusy, onClick = {
                 apkFailure = null
                 if (needsPermission) {
-                    try { apkLauncher.launch(apkInstaller.sourcePermissionIntent()); installingApk = null }
+                    try { apkLauncher.launch(apkInstaller.sourcePermissionIntent()); finish { installingApk = null } }
                     catch (_: android.content.ActivityNotFoundException) { apkFailure = apkUnavailableMessage }
                     catch (_: SecurityException) { apkFailure = apkUnavailableMessage }
                 } else apkPreparation = fileScope.launch {
@@ -449,7 +453,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
                         if (currentApkProject == project.id) {
                             apkLauncher.launch(prepared)
-                            installingApk = null
+                            finish { installingApk = null }
                         }
                     }
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
@@ -459,26 +463,28 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                     finally { apkBusy = false }
                 }
             }) { Text(stringResource(if (needsPermission) R.string.apk_source_permission else R.string.apk_install)) } },
-            dismissButton = { TextButton(enabled = !apkBusy, onClick = { installingApk = null; apkFailure = null }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { WorkbenchDialogButton(enabled = !apkBusy, onClick = { installingApk = null; apkFailure = null }) { Text(stringResource(R.string.cancel)) } })
     }
     fileActions?.let { file -> WorkbenchSheet(file.name, { fileActions = null }) {
-        TextButton(onClick = { fileActions = null; openFile(file) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
-        TextButton(onClick = { fileActions = null; actionName = file.name; fileOperation = file to "rename" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_rename)) }
-        if (!file.directory) TextButton(onClick = { fileActions = null; actionName = file.name; fileOperation = file to "copy" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy)) }
-        TextButton(onClick = { fileScope.launch { clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", file.relative))) }; fileActions = null }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy_path)) }
-        TextButton(onClick = { fileActions = null; fileOperation = file to "delete" }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_delete), color = MaterialTheme.colorScheme.error) }
+        val finish = LocalWorkbenchSheetAction.current
+        TextButton(onClick = { finish { openFile(file) } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
+        TextButton(onClick = { finish { actionName = file.name; fileOperation = file to "rename" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_rename)) }
+        if (!file.directory) TextButton(onClick = { finish { actionName = file.name; fileOperation = file to "copy" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy)) }
+        TextButton(onClick = { finish { fileScope.launch { clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", file.relative))) } } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy_path)) }
+        TextButton(onClick = { finish { fileOperation = file to "delete" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_delete), color = MaterialTheme.colorScheme.error) }
     } }
     fileOperation?.let { (file, action) ->
         WorkbenchAlertDialog(onDismissRequest = { fileOperation = null }, title = { Text(stringResource(when (action) { "rename" -> R.string.file_rename; "copy" -> R.string.file_copy; else -> R.string.file_delete })) },
             text = { if (action == "delete") Text(stringResource(R.string.file_delete_confirmation, file.relative))
                 else WorkbenchTextField(actionName, { actionName = it }, singleLine = true, label = stringResource(R.string.file_name)) },
-            confirmButton = { TextButton(onClick = { fileOperation = null; workbench.fileAction(project.id, file.relative, action, actionName) }, enabled = !state.busy && (action == "delete" || actionName.isNotBlank())) { Text(stringResource(if (action == "delete") R.string.file_delete else R.string.editor_save)) } },
-            dismissButton = { TextButton(onClick = { fileOperation = null }) { Text(stringResource(R.string.cancel)) } })
+            confirmButton = { WorkbenchDialogButton(onClick = { fileOperation = null; workbench.fileAction(project.id, file.relative, action, actionName) }, enabled = !state.busy && (action == "delete" || actionName.isNotBlank())) { Text(stringResource(if (action == "delete") R.string.file_delete else R.string.editor_save)) } },
+            dismissButton = { WorkbenchDialogButton(onClick = { fileOperation = null }) { Text(stringResource(R.string.cancel)) } })
     }
     if (creatingFile) WorkbenchSheet(stringResource(R.string.create_file), { creatingFile = false }) {
         val dismissSheet = LocalWorkbenchSheetDismiss.current
+        val finish = LocalWorkbenchSheetAction.current
         WorkbenchTextField(fileName, { fileName = it }, modifier = Modifier.fillMaxWidth(), label = stringResource(R.string.file_name), singleLine = true)
-        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { creatingFile = false; workbench.createFile(project.id, directory, fileName); fileName = "" },
+        WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { val newName = fileName; val parent = directory; finish { workbench.createFile(project.id, parent, newName); fileName = "" } },
             enabled = !state.busy && fileName.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
         WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
     }
@@ -492,21 +498,22 @@ internal fun AddProjectSheet(enabled: Boolean, onDismiss: () -> Unit, onImport: 
     var work by rememberSaveable { mutableStateOf(false) }
     WorkbenchSheet(stringResource(R.string.workspace_flow_add), onDismiss,
         stringResource(if (work) R.string.workspace_flow_source else R.string.workspace_flow_choose_mode)) {
+        val finish = LocalWorkbenchSheetAction.current
         if (!work) {
             ProjectEntryOption(stringResource(R.string.workspace_flow_work), stringResource(R.string.workspace_flow_work_hint),
                 Glyph.ProjectAdd, enabled, onClick = { work = true })
             if (onBind != null) ProjectEntryOption(stringResource(R.string.workspace_flow_local), stringResource(R.string.workspace_flow_local_hint),
-                Glyph.Projects, enabled, onClick = onBind)
+                Glyph.Projects, enabled, onClick = { finish { onBind() } })
         } else {
             TextButton(onClick = { work = false }) { Text(stringResource(R.string.workspace_flow_change_mode)) }
             Text(stringResource(R.string.workspace_flow_work_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ProjectEntryOption(stringResource(R.string.mobile_import_source), stringResource(R.string.mobile_import_source_hint),
-                Glyph.Import, enabled, onClick = onImport)
+                Glyph.Import, enabled, onClick = { finish { onImport() } })
             ProjectEntryOption(stringResource(R.string.mobile_create_empty), stringResource(R.string.mobile_create_empty_hint),
-                Glyph.ProjectAdd, enabled, onClick = onCreate)
+                Glyph.ProjectAdd, enabled, onClick = { finish { onCreate() } })
             ProjectEntryOption(stringResource(R.string.git_clone), stringResource(R.string.mobile_clone_hint),
-                Glyph.History, enabled, onClick = onClone)
+                Glyph.History, enabled, onClick = { finish { onClone() } })
         }
     }
 }

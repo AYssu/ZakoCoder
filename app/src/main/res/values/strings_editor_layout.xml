@@ -3,4 +3,8 @@
     <string name="editor_disk_changed_short">文件已被外部修改 · 当前编辑已保留</string>
     <string name="editor_disk_unavailable_short">暂时无法读取原文件 · 当前编辑已保留</string>
     <string name="editor_disk_details">文件状态详情</string>
+    <string name="editor_cursor_position">%1$d:%2$d</string>
+    <string name="editor_cursor_description">第 %1$d 行，第 %2$d 列</string>
+    <string name="editor_indent_key">Tab</string>
+    <string name="editor_file_actions">文件操作</string>
 </resources>

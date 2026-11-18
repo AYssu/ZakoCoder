@@ -23,7 +23,7 @@ internal fun AiMessageRetryDialog(entry: AiEntry, edit: Boolean, onDismiss: () -
                     modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 8, isError = !valid,
                     supportingText = { Text(stringResource(R.string.ai_message_edit_limit)) })
             }
-        }, confirmButton = { TextButton(onClick = { onConfirm(if (editing) text else null) }, enabled = valid) {
+        }, confirmButton = { WorkbenchDialogButton(onClick = { onConfirm(if (editing) text else null) }, enabled = valid) {
             Text(stringResource(R.string.ai_message_retry))
-        } }, dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
+        } }, dismissButton = { WorkbenchDialogButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
 }

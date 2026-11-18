@@ -18,6 +18,8 @@ ZakoCoder 使用Sora原生编辑器，以Kotlin/Compose页面承载AndroidView�
 
 普通文件点击进入全屏编辑层，显示文件名、路径/未保存状态、行号、查找和保存；支持中文IME、选择复制、撤销/重做及区分大小写的字面量查找替换。
 
+文件页签以底部细线标记当前文档，未保存标记与独立缓冲保留。代码区显示当前行、括号配对及缩进引导线；底部状态显示语言、UTF-8 和光标行列。快捷栏提供 Tab 与常用括号、标点，可替换选区并参与撤销；这些操作只修改缓冲，仍需显式保存源码。键盘出现时快捷栏保留在键盘上方。
+
 基础TextMate词法着色覆盖 Kotlin、Dart、Java、JavaScript/TypeScript、Python、Shell、BAT/CMD、Markdown、HTML/CSS、YAML/TOML/XML、SQL、Go、Rust、Dockerfile、Makefile、JSON、C/C++ 与 Diff。识别常见扩展名、Shell 配置文件名和有界首行 shebang；Fish 采用基础 Shell 规则，Vue/Svelte 采用基础 HTML 规则，尚不含完整嵌入语言。其他受支持 UTF-8 文件按纯文本打开。词法着色本身不是完整解析或语义诊断；Python／JavaScript／TypeScript 安装对应工具后可使用下述实验性 LSP，暂不提供编辑器内联 AI 补全。主题和词法资源离线加载。BAT、Shell 等脚本在编辑器中打开，不自动执行；Windows BAT 的运行仍需其对应执行环境。
 
 Dart 文件使用本项目自有的基础词法规则，覆盖注释、字符串、关键字和数值；不包含 Dart Analysis Server、Flutter Widget 补全或重构。Flutter 的语义检查与测试通过项目终端执行，见 [Flutter 开发](FLUTTER.md)。

@@ -211,7 +211,7 @@ private fun entryStatus(entry: GitEntry) = when {
 }
 @Composable private fun GitConfirm(title: Int, message: String, dismiss: () -> Unit, confirm: () -> Unit) {
     WorkbenchAlertDialog(onDismissRequest = dismiss, title = { Text(stringResource(title)) }, text = { Text(message) },
-        confirmButton = { TextButton(onClick = confirm) { Text(stringResource(R.string.git_workflow_confirm)) } }, dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = confirm) { Text(stringResource(R.string.git_workflow_confirm)) } }, dismissButton = { WorkbenchDialogButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
 @Composable private fun gitFailureMessage(state: GitState): String = when (state.failure?.name) {

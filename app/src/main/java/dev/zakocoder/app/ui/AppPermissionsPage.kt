@@ -46,8 +46,8 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
     if (confirmRoot) WorkbenchAlertDialog(onDismissRequest = { confirmRoot = false },
         title = { Text(stringResource(R.string.app_permissions_root)) },
         text = { Text(stringResource(R.string.app_permissions_root_confirm)) },
-        confirmButton = { TextButton(onClick = { confirmRoot = false; onRequestRoot() }) { Text(stringResource(R.string.app_permissions_root_request)) } },
-        dismissButton = { TextButton(onClick = { confirmRoot = false }) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { confirmRoot = false; onRequestRoot() }) { Text(stringResource(R.string.app_permissions_root_request)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { confirmRoot = false }) { Text(stringResource(R.string.cancel)) } })
     val content: @Composable ColumnScope.() -> Unit = {
         AppPermissionsPanel(states, rootGranted, rootBusy, rootError,
             navigationError, onManage = { permission -> navigationError = !access.openSettings(permission) },

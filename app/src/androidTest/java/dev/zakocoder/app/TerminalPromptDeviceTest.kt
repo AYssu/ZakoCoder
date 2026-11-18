@@ -20,7 +20,7 @@ import java.io.File
 import java.util.UUID
 
 class TerminalPromptDeviceTest {
-    @Test fun defaultFontIsElevenAndExistingPreferenceIsPreserved() {
+    @Test fun defaultFontIsNineAndExistingPreferenceIsPreserved() {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "terminal-font-fixture-${UUID.randomUUID()}"
         val isolated = object : ContextWrapper(base) {
@@ -28,7 +28,7 @@ class TerminalPromptDeviceTest {
         }
         try {
             val repository = SettingsRepository(isolated)
-            assertEquals(11, repository.load().terminalFontSp)
+            assertEquals(9, repository.load().terminalFontSp)
             base.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putInt("font", 13).commit()
             assertEquals(13, repository.load().terminalFontSp)
         } finally { base.deleteSharedPreferences(name) }
@@ -64,19 +64,20 @@ class TerminalPromptDeviceTest {
             val command = """
                 export ZAKOCODER_PROJECT_PATH=/workspace/$id
                 export ZAKOCODER_PROJECT_LABEL='123 测试'
-                /usr/bin/zsh -f -c 'source ./managed.zshrc; _zakocoder_prompt; print -P -- "${'$'}PROMPT"; cd subdir; _zakocoder_prompt; print -P -- "${'$'}PROMPT"'
+                /usr/bin/zsh -f -c 'source ./managed.zshrc; print -P -- "${'$'}PROMPT"; cd subdir; print -P -- "${'$'}PROMPT"'
             """.trimIndent()
             val result = runtime.execute(command, id, AppSettings(), timeoutMillis = 20000)
             assertEquals(result.output, 0, result.exitCode)
-            assertTrue(result.output, result.output.contains("123 测试"))
-            assertTrue(result.output, result.output.contains("subdir"))
+            assertTrue(result.output, result.output.contains("zako"))
+            assertTrue(result.output, result.output.contains("@ubuntu"))
+            assertFalse(result.output, result.output.contains("123 测试"))
             assertFalse(result.output, result.output.contains("invalid character"))
             withContext(Dispatchers.IO) { File(directory, "user.zshrc").writeText("PROMPT='USER_CUSTOM_PROMPT'\n") }
             val custom = runtime.execute("/usr/bin/zsh -f -c 'source ./managed.zshrc; print -P -- \"${'$'}PROMPT\"; (( ${'$'}+functions[_zakocoder_prompt] == 0 ))'", id, AppSettings(), timeoutMillis = 20000)
             assertEquals(custom.output, 0, custom.exitCode)
             assertTrue(custom.output, custom.output.contains("USER_CUSTOM_PROMPT"))
             withContext(Dispatchers.IO) { File(directory, "user.zshrc").writeText("precmd() { PROMPT='USER_DYNAMIC_PROMPT'; }\n") }
-            val dynamic = runtime.execute("/usr/bin/zsh -f -c 'source ./managed.zshrc; precmd; _zakocoder_prompt; print -P -- \"${'$'}PROMPT\"'", id, AppSettings(), timeoutMillis = 20000)
+            val dynamic = runtime.execute("/usr/bin/zsh -f -c 'source ./managed.zshrc; precmd; print -P -- \"${'$'}PROMPT\"'", id, AppSettings(), timeoutMillis = 20000)
             assertEquals(dynamic.output, 0, dynamic.exitCode)
             assertTrue(dynamic.output, dynamic.output.contains("USER_DYNAMIC_PROMPT"))
         } finally {

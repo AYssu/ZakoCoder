@@ -2,7 +2,7 @@
     <string name="ai_options_title">思考、上下文与高级配置</string>
     <string name="ai_options_thinking">深度思考</string>
     <string name="ai_options_thinking_hint">思考能力因模型而异。不确定时请选择“服务默认”。</string>
-    <string name="ai_options_provider_default">服务默认</string>
+    <string name="ai_options_provider_default">默认</string>
     <string name="ai_options_enabled">开启</string>
     <string name="ai_options_disabled">关闭</string>
     <string name="ai_options_effort">推理强度</string>

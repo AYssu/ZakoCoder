@@ -41,9 +41,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
+import dev.zakocoder.app.ai.AiDecision
 
 @Composable
-internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}, onSkills: () -> Unit = onExtensions, onMcp: () -> Unit = onExtensions) {
+internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}, onSkills: () -> Unit = onExtensions, onMcp: () -> Unit = onExtensions, onOpenTerminals: () -> Unit = {}) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = androidx.compose.ui.platform.LocalResources.current
@@ -180,6 +181,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             Box {
                 IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
                 DropdownMenu(expanded = more && pageInteractive, onDismissRequest = { more = false }) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.nav_terminal)) }, leadingIcon = { WorkbenchIcon(Glyph.Terminal) },
+                        onClick = { more = false; onOpenTerminals() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.agent_memory_title)) }, onClick = { more = false; onMemory() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.browser_title)) }, onClick = { more = false; onBrowser() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_history)) }, leadingIcon = { WorkbenchIcon(Glyph.History) },
@@ -433,9 +436,16 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             onAttach = { attaching = true },
             onSend = { if (commandInput) dispatchCommand(input) else if (state.active || state.questionContinuation != null) workbench.ai.stop() else if (workbench.ai.send(outgoing)) sent() }) {
             val permissionPreset = dev.zakocoder.app.ai.AiPermissionPresets.matching(state.policy)
-            AiComposerPermissionButton(permissionPreset, state.policy.overrides.size,
-                enabled = project != null, onClick = { permissions = true })
-            AiComposerModelButton(models.catalog.active, onClick = { modelPicker = true }, modifier = Modifier.weight(1f))
+            Box {
+                AiComposerPermissionButton(permissionPreset, state.policy.overrides.size,
+                    enabled = project != null, onClick = { permissions = true })
+                if (permissions) AiPermissionsSheet(workbench, project?.name.orEmpty(), { permissions = false })
+            }
+            Box(Modifier.weight(1f)) {
+                AiComposerModelButton(models.catalog.active, onClick = { modelPicker = true }, modifier = Modifier.fillMaxWidth())
+                if (modelPicker) AiModelPicker(workbench.ai, { modelPicker = false },
+                    onManage = { modelPicker = false; onModels() })
+            }
 
         }
     }
@@ -466,8 +476,6 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         AiChangesPanel(state, workbench.editor.languages, workbench.ai::undo, { checkpoints = true },
             workbench.ai::checkpointList, workbench.ai::checkpointChanges, Modifier.fillMaxWidth().heightIn(min = 240.dp, max = 560.dp))
     }
-    if (modelPicker) AiModelPicker(workbench.ai, { modelPicker = false },
-        onAdd = { modelPicker = false; onAddModel() }, onManage = { modelPicker = false; onModels() })
     if (detailPanel == "requests") AiFullScreen(stringResource(R.string.ai_requests), { detailPanel = null }) {
         detailState.SaveableStateProvider("${state.projectId}:${state.conversationId}:requests") {
             Box(Modifier.padding(horizontal = 20.dp)) { AiTaskPlanPanel(state, 2, visible = !keyboardOpen) }
@@ -509,12 +517,12 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     }
     deleting?.let { id -> WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_history_delete)) },
         text = { Text(stringResource(R.string.ai_history_delete_detail)) },
-        confirmButton = { TextButton(onClick = { workbench.ai.deleteConversation(id); deleting = null }) { Text(stringResource(R.string.ai_history_delete), color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { workbench.ai.deleteConversation(id); deleting = null }) { Text(stringResource(R.string.ai_history_delete), color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } }) }
     link?.let { destination -> WorkbenchAlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
         text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
-        confirmButton = { TextButton(onClick = { try { uriHandler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { } finally { link = null } }) { Text(stringResource(R.string.ai_open_browser)) } },
-        dismissButton = { TextButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { try { uriHandler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { } finally { link = null } }) { Text(stringResource(R.string.ai_open_browser)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } }) }
     if (disclosure) WorkbenchAlertDialog(onDismissRequest = { disclosure = false }, title = { Text(stringResource(R.string.ai_data_details)) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(if (state.contextTurns.isEmpty()) R.string.ai_history_local else R.string.ai_context_count, state.contextTurns.size))
@@ -524,16 +532,21 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             }
             Text(stringResource(R.string.ai_disclosure))
         }
-    }, confirmButton = { TextButton(onClick = { disclosure = false }) { Text(stringResource(R.string.close)) } })
+    }, confirmButton = { WorkbenchDialogButton(onClick = { disclosure = false }) { Text(stringResource(R.string.close)) } })
     if (state.approval == null) inspecting?.let { review -> AiCodeReview(review, workbench.editor.languages) { inspecting = null } }
     if (choose) WorkbenchSheet(stringResource(R.string.select_project), { choose = false }) {
+        val finish = LocalWorkbenchSheetAction.current
         if (workbenchState.projects.isEmpty()) {
             Text(stringResource(R.string.ai_no_projects), style = MaterialTheme.typography.bodyMedium)
-            WorkbenchPrimaryButton(onClick = { choose = false; onProjects() }) { Text(stringResource(R.string.ai_select_project_first)) }
+            WorkbenchPrimaryButton(onClick = { finish { onProjects() } }) { Text(stringResource(R.string.ai_select_project_first)) }
         }
-        workbenchState.projects.forEach { item -> TextButton(onClick = { if (workbench.openWorkspace(item.id)) choose = false else messageActionError = true }) { Text(item.name) } }
+        workbenchState.projects.forEach { item -> TextButton(onClick = { if (workbench.openWorkspace(item.id)) finish {} else messageActionError = true }) { Text(item.name) } }
     }
     state.approval?.let { approval ->
+        fun currentApproval() = workbench.ai.state.value.let {
+            it.projectId == state.projectId && it.conversationId == state.conversationId && it.approval == approval
+        }
+        fun decide(decision: AiDecision) { if (currentApproval()) workbench.ai.approve(decision) }
         val event = state.events.find { it.id == approval.eventId }
         WorkbenchAlertDialog(onDismissRequest = { }, dismissible = false, title = { Text(approval.title) }, text = {
             Column(Modifier.heightIn(max = 430.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -546,18 +559,17 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 androidx.compose.foundation.text.selection.SelectionContainer { Text(diffText(approval.detail), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
                 if (event != null) {
                     Text(stringResource(R.string.ai_approval_scope), style = MaterialTheme.typography.labelSmall)
-                    TextButton(onClick = { workbench.ai.approve(dev.zakocoder.app.ai.AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
-                    TextButton(onClick = { workbench.ai.approve(dev.zakocoder.app.ai.AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
+                    WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
+                    WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
                     Text(stringResource(R.string.ai_approve_tool_task_scope), style = MaterialTheme.typography.labelSmall)
                     TextButton(onClick = { permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
                 }
-                TextButton(onClick = workbench.ai::stop) { Text(stringResource(R.string.ai_stop)) }
+                WorkbenchDialogButton(onClick = { if (currentApproval()) workbench.ai.stop() }) { Text(stringResource(R.string.ai_stop)) }
             }
-        }, confirmButton = { TextButton(onClick = { workbench.ai.approve(true) }) { Text(stringResource(R.string.ai_approve_once)) } },
-            dismissButton = { TextButton(onClick = { workbench.ai.approve(false) }) { Text(stringResource(R.string.ai_reject)) } })
+        }, confirmButton = { WorkbenchDialogButton(onClick = { decide(AiDecision.Once) }) { Text(stringResource(R.string.ai_approve_once)) } },
+            dismissButton = { WorkbenchDialogButton(onClick = { decide(AiDecision.Reject) }) { Text(stringResource(R.string.ai_reject)) } })
     }
     if (state.approval != null) inspecting?.let { review -> AiCodeReview(review, workbench.editor.languages) { inspecting = null } }
-    if (permissions) AiPermissionsSheet(workbench, project?.name.orEmpty(), { permissions = false })
 }
 
 @Composable

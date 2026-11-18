@@ -107,7 +107,15 @@ class ModelBackPreviewDeviceTest {
     private fun await(message: String, condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 20_000
         while (!condition()) {
-            check(SystemClock.uptimeMillis() < deadline) { message }
+            if (SystemClock.uptimeMillis() >= deadline) {
+                val bitmap = instrumentation.uiAutomation.takeScreenshot()
+                bitmap?.let { image ->
+                    File(base.cacheDir, "ui-review/model-back-return/entry-failure.png").apply { parentFile.mkdirs() }
+                        .outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    image.recycle()
+                }
+                error(message)
+            }
             Thread.sleep(40)
         }
         instrumentation.waitForIdleSync()
@@ -228,8 +236,19 @@ class ModelBackPreviewDeviceTest {
             CompositionLocalProvider(LocalConfiguration provides configuration) { ZakoCoderApp(host) }
         } }
         await("Assistant navigation ready") { shown(R.string.app_navigation_open) }
+        settle()
         click(R.string.app_navigation_open)
-        click(R.string.nav_settings)
+        await("Settings drawer shortcut visible") { nodes { all ->
+            all.any { node -> matches(node, base.getString(R.string.nav_settings)) && visible(node) &&
+                generateSequence(node) { it.parent }.any { it.config.getOrNull(SemanticsProperties.Selected) != null } }
+        } }
+        settle()
+        nodes { all ->
+            val label = all.last { node -> matches(node, base.getString(R.string.nav_settings)) && visible(node) &&
+                generateSequence(node) { it.parent }.any { it.config.getOrNull(SemanticsProperties.Selected) != null } }
+            val button = generateSequence(label) { it.parent }.first { it.config.getOrNull(SemanticsActions.OnClick) != null }
+            assertTrue(button.config[SemanticsActions.OnClick].action?.invoke() == true)
+        }
         await("Actual settings parent ready") { shown(R.string.settings_device_hint) && shown(R.string.ai_settings) }
         settle()
     }

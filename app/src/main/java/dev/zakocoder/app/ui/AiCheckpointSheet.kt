@@ -127,25 +127,26 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             dismissible = !forking,
             title = { Text(stringResource(R.string.ai_checkpoint_fork)) },
             text = { Text(stringResource(R.string.ai_checkpoint_fork_detail, target.turn)) },
-            confirmButton = { TextButton(enabled = !forking && !ai.active && !ai.restoring, onClick = {
+            confirmButton = { val finish = LocalWorkbenchDialogAction.current
+                TextButton(enabled = !forking && !ai.active && !ai.restoring, onClick = {
                 if (onFork != null) {
                     forking = true
                     forkFailed = false
                     scope.launch {
                         try {
-                            if (onFork(target.conversation, target.turn)) { forkTarget = null; close() }
-                            else { forkFailed = true; forkTarget = null }
+                            if (onFork(target.conversation, target.turn)) finish { forkTarget = null; close() }
+                            else { forkFailed = true; finish { forkTarget = null } }
                         } catch (cancelled: CancellationException) { throw cancelled }
-                        catch (_: Exception) { forkFailed = true; forkTarget = null }
+                        catch (_: Exception) { forkFailed = true; finish { forkTarget = null } }
                         finally { forking = false }
                     }
                 }
             }) { Text(stringResource(R.string.ai_checkpoint_fork)) } },
-            dismissButton = { TextButton(enabled = !forking, onClick = { forkTarget = null }) { Text(stringResource(R.string.cancel)) } })
+            dismissButton = { WorkbenchDialogButton(enabled = !forking, onClick = { forkTarget = null }) { Text(stringResource(R.string.cancel)) } })
     }
     review?.let { AiCodeReview(it, workbench.editor.languages) { review = null } }
     if (confirm) WorkbenchAlertDialog(onDismissRequest = { confirm = false }, title = { Text(stringResource(R.string.ai_checkpoint_restore)) },
-        text = { Text(stringResource(if (recovery != null) R.string.ai_checkpoint_interrupted_confirm else R.string.ai_checkpoint_restore_detail)) }, confirmButton = { TextButton(onClick = {
+        text = { Text(stringResource(if (recovery != null) R.string.ai_checkpoint_interrupted_confirm else R.string.ai_checkpoint_restore_detail)) }, confirmButton = { WorkbenchDialogButton(onClick = {
             confirm = false; loading = true
             scope.launch { try {
                 restoreFailed = !workbench.ai.restoreCheckpoint(selected!!.id, recovery)
@@ -155,5 +156,5 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             catch (_: Exception) { restoreFailed = true }
             finally { loading = false }
             }
-        }) { Text(stringResource(R.string.ai_checkpoint_restore)) } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } })
+        }) { Text(stringResource(R.string.ai_checkpoint_restore)) } }, dismissButton = { WorkbenchDialogButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) } })
 }

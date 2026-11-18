@@ -162,12 +162,12 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
     }
     if (repair) WorkbenchAlertDialog(onDismissRequest = { repair = false }, title = { Text(stringResource(R.string.repair_packages)) },
         text = { Text(stringResource(R.string.repair_confirmation)) },
-        confirmButton = { TextButton(onClick = { repair = false; workbench.repairPackages() }) { Text(stringResource(R.string.run)) } },
-        dismissButton = { TextButton(onClick = { repair = false }) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { WorkbenchDialogButton(onClick = { repair = false; workbench.repairPackages() }) { Text(stringResource(R.string.run)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { repair = false }) { Text(stringResource(R.string.cancel)) } })
     dependency?.let { (id, plan) -> WorkbenchAlertDialog(onDismissRequest = { dependency = null }, title = { Text(stringResource(R.string.install_dependencies)) },
         text = { Text(stringResource(R.string.dependency_confirmation, "/workspace/$id", plan.command)) },
-        confirmButton = { TextButton(onClick = { dependency = null; workbench.installDependencies(id, plan) }) { Text(stringResource(R.string.run)) } },
-        dismissButton = { TextButton(onClick = { dependency = null }) { Text(stringResource(R.string.cancel)) } }) }
+        confirmButton = { WorkbenchDialogButton(onClick = { dependency = null; workbench.installDependencies(id, plan) }) { Text(stringResource(R.string.run)) } },
+        dismissButton = { WorkbenchDialogButton(onClick = { dependency = null }) { Text(stringResource(R.string.cancel)) } }) }
     selectedRun?.let { run -> project?.let { current ->
         ProjectRunLog(workbench, current.id, run, onAi) { selectedRun = null }
     } }

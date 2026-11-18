@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.TextUnit
 import dev.zakocoder.app.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -64,6 +65,7 @@ internal fun AiMarkdown(
     onOpenProjectPath: ((String) -> Unit)? = null,
     streaming: Boolean = false,
     onReadingInteraction: () -> Unit = {},
+    bodyFontSize: TextUnit = 12.sp,
     onLink: (String) -> Unit,
 ) {
     var document by remember { mutableStateOf(AiMarkdownCache.get(text.take(AiTextPages.MARKDOWN_LIMIT))) }
@@ -89,7 +91,7 @@ internal fun AiMarkdown(
                     blocks.forEachIndexed { index, block -> key(index, block.javaClass) {
                         ProcessArrival(live) {
                             CompositionLocalProvider(LocalTextArrival provides (live && index == blocks.lastIndex)) {
-                                MarkdownBlock(block, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction)
+                                MarkdownBlock(block, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction, bodyFontSize)
                             }
                         }
                     } }
@@ -108,26 +110,26 @@ internal fun AiMarkdown(
 
 @Composable
 private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, projectId: String?, onOpenProjectPath: ((String) -> Unit)?, streaming: Boolean,
-    sourceLimited: Boolean, onReadingInteraction: () -> Unit) {
+    sourceLimited: Boolean, onReadingInteraction: () -> Unit, bodyFontSize: TextUnit) {
     if (depth > 16) return
     val children = AiMarkdownDocument.children(node)
     when (node) {
         is Heading -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
-            fontSize = when (node.level) { 1 -> 18.sp; 2 -> 15.sp; else -> 13.sp }, lineHeight = 22.sp)
-        is org.commonmark.node.Paragraph -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontSize = 12.sp, lineHeight = 18.sp)
+            fontSize = (bodyFontSize.value + when (node.level) { 1 -> 6; 2 -> 3; else -> 1 }).sp, lineHeight = (bodyFontSize.value + 10).sp)
+        is org.commonmark.node.Paragraph -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontSize = bodyFontSize, lineHeight = bodyFontSize * 1.5f)
         is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40), streaming, sourceLimited, onReadingInteraction)
         is IndentedCodeBlock -> CodeBlock(node.literal, "", streaming, sourceLimited, onReadingInteraction)
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
             Surface(Modifier.width(3.dp).heightIn(min = 30.dp), color = MaterialTheme.colorScheme.primary) { }
             Column(Modifier.padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
+                children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction, bodyFontSize) }
             }
         }
         is BulletList, is OrderedList -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             children.forEachIndexed { index, item -> Row {
-                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = 12.sp)
+                Text(if (node is OrderedList) "${node.markerStartNumber + index}." else "•", Modifier.widthIn(min = 26.dp).padding(end = 8.dp), fontSize = bodyFontSize)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
+                    AiMarkdownDocument.children(item).forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction, bodyFontSize) }
                 }
             } }
         }
@@ -154,7 +156,7 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
                                 Surface(modifier = Modifier.width(widths[index] + extra).fillMaxHeight(),
                                     border = BorderStroke(.5.dp, MaterialTheme.colorScheme.outlineVariant),
                                     color = if (header) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
-                                    ArrivalText(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = 12.sp, lineHeight = 19.sp,
+                                    ArrivalText(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = bodyFontSize, lineHeight = (bodyFontSize.value + 7).sp,
                                         fontWeight = if (header) FontWeight.SemiBold else null)
                                 }
                             }
@@ -165,8 +167,8 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
                     Modifier.padding(top = 4.dp), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        is HtmlBlock -> Text(node.literal, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction) }
+        is HtmlBlock -> Text(node.literal, fontFamily = FontFamily.Monospace, fontSize = bodyFontSize)
+        else -> children.forEach { MarkdownBlock(it, onLink, depth + 1, projectId, onOpenProjectPath, streaming, sourceLimited, onReadingInteraction, bodyFontSize) }
     }
 }
 

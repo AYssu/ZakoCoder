@@ -40,7 +40,8 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
         finally { busy = false }
     }
     WorkbenchSheet(stringResource(R.string.git_credentials_title), { if (!busy) close() },
-        subtitle = stringResource(R.string.git_credentials_subtitle)) {
+        subtitle = stringResource(R.string.git_credentials_subtitle), dismissible = !busy) {
+        val finish = LocalWorkbenchSheetAction.current
         Column(Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -68,7 +69,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
                 scope.launch {
                     try {
                         withContext(Dispatchers.IO) { store.save(projectId, remoteUrl, username, token) }
-                        token = ""; onChanged(); close()
+                        finish { token = ""; onChanged() }
                     } catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { failed = true }
                     finally { busy = false }
@@ -84,7 +85,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
     if (confirmingRemoval) WorkbenchAlertDialog(onDismissRequest = { confirmingRemoval = false },
         title = { Text(stringResource(R.string.git_credentials_remove)) },
         text = { Text(stringResource(R.string.git_credentials_remove_help)) },
-        confirmButton = { TextButton(onClick = {
+        confirmButton = { WorkbenchDialogButton(onClick = {
             confirmingRemoval = false; busy = true; failed = false
             scope.launch {
                 try { withContext(Dispatchers.IO) { store.remove(projectId, remoteUrl) }; saved = false; token = ""; onChanged() }
@@ -93,5 +94,5 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
                 finally { busy = false }
             }
         }) { Text(stringResource(R.string.git_credentials_remove)) } },
-        dismissButton = { TextButton(onClick = { confirmingRemoval = false }) { Text(stringResource(R.string.cancel)) } })
+        dismissButton = { WorkbenchDialogButton(onClick = { confirmingRemoval = false }) { Text(stringResource(R.string.cancel)) } })
 }

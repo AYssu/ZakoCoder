@@ -87,8 +87,17 @@ fun ZakoCoderApp(workbench: Workbench) {
         shortcutPage = null
     }
     var searchConversations by rememberSaveable { mutableStateOf(false) }
-    var terminalId by rememberSaveable { mutableStateOf<String?>(null) }
-    var terminalOpen by rememberSaveable { mutableStateOf(false) }
+    var terminalReturnUtility by rememberSaveable { mutableStateOf<AppDestination?>(null) }
+    var terminalProjectId by rememberSaveable { mutableStateOf<String?>(null) }
+    fun openTerminal(projectId: String? = state.selectedId, sessionId: String? = null) {
+        focus.clearFocus(); keyboard?.hide()
+        terminalProjectId = projectId
+        utilityTerminalId = sessionId ?: state.sessions.lastOrNull { it.projectId == projectId }?.id
+        if (drawerUtility != AppDestination.Terminal) terminalReturnUtility = drawerUtility
+        drawerUtility = AppDestination.Terminal
+        if (utilityTerminalId == null && state.installed && !state.busy &&
+            state.projects.any { it.id == projectId } && state.sessions.size < 4) workbench.startTerminal(projectId)
+    }
     var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var workspaceId by rememberSaveable { mutableStateOf<String?>(null) }
     var drawerOpening by remember { mutableStateOf(false) }
@@ -196,7 +205,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                 focus.clearFocus(); keyboard?.hide()
                 modelsOpen = false; modelsAdd = false; extensionsOpen = false; shortcutPage = null
                 browserOpen = false; proxyOpen = false; updatesOpen = false; setupOpen = false
-                drawerUtility = null; openedProjectId = null; terminalOpen = false
+                drawerUtility = null; openedProjectId = null; utilityTerminalId = null
                 workspaceId = request.projectId; page = AppDestination.Ai
                 drawerState.close()
                 true
@@ -222,14 +231,14 @@ fun ZakoCoderApp(workbench: Workbench) {
         workbench.ackAssistantNavigation(request.requestId)
     }
     val inFiles = page == AppDestination.Project && state.projects.any { it.id == openedProjectId }
-    val inTerminal = page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()
-    var knownIds by remember { mutableStateOf(state.sessions.map { it.id }.toSet()) }
-    LaunchedEffect(state.sessions.map { it.id }) {
-        val newest = state.sessions.lastOrNull { it.id !in knownIds }
-        if (newest != null) terminalId = newest.id
-        else if (state.sessions.none { it.id == terminalId }) terminalId = state.sessions.lastOrNull()?.id
-        if (state.sessions.isEmpty()) terminalOpen = false
-        knownIds = state.sessions.map { it.id }.toSet()
+    val inTerminal = drawerUtility == AppDestination.Terminal
+    LaunchedEffect(page) {
+        // A restored legacy terminal destination now opens over the assistant, without a library.
+        if (page == AppDestination.Terminal) { page = AppDestination.Ai; openTerminal() }
+    }
+    LaunchedEffect(state.sessions.map { it.id }, terminalProjectId) {
+        if (state.sessions.none { it.id == utilityTerminalId })
+            utilityTerminalId = state.sessions.lastOrNull { it.projectId == terminalProjectId }?.id
     }
     LaunchedEffect(page, state.busy) {
         if (!state.busy && (page == AppDestination.Environment || page == AppDestination.Settings)) workbench.refreshStorage()
@@ -272,7 +281,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     CompositionLocalProvider(LocalWorkbenchDark provides dark, LocalMinimumInteractiveComponentSize provides 48.dp) {
     WorkbenchMiuixTheme(dark) {
-    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && !browserOpen && page != AppDestination.Project && page != AppDestination.Ai && !(page == AppDestination.Terminal && terminalOpen && state.sessions.isNotEmpty()) &&
+    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && !browserOpen && page != AppDestination.Project && page != AppDestination.Ai && !inTerminal &&
         !modelsOpen && !extensionsOpen && !updatesOpen && !proxyOpen && !drawerState.isOpen &&
         drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning && !setupOpen && !state.onboarding.required) {
         page = AppDestination.Ai
@@ -357,7 +366,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                 keyboard?.hide()
                 if (destination in listOf(AppDestination.Settings, AppDestination.Environment, AppDestination.Terminal)) {
                     if (drawerUtility != destination) utilityTerminalId = null
-                    drawerUtility = destination
+                    if (destination == AppDestination.Terminal) openTerminal() else drawerUtility = destination
                 } else {
                     drawerUtility = null
                     if (destination == AppDestination.Project) { openedProjectId = null; workspaceId = null; referencedPath = null }
@@ -375,35 +384,31 @@ fun ZakoCoderApp(workbench: Workbench) {
                             }
                         }
             drawerUtility?.let { destination ->
-                val terminalDetail = destination == AppDestination.Terminal &&
-                    state.sessions.any { it.id == utilityTerminalId }
+                val terminalDetail = destination == AppDestination.Terminal
                 val utilityBack = rememberWorkbenchBackMotion(resetKey = destination,
                     enabled = !overlayOpen && !updatesOpen && !proxyOpen && !setupOpen && !terminalDetail) {
                     drawerUtility = null; utilityTerminalId = null
                 }
                 CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!overlayOpen && !updatesOpen && !proxyOpen && !setupOpen)) {
                     Box(Modifier.fillMaxSize()) {
-                    WorkbenchRetainedPage(covered = terminalDetail || overlayOpen) {
+                    if (!terminalDetail || terminalReturnUtility != null) WorkbenchRetainedPage(covered = terminalDetail || overlayOpen) {
                     Surface(Modifier.fillMaxSize().then(utilityBack.modifier).then(if (overlayOpen) blockBackground else Modifier), color = MaterialTheme.colorScheme.background) {
                         Column(Modifier.fillMaxSize().padding(foregroundPadding)
                             .consumeWindowInsets(foregroundPadding).imePadding()) {
                             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
                                 IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
-                                Text(stringResource(destination.label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource((if (terminalDetail) terminalReturnUtility ?: destination else destination).label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) {
-                                when (destination) {
+                                when (if (terminalDetail) terminalReturnUtility else destination) {
                                     AppDestination.Settings -> settingsContent()
                                     AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) {
                                         EnvironmentPage(workbench, state,
-                                            onTerminal = { drawerUtility = AppDestination.Terminal },
+                                            onTerminal = { openTerminal() },
                                             onProjects = { drawerUtility = null; openedProjectId = null; page = AppDestination.Project },
                                             onAi = { drawerUtility = null; page = AppDestination.Ai })
                                     }
-                                    AppDestination.Terminal -> TerminalLibraryPage(workbench, state,
-                                        onOpen = { utilityTerminalId = it },
-                                        onEnvironment = { drawerUtility = AppDestination.Environment },
-                                        onProjects = { drawerUtility = null; page = AppDestination.Project })
+                                    AppDestination.Terminal -> Unit
                                     else -> Unit
                                 }
                             }
@@ -411,7 +416,9 @@ fun ZakoCoderApp(workbench: Workbench) {
                     }
                     }
                     if (terminalDetail) TerminalPage(workbench, state, utilityTerminalId,
-                        { utilityTerminalId = it }, { utilityTerminalId = null }, contentPadding = foregroundPadding)
+                        { utilityTerminalId = it }, { drawerUtility = terminalReturnUtility; terminalReturnUtility = null; utilityTerminalId = null },
+                        contentPadding = foregroundPadding, requestedProjectId = terminalProjectId,
+                        onEnvironment = { drawerUtility = AppDestination.Environment })
                     }
                 }
             }
@@ -448,7 +455,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     }
                 }
             }) {
-        Scaffold(containerColor = if (inTerminal) TerminalBackground else MaterialTheme.colorScheme.background,
+        Scaffold(containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.systemBars) { padding ->
             Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             // The assistant is a single retained composition, shared by foreground and back preview.
@@ -468,9 +475,9 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                         workspaceId = workbench.ai.state.value.projectId; openedProjectId = null; page = AppDestination.Project
                     }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onTerminal = { id ->
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
-                            focus.clearFocus(); keyboard?.hide(); terminalId = id; terminalOpen = true; page = AppDestination.Terminal
+                            openTerminal(workbench.ai.state.value.projectId, id)
                         }
-                    }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
+                    }, onOpenTerminals = { openTerminal(workbench.ai.state.value.projectId) }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
                         onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true },
                         onSkills = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "skill" },
                         onMcp = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "mcp" },
@@ -490,7 +497,7 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                         while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                     }
                 } else Modifier)) {
-                if (!inTerminal && !inFiles && page != AppDestination.Ai) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
+                if (!inFiles && page != AppDestination.Ai) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     IconButton(onClick = openNavigation, modifier = Modifier.size(48.dp)) {
                         WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open))
@@ -523,24 +530,9 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                         },
                         workspaceId = workspaceId, onWorkspace = { workspaceId = it },
                         backEnabled = !overlayOpen && !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning,
-                        referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); focus.clearFocus(); keyboard?.hide(); terminalOpen = false; page = AppDestination.Terminal })
-                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { terminalOpen = false; page = AppDestination.Terminal }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
-                    AppDestination.Terminal -> if (inTerminal) Box(Modifier.fillMaxSize()) {
-                        Column(Modifier.fillMaxSize().then(blockBackground)) {
-                            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {}) { WorkbenchIcon(Glyph.Menu) }
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
-                            }
-                            TerminalLibraryPage(workbench, state, onOpen = {}, onEnvironment = {}, onProjects = {})
-                        }
-                        TerminalPage(workbench, state, terminalId, { terminalId = it }, { terminalOpen = false })
-                    }
-                        else TerminalLibraryPage(workbench, state,
-                            onOpen = { terminalId = it; terminalOpen = true },
-                            onEnvironment = { page = AppDestination.Environment }, onProjects = { page = AppDestination.Project })
+                        referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); openTerminal(projectId) })
+                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { openTerminal() }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
+                    AppDestination.Terminal -> Unit
                     AppDestination.Ai -> Unit
                     AppDestination.Settings -> settingsContent()
                 }

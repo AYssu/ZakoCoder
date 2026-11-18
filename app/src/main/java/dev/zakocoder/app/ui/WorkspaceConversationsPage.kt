@@ -158,7 +158,7 @@ internal fun WorkspaceConversationsPage(workbench: Workbench, state: WorkbenchSt
     deleting?.let { id ->
         WorkbenchAlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.ai_history_delete)) },
             text = { Text(stringResource(R.string.ai_history_delete_detail)) },
-            confirmButton = { TextButton(enabled = mutable, onClick = { deleting = null; actionFailed = false; pendingId = "delete"; workbench.ai.deleteConversation(id) }) { Text(stringResource(R.string.ai_history_delete), color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
+            confirmButton = { WorkbenchDialogButton(enabled = mutable, onClick = { deleting = null; actionFailed = false; pendingId = "delete"; workbench.ai.deleteConversation(id) }) { Text(stringResource(R.string.ai_history_delete), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { WorkbenchDialogButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }

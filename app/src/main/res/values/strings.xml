@@ -74,7 +74,7 @@
     <string name="new_terminal">新建终端</string>
     <string name="close_terminal">关闭会话</string>
     <string name="terminal_exit">已退出 · 状态 %1$d</string>
-    <string name="ctrl_c">Ctrl+C</string>
+    <string name="terminal_slash_key">/</string>
     <string name="tab_key">Tab</string>
     <string name="escape_key">Esc</string>
     <string name="keyboard">键盘</string>
@@ -95,7 +95,7 @@
     <string name="directory_unreadable">无法读取工作目录，请刷新或重新导入项目。</string>
     <string name="repair_packages">修复中断的软件包配置</string>
     <string name="repair_confirmation" tools:ignore="TypographyDashes">将执行 dpkg --configure -a，完成上次中断的软件包配置，可能运行这些包的维护脚本。不会删除项目。若依赖本身缺失，请按日志在终端中处理。</string>
-    <string name="invalid_font">字体大小必须在 10–28 sp 之间。</string>
+    <string name="invalid_font">字体大小必须在 9–28 sp 之间。</string>
     <string name="invalid_path">附加 PATH 须为冒号分隔的 Linux 绝对路径，不能含换行或空路径项。</string>
     <string name="invalid_dns">请输入逗号分隔的 IPv4 地址，每段数字须在 0–255 之间。</string>
     <string name="invalid_proxy">代理格式须为 http://主机:端口 或 socks5://[用户名:密码@]主机:端口；SOCKS5 用户名与密码必须同时提供（可用百分号编码），HTTP 不支持凭据，也不支持其他路径参数。</string>
@@ -165,7 +165,6 @@
     <string name="path_help">使用 Linux 绝对路径，多个路径用冒号分隔。新建会话后生效。</string>
     <string name="dns_help">逗号分隔多个 IPv4 地址，保存后应用于运行环境。</string>
     <string name="proxy_help">支持 HTTP 或 SOCKS5 代理，留空即可关闭。HTTP 代理不支持用户名和密码。</string>
-    <string name="back_to_terminals">返回终端列表</string>
     <string name="terminal_library_empty">还没有终端</string>
     <string name="terminal_library_help">在工作区目录中运行命令、构建或启动服务。返回此页会保留会话和输出。</string>
     <string name="terminal_choose_project">选择工作区，终端将在其源码目录启动。</string>
@@ -211,7 +210,6 @@
     <string name="session_failed">异常退出</string>
     <string name="project_session_count">已有 %1$d 个会话</string>
     <string name="terminal_shell_help">使用设置中选择的 Shell，在工作区目录启动。</string>
-    <string name="session_minutes">%1$d 分钟</string>
     <string name="terminal_actions">终端操作</string>
     <string name="terminal_close_hint">长按会话可关闭，也可在终端操作菜单中关闭。</string>
     <string name="runtime_architecture">%1$s · 本地环境</string>
