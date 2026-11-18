@@ -199,9 +199,10 @@ private fun TerminalSystemBars() {
         controller?.apply {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            show(WindowInsetsCompat.Type.statusBars())
-            hide(WindowInsetsCompat.Type.navigationBars())
+            // Immersive navigation consumes the first Back on Android 15 to reveal bars.
+            // Keep the black navigation safe area visible so Back always reaches the page.
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            show(WindowInsetsCompat.Type.systemBars())
         }
         if (android.os.Build.VERSION.SDK_INT >= 29) window?.isNavigationBarContrastEnforced = false
         onDispose {

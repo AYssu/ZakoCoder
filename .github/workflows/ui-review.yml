@@ -61,6 +61,8 @@ jobs:
           adb -s emulator-5554 shell wm size 1080x2400
           adb -s emulator-5554 shell wm density 440
           adb -s emulator-5554 shell input keyevent 82
+          # Injected key events expose a hardware keyboard; still exercise phone IME layouts.
+          adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 1
       - name: Verify navigation and streaming, capture both themes
         run: |
           set -euo pipefail

@@ -178,7 +178,12 @@ class EditorUpdatePolishDeviceTest {
                         val symbol = all.first { text(it) == context.getString(R.string.editor_indent_key) }
                         assertTrue("Editor symbols clear the navigation bar", symbol.boundsInWindow.bottom <= root.height - barBottom + 1)
                     }
-                    instrumentation.runOnMainSync { mounted.requestFocus(); mounted.showSoftInput() }
+                    instrumentation.runOnMainSync {
+                        // Injected Android key events can expose a hardware keyboard on AOSP.
+                        // This fixture verifies the phone's software-keyboard layout explicitly.
+                        mounted.setDisableSoftKbdIfHardKbdAvailable(false)
+                        mounted.requestFocus(); mounted.showSoftInput()
+                    }
                     await("keyboard visible") {
                         var visible = false
                         instrumentation.runOnMainSync { visible = ViewCompat.getRootWindowInsets(mounted.rootView)?.isVisible(WindowInsetsCompat.Type.ime()) == true }

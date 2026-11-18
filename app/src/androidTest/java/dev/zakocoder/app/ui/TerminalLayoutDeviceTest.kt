@@ -217,6 +217,9 @@ class TerminalLayoutDeviceTest {
                     await("system clock and status indicators stay visible") {
                         main { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.statusBars()) == true }
                     }
+                    assertTrue("navigation remains visible so one Back reaches the page", main {
+                        ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.navigationBars()) == true
+                    })
                     capture("terminal-${if (dark) "night" else "day"}")
                     click(R.string.control_key)
                     assertTrue(host.terminal.modifiers.value.control)
@@ -241,10 +244,17 @@ class TerminalLayoutDeviceTest {
                     await("back dismisses menu without leaving terminal") { terminal(scenario) != null && nodes { it.none { node -> matches(node, R.string.terminal_preview) } } }
                     click(R.string.switch_terminals)
                     await("session sheet visible") { nodes { it.any { node -> matches(node, R.string.terminal_close_hint) } } }
-                    fun selectSession(number: Int) = nodes { all ->
-                        var node: SemanticsNode? = all.last { it.config.getOrNull(SemanticsProperties.Text)?.any { value -> value.text == base.getString(R.string.terminal_number, number) } == true }
-                        while (node != null && !node.config.contains(SemanticsActions.OnClick)) node = node.parent
-                        assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+                    suspend fun selectSession(number: Int) {
+                        val selectionWindow = modalWindow(R.string.terminal_close_hint)
+                        nodes { all ->
+                            var node: SemanticsNode? = all.last { it.config.getOrNull(SemanticsProperties.Text)?.any { value -> value.text == base.getString(R.string.terminal_number, number) } == true }
+                            while (node != null && !node.config.contains(SemanticsActions.OnClick)) node = node.parent
+                            assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
+                        }
+                        // Native PTY attachment can precede the sheet window's removal by a frame.
+                        await("session selection window fully closes before another action") {
+                            main { !selectionWindow.isAttachedToWindow }
+                        }
                     }
                     selectSession(alternate.number)
                     await("switch attaches the other PTY") { terminal(scenario)?.currentSession === alternate.session }
@@ -253,8 +263,11 @@ class TerminalLayoutDeviceTest {
                     await("session sheet reopened") { nodes { it.any { node -> matches(node, R.string.terminal_close_hint) } } }
                     selectSession(first.number)
                     await("switch restores original PTY") { terminal(scenario)?.currentSession === first.session }
+                    await("terminal window regains focus after session selection") { main { view.hasWindowFocus() } }
+                    val imeBeforeBack = main { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) }
+                    capture("terminal-before-back-${if (dark) "night" else "day"}")
                     instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-                    await("one back returns directly to assistant") { terminal(scenario) == null && nodes { it.any { node -> matches(node, R.string.ai_more) } } }
+                    await("one back returns directly to assistant; IME before Back=$imeBeforeBack") { terminal(scenario) == null && nodes { it.any { node -> matches(node, R.string.ai_more) } } }
                     assertEquals(conversation, host.ai.state.value.conversationId)
                     assertTrue(first.session.isRunning)
                     click(R.string.ai_switch_model)

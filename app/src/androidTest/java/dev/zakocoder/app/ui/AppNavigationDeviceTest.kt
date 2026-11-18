@@ -71,7 +71,12 @@ class AppNavigationDeviceTest {
     private fun await(label: String, timeout: Long = 20_000, predicate: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + timeout
         while (!predicate()) {
-            if (SystemClock.uptimeMillis() >= deadline) throw AssertionError(label)
+            if (SystemClock.uptimeMillis() >= deadline) {
+                capture("failed-wait")
+                throw AssertionError("$label; visible labels=" + nodes { all -> all.filter(::visible).mapNotNull {
+                    it.config.getOrNull(SemanticsProperties.Text)?.joinToString { text -> text.text }
+                }.distinct().joinToString(" | ") })
+            }
             Thread.sleep(30)
         }
     }
