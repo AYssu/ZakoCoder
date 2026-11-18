@@ -50,14 +50,31 @@ class Device:
         self.last_xml = self.shell('cat', '/sdcard/zako-beta-smoke.xml')
         return ET.fromstring(self.last_xml)
 
-    def find(self, label, *, click=False, scroll=False, timeout=45, description_only=False):
+    def find(self, label, *, click=False, scroll=False, timeout=45, description_only=False,
+             editable=False, focused=False):
         until = time.monotonic() + timeout
         while time.monotonic() < until:
             tree = self.dump()
             matches = [n for n in tree.iter('node') if
                        label in ((n.get('content-desc'),) if description_only else (n.get('text'), n.get('content-desc')))
                        and n.get('enabled') == 'true']
+            targets = []
             for node in matches:
+                if not editable:
+                    targets.append(node)
+                    continue
+                visible = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+                # Compose can expose a field's label beside its EditText in the
+                # accessibility tree. Associate their visible bounds, not ancestry.
+                for editor in tree.iter('node'):
+                    rect = list(map(int, re.findall(r'\d+', editor.get('bounds', ''))))
+                    if (editor.get('class') == 'android.widget.EditText' and editor.get('enabled') == 'true'
+                            and (not focused or editor.get('focused') == 'true')
+                            and len(visible) == len(rect) == 4
+                            and visible[0] <= rect[0] < rect[2] <= visible[2]
+                            and visible[1] <= rect[1] < rect[3] <= visible[3]):
+                        targets.append(editor)
+            for node in targets:
                 rect = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
                 if len(rect) != 4 or rect[2] <= rect[0] or rect[3] <= rect[1]:
                     continue
@@ -81,12 +98,16 @@ class Device:
     def click(self, resource, **kwargs):
         return self.find(self.labels.get(resource, resource), click=True, **kwargs)
 
-    def navigate(self, resource):
-        self.click('app_navigation_open', description_only=True)
+    def navigate(self, resource, *, from_utility=False):
+        # Settings/environment cover the retained drawer. Their public Close
+        # action restores that drawer; only primary pages expose Open navigation.
+        self.click('close' if from_utility else 'app_navigation_open', description_only=True)
         return self.click(resource)
 
     def text(self, resource, value, scroll=False):
-        self.click(resource, scroll=scroll)
+        label = self.labels.get(resource, resource)
+        self.find(label, click=True, scroll=scroll, editable=True)
+        self.find(label, editable=True, focused=True, timeout=5)
         self.shell('input', 'keycombination', 113, 29)  # Ctrl+A
         self.shell('input', 'keyevent', 67)
         self.shell('input', 'text', value)
@@ -136,8 +157,8 @@ def complete_onboarding(device, report):
     report['checks'].append('first-run-setup-completed-without-optional-downloads')
 
 
-def open_workspace_files(device, project):
-    device.navigate('drawer_manage_workspaces')
+def open_workspace_files(device, project, *, from_utility=False):
+    device.navigate('drawer_manage_workspaces', from_utility=from_utility)
     device.find(project)
     device.click('workspace_flow_open')
     device.click('workspace_threads_files')
@@ -154,7 +175,7 @@ def prepare_full_environment(device, edition, report):
         device.find(device.labels['bundle_ready'], scroll='up', timeout=180)
     report['checks'].append('full-bundled-ubuntu-ready-through-real-ui')
     device.shot('environment-ready')
-    device.navigate('drawer_manage_workspaces')
+    device.navigate('drawer_manage_workspaces', from_utility=True)
 
 
 def validate_edition_switch(original, alternate, aapt):
@@ -184,7 +205,7 @@ def verify_edition_switch(device, apk, project, marker, profile, report):
     device.click('ai_settings', scroll=True)
     device.saved_model_card(profile)
     device.click('ai_models_back')
-    open_workspace_files(device, project)
+    open_workspace_files(device, project, from_utility=True)
     device.click('main.py')
     device.dump()
     if marker not in device.last_xml:
@@ -303,7 +324,7 @@ def run(args):
         time.sleep(1)
         device.shot('models-day')
         device.click('ai_models_back')
-        open_workspace_files(device, name)
+        open_workspace_files(device, name, from_utility=True)
         device.click('main.py')
         device.dump()
         if marker not in device.last_xml:
