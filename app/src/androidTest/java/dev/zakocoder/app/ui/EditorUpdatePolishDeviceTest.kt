@@ -24,6 +24,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
+import dev.zakocoder.app.test.R as TestR
 import dev.zakocoder.app.editor.EditorController
 import dev.zakocoder.app.projects.ProjectRepository
 import dev.zakocoder.app.updates.*
@@ -210,7 +211,7 @@ class EditorUpdatePolishDeviceTest {
                     instrumentation.runOnMainSync { view.setSelection(1, 1) }
                     click(context.getString(R.string.editor_file_actions))
                     await("compact editing menu") { has(context.getString(R.string.editor_uppercase_line)) }
-                    assertFalse(has(context.getString(R.string.editor_disk_check)))
+                    assertFalse(has(instrumentation.context.getString(TestR.string.editor_disk_check)))
                     assertFalse(has(context.getString(R.string.editor_reload)))
                     capture("editor-menu-${if (dark) "night" else "day"}")
                     click(context.getString(R.string.editor_select_line))

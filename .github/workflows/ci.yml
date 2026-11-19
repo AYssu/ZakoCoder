@@ -67,6 +67,10 @@ jobs:
           python3 native-runtime/checks/verify.py native-runtime/prebuilt/arm64-v8a
           python3 native-runtime/checks/verify.py native-runtime/prebuilt/x86_64 --abi x86_64
       - run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:testDebugUnitTest :terminal-emulator:testDebugUnitTest --stacktrace
+      - name: Check Release Lint before publication
+        run: |
+          base_version=$(sed -n 's/^baseVersion=//p' gradle.properties)
+          ./gradlew :app:lintRelease -PbetaRelease=true -PbetaVersion="$base_version" -PbetaVersionCode=1 --stacktrace
       - name: Check all four distribution builds and actual package inventories
         env:
           BUILD_VERSION: ${{ steps.version.outputs.version }}

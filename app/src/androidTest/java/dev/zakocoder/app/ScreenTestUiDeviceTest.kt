@@ -168,10 +168,10 @@ UI-only fixture: no real app or task was started."""
                 assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_no_project)))
                 assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_choose_apk)))
                 assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_allow_install)))
-                assertFalse(has(context.getString(R.string.screen_test_access)))
-                assertFalse(has(context.getString(R.string.screen_test_enable_service)))
-                assertFalse(has(context.getString(R.string.screen_overlay_title)))
-                assertFalse(has(context.getString(R.string.screen_overlay_open_settings)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_access)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_enable_service)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_overlay_title)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_overlay_open_settings)))
             }
             panel(VirtualScreenTaskUiModel())
             await("Task guidance without workspace or APK") { has(context.getString(R.string.screen_test_idle)) }

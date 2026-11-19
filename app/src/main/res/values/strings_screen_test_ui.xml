@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="screen_test_development_group">开发能力</string>
-    <string name="screen_test_enable_service">开启屏幕交互</string>
     <string name="screen_test_run">测试记录</string>
     <string name="screen_test_idle">在助手中描述需要操作的流程。首次调用会请求任务授权；结果以实际观察和操作记录为准。</string>
     <string name="screen_test_stop">停止并撤销本次授权</string>
@@ -9,7 +8,6 @@
     <string name="screen_test_report_title">屏幕操作记录</string>
     <string name="screen_test_report_loading">正在读取报告…</string>
     <string name="screen_test_report_empty">暂无操作记录。任务完成或停止后可查看实际结果。</string>
-    <string name="screen_test_access">操作方式</string>
     <string name="screen_test_share_confirm_title">分享虚拟屏幕截图？</string>
     <string name="screen_test_share_confirm_body">本次任务捕获的虚拟屏幕画面将发送到你配置的模型服务，可能包含所调试应用的数据。请确认模型支持图片输入。停止或任务结束后自动关闭分享。</string>
     <string name="screen_test_share_confirm_action">允许本次任务</string>

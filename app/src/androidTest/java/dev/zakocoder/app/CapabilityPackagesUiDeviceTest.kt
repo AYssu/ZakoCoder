@@ -187,29 +187,29 @@ class CapabilityPackagesUiDeviceTest {
                     { trusted.set(true) }, { forgotten.set(true) }, {}) }
             }
             packages(CapabilityPackagesUiModel())
-            await("Global screen available without workspace") { has(context.getString(R.string.capability_screen_title)) }
+            await("Global screen available without workspace") { has(context.getString(R.string.virtual_screen_title)) }
             assertFalse(has(instrumentation.context.getString(TestR.string.capability_packages_no_project)))
             nodes { all ->
                 val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
-                assertEquals(2, switches.size)
-                assertNull(switches.first().config.getOrNull(SemanticsProperties.Disabled))
+                assertEquals(4, switches.size)
+                switches.take(3).forEach { assertNull(it.config.getOrNull(SemanticsProperties.Disabled)) }
                 assertNotNull(switches.last().config.getOrNull(SemanticsProperties.Disabled))
             }
             capture(dark, "no-project")
-            packages(CapabilityPackagesUiModel(projectName = "Screen test fixture", hasProject = true))
-            await("Both packages default off") { has(context.getString(R.string.capability_screen_title)) }
+            packages(CapabilityPackagesUiModel(projectName = "Screen test fixture", hasProject = true, rootReady = true))
+            await("All packages default off") { has(context.getString(R.string.virtual_screen_title)) }
             nodes { all ->
                 val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
-                assertEquals(2, switches.size)
+                assertEquals(4, switches.size)
                 switches.forEach { assertEquals(androidx.compose.ui.state.ToggleableState.Off,
                     it.config.getOrNull(SemanticsProperties.ToggleableState)) }
-                assertTrue(switches.first().config[SemanticsActions.OnClick].action?.invoke() == true)
+                assertTrue(switches[1].config[SemanticsActions.OnClick].action?.invoke() == true)
                 assertTrue(switches.last().config[SemanticsActions.OnClick].action?.invoke() == true)
             }
             assertTrue(screen.get()); assertTrue(ssh.get())
             capture(dark, "packages-default-off-360-font130")
             packages(CapabilityPackagesUiModel("Screen test fixture", true, screenEnabled = true, sshEnabled = true))
-            val screenConfigure = context.getString(R.string.capability_screen_configure)
+            val screenConfigure = context.getString(R.string.virtual_screen_configure)
             reveal(screenConfigure); click(screenConfigure); assertTrue(details.get())
             capture(dark, "screen-enabled")
             val sshConfigure = context.getString(R.string.capability_ssh_configure)
