@@ -3,11 +3,14 @@ package dev.zakocoder.app.ui
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.SystemClock
+import android.view.MotionEvent
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.runtime.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.state.ToggleableState
@@ -18,9 +21,11 @@ import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.capabilities.CapabilityPackage
 import dev.zakocoder.app.capabilities.CapabilityPackages
+import dev.zakocoder.app.device.DeviceMode
 import dev.zakocoder.app.warmDeviceActivity
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.*
 import org.junit.Test
@@ -74,14 +79,120 @@ class CapabilitySelectionDeviceTest {
         return result.get()
     }
 
+    private fun controlDiagnostics(label: String): String {
+        val result = AtomicReference("")
+        instrumentation.runOnMainSync {
+            val matches = mutableListOf<String>()
+            fun walk(node: SemanticsNode, labelled: Boolean = false) {
+                val matchesLabel = node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
+                    node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+                if (labelled || matchesLabel) {
+                    matches += "bounds=${node.boundsInWindow}, parent=${node.parent?.boundsInWindow}, " +
+                        "toggle=${node.config.getOrNull(SemanticsProperties.ToggleableState)}, " +
+                        "disabled=${node.config.getOrNull(SemanticsProperties.Disabled)}, " +
+                        "click=${node.config.getOrNull(SemanticsActions.OnClick) != null}"
+                }
+                node.children.forEach { walk(it, labelled || matchesLabel) }
+            }
+            fun visit(view: android.view.View) {
+                if (!view.isShown) return
+                if (view is ViewRootForTest) walk(view.semanticsOwner.unmergedRootSemanticsNode)
+                if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
+            }
+            android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
+            result.set(matches.joinToString("; "))
+        }
+        return result.get()
+    }
+
+    /** Touch the native toggle, after accessibility scrolling has actually settled. */
+    private fun tapSwitch(label: String) {
+        ui.reveal(label)
+        fun bounds(reveal: Boolean = false): Rect? {
+            val result = AtomicReference<Rect?>()
+            instrumentation.runOnMainSync {
+                var target: SemanticsNode? = null
+                fun walk(node: SemanticsNode, labelled: Boolean = false) {
+                    val matches = labelled || node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+                    if (matches && node.config.getOrNull(SemanticsProperties.ToggleableState) != null &&
+                        node.config.getOrNull(SemanticsActions.OnClick) != null &&
+                        node.config.getOrNull(SemanticsProperties.Disabled) == null) {
+                        target = node
+                    }
+                    node.children.forEach { walk(it, matches) }
+                }
+                fun visit(view: android.view.View) {
+                    if (!view.isShown) return
+                    if (view is ViewRootForTest) walk(view.semanticsOwner.unmergedRootSemanticsNode)
+                    if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
+                }
+                android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
+                val toggle = target ?: return@runOnMainSync
+                val visible = toggle.boundsInWindow
+                if (visible.width > 0 && visible.height > 0 &&
+                    visible.width >= toggle.size.width * .95f && visible.height >= toggle.size.height * .95f) {
+                    result.set(visible)
+                } else if (reveal) {
+                    val scroll = generateSequence(toggle.parent) { it.parent }.firstOrNull {
+                        it.config.getOrNull(SemanticsActions.ScrollBy) != null &&
+                            it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null
+                    } ?: error("No native toggle scroll ancestor: $label")
+                    // The label wrapper can retain a 3px sliver while the toggle
+                    // is completely clipped. Use the real, unclipped layout position.
+                    val centerY = toggle.layoutInfo.coordinates.localToWindow(Offset.Zero).y + toggle.size.height / 2f
+                    assertTrue("Scroll actual toggle into viewport: $label",
+                        scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, centerY - scroll.boundsInWindow.center.y) == true)
+                }
+            }
+            return result.get()
+        }
+        for (attempt in 0 until 12) {
+            if (bounds(reveal = true) != null) break
+            SystemClock.sleep(250)
+        }
+        var previous: Rect? = null
+        var stationarySince = SystemClock.uptimeMillis()
+        var target: Rect? = null
+        val samples = ArrayDeque<String>()
+        var missing = 0
+        var changed = 0
+        try {
+            ui.await("Stable native toggle: $label") {
+                val current = bounds()
+                if (current == null) missing++
+                if (current != previous) changed++
+                if (current == null || current != previous) stationarySince = SystemClock.uptimeMillis()
+                previous = current
+                target = current
+                samples.addLast("${SystemClock.uptimeMillis()}:$current")
+                if (samples.size > 8) samples.removeFirst()
+                current != null && SystemClock.uptimeMillis() - stationarySince >= 350
+            }
+        } catch (failure: IllegalStateException) {
+            ui.capture("capability-selection/failed-stable-native-toggle")
+            error("${failure.message}; missing=$missing, changed=$changed, recent=$samples; control=[${controlDiagnostics(label)}]")
+        }
+        // A label or its decorative thumb can have their own semantics; neither is
+        // the independent toggle's hit box. Keep real input rather than OnClick invocation.
+        val center = requireNotNull(target).center
+        val time = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, center.x, center.y, 0)
+        val up = MotionEvent.obtain(time, time + 40, MotionEvent.ACTION_UP, center.x, center.y, 0)
+        try {
+            assertTrue(instrumentation.uiAutomation.injectInputEvent(down, true))
+            assertTrue(instrumentation.uiAutomation.injectInputEvent(up, true))
+        } finally { down.recycle(); up.recycle() }
+    }
+
     @Test(timeout = 90_000) fun lightConfigurationButtonsStayAvailableDuringOtherPackageSaves() = verifyConfigurationButtons(false)
     @Test(timeout = 90_000) fun darkConfigurationButtonsStayAvailableDuringOtherPackageSaves() = verifyConfigurationButtons(true)
 
     private fun verifyConfigurationButtons(dark: Boolean) {
         warmDeviceActivity()
-        var model by mutableStateOf(CapabilityPackagesUiModel(hasProject = true, screenEnabled = true))
+        // Root availability is presentation-only here: no controller or shell is authorized.
+        var model by mutableStateOf(CapabilityPackagesUiModel(hasProject = true, screenEnabled = true, rootReady = true))
         val details = java.util.concurrent.atomic.AtomicInteger()
-        val screenConfigure = context.getString(R.string.capability_screen_configure)
+        val screenConfigure = context.getString(R.string.virtual_screen_configure)
         val sshConfigure = context.getString(R.string.capability_ssh_configure)
         val sshTitle = context.getString(R.string.capability_ssh_title)
         val browserTitle = context.getString(R.string.browser_title)
@@ -102,7 +213,8 @@ class CapabilitySelectionDeviceTest {
                     }
                 }
             }
-            ui.await("Screen configuration ready") { controlEnabled(screenConfigure) == true }
+            ui.reveal(screenConfigure)
+            ui.await("Virtual screen configuration ready") { controlEnabled(screenConfigure) == true }
             ui.capture("capability-buttons/$mode-idle")
             ui.tap(sshTitle)
             ui.await("SSH save in progress") { model.busy && model.sshEnabled }
@@ -141,9 +253,10 @@ class CapabilitySelectionDeviceTest {
         warmDeviceActivity()
         val token = "capability-selection-${UUID.randomUUID()}"
         val root = File(context.cacheDir, token).apply { mkdirs() }
-        val preferences = mutableSetOf<String>()
+        val preferences = ConcurrentHashMap.newKeySet<String>()
         val base = context
         val isolated = object : ContextWrapper(base) {
+            override fun getApplicationContext(): Context = this
             override fun getFilesDir() = File(root, "files").apply { mkdirs() }
             override fun getNoBackupFilesDir() = File(root, "private").apply { mkdirs() }
             override fun getCacheDir() = File(root, "cache").apply { mkdirs() }
@@ -156,14 +269,26 @@ class CapabilitySelectionDeviceTest {
         try {
             instrumentation.runOnMainSync { host = Workbench(isolated) }
             val workbench = requireNotNull(host)
-            ui.await("Fresh workbench") { !workbench.state.value.loading && workbench.capabilityPackages.state.value.loaded }
+            ui.await("Fresh Basic workbench") {
+                !workbench.state.value.loading && workbench.capabilityPackages.state.value.loaded &&
+                    workbench.deviceAccess.state.value.loaded
+            }
+            assertEquals(DeviceMode.Basic, workbench.deviceAccess.state.value.mode)
+            assertFalse(workbench.deviceAccess.state.value.rootGranted)
             instrumentation.runOnMainSync { workbench.create("Capability selection fixture") }
             ui.await("Fixture workspace") { !workbench.state.value.busy && workbench.state.value.projects.size == 1 }
             val id = workbench.state.value.projects.single().id
             var generation by mutableIntStateOf(0)
             var dark by mutableStateOf(false)
-            val labels = listOf(R.string.capability_screen_title, R.string.capability_ssh_title, R.string.browser_title)
-                .map(context::getString)
+            // Explicit keys prevent a new capability or a different visual order from
+            // silently pairing a switch label with the wrong persisted selection.
+            val labels = linkedMapOf(
+                CapabilityPackage.DeviceShell to context.getString(R.string.capability_device_shell_title),
+                CapabilityPackage.Screen to context.getString(R.string.virtual_screen_title),
+                CapabilityPackage.Browser to context.getString(R.string.browser_title),
+                CapabilityPackage.Ssh to context.getString(R.string.capability_ssh_title),
+            )
+            assertEquals(CapabilityPackage.entries.toSet(), labels.keys)
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 scenario.onActivity { activity -> activity.setContent {
                     WorkbenchMiuixTheme(dark) {
@@ -172,7 +297,7 @@ class CapabilitySelectionDeviceTest {
                     }
                 } }
                 fun assertSelection(expected: Set<CapabilityPackage>) {
-                    CapabilityPackage.entries.zip(labels).forEach { (kind, label) ->
+                    labels.forEach { (kind, label) ->
                         ui.reveal(label)
                         ui.await("Rendered independent state: $kind = ${kind in expected}") {
                             switchState(label) == if (kind in expected) ToggleableState.On else ToggleableState.Off
@@ -180,20 +305,59 @@ class CapabilitySelectionDeviceTest {
                     }
                     assertEquals(expected, workbench.capabilityPackages.snapshot(id).keys)
                 }
-                fun tap(index: Int) {
-                    ui.tap(labels[index])
+                fun tap(kind: CapabilityPackage, expectChange: Boolean = true) {
+                    val label = labels.getValue(kind)
+                    ui.reveal(label)
+                    val previous = workbench.capabilityPackages.enabled(id, kind)
+                    val before = controlDiagnostics(label)
+                    tapSwitch(label)
                     ui.await("Selection saved") { !workbench.capabilityPackages.state.value.busy }
+                    if (expectChange) try {
+                        ui.await("Touch toggles stored $kind selection") {
+                            workbench.capabilityPackages.enabled(id, kind) != previous
+                        }
+                    } catch (failure: IllegalStateException) {
+                        val state = workbench.capabilityPackages.state.value
+                        ui.capture("capability-selection/failed-$kind-touch")
+                        error("$kind touch did not toggle stored selection; before=$previous, " +
+                            "stored=${workbench.capabilityPackages.snapshot(id).keys}, busy=${state.busy}, error=${state.error}; " +
+                            "before control=[$before]; after control=[${controlDiagnostics(label)}]; ${failure.message}")
+                    }
                 }
                 assertSelection(emptySet())
-                tap(0)
-                // Before the fix the store becomes true, but this first switch stays visually off.
+
+                // Production Basic bindings must open permissions rather than granting
+                // virtual-screen availability merely because its switch was touched.
+                tap(CapabilityPackage.Screen, expectChange = false)
+                ui.await("Basic virtual-screen enable opens permissions") { ui.has(R.string.device_mode_basic) }
+                assertFalse(workbench.capabilityPackages.state.value.screenEnabled)
+                assertFalse(workbench.virtualScreen.state.value.active)
+                assertEquals(DeviceMode.Basic, workbench.deviceAccess.state.value.mode)
+                ui.click(R.string.close)
+                ui.await("Return from Root gate retains capability page") {
+                    !ui.has(R.string.device_mode_basic) && ui.has(R.string.virtual_screen_title)
+                }
+                assertSelection(emptySet())
+
+                // Seed only the stored switch to cover presenting and disabling an
+                // existing preference on a non-Root emulator. This is neither a Root
+                // grant nor a virtual-display/task authorization or execution fixture.
+                instrumentation.runOnMainSync { workbench.capabilityPackages.setScreenEnabled(true) }
+                ui.await("Seeded screen selection saved") { !workbench.capabilityPackages.state.value.busy }
+                ui.reveal(labels.getValue(CapabilityPackage.Screen))
+                // Before the original fix the store became true while this switch stayed off.
                 ui.await("Screen switch must immediately reflect saved selection") {
-                    switchState(labels[0]) == ToggleableState.On
+                    switchState(labels.getValue(CapabilityPackage.Screen)) == ToggleableState.On
                 }
                 assertSelection(setOf(CapabilityPackage.Screen))
-                tap(1)
-                assertSelection(setOf(CapabilityPackage.Screen, CapabilityPackage.Ssh))
-                tap(0); tap(1); tap(2)
+                tap(CapabilityPackage.DeviceShell)
+                assertSelection(setOf(CapabilityPackage.Screen, CapabilityPackage.DeviceShell))
+                tap(CapabilityPackage.Ssh)
+                assertSelection(setOf(CapabilityPackage.Screen, CapabilityPackage.DeviceShell, CapabilityPackage.Ssh))
+                tap(CapabilityPackage.Screen)
+                tap(CapabilityPackage.Ssh)
+                tap(CapabilityPackage.DeviceShell)
+                tap(CapabilityPackage.Browser)
                 assertSelection(setOf(CapabilityPackage.Browser))
                 for (night in listOf(false, true)) {
                     scenario.onActivity { ui.configureSystemBars(it, night) }
@@ -202,7 +366,7 @@ class CapabilitySelectionDeviceTest {
                     assertSelection(setOf(CapabilityPackage.Browser))
                     ui.scrollTop()
                     ui.capture("capability-selection/${if (night) "night" else "day"}-browser-only-top")
-                    ui.reveal(labels[2])
+                    ui.reveal(labels.getValue(CapabilityPackage.Browser))
                     ui.capture("capability-selection/${if (night) "night" else "day"}-browser-only-bottom")
                 }
                 lateinit var reloaded: CapabilityPackages
@@ -211,11 +375,12 @@ class CapabilitySelectionDeviceTest {
                 assertEquals(setOf(CapabilityPackage.Browser), reloaded.snapshot(id).keys)
                 assertFalse(reloaded.enabled(id, CapabilityPackage.Screen))
                 assertFalse(reloaded.enabled(id, CapabilityPackage.Ssh))
+                assertFalse(reloaded.enabled(id, CapabilityPackage.DeviceShell))
                 // Disable browser, then re-enable and disable each other capability independently.
-                tap(2)
-                for (index in labels.indices) {
-                    tap(index); assertSelection(setOf(CapabilityPackage.entries[index]))
-                    tap(index); assertSelection(emptySet())
+                tap(CapabilityPackage.Browser)
+                for (kind in labels.keys.filter { it != CapabilityPackage.Screen }) {
+                    tap(kind); assertSelection(setOf(kind))
+                    tap(kind); assertSelection(emptySet())
                 }
             }
         } finally {
