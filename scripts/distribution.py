@@ -40,7 +40,7 @@ def inspect(apk, edition, abi, aapt, signer, release=True):
         raise ValueError("Distribution must not embed a separate plugin APK")
     marker = json.loads(entries.get('assets/distribution.json', b'{}'))
     if (marker.get('edition') != edition or marker.get('abis') != [abi] or
-            marker.get('bundledRootfs') is not (edition == 'full') or marker.get('bundledKernel') is not (edition == 'full')):
+            marker.get('bundledRootfs') is not (edition == 'full')):
         raise ValueError('Packaged distribution marker differs from the artifact name')
     root = Path(__file__).resolve().parents[1]
     runtime = json.loads((root / 'runtime/artifacts.json').read_text())
@@ -51,19 +51,17 @@ def inspect(apk, edition, abi, aapt, signer, release=True):
             raise ValueError('Packaged runtime differs from the pinned source build')
     rootfs_names = {n for n in entries if n.startswith('assets/ubuntu-rootfs/')}
     kernel_names = {n for n in entries if n.endswith('/libzakocoder_xray.so')}
+    if kernel_names:
+        raise ValueError('Removed proxy kernels must not be packaged')
     if edition == 'full':
         rootfs_name = f'assets/ubuntu-rootfs/{abi}.tar.xz'
-        kernel_name = f'lib/{abi}/libzakocoder_xray.so'
-        if rootfs_names != {rootfs_name} or kernel_names != {kernel_name}:
-            raise ValueError('Full must bundle exactly its own Ubuntu and kernel ABI')
+        if rootfs_names != {rootfs_name}:
+            raise ValueError('Full must bundle exactly its own Ubuntu ABI')
         rootfs = target['rootfs']
         if len(entries[rootfs_name]) != rootfs['bytes'] or hashlib.sha256(entries[rootfs_name]).hexdigest() != rootfs['sha256']:
             raise ValueError('Bundled Ubuntu does not match its pinned rootfs')
-        kernel = json.loads((root / 'native-kernel/artifacts.lock.json').read_text())
-        if hashlib.sha256(entries[kernel_name]).hexdigest() != kernel['targets'][abi]['sha256']:
-            raise ValueError('Bundled kernel does not match its source build lock')
-    elif rootfs_names or kernel_names:
-        raise ValueError('Lite must not include bundled Ubuntu or kernel')
+    elif rootfs_names:
+        raise ValueError('Lite must not include bundled Ubuntu')
     if not release:
         badging = subprocess.run([str(aapt), 'dump', 'badging', str(apk)], check=True,
                                  capture_output=True, text=True, timeout=120).stdout

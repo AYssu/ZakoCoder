@@ -90,11 +90,50 @@ class DistributionTest(unittest.TestCase):
         with patch('check_release_apk._entries', return_value={
             'lib/arm64-v8a/libzakocoder_proot.so': b'fixture',
             'assets/distribution.json': json.dumps({'edition': 'lite', 'abis': ['arm64-v8a'],
-                'bundledRootfs': False, 'bundledKernel': False}).encode(),
+                'bundledRootfs': False}).encode(),
             'assets/plugin.apk': b'plugin',
         }), patch('distribution.digest', return_value='a' * 64):
             with self.assertRaisesRegex(ValueError, 'separate plugin'):
                 dist.inspect('fake.apk', 'lite', 'arm64-v8a', 'aapt', 'apksigner', False)
+
+    def test_both_editions_accept_only_their_pinned_runtime_and_ubuntu(self):
+        import hashlib
+        runtime_bytes, rootfs_bytes = b'pinned proot', b'pinned rootfs'
+        for abi in dist.ABIS:
+            for edition in dist.EDITIONS:
+                with self.subTest(abi=abi, edition=edition), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    (root / 'runtime').mkdir()
+                    target = {'nativeArtifacts': [{'name': 'libzakocoder_proot.so',
+                              'sha256': hashlib.sha256(runtime_bytes).hexdigest()}],
+                              'rootfs': {'bytes': len(rootfs_bytes),
+                                         'sha256': hashlib.sha256(rootfs_bytes).hexdigest()}}
+                    (root / 'runtime/artifacts.json').write_text(json.dumps({**target,
+                        'architectures': {'x86_64': target}}))
+                    marker = {'edition': edition, 'abis': [abi], 'bundledRootfs': edition == 'full'}
+                    entries = {f'lib/{abi}/libzakocoder_proot.so': runtime_bytes,
+                               'assets/distribution.json': json.dumps(marker).encode()}
+                    if edition == 'full':
+                        entries[f'assets/ubuntu-rootfs/{abi}.tar.xz'] = rootfs_bytes
+                    with patch.object(dist, '__file__', str(root / 'scripts/distribution.py')), \
+                            patch('check_release_apk._entries', return_value=entries), \
+                            patch.object(dist, 'digest', return_value='a' * 64), \
+                            patch('sign_beta_apk.certificate_digest', return_value='b' * 64), \
+                            patch.object(dist.subprocess, 'run') as run:
+                        run.return_value.stdout = "package: name='dev.zakocoder.app' versionCode='1' versionName='0.1.5-dev'"
+                        self.assertEqual(edition, dist.inspect('fake.apk', edition, abi, 'aapt', 'signer', False)['edition'])
+                        entries[f'lib/{abi}/libzakocoder_xray.so'] = b'obsolete kernel'
+                        with self.assertRaisesRegex(ValueError, 'Removed proxy kernels'):
+                            dist.inspect('fake.apk', edition, abi, 'aapt', 'signer', False)
+                        del entries[f'lib/{abi}/libzakocoder_xray.so']
+                        if edition == 'full':
+                            entries[f'assets/ubuntu-rootfs/{abi}.tar.xz'] = b'tampered rootfs'
+                            with self.assertRaisesRegex(ValueError, 'pinned rootfs'):
+                                dist.inspect('fake.apk', edition, abi, 'aapt', 'signer', False)
+                        else:
+                            entries[f'assets/ubuntu-rootfs/{abi}.tar.xz'] = rootfs_bytes
+                            with self.assertRaisesRegex(ValueError, 'Lite must not include'):
+                                dist.inspect('fake.apk', edition, abi, 'aapt', 'signer', False)
 
     def test_matrix_finalize_and_publish_only_four_apks_and_checksum(self):
         with tempfile.TemporaryDirectory() as temporary:

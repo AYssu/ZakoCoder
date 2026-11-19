@@ -55,11 +55,10 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     var removing by remember { mutableStateOf<Project?>(null) }
     var actions by remember { mutableStateOf<Project?>(null) }
     val assistant by workbench.ai.state.collectAsStateWithLifecycle()
-    val opened = state.projects.singleOrNull { it.id == openedId }
-    val workspace = state.projects.singleOrNull { it.id == workspaceId }
+    val opened = state.projects.singleOrNull { it.id == (openedId ?: workspaceId) }
     val interactive = LocalWorkbenchPageInteractive.current
     Box(Modifier.fillMaxSize()) {
-    WorkbenchRetainedPage(covered = opened != null || workspace != null) {
+    WorkbenchRetainedPage(covered = opened != null) {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
@@ -129,15 +128,7 @@ PageHeading(stringResource(R.string.projects_title)) {
     }
     }
     }
-    if (workspace != null) WorkbenchRetainedPage(covered = opened != null) {
-        WorkbenchEntrance("workspace:${workspace.id}", ready = true, retainBackground = false) {
-            WorkspaceConversationsPage(workbench, state, workspace,
-                onBack = { onWorkspace(null) }, onFiles = { onOpened(workspace.id) },
-                onTerminal = { onTerminal(workspace.id) }, onAi = { onAi(workspace.id) },
-                backEnabled = backEnabled && interactive && opened == null)
-        }
-    }
-    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null) },
+    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null); onWorkspace(null) },
         onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi,
         referencedPath = referencedPath, backEnabled = backEnabled && interactive)
     }
@@ -322,6 +313,17 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
         if (uri != null) workbench.importFile(uploadProjectId, uploadDirectory, uri)
     }
     val editor by workbench.editor.state.collectAsStateWithLifecycle()
+    LaunchedEffect(project.id, referencedPath) {
+        if (referencedPath == null) workbench.editor.restoreWorkspace(project.id)
+    }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, project.id) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) revision++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val editorOpen = editor.projectId == project.id && !showReferencedDirectory
     val childOpen = tasks || git || editorOpen
     val back = rememberWorkbenchBackMotion(enabled = backEnabled && LocalWorkbenchPageInteractive.current && !childOpen,
@@ -427,7 +429,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     else if (editorOpen) CodeEditorPage(workbench.editor, fullScreen = true, lspEnabled = state.settings.editorLspEnabled,
         onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
             workbench.installToolBundles(setOf(server.bundleId))
-        }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
+        }, onConversation = { onAi(project.id) }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
     }
     installingApk?.let { file ->
         val needsPermission = apkInstaller.needsSourcePermission()

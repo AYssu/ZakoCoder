@@ -161,7 +161,6 @@ def open_workspace_files(device, project, *, from_utility=False):
     device.navigate('drawer_manage_workspaces', from_utility=from_utility)
     device.find(project)
     device.click('workspace_flow_open')
-    device.click('workspace_threads_files')
 
 
 def prepare_full_environment(device, edition, report):
@@ -206,7 +205,7 @@ def verify_edition_switch(device, apk, project, marker, profile, report):
     device.saved_model_card(profile)
     device.click('ai_models_back')
     open_workspace_files(device, project, from_utility=True)
-    device.click('main.py')
+    device.find(device.labels['editor_content'])
     device.dump()
     if marker not in device.last_xml:
         raise RuntimeError('Saved project source did not survive the edition switch')
@@ -280,13 +279,13 @@ def run(args):
         device.find(name, timeout=35)
         report['checks'].append('project-created-through-real-ui')
         device.click('workspace_flow_open')
-        device.click('workspace_threads_files')
         device.find('main.py')
         device.click('main.py')
         device.click('editor_content')
         marker = 'beta_release_smoke_' + uuid.uuid4().hex[:10]
         device.shell('input', 'text', '%s#' + marker)
-        device.click('editor_save')
+        # The editor saves changed buffers every three seconds; no manual-save control remains.
+        time.sleep(4)
         device.click('editor_back')
         device.click('main.py')
         device.dump()
@@ -325,7 +324,8 @@ def run(args):
         device.shot('models-day')
         device.click('ai_models_back')
         open_workspace_files(device, name, from_utility=True)
-        device.click('main.py')
+        # Re-entering this workspace now restores its last editor directly.
+        device.find(device.labels['editor_content'])
         device.dump()
         if marker not in device.last_xml:
             raise RuntimeError('Saved source did not survive process restart')

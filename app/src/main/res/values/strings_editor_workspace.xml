@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_select_line">选中行</string>
+    <string name="editor_delete_line">删除行</string>
+    <string name="editor_uppercase_line">行大写</string>
+    <string name="editor_lowercase_line">行小写</string>
+    <string name="editor_conversation">返回对话</string>
+    <string name="editor_workspace_files">工作区文件</string>
+</resources>

@@ -29,8 +29,6 @@ concurrency:
 
 env:
   JAVA_VERSION: '17'
-  PROXY_KERNEL_GOPROXY: https://proxy.golang.org,direct
-  PROXY_KERNEL_GOSUMDB: sum.golang.org
 
 jobs:
   resolve:
@@ -91,16 +89,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-provider: basic
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: native-kernel/go.version
-          cache: false
-      - name: Rebuild both runtime and kernel ABIs from source
+      - name: Rebuild both runtime ABIs from source
         run: |
           set -euo pipefail
           for abi in arm64-v8a x86_64; do
             python3 scripts/prepare_runtime.py --ndk "$ANDROID_HOME/ndk/28.2.13676358" --abi "$abi" --build-from-source
-            python3 scripts/prepare_proxy_kernel.py --abis "$abi" --force --strict-hash
           done
       - name: Check repository, installers, unit tests and Release Lint; build four distributions
         run: |
@@ -348,13 +341,3 @@ jobs:
           python3 scripts/beta_release.py publish --repository "$GITHUB_REPOSITORY" \
             --directory out/candidate --qa-apk "out/candidate/ZakoCoder-${{ needs.resolve.outputs.version }}-lite-x86_64.apk" \
             --report out/device-validation/report.json
-
-  kernel-plugin:
-    needs: [resolve, publish]
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release-kernel-plugin.yml
-    with:
-      main_release_tag: v${{ needs.resolve.outputs.version }}
-      source_commit: ${{ needs.resolve.outputs.commit }}
-    secrets: inherit

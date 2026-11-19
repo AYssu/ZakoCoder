@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,7 +100,9 @@ internal fun AiModelPickerContent(state: AiModelsState, locked: Boolean,
             TextButton(onClick = { if (!dismissing) onRetry() }, enabled = !state.loading && !state.saving) { Text(stringResource(R.string.editor_retry)) }
         }
         key(active?.id) {
-            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 132.dp).testTag("ai-model-saved-list")) {
+            // Initialize once per opening/profile. Selecting or saving must not reset a user's scroll.
+            val viewport = rememberLazyListState(initialFirstVisibleItemIndex = choices.indexOf(active?.model).coerceAtLeast(0))
+            LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 132.dp).testTag("ai-model-saved-list"), state = viewport) {
                 if (active != null) {
                     items(choices, key = { "model:${active.id}:$it" }) { model ->
                         PickerRow(model, active.model == model, editable) { if (!dismissing) onSelect(active.id, model) }

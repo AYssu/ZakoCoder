@@ -1,5 +1,6 @@
 package com.termux.view.textselection;
 
+import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Rect;
@@ -135,7 +136,14 @@ public class TextSelectionCursorController implements CursorController {
                 switch (item.getItemId()) {
                     case ACTION_COPY:
                         String selectedText = getSelectedText();
-                        terminalView.mTermSession.onCopyTextToClipboard(selectedText);
+                        // A user-selected Copy is distinct from application-originated OSC 52.
+                        // Do not send it through the session's programmatic clipboard callback.
+                        ClipboardManager copyClipboard = (ClipboardManager) terminalView.getContext()
+                            .getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (copyClipboard != null) {
+                            copyClipboard.setPrimaryClip(ClipData.newPlainText(
+                                terminalView.getContext().getString(R.string.copy_text), selectedText));
+                        }
                         terminalView.stopTextSelectionMode();
                         break;
                     case ACTION_PASTE:

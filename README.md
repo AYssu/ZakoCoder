@@ -20,7 +20,7 @@
   <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
-<img align="right" src="docs/assets/brand/mascots/05-welcome.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
+<img align="right" src="docs/assets/brand/mascots/06-idea.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
 
 ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
@@ -36,8 +36,8 @@ ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助
 
 | 版本 | 适合谁 | 包含什么 |
 | --- | --- | --- |
-| **Lite 轻量版** | 希望按需下载、减少安装包体积 | Ubuntu 可在线安装或本地导入；代理内核按需安装独立插件。 |
-| **Full 完整版** | 希望减少首次环境下载 | 内置基础 Ubuntu 和代理内核，确认后在本机初始化，无需另装内核插件。 |
+| **Lite 轻量版** | 希望按需下载、减少安装包体积 | Ubuntu 可在线安装或本地导入。 |
+| **Full 完整版** | 希望减少首次环境下载 | 内置基础 Ubuntu，确认后在本机初始化。 |
 
 - **ARM64 / arm64-v8a**：大多数 Android 手机。
 - **x86_64**：对应架构的设备与常见电脑 Android 模拟器。
@@ -79,7 +79,7 @@ Full 仍需按项目安装 Node.js、Python、Java 等开发工具，并自行�
 1. **完成初始化**：首次打开时选择开发用途，配置环境、模型、Skill 和所需权限；可跳过部分步骤，之后从「设置 → 初始化配置」重新进入。
 2. **添加工作区**：选择 Work 应用内副本或本地目录，也可以导入源码、克隆仓库。同一工作区的对话共用源码；导入副本不会同步修改原目录。
 3. **准备所需工具**：从环境页安装或初始化 Ubuntu，再选择项目需要的工具包。安装工具不会自动启用语言服务。
-4. **开始对话或编辑**：配置模型并测试连接，新建对话交代任务；也可以直接打开文件修改，手动保存源码。
+4. **开始对话或编辑**：配置模型并测试连接，新建对话交代任务；也可以直接打开文件修改，编辑器每 3 秒自动保存变更。
 5. **运行并检查**：执行构建、测试或启动命令，查看日志、变更和实际结果，再决定是否保留修改或提交 Git。
 
 Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不必先创建工作区；SSH 连接按工作区配置。系统权限可在「设置 → 权限管理」集中调整。
@@ -99,7 +99,7 @@ Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不
 
 ## 反馈与参与
 
-遇到问题，可先在助手输入 `/doctor`，保存脱敏诊断包；再在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、订阅令牌或私人源码。
+遇到问题，可先在助手输入 `/doctor`，保存脱敏诊断包；再在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、代理凭据或私人源码。
 
 欢迎贡献修复、翻译和功能建议。应用采用 Kotlin + Jetpack Compose 原生方案；源码构建、架构和协作流程分别见[开发文档](docs/DEVELOPMENT.md)、[架构说明](docs/ARCHITECTURE.md)和[贡献指南](CONTRIBUTING.md)。发布变化见[更新记录](CHANGELOG.md)。
 

@@ -230,7 +230,7 @@ fun ZakoCoderApp(workbench: Workbench) {
         }
         workbench.ackAssistantNavigation(request.requestId)
     }
-    val inFiles = page == AppDestination.Project && state.projects.any { it.id == openedProjectId }
+    val inFiles = page == AppDestination.Project && state.projects.any { it.id == (openedProjectId ?: workspaceId) }
     val inTerminal = drawerUtility == AppDestination.Terminal
     LaunchedEffect(page) {
         // A restored legacy terminal destination now opens over the assistant, without a library.
@@ -271,6 +271,12 @@ fun ZakoCoderApp(workbench: Workbench) {
     val entryAnimationFinished = remember { mutableStateOf(false) }
     val dark = isSystemInDarkTheme()
     val activity = androidx.activity.compose.LocalActivity.current
+    WorkbenchHomeBack(enabled = page == AppDestination.Ai && !baseCovered &&
+        !updatesOpen && !proxyOpen && !wantsSetup && !state.loading && entryAnimationFinished.value &&
+        !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning &&
+        WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) == 0) {
+        activity?.moveTaskToBack(true)
+    }
     SideEffect {
         activity?.let {
             androidx.core.view.WindowCompat.getInsetsController(it.window, it.window.decorView).apply {
@@ -354,9 +360,8 @@ fun ZakoCoderApp(workbench: Workbench) {
             onHistory = {
                 focus.clearFocus(); keyboard?.hide()
                 modelsOpen = false; extensionsOpen = false
-                workspaceId = workbench.ai.state.value.projectId
-                openedProjectId = null
-                page = AppDestination.Project
+                historyRequest++
+                page = AppDestination.Ai
                 navigationScope.launch { drawerState.close() }
             },
             onSelect = { destination ->
@@ -405,7 +410,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                                     AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) {
                                         EnvironmentPage(workbench, state,
                                             onTerminal = { openTerminal() },
-                                            onProjects = { drawerUtility = null; openedProjectId = null; page = AppDestination.Project },
+                                            onProjects = { drawerUtility = null; openedProjectId = null; workspaceId = null; page = AppDestination.Project },
                                             onAi = { drawerUtility = null; page = AppDestination.Ai })
                                     }
                                     AppDestination.Terminal -> Unit
@@ -473,7 +478,7 @@ fun ZakoCoderApp(workbench: Workbench) {
 CompositionLocalProvider(LocalWorkbenchPageInteractive provides (page == AppDestination.Ai && !baseCovered && !updatesOpen && !proxyOpen)) {
 WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.value) { aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, historyRequest = historyRequest, onHistoryRequestConsumed = { historyRequest = 0 }, onConversations = {
                         workspaceId = workbench.ai.state.value.projectId; openedProjectId = null; page = AppDestination.Project
-                    }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onTerminal = { id ->
+                    }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; workspaceId = null; page = AppDestination.Project }, onTerminal = { id ->
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
                             openTerminal(workbench.ai.state.value.projectId, id)
                         }
@@ -531,7 +536,7 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                         workspaceId = workspaceId, onWorkspace = { workspaceId = it },
                         backEnabled = !overlayOpen && !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning,
                         referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); openTerminal(projectId) })
-                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { openTerminal() }, onProjects = { openedProjectId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
+                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { openTerminal() }, onProjects = { openedProjectId = null; workspaceId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
                     AppDestination.Terminal -> Unit
                     AppDestination.Ai -> Unit
                     AppDestination.Settings -> settingsContent()

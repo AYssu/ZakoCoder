@@ -107,7 +107,9 @@ private fun CapabilityPackageCard(title: String, description: String, hint: Stri
             if (enabled) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                WorkbenchSecondaryButton(onClick = onDetails, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                // Opening settings does not mutate the package selection. A save in
+                // another card must not dim and re-enable this navigation button.
+                WorkbenchSecondaryButton(onClick = onDetails, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(configureLabel)
                 }
             }

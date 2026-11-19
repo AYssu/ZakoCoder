@@ -8,11 +8,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 
 class EditorDocument(var baseline: FileBaseline) {
     val content = Content(baseline.text)
     var line = 0
     var column = 0
+    var autosaveEnabled = false
+    var failedText: String? = null
+    var saveError: String = ""
+    var conflict: Boolean = false
 }
 
 data class EditorTab(val projectId: String, val path: String, val dirty: Boolean)
@@ -37,6 +42,9 @@ class EditorController(private val context: Context, private val projects: Proje
     val state = mutable.asStateFlow()
     private val documents = linkedMapOf<Pair<String, String>, EditorDocument>()
     private val drafts = EditorDraftStore(java.io.File(context.noBackupFilesDir, "editor-drafts"))
+    private val locations = EditorWorkspaceStore(java.io.File(context.noBackupFilesDir, "editor-drafts"))
+    private val lastOpened = linkedMapOf<String, EditorLocation>()
+    private val initialized = CompletableDeferred<Unit>()
     private val draftMutex = kotlinx.coroutines.sync.Mutex()
     private var draftJob: Job? = null
     private var diskJob: Job? = null
@@ -47,7 +55,15 @@ class EditorController(private val context: Context, private val projects: Proje
         mutable.update { it.copy(loading = true) }
         scope.launch {
             try {
-                val restored = withContext(Dispatchers.IO) { languages.prepare(); drafts.load() }
+                val (restored, positions) = withContext(Dispatchers.IO) {
+                    languages.prepare()
+                    val draftsSnapshot = drafts.load()
+                    val positionsSnapshot = try { locations.load() }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { emptyMap() }
+                    draftsSnapshot to positionsSnapshot
+                }
+                lastOpened.putAll(positions)
                 restored.forEach { d ->
                     val valid = withContext(Dispatchers.IO) { runCatching { projects.directory(d.baseline.projectId); AiSafeDraftPath.validate(d.baseline.path) }.isSuccess }
                     if (valid) documents[d.baseline.projectId to d.baseline.path] = EditorDocument(d.baseline).apply { content.replace(0, content.length, d.text); line = d.line; column = d.column }
@@ -55,14 +71,41 @@ class EditorController(private val context: Context, private val projects: Proje
                 mutable.update { it.copy(tabs = tabs(), loading = false) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { mutable.update { it.copy(loading = false, error = context.getString(R.string.editor_draft_error)) } }
+            finally { initialized.complete(Unit) }
         }
+        scope.launch {
+            initialized.await()
+            while (isActive) {
+                delay(3000)
+                // Periodic rather than debounce: continuous typing still reaches the disk.
+                documents.values.toList().forEach { doc ->
+                    if (documents[doc.baseline.projectId to doc.baseline.path] === doc && doc.autosaveEnabled && mutable.value.tabs.any { it.projectId == doc.baseline.projectId && it.path == doc.baseline.path && it.dirty }) {
+                        val text = doc.content.toString()
+                        if (!mutable.value.loading && !mutable.value.saving && text != doc.baseline.text && text != doc.failedText)
+                            persist(doc, text)?.join()
+                    }
+                }
+            }
+        }
+    }
+    suspend fun restoreWorkspace(id: String) {
+        initialized.await()
+        mutable.first { !it.loading && !it.saving }
+        if (mutable.value.projectId == id) return
+        lastOpened[id]?.let { open(id, it.path) }
+    }
+    fun cursorChanged() { queueDrafts() }
+    private fun rememberLocation(doc: EditorDocument) {
+        lastOpened[doc.baseline.projectId] = EditorLocation(doc.baseline.path, doc.line, doc.column)
     }
     private fun queueDrafts(immediate: Boolean = false) {
         draftJob?.cancel()
         draftJob = scope.launch {
             if (!immediate) delay(500)
+            lastOpened.toMap().forEach { (id, location) -> documents[id to location.path]?.let(::rememberLocation) }
+            val positionSnapshot = lastOpened.toMap()
             val snapshot = documents.values.filter { it.content.toString() != it.baseline.text }.map { EditorDraft(it.baseline, it.content.toString(), it.line, it.column) }
-            try { draftMutex.lock(); try { withContext(Dispatchers.IO) { drafts.save(snapshot) } } finally { draftMutex.unlock() } }
+            try { draftMutex.lock(); try { withContext(Dispatchers.IO) { drafts.save(snapshot); locations.save(positionSnapshot) } } finally { draftMutex.unlock() } }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { mutable.update { it.copy(error = context.getString(R.string.editor_draft_error)) } }
         }
@@ -73,15 +116,16 @@ class EditorController(private val context: Context, private val projects: Proje
         if (mutable.value.loading || mutable.value.saving) return
         val doc = documents[id to path]
         if (doc != null) {
-            mutable.value = EditorState(tabs(), id, path, doc, dirty = doc.content.toString() != doc.baseline.text, canUndo = doc.content.canUndo(), canRedo = doc.content.canRedo())
-            checkDisk(); return
+            mutable.value = EditorState(tabs(), id, path, doc, dirty = doc.content.toString() != doc.baseline.text, canUndo = doc.content.canUndo(), canRedo = doc.content.canRedo(), error = doc.saveError, conflict = doc.conflict)
+            doc.autosaveEnabled = true
+            rememberLocation(doc); queueDrafts(); checkDisk(); return
         }
         if (documents.size >= 8) { mutable.update { it.copy(error = context.getString(R.string.editor_tabs_limit)) }; return }
         invalidateDisk()
         mutable.value = EditorState(tabs = tabs(), projectId = id, path = path, loading = true)
         load(id, path)
     }
-    /** A sampled comparison only. Never replaces a user's buffer or rebases its save protection. */
+    /** Refresh clean buffers only; local edits always retain their original save baseline. */
     fun checkDisk(): Job? {
         val state = mutable.value
         val doc = state.document ?: return null
@@ -95,14 +139,20 @@ class EditorController(private val context: Context, private val projects: Proje
                 val disk = withContext(Dispatchers.IO) { inspectDisk(baseline) }
                 if (generation == diskGeneration && mutable.value.document === doc && doc.baseline == baseline) {
                     val changed = disk.digest != baseline.digest
-                    mutable.update { it.copy(diskState = if (changed) EditorDiskState.Changed else EditorDiskState.Unchanged, diskVersion = if (changed) disk else null) }
+                    if (changed && doc.content.toString() == baseline.text) {
+                        // A clean buffer can follow external writes without a manual refresh action.
+                        val refreshed = EditorDocument(disk).apply { line = doc.line; column = doc.column }
+                        documents[baseline.projectId to baseline.path] = refreshed
+                        mutable.update { it.copy(document = refreshed, tabs = tabs(), diskState = EditorDiskState.Unchanged,
+                            diskVersion = null, canUndo = false, canRedo = false, saved = false) }
+                    } else mutable.update { it.copy(diskState = if (changed) EditorDiskState.Changed else EditorDiskState.Unchanged, diskVersion = if (changed) disk else null) }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) {
                 if (generation == diskGeneration && mutable.value.document === doc && doc.baseline == baseline)
                     mutable.update { it.copy(diskState = EditorDiskState.Unavailable, diskVersion = null) }
             } finally {
-                if (generation == diskGeneration && mutable.value.document === doc) mutable.update { it.copy(diskChecking = false) }
+                if (generation == diskGeneration) mutable.update { it.copy(diskChecking = false) }
             }
         }.also { diskJob = it }
     }
@@ -117,7 +167,10 @@ class EditorController(private val context: Context, private val projects: Proje
         scope.launch {
             try {
                 val baseline = withContext(Dispatchers.IO) { languages.prepare(); files.open(id, path) }
-                val doc = EditorDocument(baseline)
+                val doc = EditorDocument(baseline).apply {
+                    lastOpened[id]?.takeIf { it.path == path }?.let { line = it.line; column = it.column }
+                }
+                rememberLocation(doc)
                 documents[id to path] = doc
                 mutable.value = EditorState(tabs = tabs(), projectId = id, path = path, document = doc, diskState = EditorDiskState.Unchanged)
                 queueDrafts(immediate = true)
@@ -127,6 +180,7 @@ class EditorController(private val context: Context, private val projects: Proje
     }
     fun changed() {
         val doc = mutable.value.document ?: return
+        doc.autosaveEnabled = true
         mutable.update { it.copy(dirty = doc.content.toString() != doc.baseline.text, canUndo = doc.content.canUndo(), canRedo = doc.content.canRedo(),
             revision = it.revision + 1, saved = false, tabs = tabs()) }
         queueDrafts()
@@ -136,21 +190,38 @@ class EditorController(private val context: Context, private val projects: Proje
         val doc = current.document ?: return
         if (current.saving || current.loading) return
         if (!current.dirty) { if (closeAfter) close(keepEditorOpen); return }
+        persist(doc, doc.content.toString(), closeAfter, keepEditorOpen)
+    }
+    private fun persist(doc: EditorDocument, text: String, closeAfter: Boolean = false, keepEditorOpen: Boolean = false): Job? {
+        if (mutable.value.saving || mutable.value.loading) return null
         invalidateDisk()
-        val text = doc.content.toString()
-        mutable.update { it.copy(saving = true, error = "", saved = false, diskChecking = false, diskState = null, diskVersion = null) }
-        scope.launch {
+        mutable.update { it.copy(saving = true, diskChecking = false) }
+        return scope.launch {
             try {
                 val baseline = withContext(Dispatchers.IO) { files.save(doc.baseline, text) }
                 doc.baseline = baseline
+                doc.failedText = null; doc.saveError = ""; doc.conflict = false
                 savedFile()
-                mutable.update { it.copy(saving = false, dirty = doc.content.toString() != text, error = "", conflict = false, saved = true, diskState = null, diskChecking = false, diskVersion = null) }
-                lsp?.save(doc.baseline.projectId, doc.baseline.path)
-                checkDisk()
-                mutable.update { it.copy(tabs = tabs()) }; queueDrafts(immediate = true)
-                if (closeAfter && !mutable.value.dirty) close(keepEditorOpen)
+                mutable.update { current ->
+                    if (current.document === doc) current.copy(saving = false, dirty = doc.content.toString() != text,
+                        error = "", conflict = false, saved = true, diskState = null, diskVersion = null, tabs = tabs())
+                    else current.copy(saving = false, tabs = tabs())
+                }
+                lsp?.save(baseline.projectId, baseline.path)
+                queueDrafts(immediate = true)
+                if (mutable.value.document === doc) {
+                    checkDisk()
+                    if (closeAfter && !mutable.value.dirty) close(keepEditorOpen)
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { mutable.update { it.copy(saving = false, error = message(error), conflict = (error as? EditorFileException)?.reason == EditorFileException.Reason.CONFLICT, diskChecking = false) }; checkDisk() }
+            catch (error: Exception) {
+                // Do not retry an unchanged failed buffer every three seconds or overwrite an external edit.
+                doc.failedText = text; doc.saveError = message(error)
+                doc.conflict = (error as? EditorFileException)?.reason == EditorFileException.Reason.CONFLICT
+                mutable.update { current -> if (current.document === doc) current.copy(saving = false,
+                    error = doc.saveError, conflict = doc.conflict) else current.copy(saving = false) }
+                if (mutable.value.document === doc) checkDisk()
+            }
         }
     }
     fun replaceAll(query: String, replacement: String) {
@@ -184,10 +255,13 @@ class EditorController(private val context: Context, private val projects: Proje
         mutable.update { it.copy(loading = true, error = "", diskChecking = false, diskState = null, diskVersion = null) }
         load(id, current.path)
     }
+    /** Release an isolated/editor owner; normal app navigation retains this controller. */
+    fun dispose() { scope.cancel() }
     fun close(keepEditorOpen: Boolean = false) {
         if (!mutable.value.loading && !mutable.value.saving) {
             invalidateDisk()
             val projectId = mutable.value.projectId
+            documents[projectId to mutable.value.path]?.let(::rememberLocation)
             documents.remove(projectId to mutable.value.path)
             val next = if (keepEditorOpen) documents.keys.lastOrNull { it.first == projectId } else null
             mutable.value = EditorState(tabs = tabs())

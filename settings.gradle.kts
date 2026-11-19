@@ -14,7 +14,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = "ZakoCoder"
 include(":app")
-include(":kernel-plugin")
 
 include(":terminal-emulator", ":terminal-view")
 project(":terminal-emulator").projectDir = file("third_party/terminal-emulator")

@@ -128,13 +128,12 @@ class SmokeSafetyTest(unittest.TestCase):
             release_smoke.prepare_full_environment(device, 'full', {'checks': []})
         device.navigate.assert_called_once_with('nav_environment')
 
-    def test_open_files_uses_workspace_conversations_instead_of_removed_card_button(self):
+    def test_workspace_opens_files_without_conversation_intermediate(self):
         device = MagicMock()
         release_smoke.open_workspace_files(device, 'owned-smoke-workspace')
         self.assertEqual([unittest.mock.call.navigate('drawer_manage_workspaces', from_utility=False),
                           unittest.mock.call.find('owned-smoke-workspace'),
-                          unittest.mock.call.click('workspace_flow_open'),
-                          unittest.mock.call.click('workspace_threads_files')], device.mock_calls)
+                          unittest.mock.call.click('workspace_flow_open')], device.mock_calls)
 
     def test_utility_navigation_closes_cover_before_selecting_retained_drawer(self):
         device = release_smoke.Device('emulator-5554', self.root)

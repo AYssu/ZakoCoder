@@ -19,7 +19,9 @@ import org.json.JSONObject
 /** UI delegates IO, permissions and network to the native controllers. */
 @Composable
 internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?, projectName: String, fullPage: Boolean = false, contentPadding: PaddingValues = PaddingValues(0.dp), onDismiss: () -> Unit) {
-    val packages by workbench.capabilityPackages.state.collectAsStateWithLifecycle()
+    // Read in this composition, not only inside packagesContent. Otherwise only that
+    // child lambda is invalidated, leaving its captured screenOn/sshOn values stale.
+    val packages = workbench.capabilityPackages.state.collectAsStateWithLifecycle().value
     val ssh by workbench.ssh.state.collectAsStateWithLifecycle()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()

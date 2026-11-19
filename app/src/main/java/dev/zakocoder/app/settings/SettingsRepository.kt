@@ -38,6 +38,20 @@ class SettingsRepository(private val context: Context) {
         editorLspEnabled = preferences.getBoolean("editor-lsp-enabled", false),
     )
 
+    /** Upgrade cleanup: only the endpoint explicitly marked as our retired local bridge is removed.
+     * Called on IO before startup publishes settings; manual loopback proxies are preserved.
+     */
+    internal fun migrateRemovedKernelProxy(): Boolean {
+        val legacy = context.getSharedPreferences("proxy-kernel", Context.MODE_PRIVATE)
+        val ownedPort = legacy.getInt("port", 0)
+        if (ownedPort <= 0) return false
+        val current = parseStored(preferences.getString("proxy", "").orEmpty())
+        val owned = current?.isSocks == true && current.host == "127.0.0.1" && current.port == ownedPort
+        if (owned) save(load().copy(proxy = ""))
+        legacy.edit { remove("port") }
+        return owned
+    }
+
     fun saveEditorLspEnabled(enabled: Boolean) {
         preferences.edit { putBoolean("editor-lsp-enabled", enabled) }
     }

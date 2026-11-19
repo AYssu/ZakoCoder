@@ -268,8 +268,8 @@ class RouteReturnDeviceTest {
                                 }
                             }
                             click(proxyRow)
-                            fun proxyPageVisible() = has(context.getString(R.string.proxy_mode_direct)) &&
-                                has(context.getString(R.string.proxy_mode_airport))
+                            fun proxyPageVisible() = has(context.getString(R.string.proxy_section_manual)) &&
+                                has(context.getString(R.string.proxy_manual_label))
                             await("An intentional settings proxy click still opens its page") { proxyPageVisible() }
                             await("Proxy Dialog owns window focus before Back") {
                                 val focused = java.util.concurrent.atomic.AtomicBoolean()
@@ -331,6 +331,11 @@ class RouteReturnDeviceTest {
                     scenario.onActivity { it.onBackPressedDispatcher.dispatchOnBackCancelled() }
                     delay(500)
                     assertTrue("Cancelled assistant Back preserves message input", draftVisible())
+                    scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                    delay(350) // Capture the system Toast after its entrance, still within the 2s guard.
+                    assertEquals("First root Back asks for confirmation", Lifecycle.State.RESUMED, scenario.state)
+                    assertTrue("Confirmation preserves the current draft", draftVisible())
+                    screenshot("${if (dark) "night" else "day"}-assistant-exit-confirmation")
                     scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
                     await("Assistant root Back leaves the Activity instead of creating a workspace route") {
                         scenario.state != Lifecycle.State.RESUMED
