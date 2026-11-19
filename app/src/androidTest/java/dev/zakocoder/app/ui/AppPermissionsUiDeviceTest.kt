@@ -70,7 +70,7 @@ class AppPermissionsUiDeviceTest {
     private fun render(dark: Boolean) {
         var operations = 0
         val states = AppPermission.entries.map { permission ->
-            AppPermissionStatus(permission, if (permission == AppPermission.Overlay) null else permission in setOf(AppPermission.Files, AppPermission.InstallPackages),
+            AppPermissionStatus(permission, if (permission == AppPermission.Accessibility) null else permission in setOf(AppPermission.Files, AppPermission.InstallPackages),
                 if (permission == AppPermission.Notifications) RunningNotificationStatus.PermissionRequired else null)
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->

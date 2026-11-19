@@ -1,6 +1,7 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import dev.zakocoder.app.ui.theme.DarkPalette
@@ -36,7 +37,10 @@ internal fun WorkbenchMiuixTheme(dark: Boolean, content: @Composable () -> Unit)
         surfaceContainerHighest = palette.surfaceSunken, onSurfaceVariant = palette.textSecondary,
         outlineVariant = palette.divider,
     )
-    CompositionLocalProvider(LocalWorkbenchDark provides dark) {
+    // ColorScheme alone does not set Material's default text/icon foreground. Child
+    // pages hosted above the main Surface must also inherit the current theme.
+    CompositionLocalProvider(LocalWorkbenchDark provides dark,
+        LocalContentColor provides material.onBackground) {
     MaterialTheme(colorScheme = material, typography = WorkbenchTypography,
         shapes = dev.zakocoder.app.ui.theme.WorkbenchShapes) {
         ProvideWorkbenchPalette(palette) {

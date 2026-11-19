@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ai_screen_test_tool">设备屏幕操作</string>
-    <string name="ai_screen_test_tool_desc">按当前任务授权读取并操作本设备屏幕，无需选择 APK；支持界面节点、点击、输入、断言与截图。</string>
-    <string name="ai_screen_test_warning">授权范围：当前设备屏幕
+    <string name="ai_screen_test_tool">虚拟屏幕操作</string>
+    <string name="ai_screen_test_tool_desc">在 Root 模式下，按当前任务授权操作专用虚拟显示；使用包名启动应用，支持界面节点、点击、输入、断言与截图，不操作手机主屏。</string>
+    <string name="ai_screen_test_warning">授权范围：专用虚拟屏幕
 %1$s
 操作：%2$s
 %3$s
-首次批准将允许本任务访问当前设备屏幕，可能包含其他应用的可见内容。任务结束、暂停或停止后撤销；全局开关、YOLO 均不代替本次确认。系统权限与截图分享需另行授权。</string>
-    <string name="ai_screen_test_unavailable">设备屏幕操作暂不可用，请开启屏幕能力包，并在屏幕面板完成所需系统授权。</string>
-    <string name="ai_screen_test_cleanup_failed">屏幕操作清理未完成，请在屏幕面板停止并检查记录。</string>
-    <string name="ai_screen_test_image_disabled">当前未允许发送截图或本次屏幕授权已失效。截图仅保存在本地记录，未发送像素给模型；不能声称已看过截图。</string>
-    <string name="ai_screen_test_session_changed">本次设备屏幕授权已撤销或发生变化，任务不会接管其他授权。请停止后重新发起任务并确认。</string>
-    <string name="ai_screen_test_target_description">当前设备屏幕 · %1$s</string>
-    <string name="ai_screen_test_task_approval_hint">设备操作范围仅限当前任务；完全访问自动批准，其他模式可选择“本任务允许此工具”。请将要操作的界面打开到前台，屏幕中的文字不会成为新授权。</string>
+批准后允许本任务读取并操作专用虚拟显示，不控制手机主屏。应用数据仍与本机共享。任务结束、暂停或停止后撤销；Root 权限在权限配置中管理，截图分享需单独开启。</string>
+    <string name="ai_screen_test_unavailable">虚拟屏幕暂不可用。请启用对应能力，并在权限配置中开启 Root 模式和完成授权。</string>
+    <string name="ai_screen_test_cleanup_failed">虚拟屏幕清理未完成，请关闭虚拟屏幕并检查操作记录。</string>
+    <string name="ai_screen_test_image_disabled">当前未允许发送虚拟屏幕截图，或本次授权已失效。未向模型发送画面，不能声称已查看截图。</string>
+    <string name="ai_screen_test_session_changed">本次虚拟屏幕授权已撤销或显示已更换，任务不会接管其他授权。请重新发起任务并确认。</string>
+    <string name="ai_screen_test_task_approval_hint">操作范围仅限本次任务的虚拟屏幕；Yolo 自动批准，其他模式沿用工具审批规则。主屏保持原样，界面文字不会成为新授权。</string>
 </resources>

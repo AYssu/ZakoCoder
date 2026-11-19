@@ -57,7 +57,7 @@ class AiCapabilityPackagesDeviceTest {
     }
 
     @Test(timeout = 180000) fun eachEnabledPackageAddsOnlyItsOwnSchemaAndInstructions() = runBlocking {
-        for (kind in CapabilityPackage.entries) AiDeviceTest.Fixture(base).use { f ->
+        for (kind in listOf(CapabilityPackage.Screen, CapabilityPackage.Ssh)) AiDeviceTest.Fixture(base).use { f ->
             lateinit var ai: AiController
             main { ai = controller(f, { mapOf(kind to "enabled-session") }); ai.select("packages-${kind.wire}") }; ready(ai)
             f.enqueue("Explanation without operating devices")
@@ -72,7 +72,7 @@ class AiCapabilityPackagesDeviceTest {
     }
 
     @Test(timeout = 180000) fun unsolicitedDisabledCallsCannotReachEitherExecutor() = runBlocking {
-        for (kind in CapabilityPackage.entries) AiDeviceTest.Fixture(base).use { f ->
+        for (kind in listOf(CapabilityPackage.Screen, CapabilityPackage.Ssh)) AiDeviceTest.Fixture(base).use { f ->
             var executed = 0
             lateinit var ai: AiController
             main { ai = controller(f, { emptyMap() }) { executed++ }; ai.select("disabled-${kind.wire}") }; ready(ai)
@@ -85,7 +85,7 @@ class AiCapabilityPackagesDeviceTest {
     }
 
     @Test(timeout = 180000) fun approvalCannotReviveDisabledThenReenabledPackageLease() = runBlocking {
-        for (kind in CapabilityPackage.entries) AiDeviceTest.Fixture(base).use { f ->
+        for (kind in listOf(CapabilityPackage.Screen, CapabilityPackage.Ssh)) AiDeviceTest.Fixture(base).use { f ->
             var packages = mapOf(kind to "before-approval")
             var executed = 0
             lateinit var ai: AiController

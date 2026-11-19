@@ -32,14 +32,10 @@ import kotlinx.coroutines.sync.withLock
     val settings: AppSettings = AppSettings(), val proxyDisplay: String = "", val sessions: List<TerminalItem> = emptyList(), val terminalRevision: Int = 0,
  ) { val project get() = projects.singleOrNull { it.id == selectedId } }
 
-/** One-shot UI navigation, always scoped to the screen session that requested it. */
-data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
-    val requestId: String = java.util.UUID.randomUUID().toString())
-
 data class BackgroundConversationNavigation(val projectId: String, val conversationId: String,
     val requestId: String = java.util.UUID.randomUUID().toString())
 
-private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean, val onboarding: OnboardingProgress)
+private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean, val onboarding: OnboardingProgress, val removedKernelProxy: Boolean)
 
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
@@ -56,14 +52,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private val settingsRepository = SettingsRepository(context)
     private val onboardingRepository = OnboardingRepository(context)
     private val onboardingMutex = Mutex()
-    private val kernelProxyPreferences = context.getSharedPreferences(KERNEL_PROXY_PREFERENCES, Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
-    private val mutableAssistantNavigation = MutableStateFlow<AssistantNavigationRequest?>(null)
-    val assistantNavigation = mutableAssistantNavigation.asStateFlow()
-    fun ackAssistantNavigation(requestId: String) {
-        mutableAssistantNavigation.update { if (it?.requestId == requestId) null else it }
-    }
     private val mutableBackgroundNavigation = MutableStateFlow<BackgroundConversationNavigation?>(null)
     val backgroundNavigation = mutableBackgroundNavigation.asStateFlow()
     /** Intent identifiers are validated again against loaded workspaces and conversations by the UI. */
@@ -130,17 +120,15 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         if (ai.state.value.active && (kind != dev.zakocoder.app.capabilities.CapabilityPackage.Ssh || ai.state.value.projectId == id)) ai.stop()
         when (kind) {
             dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> screenTests.stop()
+            dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell -> deviceAccess.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> ssh.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Browser -> browser.close()
         }
     }
-    val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
-    /** Airport subscription state. All networking is triggered by the proxy page's explicit actions. */
-    val proxyCatalog = ProxyCatalog(HttpProxySubscriptionFetcher(), EncryptedProxySubscriptionStore(context))
-    /** Optional kernel plugin (separate APK); the main app never packages or executes Xray itself. */
-    val kernelPlugin = dev.zakocoder.app.kernel.KernelPluginManager(context)
-    /** Client for the plugin's kernel service; exposes a loopback SOCKS5 bridge while Running. */
-    val proxyKernel = ProxyKernel(context, kernelPlugin)
+    val deviceAccess = dev.zakocoder.app.device.DeviceAccessController(context)
+    val virtualScreen = dev.zakocoder.app.device.VirtualScreenController(context, deviceAccess)
+    val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context,
+        virtualScreen = virtualScreen, deviceAccess = deviceAccess)
     internal val browser = dev.zakocoder.app.browser.BrowserController(context, scope)
     private val mutableBrowserNavigation = MutableStateFlow<String?>(null)
     val browserNavigation = mutableBrowserNavigation.asStateFlow()
@@ -185,9 +173,23 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }
         },
         browserImagesAllowed = { browser.state.value.shareImages && capabilityPackages.enabled(null, dev.zakocoder.app.capabilities.CapabilityPackage.Browser) },
-        capabilitySnapshot = { id -> capabilityPackages.snapshot(id).mapValues { (kind, token) ->
-            if (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Ssh) token + "|" + (ssh.configurationLease(id) ?: "unconfigured") else token
-        } },
+        capabilitySnapshot = ::deviceCapabilitySnapshot,
+        deviceShellDescription = { context.getString(if (deviceAccess.state.value.mode == dev.zakocoder.app.device.DeviceMode.Root)
+            R.string.device_shell_root_identity else R.string.device_shell_basic_identity) },
+        deviceShellTool = { id, args, approved, output ->
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(mutable.value.projects.any { it.id == id })
+            check(approved != null && deviceCapabilitySnapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell] == approved)
+            val approvedGeneration = approved.split('|').getOrNull(1)?.toLongOrNull()
+                ?: error("device_access_revoked")
+            val result = deviceAccess.execute(args.getString("command"), args.optInt("timeout_seconds", 120),
+                expectedGeneration = approvedGeneration, onOutput = output)
+            check(deviceCapabilitySnapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell] == approved)
+            org.json.JSONObject().put("environment", "android_host").put("cwd", "/").put("uid", result.uid)
+                .put("identity", result.identity).put("exit_code", result.exitCode).put("stdout", result.stdout.takeLast(30000))
+                .put("stderr", result.stderr.takeLast(16000)).put("timed_out", result.timedOut)
+                .put("truncated", result.truncated || result.stdout.length > 30000 || result.stderr.length > 16000).toString()
+        },
         sshDescription = { id -> ssh.state.value.profiles.singleOrNull { it.id == id }?.let { "${it.username}@${it.host}:${it.port} · ${it.workingDirectory}" } ?: id },
         sshTool = { id, args, approved ->
             check(ai.state.value.active && ai.state.value.projectId == id)
@@ -208,18 +210,23 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
             screenTests.authorizeDeviceTask(id, taskId)
         },
-        screenTestDescription = { _ ->
-            val current = screenTests.state.value
-            context.getString(R.string.ai_screen_test_target_description,
-                context.getString(when (current.access) {
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Normal -> R.string.screen_test_access_normal
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Accessibility -> R.string.screen_test_access_accessibility
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Root -> R.string.screen_test_access_root
-                }))
-        },
+        screenTestDescription = { _ -> context.getString(R.string.device_virtual_target) },
         finishScreenTestTask = { id, lease -> screenTests.finishTask(id, lease) }, stopScreenTest = { screenTests.stop() },
         shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() },
         canStartTask = { !mutable.value.loading && !mutable.value.busy && !git.state.value.busy && !projectTasksActive() })
+    private fun deviceCapabilitySnapshot(id: String): Map<dev.zakocoder.app.capabilities.CapabilityPackage, String> {
+        val access = deviceAccess.state.value
+        return capabilityPackages.snapshot(id).mapNotNull { (kind, token) ->
+            when (kind) {
+                dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> kind to (token + "|" + (ssh.configurationLease(id) ?: "unconfigured"))
+                dev.zakocoder.app.capabilities.CapabilityPackage.Screen ->
+                    if (access.loaded && access.mode == dev.zakocoder.app.device.DeviceMode.Root) kind to (token + "|" + deviceAccess.generation) else null
+                dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell ->
+                    if (access.loaded) kind to (token + "|" + deviceAccess.generation + "|" + access.mode.name) else null
+                else -> kind to token
+            }
+        }.toMap()
+    }
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -303,43 +310,18 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
-        screenTests.bindOverlayActions(returnToApp = { projectId, lease ->
-            if (screenTests.taskLease(projectId) == lease && mutable.value.projects.any { it.id == projectId }) {
-                val request = AssistantNavigationRequest(projectId, lease)
-                mutableAssistantNavigation.value = request
-                try {
-                    context.startActivity(Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-                } catch (_: android.content.ActivityNotFoundException) {
-                    ackAssistantNavigation(request.requestId)
-                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
-                } catch (_: SecurityException) {
-                    ackAssistantNavigation(request.requestId)
-                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
-                }
-            }
-        }, stopTask = { projectId, lease ->
-            if (screenTests.stopOverlayTask(projectId, lease)) ai.stopForScreenLease(projectId, lease)
-        })
         scope.launch {
             screenTests.state.collect {
                 if (!screenTestActive()) releaseService()
                 else try { service() }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: SecurityException) { screenTests.reportOverlayServiceFailure() }
+                catch (_: SecurityException) { mutable.update { it.copy(backgroundServiceError = true) } }
                 catch (_: IllegalStateException) {
                     // Includes Android's foreground/background service start restrictions.
                     // Keep this collector alive; a later explicit opt-in may retry.
-                    screenTests.reportOverlayServiceFailure()
+                    mutable.update { it.copy(backgroundServiceError = true) }
                 }
             }
-        }
-        scope.launch {
-            kotlinx.coroutines.flow.combine(ai.state, screenTests.state) { _, screen ->
-                val project = screen.projectId
-                val lease = project?.let(screenTests::taskLease)
-                if (project == null || lease == null) null else Triple(project, lease, ai.screenOverlayTranscript(project, lease).orEmpty())
-            }.collect { update -> update?.let { (project, lease, text) -> screenTests.updateOverlayConversation(project, lease, text) } }
         }
         scope.launch {
             ai.state.map(AiBackgroundTask::from).distinctUntilChanged().collect { task ->
@@ -377,26 +359,17 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { true } // A broken existing catalog must not trigger fresh-install setup.
                     val onboarding = onboardingRepository.load(initialProjects.isNotEmpty() || environmentPresent || existingProfiles)
-                    WorkbenchInitial(initialProjects, settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay(), environmentPresent, onboarding) }
+                    val removedKernelProxy = settingsRepository.migrateRemovedKernelProxy()
+                    WorkbenchInitial(initialProjects, settingsRepository.load(), runtime.isInstalled(), settingsRepository.proxyDisplay(), environmentPresent, onboarding, removedKernelProxy) }
                 bundledEnvironmentPresent = data.environmentPresent
                 val selected = withContext(Dispatchers.IO) { projects.selected() }
-                // A kernel-backed proxy points at a loopback port owned by this process; after a
-                // restart that process is gone, so clear the dead endpoint instead of showing it as
-                // active. Direct/manual non-loopback settings are left untouched.
-                val kernelPort = kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
-                val parsedProxy = runCatching { NetworkProxy.parse(data.settings.proxy) }.getOrNull()
-                // Only clear an endpoint this app's kernel owned (marker match); a user's manual
-                // 127.0.0.1 proxy must survive a restart.
-                val staleKernelProxy = kernelPort > 0 && parsedProxy?.host == "127.0.0.1" && parsedProxy.port == kernelPort
-                if (kernelPort > 0) kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
-                if (staleKernelProxy) withContext(Dispatchers.IO) { settingsRepository.save(data.settings.copy(proxy = "")) }
                 // The first AI task freezes these identities. Publish readiness only after
                 // their parallel disk loads finish, never with a transient empty/unconfigured lease.
                 initialSsh.join()
                 capabilityPackages.state.first { it.loaded }
                 mutable.update { it.copy(loading = false, onboarding = data.onboarding, projects = data.projects,
-                    settings = if (staleKernelProxy) data.settings.copy(proxy = "") else data.settings,
-                    proxyDisplay = if (staleKernelProxy) "" else data.proxyDisplay, installed = data.installed,
+                    settings = data.settings, proxyDisplay = data.proxyDisplay, installed = data.installed,
+                    message = if (data.removedKernelProxy) context.getString(R.string.proxy_removed_kernel_notice) else it.message,
                     selectedId = selected?.takeIf { id -> data.projects.any { it.id == id } } ?: data.projects.firstOrNull()?.id) }
                 refreshPlans()
                 doctor()
@@ -879,72 +852,6 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         }
     }
 
-    /**
-     * Applies a subscription node. Direct HTTP/SOCKS5 nodes keep the existing settings path; kernel
-     * nodes start Xray asynchronously and only then point the proxy setting at its loopback SOCKS5
-     * inbound. Returns whether the action was submitted (the kernel result arrives on its state
-     * flow); unsupported nodes and a busy workbench are rejected here.
-     */
-    fun applyProxyNode(node: ProxyNode): Boolean {
-        if (!node.supported) return false
-        if (mutable.value.busy || mutable.value.loading) return false
-        if (node.viaKernel) {
-            // One start at a time; a second tap while starting must not queue another process.
-            if (proxyKernel.state.value is ProxyKernelState.Starting) return false
-            val previous = mutable.value.settings.proxy
-            scope.launch {
-                val result = proxyKernel.start(node)
-                if (result is ProxyKernelState.Running) {
-                    // The inbound is credential-gated with a per-start SOCKS user/pass; only the
-                    // settings layer and the JVM proxy path ever see that URL.
-                    val proxyUrl = proxyKernel.localProxyUrl()
-                    if (proxyUrl == null) {
-                        proxyKernel.stop()
-                        mutable.update {
-                            it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
-                        }
-                        return@launch
-                    }
-                    kernelProxyPreferences.edit { putInt(KEY_KERNEL_PORT, result.port) }
-                    saveSettings(mutable.value.settings.copy(proxy = proxyUrl))
-                } else if (result is ProxyKernelState.Failed) {
-                    val ownedPort = kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
-                    kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
-                    // The previous kernel (if any) was stopped before this attempt. Clear only an
-                    // endpoint this app's kernel owned; a user's manual local SOCKS proxy must stay.
-                    val previousEndpoint = runCatching { NetworkProxy.parse(previous) }.getOrNull()
-                    if (ownedPort > 0 && previousEndpoint?.host == "127.0.0.1" && previousEndpoint.port == ownedPort) {
-                        saveSettings(mutable.value.settings.copy(proxy = ""))
-                    }
-                    mutable.update {
-                        it.copy(message = context.getString(R.string.operation_failed, "xray"), messageIsError = true)
-                    }
-                }
-            }
-            return true
-        }
-        if (node.proxyUrl.isEmpty()) return false
-        // Switching from a kernel node back to a direct node must not leave the kernel process alive.
-        proxyKernel.stop()
-        kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
-        saveSettings(mutable.value.settings.copy(proxy = node.proxyUrl))
-        return true
-    }
-
-    /**
-     * Stops the kernel and clears the local bridge endpoint when the current setting points at it.
-     * Called by the UI when the subscription is cleared or the source is switched.
-     */
-    fun stopProxyKernel(clearSetting: Boolean = true) {
-        val running = proxyKernel.state.value as? ProxyKernelState.Running
-        val ownedPort = running?.port ?: kernelProxyPreferences.getInt(KEY_KERNEL_PORT, 0)
-        proxyKernel.stop()
-        kernelProxyPreferences.edit { remove(KEY_KERNEL_PORT) }
-        val current = runCatching { NetworkProxy.parse(mutable.value.settings.proxy) }.getOrNull()
-        if (clearSetting && ownedPort > 0 && current?.host == "127.0.0.1" && current.port == ownedPort) {
-            saveSettings(mutable.value.settings.copy(proxy = ""))
-        }
-    }
     private val editorLspSettingsMutex = kotlinx.coroutines.sync.Mutex()
     fun setEditorLspEnabled(enabled: Boolean) {
         mutable.update { it.copy(settings = it.settings.copy(editorLspEnabled = enabled)) }
@@ -973,7 +880,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.create(project.id, project.name, prepared)
     }
     fun closeTerminal(id: String) { scope.launch { terminal.close(id); releaseService() } }
-    fun stopAll() { browser.stop(); ssh.stop(); screenTests.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
+    fun stopAll() { browser.stop(); ssh.stop(); screenTests.stop(); deviceAccess.stop(); virtualScreen.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
     fun referenceAi(projectId: String, reference: dev.zakocoder.app.ai.AiReference): Boolean {
         val accepted = ai.referenceProject(projectId, reference)
         if (!accepted) mutable.update { it.copy(message = ai.state.value.error.ifBlank { context.getString(R.string.ai_reference_error) }, messageIsError = true) }
@@ -981,8 +888,4 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     fun dismissMessage() { mutable.update { it.copy(message = "", messageIsError = false) } }
 
-    private companion object {
-        const val KERNEL_PROXY_PREFERENCES = "proxy-kernel"
-        const val KEY_KERNEL_PORT = "port"
-    }
 }

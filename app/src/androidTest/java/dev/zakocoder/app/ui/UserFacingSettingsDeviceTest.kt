@@ -99,12 +99,10 @@ class UserFacingSettingsDeviceTest {
                 val originalProxy = workbench.state.value.settings.proxy
                 click(proxy)
                 await("Independent proxy page ready") { shown(base.getString(R.string.proxy_page_title)) }
-                await("All proxy connection modes visible") {
-                    listOf(R.string.proxy_mode_direct, R.string.proxy_mode_manual, R.string.proxy_mode_airport)
-                        .all { shown(base.getString(it)) }
+                await("External proxy settings visible") {
+                    shown(base.getString(R.string.proxy_section_manual)) && shown(base.getString(R.string.proxy_manual_label))
                 }
-                capture(dark, "proxy-modes")
-                click(base.getString(R.string.proxy_mode_manual))
+                capture(dark, "proxy-manual")
                 scrollUntil(base.getString(R.string.proxy_mode_manual_hint), 400f)
                 assertTrue(shown(base.getString(R.string.proxy_manual_help)))
                 assertEquals("Opening manual mode must not save a proxy", originalProxy, workbench.state.value.settings.proxy)

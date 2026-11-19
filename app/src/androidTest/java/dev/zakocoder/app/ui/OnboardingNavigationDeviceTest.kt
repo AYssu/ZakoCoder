@@ -91,6 +91,27 @@ class OnboardingNavigationDeviceTest {
     private fun left(resource: Int) = nodes { all ->
         all.last { label(it) == base.getString(resource) }.boundsInWindow.left
     }
+    private fun revealSetupControl(resource: Int) {
+        val text = base.getString(resource)
+        repeat(12) {
+            val revealed = nodes { all ->
+                val target = all.last { label(it) == text }
+                val bounds = target.boundsInWindow
+                if (visible(target) && bounds.height >= target.size.height * .95f) true
+                else {
+                    val scroll = generateSequence(target.parent) { it.parent }.first {
+                        it.config.getOrNull(SemanticsActions.ScrollBy) != null
+                    }
+                    assertTrue("Setup scroll accepts navigation to $text",
+                        scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, 400f) == true)
+                    false
+                }
+            }
+            if (revealed) return
+            settle()
+        }
+        error("Setup control is not visible after scrolling: $text")
+    }
     private fun click(resource: Int) {
         val text = base.getString(resource)
         fun root(node: SemanticsNode): SemanticsNode = generateSequence(node) { it.parent }.last()
@@ -222,7 +243,14 @@ class OnboardingNavigationDeviceTest {
                         }
                     }
                 } }
-                await("Permissions setup step missing") { shown(R.string.setup_permissions_title) }
+                await("Permissions setup step missing") {
+                    host.state.value.onboarding.step == 5 && nodes { all ->
+                        all.any { label(it) == base.getString(R.string.setup_permissions_title) }
+                    }
+                }
+                // Device mode choices precede this button. Reach it through the real setup
+                // scroll container, then preserve that exact background for return gestures.
+                revealSetupControl(R.string.setup_manage_permissions)
                 settle()
                 val initialWindows = windowCount()
                 val reference = capture(dark, "permissions-setup")
@@ -245,7 +273,9 @@ class OnboardingNavigationDeviceTest {
                         assertEquals(5, OnboardingRepository(context).load(false).step)
                         progress(scenario)
                         commit(scenario)
-                        await("Commit did not restore setup step 5") { !shown(R.string.app_permissions_title) && shown(R.string.setup_permissions_title) }
+                        await("Commit did not restore setup step 5 at its scrolled position") {
+                            !shown(R.string.app_permissions_title) && shown(R.string.setup_manage_permissions)
+                        }
                         assertEquals(initialWindows, windowCount())
                         assertEquals(5, OnboardingRepository(context).load(false).step)
                     }

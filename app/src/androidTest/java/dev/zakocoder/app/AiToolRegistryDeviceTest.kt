@@ -1,6 +1,10 @@
 package dev.zakocoder.app
 
 import dev.zakocoder.app.ai.*
+import dev.zakocoder.app.device.DEVICE_APP_RESPONSE_MAX_BYTES
+import dev.zakocoder.app.device.LaunchableDeviceApp
+import dev.zakocoder.app.device.launchableDeviceAppsResponse
+import dev.zakocoder.app.device.selectLaunchableDeviceApps
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -12,7 +16,7 @@ class AiToolRegistryDeviceTest {
         for (screen in listOf(false, true)) for (ssh in listOf(false, true)) for (skills in listOf(false, true)) for (delegation in listOf(false, true)) for (browser in listOf(false, true)) {
             val schema = AiController.schemas(screen, ssh, skills, delegation, browser)
             val names = (0 until schema.length()).map { schema.getJSONObject(it).getJSONObject("function").getString("name") }
-            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) && (delegation || it != AiTool.DelegateReadOnly) && (browser || it != AiTool.Browser) }.map { it.wire }
+            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) && (delegation || it != AiTool.DelegateReadOnly) && (browser || it != AiTool.Browser) && it != AiTool.DeviceShell }.map { it.wire }
             assertEquals(expected.toSet(), names.toSet())
             assertEquals(expected.size, names.size)
             repeat(schema.length()) { index ->
@@ -26,7 +30,7 @@ class AiToolRegistryDeviceTest {
     }
 
     @Test fun descriptorsCoverMetadataPermissionTargetsAndUnknownNamesAreNotExecutable() {
-        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true, delegation = true, browser = true)
+        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true, delegation = true, browser = true, deviceShell = true)
         assertEquals(AiTool.entries.toSet(), all.map { it.tool }.toSet())
         assertEquals(AiTool.entries.size, all.size)
         assertNull(AiToolRegistry.named("unregistered_tool"))
@@ -92,7 +96,8 @@ class AiToolRegistryDeviceTest {
         }
         assertEquals(AiToolRegistry.SCREEN_TEST_ACTIONS, actions("android_test"))
         assertTrue("authorize" in actions("android_test"))
-        assertTrue(actions("android_test").none { it in setOf("prepare", "install", "launch") })
+        assertTrue("launch" in actions("android_test"))
+        assertTrue(actions("android_test").none { it in setOf("prepare", "install") })
         assertEquals(AiToolRegistry.SSH_ACTIONS, actions("ssh_remote"))
     }
 
@@ -107,8 +112,40 @@ class AiToolRegistryDeviceTest {
         assertEquals("integer", timeout.getString("type"))
         assertEquals(1, timeout.getInt("minimum"))
         assertEquals(20000, timeout.getInt("maximum"))
-        assertTrue(schema.getString("description").contains("does not repeat clicks or typing"))
+        assertTrue(schema.getString("description").contains("without repeating side effects"))
         assertTrue(properties.getJSONObject("snapshot").getString("description").contains("returned observation"))
+    }
+
+    @Test fun screenAppDiscoveryRequiresNoApkAndAcceptsOnlyBoundedPlainFilters() {
+        val schema = AiToolRegistry.definition(AiTool.AndroidTest).schema.getJSONObject("function")
+        assertTrue(schema.getString("description").contains("list_apps"))
+        assertTrue("list_apps" in AiToolRegistry.SCREEN_TEST_ACTIONS)
+        fun validate(args: JSONObject) = AiToolRegistry.validateArguments(AiTool.AndroidTest, args, "list_apps")
+        validate(JSONObject().put("action", "list_apps"))
+        validate(JSONObject().put("action", "list_apps").put("text", "浏览器"))
+        validate(JSONObject().put("action", "list_apps").put("text", "x".repeat(200)))
+        for (text in listOf("x".repeat(201), "x\u0000", "x\n", 123, JSONObject.NULL)) {
+            try { validate(JSONObject().put("action", "list_apps").put("text", text)); fail("Invalid discovery filter accepted") }
+            catch (_: IllegalArgumentException) { }
+        }
+        try { validate(JSONObject().put("action", "list_apps").put("apk", "old.apk")); fail("APK selector accepted") }
+        catch (_: IllegalArgumentException) { }
+    }
+
+    @Test fun screenAppDiscoveryReturnsCompleteJsonUnderTheUtf8Budget() {
+        val page = selectLaunchableDeviceApps((1..120).map { index ->
+            LaunchableDeviceApp("dev.fixture.app$index", "🐟".repeat(80))
+        }, "")
+        val encoded = launchableDeviceAppsResponse(page, 7)
+        assertTrue(encoded.toByteArray(Charsets.UTF_8).size <= DEVICE_APP_RESPONSE_MAX_BYTES)
+        val parsed = JSONObject(encoded)
+        assertTrue(parsed.getBoolean("truncated"))
+        assertEquals(120, parsed.getInt("matched_count"))
+        assertEquals(7, parsed.getInt("display_id"))
+        val apps = parsed.getJSONArray("apps")
+        assertEquals(apps.length(), parsed.getInt("returned_count"))
+        assertTrue(apps.length() in 1..99)
+        repeat(apps.length()) { index -> assertEquals("🐟".repeat(80), apps.getJSONObject(index).getString("label")) }
     }
 
     @Test fun screenWaitAcceptsOnlyNonBlankTextAndExactBoundedIntegerTimeouts() {

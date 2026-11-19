@@ -165,7 +165,7 @@ class TerminalLayoutDeviceTest {
 
     @Test(timeout = 60_000) fun modelListBelongsToActiveProfileAndScrollsWithoutSearch(): Unit = runBlocking {
         val profiles = listOf(
-            AiProfile("deepseek", "fixture DeepSeek", "http://127.0.0.1", "deepseek-00", false,
+            AiProfile("deepseek", "fixture DeepSeek", "http://127.0.0.1", "deepseek-23", false,
                 AiParameters(), modelChoices = (0..24).map { "deepseek-%02d".format(it) } + "shared-model"),
             AiProfile("gpt", "fixture GPT", "http://127.0.0.1", "gpt-00", false,
                 AiParameters(), modelChoices = (0..24).map { "gpt-%02d".format(it) } + "shared-model"))
@@ -195,7 +195,7 @@ class TerminalLayoutDeviceTest {
                         }
                     }
                 } }
-                await("only active provider models shown") { visible("deepseek-00") && !visible("gpt-") }
+                await("opens at selected model in active provider") { visible("deepseek-23") && !visible("gpt-") }
                 assertFalse("long lists must not introduce a search editor", nodes { all -> all.any { it.config.contains(SemanticsActions.SetText) } })
                 capture("model-list-deepseek-${if (dark) "night" else "day"}")
                 scrollTo(24)
@@ -210,7 +210,7 @@ class TerminalLayoutDeviceTest {
                 clickModel("shared-model")
                 assertEquals("gpt" to "shared-model", chosen.get())
                 main { state = state.copy(catalog = state.catalog.copy(activeId = "deepseek")) }
-                await("previous provider retains its saved models") { visible("deepseek-00") && !visible("gpt-") }
+                await("previous provider retains its saved models") { visible("deepseek-23") && !visible("gpt-") }
                 assertEquals(profiles, state.catalog.profiles)
             }
         }

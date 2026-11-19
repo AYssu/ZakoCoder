@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -187,7 +188,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     DropdownMenuItem(text = { Text(stringResource(R.string.browser_title)) }, onClick = { more = false; onBrowser() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_history)) }, leadingIcon = { WorkbenchIcon(Glyph.History) },
                         enabled = project != null && !state.active && !state.restoring,
-                        onClick = { more = false; onConversations?.invoke() ?: run { history = true } })
+                        onClick = { more = false; history = true })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_file_changes_title)) },
                         onClick = { more = false; detailPanel = "changes" })
                     DropdownMenuItem(text = { Text(stringResource(R.string.ai_agent_settings)) },
@@ -225,7 +226,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.recoveryNotes.isNotEmpty() && !state.active) Text(stringResource(R.string.ai_recovery_available), style = MaterialTheme.typography.labelSmall)
         if (state.historyTrimmed) Text(stringResource(R.string.ai_history_trimmed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth()) { LazyColumn(Modifier.fillMaxSize().nestedScroll(readingScroll), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth().testTag("ai-message-viewport")) { LazyColumn(Modifier.fillMaxSize().nestedScroll(readingScroll), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
             if (state.timeline.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WorkbenchIcon(Glyph.Ai, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ai_ready_title), fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -298,9 +299,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             }
             item(key = "conversation-bottom") { Spacer(Modifier.height(with(androidx.compose.ui.platform.LocalDensity.current) { 36.sp.toDp() })) }
         }
-        }
-        }
-        if (!follow && !atBottom) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        if (!follow && !atBottom) Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = {
                 readingPaused = false
                 follow = true
@@ -308,9 +307,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     automaticScroll = true
                     try { listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)) } finally { automaticScroll = false; follow = true }
                 }
-            }, modifier = Modifier.heightIn(min = 48.dp)) {
+            }, modifier = Modifier.heightIn(min = 48.dp).testTag("ai-latest-overlay")) {
                 WorkbenchIcon(Glyph.Down, Modifier.size(15.dp)); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_latest), fontSize = 12.sp)
             }
+        }
+        }
         }
         AiImageAttachments(state.pendingImages, workbench.ai::imageThumbnail, enabled = !state.active && !state.imagesLoading, onRemove = workbench.ai::removeImage)
         if (state.imagesLoading) Text(stringResource(R.string.ai_images_loading), style = MaterialTheme.typography.labelSmall)

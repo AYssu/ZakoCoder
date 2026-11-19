@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ai_device_shell_tool">真机 Shell</string>
+    <string name="ai_device_shell_tool_desc">在 Android 宿主执行命令，身份由全局权限模式决定</string>
+    <string name="ai_device_shell_warning">执行环境：Android 真机 · %1$s\n工作目录：/\n命令：%2$s\n系统、应用及外部文件的修改无法通过项目检查点恢复。</string>
+    <string name="device_shell_basic_identity">应用身份（普通权限）</string>
+    <string name="device_shell_root_identity">Root 身份（UID 0）</string>
+    <string name="device_virtual_target">独立虚拟屏幕 · Root</string>
+</resources>

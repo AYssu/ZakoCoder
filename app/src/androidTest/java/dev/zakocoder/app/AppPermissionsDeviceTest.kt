@@ -23,7 +23,7 @@ class AppPermissionsDeviceTest {
             access.runtimePermissions(AppPermission.Notifications))
         assertArrayEquals(if (Build.VERSION.SDK_INT < 30) arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE) else emptyArray<String>(),
             access.runtimePermissions(AppPermission.Files))
-        listOf(AppPermission.InstallPackages, AppPermission.Overlay, AppPermission.Accessibility, AppPermission.Battery).forEach {
+        listOf(AppPermission.InstallPackages, AppPermission.Accessibility, AppPermission.Battery).forEach {
             assertTrue(access.runtimePermissions(it).isEmpty())
         }
     }

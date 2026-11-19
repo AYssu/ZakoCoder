@@ -10,11 +10,11 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-enum class CapabilityPackage(val wire: String) { Screen("screen"), Ssh("ssh"), Browser("browser") }
+enum class CapabilityPackage(val wire: String) { Screen("screen"), Ssh("ssh"), Browser("browser"), DeviceShell("device_shell") }
 data class CapabilityPackagesState(
     val loaded: Boolean = false, val busy: Boolean = false, val error: String? = null,
     val enabled: Map<String, Set<CapabilityPackage>> = emptyMap(),
-    val screenEnabled: Boolean = false, val browserEnabled: Boolean = false,
+    val screenEnabled: Boolean = false, val browserEnabled: Boolean = false, val deviceShellEnabled: Boolean = false,
 )
 
 /** Screen and browser availability are global; SSH remains project scoped. Neither switch grants device/host access. */
@@ -26,16 +26,18 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
     val state = mutable.asStateFlow()
     private var leases = emptyMap<Pair<String, CapabilityPackage>, String>()
     private val deviceScope = "device-screen-global"
+    private val shellScope = "device-shell-global"
     private val browserScope = "device-browser-global"
     private fun scopeFor(id: String, kind: CapabilityPackage) = when (kind) {
         CapabilityPackage.Screen -> deviceScope
         CapabilityPackage.Browser -> browserScope
+        CapabilityPackage.DeviceShell -> shellScope
         CapabilityPackage.Ssh -> id
     }
     init { scope.launch {
         try {
-            val (loaded, screenEnabled, browserEnabled) = withContext(Dispatchers.IO) {
-                if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) Triple(emptyMap<String, Set<CapabilityPackage>>(), false, false) else {
+            val stored = withContext(Dispatchers.IO) {
+                if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) Stored(emptyMap(), false, false, false) else {
                     val json = JSONObject(file.openRead().bufferedReader().use { it.readText() })
                     val version = json.getInt("version")
                     require(version in 1..2)
@@ -47,22 +49,29 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                             CapabilityPackage.entries.singleOrNull { it == CapabilityPackage.Ssh && it.wire == names.getString(index) }
                         }.toSet()
                     }
-                    Triple(configured, version == 2 && json.optBoolean("screen_enabled", false), version == 2 && json.optBoolean("browser_enabled", false))
+                    Stored(configured, version == 2 && json.optBoolean("screen_enabled", false), version == 2 && json.optBoolean("browser_enabled", false), version == 2 && json.optBoolean("device_shell_enabled", false))
                 }
             }
+            val (loaded, screenEnabled, browserEnabled, deviceShellEnabled) = stored
             leases = loaded.flatMap { (id, kinds) -> kinds.map { (id to it) to UUID.randomUUID().toString() } }.toMap()
             if (screenEnabled) leases = leases + ((deviceScope to CapabilityPackage.Screen) to UUID.randomUUID().toString())
             if (browserEnabled) leases = leases + ((browserScope to CapabilityPackage.Browser) to UUID.randomUUID().toString())
-            mutable.value = CapabilityPackagesState(loaded = true, enabled = loaded, screenEnabled = screenEnabled, browserEnabled = browserEnabled)
+            if (deviceShellEnabled) leases = leases + ((shellScope to CapabilityPackage.DeviceShell) to UUID.randomUUID().toString())
+            mutable.value = CapabilityPackagesState(loaded = true, enabled = loaded, screenEnabled = screenEnabled, browserEnabled = browserEnabled, deviceShellEnabled = deviceShellEnabled)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { mutable.value = CapabilityPackagesState(loaded = true, error = failure) }
     } }
     fun enabled(id: String?, kind: CapabilityPackage): Boolean =
         mutable.value.loaded && mutable.value.error == null && if (kind == CapabilityPackage.Screen) mutable.value.screenEnabled
-        else if (kind == CapabilityPackage.Browser) mutable.value.browserEnabled else id != null && snapshot(id).containsKey(kind)
+        else if (kind == CapabilityPackage.Browser) mutable.value.browserEnabled
+        else if (kind == CapabilityPackage.DeviceShell) mutable.value.deviceShellEnabled else id != null && snapshot(id).containsKey(kind)
     fun snapshot(id: String): Map<CapabilityPackage, String> =
         if (!mutable.value.loaded || mutable.value.error != null) emptyMap()
         else CapabilityPackage.entries.mapNotNull { kind -> leases[scopeFor(id, kind) to kind]?.let { kind to it } }.toMap()
+
+    private data class Stored(val projects: Map<String, Set<CapabilityPackage>>, val screen: Boolean, val browser: Boolean, val shell: Boolean)
+
+    fun setDeviceShellEnabled(value: Boolean) = setEnabled(shellScope, CapabilityPackage.DeviceShell, value)
 
     fun setBrowserEnabled(value: Boolean) = setEnabled(browserScope, CapabilityPackage.Browser, value)
 
@@ -78,7 +87,8 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
         val enabled = if (kind != CapabilityPackage.Ssh) mutable.value.enabled else mutable.value.enabled + (id to kinds)
         val screenEnabled = if (kind == CapabilityPackage.Screen) value else mutable.value.screenEnabled
         val browserEnabled = if (kind == CapabilityPackage.Browser) value else mutable.value.browserEnabled
-        mutable.value = mutable.value.copy(busy = true, enabled = enabled, screenEnabled = screenEnabled, browserEnabled = browserEnabled, error = null)
+        val deviceShellEnabled = if (kind == CapabilityPackage.DeviceShell) value else mutable.value.deviceShellEnabled
+        mutable.value = mutable.value.copy(busy = true, enabled = enabled, screenEnabled = screenEnabled, browserEnabled = browserEnabled, deviceShellEnabled = deviceShellEnabled, error = null)
         changed(scopeFor(id, kind), kind)
         scope.launch {
             try {
@@ -87,7 +97,7 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                     enabled.forEach { (project, packages) -> projects.put(project, JSONArray(packages.map { it.wire })) }
                     val output = file.startWrite()
                     try {
-                        output.write(JSONObject().put("version", 2).put("screen_enabled", screenEnabled).put("browser_enabled", browserEnabled).put("projects", projects).toString().toByteArray())
+                        output.write(JSONObject().put("version", 2).put("screen_enabled", screenEnabled).put("browser_enabled", browserEnabled).put("device_shell_enabled", deviceShellEnabled).put("projects", projects).toString().toByteArray())
                         file.finishWrite(output)
                     } catch (error: Exception) { file.failWrite(output); throw error }
                 }
@@ -97,8 +107,9 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                 leases = emptyMap()
                 changed(deviceScope, CapabilityPackage.Screen)
                 changed(browserScope, CapabilityPackage.Browser)
+                changed(shellScope, CapabilityPackage.DeviceShell)
                 enabled.forEach { (project, packages) -> packages.forEach { changed(project, it) } }
-                mutable.update { it.copy(busy = false, enabled = emptyMap(), screenEnabled = false, browserEnabled = false, error = failure) }
+                mutable.update { it.copy(busy = false, enabled = emptyMap(), screenEnabled = false, browserEnabled = false, deviceShellEnabled = false, error = failure) }
             }
         }
     }

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="device_mode_title">运行权限</string>
+    <string name="device_mode_basic">基础模式</string>
+    <string name="device_mode_basic_hint">保留 Ubuntu 开发环境，真机 Shell 使用应用的普通权限。</string>
+    <string name="device_mode_root">Root 模式</string>
+    <string name="device_mode_root_hint">授权设备 Shell 和虚拟屏幕使用系统级权限。</string>
+    <string name="device_mode_root_confirm">开启后，设备 Shell 与虚拟屏幕将使用已授予的 Root 权限，可读取或修改手机系统及应用数据。系统授权仍以实际结果为准。Ubuntu、SSH、网页与当前 AI 审批模式保持原样。</string>
+    <string name="device_mode_root_enable">授权并开启</string>
+    <string name="device_mode_authorizing">正在检查设备权限…</string>
+    <string name="device_mode_root_ready">Root 已授权，设备调试可用</string>
+    <string name="device_mode_root_unavailable">Root 尚未就绪，请重新授权</string>
+    <string name="device_mode_scope_hint">运行权限只影响真机 Shell 与设备调试。Ask、Auto、Yolo、Only 继续管理 AI 工具审批。</string>
+    <string name="device_permissions_open">权限配置</string>
+    <string name="device_permissions_error">无法完成设备授权，请检查授权状态后重试。</string>
+    <string name="capability_category_device">设备调试</string>
+    <string name="capability_category_web">网页调试</string>
+    <string name="capability_category_remote">远程开发</string>
+    <string name="capability_device_root_hint">虚拟屏幕需要 Root 模式。真机 Shell 在基础模式下使用普通应用身份。</string>
+    <string name="capability_device_shell_title">设备 Shell</string>
+    <string name="capability_device_shell_description">让 AI 在 Android 宿主机执行命令，读取实时输出与退出状态。</string>
+    <string name="capability_device_shell_hint">基础模式使用应用身份，Root 模式使用 UID 0；命令在当前手机运行，与 Ubuntu 终端相互独立。</string>
+    <string name="capability_device_shell_configure">查看设备权限</string>
+    <string name="virtual_screen_title">虚拟屏幕</string>
+    <string name="virtual_screen_description">在独立显示中调试应用，读取界面、截图、点击和输入。</string>
+    <string name="virtual_screen_hint">只操作专用虚拟显示，不控制当前手机主屏。应用数据仍与本机共享。</string>
+    <string name="virtual_screen_configure">打开虚拟屏幕</string>
+    <string name="virtual_screen_failure">虚拟屏幕不可用：%1$s</string>
+    <string name="virtual_screen_root_required">请在权限配置中启用 Root 模式并完成授权</string>
+    <string name="virtual_screen_start">启动虚拟屏幕</string>
+    <string name="virtual_screen_stop">关闭虚拟屏幕</string>
+    <string name="virtual_screen_refresh">刷新画面</string>
+    <string name="virtual_screen_idle">虚拟屏幕尚未启动</string>
+    <string name="virtual_screen_starting">正在准备虚拟屏幕…</string>
+    <string name="virtual_screen_running">显示 %1$d · %2$d × %3$d</string>
+    <string name="virtual_screen_apps">打开应用</string>
+    <string name="virtual_screen_apps_loading">正在读取应用列表…</string>
+    <string name="virtual_screen_apps_empty">没有可启动的应用</string>
+    <string name="virtual_screen_apps_failed">无法读取应用列表，请重新打开后重试。</string>
+    <string name="virtual_screen_preview">虚拟屏幕画面</string>
+    <string name="virtual_screen_preview_hint">启动应用后刷新画面。AI 仅在任务授权范围内操作该虚拟显示。</string>
+    <string name="virtual_screen_operation_failed">操作失败，请查看设备权限并重试。</string>
+    <string name="virtual_screen_share">向模型分享截图</string>
+    <string name="virtual_screen_share_hint">关闭时仍可读取节点与操作界面，截图不会发送给模型。</string>
+    <string name="virtual_screen_sharing_required">请在虚拟屏幕中开启当前任务的截图分享</string>
+</resources>

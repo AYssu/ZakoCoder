@@ -84,7 +84,7 @@ class WorkspaceNavigationDeviceTest {
         } } finally { bitmap.recycle() }
     }
 
-    @Test(timeout = 180000) fun isolatedWorkspaceConversationsAndCreationModes() = runBlocking {
+    @Test(timeout = 180000) fun workspacesOpenFilesDirectlyAndKeepCreationModes() = runBlocking {
         warmDeviceActivity()
         val token = "workspace-navigation-${UUID.randomUUID()}"
         val own = File(base.cacheDir, token).apply { mkdirs() }
@@ -109,14 +109,9 @@ class WorkspaceNavigationDeviceTest {
                 repository.select(list.first().id)
                 list
             }
-            val conversationIds = projects.map { UUID.randomUUID().toString() }
-            val titles = listOf("Only Alpha conversation", "Only Beta conversation")
             withContext(Dispatchers.IO) {
-                projects.forEachIndexed { index, project -> history.save(project.id,
-                    AiState(projectId = project.id, conversationId = conversationIds[index],
-                        timeline = listOf(AiEntry(UUID.randomUUID().toString(), titles[index], role = AiRole.User)))) }
                 projects.forEachIndexed { index, project ->
-                    assertEquals(titles[index], AiHistoryStore(isolated).load(project.id).conversations.single().title)
+                    File(isolated.filesDir, "workspaces/${project.id}/source-$index.py").writeText("print($index)\n")
                 }
             }
             val host = main { Workbench(isolated, aiHistory = history) }.also { workbench = it }
@@ -145,40 +140,18 @@ class WorkspaceNavigationDeviceTest {
                                         AddProjectSheet(enabled = true, onDismiss = { addMode = false },
                                             onImport = { imports.incrementAndGet() }, onCreate = { creates.incrementAndGet() },
                                             onClone = { clones.incrementAndGet() }, onBind = { bindings.incrementAndGet() })
-                                    } else WorkspaceConversationsPage(host, state, selectedProject,
-                                        onBack = {}, onFiles = {}, onTerminal = {}, onAi = { navigations.incrementAndGet() })
+                                    } else ProjectLibraryPage(host, state, openedId = null, onOpened = {}, onEnvironment = {}, onTerminal = {},
+                                        onAi = { navigations.incrementAndGet() }, workspaceId = selectedProject.id)
                                 }
                             }
                         }
                     } }
-                    await("Alpha conversation missing") { shown(titles[0]) }
-                    assertFalse("Beta history must not appear in Alpha", shown(titles[1]))
-                    capture(dark, "alpha-conversations")
-                    val beforeNavigation = navigations.get()
-                    click(titles[0])
-                    await("Existing conversation did not navigate") { navigations.get() == beforeNavigation + 1 }
-                    assertEquals(conversationIds[0], host.ai.state.value.conversationId)
+                    await("Alpha files open directly") { shown("source-0.py") }
+                    assertFalse("The obsolete conversation intermediate page must not appear", shown(base.getString(R.string.workspace_threads_heading)))
+                    capture(dark, "alpha-files")
                     main { selectedProject = projects[1]; assertTrue(host.openWorkspace(projects[1].id)) }
-                    await("Beta workspace transaction did not finish") {
-                        host.state.value.selectedId == projects[1].id && !host.state.value.busy &&
-                            host.ai.state.value.let { it.projectId == projects[1].id && !it.permissionsLoading && !it.historyError }
-                    }
-                    await("Beta conversation missing") { shown(titles[1]) }
-                    assertFalse("Alpha history must not appear in Beta", shown(titles[0]))
-                    capture(dark, "beta-conversations")
-                    val beforeBetaNavigation = navigations.get()
-                    click(titles[1])
-                    await("Specified Beta conversation did not navigate") { navigations.get() == beforeBetaNavigation + 1 }
-                    assertEquals(conversationIds[1], host.ai.state.value.conversationId)
-                    val beforeNew = navigations.get()
-                    click(base.getString(R.string.workspace_threads_new))
-                    await("New conversation did not navigate") { navigations.get() == beforeNew + 1 }
-                    val createdId = host.ai.state.value.conversationId
-                    assertNotEquals(conversationIds[1], createdId)
-                    val reloaded = withContext(Dispatchers.IO) { AiHistoryStore(isolated).load(projects[1].id, createdId) }
-                    assertEquals(createdId, reloaded.state?.conversationId)
-                    assertTrue(reloaded.conversations.any { it.id == createdId })
-                    assertFalse(reloaded.conversations.any { it.id == conversationIds[0] })
+                    await("Beta files replace Alpha") { shown("source-1.py") && !shown("source-0.py") }
+                    capture(dark, "beta-files")
 
                     main { addRevision++; addMode = true }
                     await("Workspace mode picker missing") { shown(base.getString(R.string.workspace_flow_local)) }
@@ -196,17 +169,17 @@ class WorkspaceNavigationDeviceTest {
                     main { addRevision++ }
                     await("Workspace mode picker did not reset") { shown(base.getString(R.string.workspace_flow_local)) }
                     click(base.getString(R.string.workspace_flow_local))
-                    assertEquals(beforeBind + 1, bindings.get())
+                    await("Local mode action runs after panel exit") { bindings.get() == beforeBind + 1 }
                     assertEquals(0, imports.get())
                     assertEquals(0, creates.get())
                     assertEquals(0, clones.get())
-                    assertFalse("Local action must not reveal Work actions", shown(base.getString(R.string.mobile_import_source)))
+                    await("Local action closes the mode panel") { !shown(base.getString(R.string.mobile_import_source)) }
                     main { addMode = false }
                 }
             }
         } finally {
             withContext(NonCancellable) {
-                main { workbench?.stopAll() }
+                main { workbench?.editor?.dispose(); workbench?.stopAll() }
                 delay(300)
                 withContext(Dispatchers.IO) {
                     PrivateFiles.deleteTree(own)

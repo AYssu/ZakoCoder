@@ -13,7 +13,7 @@ class DebugApkWorkflowTest(unittest.TestCase):
     def test_ci_four_builds_share_resolved_identity_and_inventory_version(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/ci.yml").read_text()
-        job = workflow.split("  android:\n", 1)[1].split("  kernel-plugin:", 1)[0]
+        job = workflow.split("  android:\n", 1)[1]
         self.assertIn('scripts/build_version.py --channel dev --github-output "$GITHUB_OUTPUT"', job)
         step = job.split("      - name: Check all four distribution builds and actual package inventories\n", 1)[1]
         self.assertIn("BUILD_VERSION: ${{ steps.version.outputs.version }}", step)
@@ -74,7 +74,7 @@ class DebugApkWorkflowTest(unittest.TestCase):
             self.assertIn("Commit: fixture-commit\n", metadata)
             self.assertIn("Ref: refs/heads/main\n", metadata)
             self.assertIn("Run: 12 (attempt 2)\n", metadata)
-            self.assertIn("kernel plugin APK is optional", metadata)
+            self.assertIn("Full bundles the Ubuntu archive", metadata)
             self.assertIn("Upgrading does not automatically replace", metadata)
             self.assertEqual(8, len(metadata.splitlines()))
             self.assertIn("Version: 0.1.2111216-dev (versionCode 216000000)", metadata)
@@ -87,9 +87,7 @@ class DebugApkWorkflowTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             apps = root / "apk-output"
-            plugins = root / "plugin-output"
             apps.mkdir()
-            plugins.mkdir()
             sources = {}
             for edition in ("lite", "full"):
                 for abi in ("arm64-v8a", "x86_64"):
@@ -97,13 +95,8 @@ class DebugApkWorkflowTest(unittest.TestCase):
                     source = apps / name
                     source.write_bytes(f"fixture {edition} {abi}".encode())
                     sources[f"debug-{edition}-{abi}"] = source
-            for abi in ("arm64-v8a", "x86_64"):
-                source = plugins / f"ZakoCoder-kernel-plugin-debug-{abi}.apk"
-                source.write_bytes(f"fixture kernel {abi}".encode())
-                sources[f"kernel-plugin-{abi}"] = source
             (apps / "BUILD.txt").write_text("Commit: fixture-commit\n")
             (apps / "SHA256SUMS.txt").write_text("complete main checksums\n")
-            (plugins / "SHA256SUMS.txt").write_text("complete plugin checksums\n")
             for name in ("native-runtime-sources.tar.gz", "distribution-validation.json", "LICENSE.txt"):
                 (apps / name).write_text(f"fixture {name}\n")
             result = subprocess.run(["bash", "-euo", "pipefail", "-c", command], cwd=root,
@@ -125,8 +118,6 @@ class DebugApkWorkflowTest(unittest.TestCase):
             for source in apps.iterdir():
                 if source.suffix != ".apk":
                     self.assertEqual(source.read_bytes(), (support / source.name).read_bytes())
-            self.assertEqual((plugins / "SHA256SUMS.txt").read_bytes(),
-                             (support / "kernel-plugin-SHA256SUMS.txt").read_bytes())
 
     def test_each_upload_and_summary_link_uses_its_individual_directory(self):
         workflow = Path(__file__).resolve().parents[1] / ".github/workflows/build-apk.yml"
@@ -135,8 +126,8 @@ class DebugApkWorkflowTest(unittest.TestCase):
         uploads = [s for s in steps if "uses: actions/upload-artifact@" in s]
         expected = {f"debug-{edition}-{abi}" for edition in ("lite", "full")
                     for abi in ("arm64-v8a", "x86_64")}
-        expected |= {"kernel-plugin-arm64-v8a", "kernel-plugin-x86_64", "support"}
-        self.assertEqual(7, len(uploads))
+        expected |= {"support"}
+        self.assertEqual(5, len(uploads))
         self.assertEqual(expected, {s.splitlines()[0].removeprefix("Upload ") for s in uploads})
         for step in uploads:
             artifact = step.splitlines()[0].removeprefix("Upload ")

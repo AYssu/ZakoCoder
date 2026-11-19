@@ -28,7 +28,8 @@ import dev.zakocoder.app.settings.RunningNotificationStatus
 internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false, rootError: String = "",
     onRequestRoot: () -> Unit, onToolPermissions: () -> Unit, onBack: () -> Unit,
     toolsEnabled: Boolean = true, backgroundServiceRunning: Boolean = false, backgroundServiceError: Boolean = false,
-    embedded: Boolean = false, backEnabled: Boolean = true) {
+    embedded: Boolean = false, backEnabled: Boolean = true,
+    deviceConfiguration: (@Composable () -> Unit)? = null, showLegacyDevicePermissions: Boolean = true) {
     val context = LocalContext.current
     val access = remember(context) { AppPermissions(context) }
     val owner = LocalLifecycleOwner.current
@@ -42,7 +43,7 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(access, revision) { states = access.snapshot() }
+    LaunchedEffect(access, revision, rootGranted, rootBusy) { states = access.snapshot() }
     if (confirmRoot) WorkbenchAlertDialog(onDismissRequest = { confirmRoot = false },
         title = { Text(stringResource(R.string.app_permissions_root)) },
         text = { Text(stringResource(R.string.app_permissions_root_confirm)) },
@@ -56,7 +57,8 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
                 if (permissions.isNotEmpty()) permissionRequest.launch(permissions)
                 else navigationError = !access.openSettings(permission)
             }, onRoot = { confirmRoot = true }, onTools = onToolPermissions, toolsEnabled = toolsEnabled,
-            backgroundServiceRunning = backgroundServiceRunning, backgroundServiceError = backgroundServiceError)
+            backgroundServiceRunning = backgroundServiceRunning, backgroundServiceError = backgroundServiceError,
+            deviceConfiguration = deviceConfiguration, showLegacyDevicePermissions = showLegacyDevicePermissions)
     }
     if (embedded) {
         val back = rememberWorkbenchBackMotion(enabled = backEnabled, onBack = onBack)
@@ -80,8 +82,10 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
 internal fun AppPermissionsPanel(states: List<AppPermissionStatus>?, rootGranted: Boolean, rootBusy: Boolean,
     rootError: String, navigationError: Boolean = false, onManage: (AppPermission) -> Unit,
     onRequest: (AppPermission) -> Unit, onRoot: () -> Unit, onTools: () -> Unit,
-    toolsEnabled: Boolean = true, backgroundServiceRunning: Boolean = false, backgroundServiceError: Boolean = false) {
+    toolsEnabled: Boolean = true, backgroundServiceRunning: Boolean = false, backgroundServiceError: Boolean = false,
+    deviceConfiguration: (@Composable () -> Unit)? = null, showLegacyDevicePermissions: Boolean = true) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (deviceConfiguration != null) item { deviceConfiguration() }
         item { Text(stringResource(R.string.app_permissions_intro), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         if (states == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.app_permissions_loading),
@@ -94,9 +98,7 @@ internal fun AppPermissionsPanel(states: List<AppPermissionStatus>?, rootGranted
             GroupDivider()
             PermissionRow(AppPermission.InstallPackages, states, onManage, onRequest)
         } }
-        item { PermissionGroup(stringResource(R.string.app_permissions_special)) {
-            PermissionRow(AppPermission.Overlay, states, onManage, onRequest)
-            GroupDivider()
+        if (showLegacyDevicePermissions) item { PermissionGroup(stringResource(R.string.app_permissions_special)) {
             PermissionRow(AppPermission.Accessibility, states, onManage, onRequest)
             GroupDivider()
             PermissionContent(stringResource(R.string.app_permissions_root), stringResource(R.string.app_permissions_root_hint),
@@ -144,7 +146,6 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
         AppPermission.Notifications -> R.string.app_permissions_notifications
         AppPermission.Files -> if (Build.VERSION.SDK_INT >= 30) R.string.app_permissions_files else R.string.app_permissions_files_legacy
         AppPermission.InstallPackages -> R.string.app_permissions_install
-        AppPermission.Overlay -> R.string.app_permissions_overlay
         AppPermission.Accessibility -> R.string.app_permissions_accessibility
         AppPermission.Battery -> R.string.app_permissions_battery
     }
@@ -152,7 +153,6 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
         AppPermission.Notifications -> R.string.app_permissions_notifications_hint
         AppPermission.Files -> if (Build.VERSION.SDK_INT >= 30) R.string.app_permissions_files_hint else R.string.app_permissions_files_legacy_hint
         AppPermission.InstallPackages -> R.string.app_permissions_install_hint
-        AppPermission.Overlay -> R.string.app_permissions_overlay_hint
         AppPermission.Accessibility -> R.string.app_permissions_accessibility_hint
         AppPermission.Battery -> R.string.app_permissions_battery_hint
     }

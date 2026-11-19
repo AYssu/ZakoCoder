@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.ui.*
 import dev.zakocoder.app.test.R as TestR
 import org.junit.Assert.*

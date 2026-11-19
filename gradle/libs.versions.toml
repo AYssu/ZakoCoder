@@ -19,6 +19,8 @@ okhttp = "5.5.1"
 jsch = "2.28.8"
 
 [libraries]
+libsu-core = { module = "com.github.topjohnwu.libsu:core", version = "6.0.0" }
+libsu-service = { module = "com.github.topjohnwu.libsu:service", version = "6.0.0" }
 json-test = { module = "org.json:json", version = "20240303" }
 navigationevent-compose = { module = "androidx.navigationevent:navigationevent-compose", version = "1.2.0" }
 miuix-ui = { module = "top.yukonga.miuix.kmp:miuix-ui", version = "0.9.4" }

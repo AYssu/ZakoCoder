@@ -169,29 +169,11 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     var aiPermissions by remember { mutableStateOf(false) }
     if (aiPermissions) AiPermissionsSheet(workbench, state.projects.find { it.id == ai.projectId }?.name.orEmpty(), { aiPermissions = false })
     var appPermissionsOpen by rememberSaveable { mutableStateOf(false) }
-    var rootRequestBusy by remember { mutableStateOf(false) }
-    var rootRequestError by remember { mutableStateOf("") }
-    val permissionScope = rememberCoroutineScope()
-    val rootDeniedMessage = stringResource(R.string.screen_test_root_denied)
-    val rootFailedMessage = stringResource(R.string.screen_test_operation_failed)
     if (appPermissionsOpen) {
-        val screenPermissions by workbench.screenTests.state.collectAsStateWithLifecycle()
-        AppPermissionsPage(rootGranted = screenPermissions.rootGranted, rootBusy = rootRequestBusy, rootError = rootRequestError,
-            onRequestRoot = {
-                permissionScope.launch {
-                    rootRequestBusy = true; rootRequestError = ""
-                    try {
-                        workbench.screenTests.setAccess(dev.zakocoder.app.screentest.ScreenTestAccess.Root)
-                        if (!workbench.screenTests.requestRootAccess()) rootRequestError = rootDeniedMessage
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                    catch (_: Exception) { rootRequestError = rootFailedMessage }
-                    finally { rootRequestBusy = false }
-                }
-            }, onToolPermissions = {
-                workbench.ai.select(state.selectedId)
-                if (workbench.ai.state.value.projectId == state.selectedId) { appPermissionsOpen = false; aiPermissions = true }
-            }, onBack = { appPermissionsOpen = false },
-            toolsEnabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
+        DevicePermissionsPage(workbench, onBack = { appPermissionsOpen = false }, onToolPermissions = {
+            workbench.ai.select(state.selectedId)
+            if (workbench.ai.state.value.projectId == state.selectedId) { appPermissionsOpen = false; aiPermissions = true }
+        }, toolsEnabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
             backgroundServiceRunning = state.backgroundServiceRunning, backgroundServiceError = state.backgroundServiceError)
     }
     var editing by remember { mutableStateOf<String?>(null) }

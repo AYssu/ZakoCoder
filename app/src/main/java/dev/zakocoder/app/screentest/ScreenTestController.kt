@@ -1,19 +1,11 @@
 package dev.zakocoder.app.screentest
 
-import android.content.ClipData
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
-import android.os.Build
-import android.provider.Settings
 import android.util.AtomicFile
-import androidx.core.content.FileProvider
-import androidx.core.net.toUri
 import dev.zakocoder.app.R
-import dev.zakocoder.app.projects.ApkInstallCopy
+import dev.zakocoder.app.device.DeviceAccessController
+import dev.zakocoder.app.device.DeviceMode
+import dev.zakocoder.app.device.VirtualScreenController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Deferred
@@ -37,13 +29,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.io.File
-import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 /** Owns explicit task authorization and evidence. Capability availability never grants a task. */
-class ScreenTestController(context: Context, private val projectRoot: (String) -> File) {
+class ScreenTestController(context: Context,
+    private val virtualScreen: VirtualScreenController, private val deviceAccess: DeviceAccessController) {
     private val context = context.applicationContext
     private val mutableState = MutableStateFlow(ScreenTestState())
     val state: StateFlow<ScreenTestState> = mutableState.asStateFlow()
@@ -57,86 +49,35 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     private var reportTail: Deferred<Unit>? = null
     @Volatile private var selected: Selection? = null
     @Volatile private var operation: Job? = null
-    private val rootBackend = RootScreenTestBackend(this.context)
-    private var overlayReturn: (String, String) -> Unit = { _, _ -> }
-    private var overlayStop: (String, String) -> Unit = { project, lease -> stopOverlayTask(project, lease) }
-    private val overlayScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val overlay = ScreenTestOverlay(this.context,
-        { visible -> mutableState.update { it.copy(overlayVisible = visible) } },
-        { project, lease ->
-            if (taskLease(project) == lease) {
-                try { overlayReturn(project, lease) } finally { setOverlayEnabled(false) }
-            }
-        }, { project, lease -> if (taskLease(project) == lease) overlayStop(project, lease) },
-        { code -> mutableState.update { it.copy(overlayEnabled = false, overlayFailure = code, overlayGranted = Settings.canDrawOverlays(this.context)) } })
-    fun stopOverlayTask(expectedProject: String, expectedLease: String): Boolean = synchronized(selectionLock) {
-        if (selected?.projectId != expectedProject || selected?.sessionId != expectedLease) false
-        else { stopWithReason("overlay_stop"); true }
-    }
-    fun bindOverlayActions(returnToApp: (String, String) -> Unit, stopTask: (String, String) -> Unit) {
-        overlayReturn = returnToApp; overlayStop = stopTask
-    }
-    fun reportOverlayServiceFailure() {
-        mutableState.update { it.copy(overlayEnabled = false, overlayFailure = "foreground_service") }
-    }
-    /** Only the owning project and live lease may publish public conversation text. */
-    fun updateOverlayConversation(projectId: String, lease: String, publicText: String) = synchronized(selectionLock) {
-        if (selected?.projectId != projectId || selected?.sessionId != lease) return@synchronized
-        val bounded = boundedOverlayText(publicText)
-        mutableState.update { it.copy(overlayConversation = bounded) }
-    }
-
-    fun setOverlayEnabled(enabled: Boolean) {
-        mutableState.update { it.copy(overlayEnabled = enabled && Settings.canDrawOverlays(this.context), overlayFailure = "") }
-        refresh()
-    }
-    fun openOverlaySettings() {
-        this.context.startActivity(android.content.Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            "package:${this.context.packageName}".toUri()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-    private val connectionCallback: () -> Unit = ::refresh
+    // State emissions may occur under another controller's lock. Dispatch collectors so
+    // they cannot synchronously re-enter selectionLock with the opposite lock order.
+    private val lifecycleScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
-        ScreenTestAccessibilityService.connectionListeners += java.lang.ref.WeakReference(connectionCallback)
-        overlayScope.launch {
-            state.collect { current ->
-                synchronized(selectionLock) {
-                    // A queued old state must never be rendered with a newly selected lease.
-                    if (mutableState.value == current) overlay.update(
-                        current.overlayEnabled && current.overlayGranted && current.active && !current.overlaySuppressed,
-                        current.projectId, current.projectId?.let(::taskLease), current.packageName.orEmpty(),
-                        current.summary, current.overlayConversation, progress = current.overlayProgress)
-                }
+        lifecycleScope.launch {
+            deviceAccess.state.collect {
+                stopWithReason("device_permission_changed", onlyIfInvalid = true)
+                refresh()
+            }
+        }
+        lifecycleScope.launch {
+            virtualScreen.state.collect {
+                stopWithReason("virtual_display_closed", onlyIfInvalid = true)
+                refresh()
             }
         }
         refresh()
     }
 
     fun refresh() {
-        val component = ComponentName(context, ScreenTestAccessibilityService::class.java)
-        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            ?.split(':')?.any { ComponentName.unflattenFromString(it) == component } == true
-        mutableState.update { it.copy(enabled = enabled, connected = ScreenTestAccessibilityService.isConnected(),
-            rootGranted = rootBackend.granted, installAllowed = context.packageManager.canRequestPackageInstalls(),
-            overlayGranted = Settings.canDrawOverlays(context)) }
-    }
-
-    fun setAccess(access: ScreenTestAccess) {
-        if (mutableState.value.access == access) return
-        stopWithReason("access_changed")
-        mutableState.update { it.copy(access = access) }
-    }
-
-    suspend fun requestRootAccess(): Boolean {
-        check(mutableState.value.access == ScreenTestAccess.Root)
-        val granted = rootBackend.requestAccess()
-        refresh()
-        return granted
+        val permissions = deviceAccess.state.value
+        mutableState.update { it.copy(enabled = permissions.mode == DeviceMode.Root && permissions.rootGranted,
+            connected = virtualScreen.state.value.active, rootGranted = permissions.rootGranted) }
     }
 
     fun setScreenshotSharing(projectId: String, enabled: Boolean, expectedLease: String? = null) {
         synchronized(selectionLock) {
-            check(selected?.projectId == projectId && mutableState.value.active) { message(R.string.screen_test_device_task_required) }
+            check(selected?.let { it.projectId == projectId && mutableState.value.active && virtualLeaseValid(it) } == true) { message(R.string.screen_test_device_task_required) }
             check(expectedLease == null || selected?.sessionId == expectedLease) { message(R.string.screen_test_lease_changed) }
             mutableState.update { it.copy(shareScreenshots = enabled) }
         }
@@ -144,121 +85,73 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
 
     fun stop() = stopWithReason("user_stop")
 
-    private fun stopWithReason(reason: String) {
+    private fun stopWithReason(reason: String, onlyIfInvalid: Boolean = false) {
         val running = synchronized(selectionLock) {
+            // Notifications can outlive the task that emitted them. Recheck the currently
+            // selected lease under its lock, so an old event cannot stop a new valid task.
+            if (onlyIfInvalid && selected?.let { !virtualLeaseValid(it) } != true) return
             epoch.incrementAndGet()
             val ended = selected
             selected = null
             if (ended != null) enqueueReport(ended, "stop", true, reason.take(80))
             val running = operation
             operation = null
-            mutableState.update { it.copy(packageName = null, apkPath = null, taskId = null, leaseId = null, active = false,
-                busy = false, shareScreenshots = false, overlayConversation = "", overlaySuppressed = false,
+            mutableState.update { it.copy(packageName = null, taskId = null, leaseId = null, active = false,
+                busy = false, shareScreenshots = false,
                 overlayProgress = ScreenOverlayProgress(ScreenOverlayPhase.Cancelled, title = message(R.string.screen_overlay_progress_stopped)), summary = message(R.string.screen_test_stopped)) }
-            ScreenTestAccessibilityService.instance?.stop()
-            rootBackend.stop()
+            virtualScreen.stop()
             actionFeedback.clear()
-            overlayScope.launch { overlay.remove() }
             running
         }
         running?.cancel()
     }
 
-    suspend fun discoverApks(projectId: String): List<ScreenTestApk> = withContext(Dispatchers.IO) {
-        val root = projectRoot(projectId)
-        require(root.isDirectory && !Files.isSymbolicLink(root.toPath()))
-        val boundary = root.canonicalFile.toPath()
-        val results = mutableListOf<ScreenTestApk>()
-        var count = 0
-        val job = currentCoroutineContext()[Job]
-        fun visit(directory: File, depth: Int) {
-            if (depth > 16 || count >= 20_000 || results.size >= 40) return
-            directory.listFiles().orEmpty().sortedBy { it.name }.forEach { file ->
-                job?.ensureActive()
-                if (++count > 20_000 || results.size >= 40 || Files.isSymbolicLink(file.toPath())) return@forEach
-                if (!file.canonicalFile.toPath().startsWith(boundary)) return@forEach
-                if (file.isDirectory && file.name !in setOf(".git", ".gradle", "node_modules")) visit(file, depth + 1)
-                else if (file.isFile && file.extension.equals("apk", true) && file.length() in 1..MAX_APK_BYTES) {
-                    val relative = root.toPath().relativize(file.toPath()).toString().replace(File.separatorChar, '/')
-                    val info = archiveInfo(file) ?: return@forEach
-                    if (isAllowed(info)) results += descriptor(info, relative)
-                }
-            }
-        }
-        // Java directory traversal is bounded; interruption is checked at every entry.
-        visit(root, 0)
-        results
-    }
-
-    /** Read-only proposal: selecting a target still requires an explicit user decision. */
-    suspend fun previewApk(projectId: String, relativePath: String): ScreenTestApkProposal =
-        inspectApk(projectId, relativePath).let { ScreenTestApkProposal(it.apk, it.digest) }
-
-    private suspend fun inspectApk(projectId: String, relativePath: String): ValidatedApk = withContext(Dispatchers.IO) {
-        val job = currentCoroutineContext()[Job]
-        val copy = ApkInstallCopy(File(context.cacheDir, "apk-install")).prepare(projectRoot(projectId), relativePath) {
-            job?.ensureActive()
-        }
-        try {
-            currentCoroutineContext().ensureActive()
-            val info = archiveInfo(copy) ?: error(message(R.string.screen_test_invalid_apk))
-            check(isAllowed(info)) { message(R.string.screen_test_invalid_apk) }
-            val signerSet = signatures(info)
-            check(signerSet.isNotEmpty()) { message(R.string.screen_test_invalid_apk) }
-            val installed = installedInfo(info.packageName)
-            if (installed != null) check(isAllowed(installed) && signatures(installed) == signerSet) {
-                message(R.string.screen_test_changed_identity)
-            }
-            ValidatedApk(descriptor(info, relativePath), signerSet, artifactDigest(copy))
-        } catch (error: Exception) {
-            if (error is CancellationException) throw error
-            throw safeError(error)
-        } finally { copy.delete() }
-    }
-
-    suspend fun selectApk(projectId: String, relativePath: String, expectedDigest: String? = null): ScreenTestApk = actionMutex.withLock {
-        stopWithReason("target_reselected")
-        val generation = epoch.get()
-        val inspected = inspectApk(projectId, relativePath)
-        currentCoroutineContext().ensureActive()
-        if (expectedDigest != null && inspected.digest != expectedDigest) throw ScreenTestException(message(R.string.screen_test_artifact_changed))
-        check(epoch.get() == generation) { message(R.string.screen_test_stopped) }
-        val selection = Selection(projectId, inspected.apk, inspected.signatures, inspected.digest, UUID.randomUUID().toString())
-        withContext(Dispatchers.IO) { report(selection, "select", true, "selected_debug_apk") }
-        synchronized(selectionLock) {
-            check(epoch.get() == generation) { message(R.string.screen_test_stopped) }
-            selected = selection
-            mutableState.update { it.copy(projectId = projectId, packageName = inspected.apk.packageName, apkPath = relativePath,
-                active = false, taskId = null, leaseId = null, shareScreenshots = false, overlayConversation = "", overlaySuppressed = false,
-                overlayProgress = ScreenOverlayProgress(title = message(R.string.screen_test_ready)), summary = message(R.string.screen_test_ready),
-                reportPath = reportFile(projectId).absolutePath) }
-        }
-        inspected.apk
-    }
-
     /** Called only after an explicit user decision for this exact task, never from capability enable. */
-    suspend fun authorizeDeviceTask(projectId: String, taskId: String): String = actionMutex.withLock {
+    suspend fun authorizeDeviceTask(projectId: String, taskId: String): String = actionMutex.withLock { coroutineScope {
         require(projectId.isNotBlank() && taskId.isNotBlank())
         stopWithReason("task_reauthorized")
-        val generation = epoch.get()
-        val selection = Selection(projectId, sessionId = UUID.randomUUID().toString(), taskId = taskId)
-        withContext(Dispatchers.IO) { report(selection, "authorize", true, "current_device_task_authorized") }
-        synchronized(selectionLock) {
-            check(epoch.get() == generation) { message(R.string.screen_test_stopped) }
-            selected = selection
-            mutableState.update { it.copy(projectId = projectId, packageName = null, apkPath = null,
-                taskId = taskId, leaseId = selection.sessionId, active = true, shareScreenshots = false,
-                overlayConversation = "", overlaySuppressed = false,
-                overlayProgress = ScreenOverlayProgress(title = message(R.string.screen_test_device_ready)),
-                summary = message(R.string.screen_test_device_ready), reportPath = reportFile(projectId).absolutePath) }
+        val authorizationJob = currentCoroutineContext()[Job]
+        val generation = synchronized(selectionLock) {
+            operation = authorizationJob
+            epoch.get()
         }
-        selection.sessionId
-    }
-
-    private data class ValidatedApk(val apk: ScreenTestApk, val signatures: Set<String>, val digest: String)
+        val deviceGeneration: Long
+        val displayId: Int
+        try {
+            run {
+                val permissions = deviceAccess
+                check(permissions.state.value.loaded && permissions.state.value.mode == DeviceMode.Root) { message(R.string.virtual_screen_root_required) }
+                deviceGeneration = permissions.generation
+                currentCoroutineContext().ensureActive()
+                virtualScreen.start()
+                currentCoroutineContext().ensureActive()
+                displayId = requireNotNull(virtualScreen.state.value.displayId)
+                check(displayId > 0 && permissions.generation == deviceGeneration && epoch.get() == generation) { message(R.string.screen_test_stopped) }
+            }
+            val selection = Selection(projectId, sessionId = UUID.randomUUID().toString(), taskId = taskId,
+                rootGeneration = deviceGeneration, displayId = displayId)
+            withContext(Dispatchers.IO) { report(selection, "authorize", true,
+                "virtual_display_task_authorized") }
+            synchronized(selectionLock) {
+                check(epoch.get() == generation) { message(R.string.screen_test_stopped) }
+                check(virtualLeaseValid(selection)) { message(R.string.screen_test_lease_changed) }
+                selected = selection
+                mutableState.update { it.copy(projectId = projectId, packageName = null,
+                    taskId = taskId, leaseId = selection.sessionId, active = true, shareScreenshots = false,
+                    overlayProgress = ScreenOverlayProgress(title = message(R.string.screen_test_device_ready)),
+                    summary = message(R.string.screen_test_device_ready), reportPath = reportFile(projectId).absolutePath) }
+            }
+            selection.sessionId
+        } catch (failure: Exception) {
+            if (epoch.get() == generation) stopWithReason("authorization_failed")
+            throw failure
+        } finally {
+            synchronized(selectionLock) { if (operation === authorizationJob) operation = null }
+        }
+    } }
 
     fun taskLease(projectId: String): String? = synchronized(selectionLock) {
-        selected?.takeIf { it.projectId == projectId && mutableState.value.active }?.sessionId
+        selected?.takeIf { it.projectId == projectId && mutableState.value.active && virtualLeaseValid(it) }?.sessionId
     }
 
     suspend fun execute(projectId: String, args: JSONObject, expectedSession: String? = null): ScreenTestResult = actionMutex.withLock {
@@ -271,55 +164,39 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             val job = currentCoroutineContext()[Job]
             val (selection, generation) = synchronized(selectionLock) {
                 val value = selected ?: throw ScreenTestException(message(R.string.screen_test_device_task_required))
-                val installation = action in setOf("install", "launch") && value.apk != null
-                if (value.projectId != projectId || (!installation && (!mutableState.value.active || value.taskId == null)))
+                check(virtualLeaseValid(value)) { message(R.string.screen_test_lease_changed) }
+                if (value.projectId != projectId || !mutableState.value.active)
                     throw ScreenTestException(message(R.string.screen_test_device_task_required))
                 if (expectedSession != null && value.sessionId != expectedSession) throw ScreenTestException(message(R.string.screen_test_lease_changed))
                 operation = job
                 mutableState.update { it.copy(busy = true, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Verifying)) }
                 value to epoch.get()
             }
-            var stage = "overlay_sync"
+            var stage = "access"
             try {
                 withTimeout(screenActionTimeoutMillis(action)) {
                     stage = "foreground"
                     val result = withContext(Dispatchers.IO) {
                         currentCoroutineContext().ensureActive()
                         check(epoch.get() == generation && selected === selection) { message(R.string.screen_test_stopped) }
+                        check(deviceAccess.state.value.mode == DeviceMode.Root && deviceAccess.state.value.rootGranted && virtualLeaseValid(selection)) {
+                            message(R.string.virtual_screen_root_required)
+                        }
+                        if (action == "screenshot") check(mutableState.value.shareScreenshots) { message(R.string.virtual_screen_sharing_required) }
                         when (action) {
                             "finish" -> ScreenTestResult("{\"finished\":true}")
-                            "install" -> {
-                                check(selection.apk != null) { message(R.string.screen_test_device_launch_unsupported) }
-                                install(selection)
-                            }
-                            "launch" -> {
-                                check(selection.apk != null) { message(R.string.screen_test_device_launch_unsupported) }
-                                launch(selection)
-                            }
                             else -> {
-                                stage = "overlay_sync"
-                                suppressOverlay(selection, action)
-                                stage = "${mutableState.value.access.name.lowercase()}_$action"
-                                val access = mutableState.value.access
-                                val backend: ScreenTestBackend = when (access) {
-                                    ScreenTestAccess.Normal -> error(message(R.string.screen_test_need_accessibility))
-                                    ScreenTestAccess.Accessibility -> {
-                                        val service = ScreenTestAccessibilityService.instance
-                                        check(service != null && mutableState.value.enabled) { message(R.string.screen_test_need_accessibility) }
-                                        service
-                                    }
-                                    ScreenTestAccess.Root -> {
-                                        check(rootBackend.granted) { "Root access must be explicitly authorized by the user" }
-                                        if (action == "screenshot") {
-                                            val service = ScreenTestAccessibilityService.instance
-                                            check(service != null && mutableState.value.enabled) {
-                                                message(R.string.screen_test_root_screenshot_accessibility)
-                                            }
-                                            service
-                                        } else rootBackend
-                                    }
+                                stage = "root_virtual_$action"
+                                synchronized(selectionLock) {
+                                    check(selected === selection && virtualLeaseValid(selection)) { message(R.string.screen_test_lease_changed) }
+                                    mutableState.update { it.copy(overlayProgress = overlayProgress(action, ScreenOverlayPhase.Acting)) }
                                 }
-                                actionFeedback.execute("${selection.sessionId}:${access.name}", args) { request -> backend.execute("", request) }
+                                // Discovery is read-only; it needs no node baseline or gesture receipt.
+                                if (action == "list_apps") virtualScreen.execute("", args)
+                                else actionFeedback.execute("${selection.sessionId}:virtual:${selection.displayId}", args) { request ->
+                                    check(virtualLeaseValid(selection)) { message(R.string.screen_test_lease_changed) }
+                                    virtualScreen.execute("", request)
+                                }
                             }
                         }
                     }
@@ -350,8 +227,6 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                     result
                 }
             } catch (error: TimeoutCancellationException) {
-                ScreenTestAccessibilityService.instance?.stop()
-                rootBackend.stop()
                 val detail = context.getString(R.string.screen_test_stage_timeout, screenTestStageLabel(context, stage), screenActionTimeoutMillis(action) / 1000)
                 reportCancellation(selection, action, "timeout:$stage", error)
                 synchronized(selectionLock) {
@@ -371,7 +246,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 if (selected === selection) stopWithReason("operation_cancelled")
                 synchronized(selectionLock) {
                     if (epoch.get() == generation && selected === selection) mutableState.update {
-                        it.copy(overlayEnabled = false, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Cancelled))
+                        it.copy(overlayProgress = overlayProgress(action, ScreenOverlayPhase.Cancelled))
                     }
                 }
                 throw cancelled
@@ -389,7 +264,7 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
                 synchronized(selectionLock) {
                     if (epoch.get() == generation && selected === selection) {
                         operation = null
-                        mutableState.update { it.copy(busy = false, overlaySuppressed = false) }
+                        mutableState.update { it.copy(busy = false) }
                     }
                 }
             }
@@ -424,22 +299,24 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     private suspend fun status(projectId: String): ScreenTestResult = withContext(Dispatchers.IO) {
         refresh()
         val (initialSelection, generation) = synchronized(selectionLock) { selected to epoch.get() }
-        val selection = initialSelection?.takeIf { it.projectId == projectId && it.taskId != null && state.value.active }
+        val selection = initialSelection?.takeIf { it.projectId == projectId && state.value.active && virtualLeaseValid(it) }
         synchronized(selectionLock) {
             check(epoch.get() == generation && selected === initialSelection) { message(R.string.screen_test_stopped) }
             val current = state.value
-            ScreenTestResult(JSONObject().put("scope", "current_device").put("taskAuthorizationRequired", selection == null)
+            ScreenTestResult(JSONObject().put("scope", "virtual_display")
+                .put("display_id", virtualScreen.state.value.displayId).put("physical_screen_control", false)
+                .put("taskAuthorizationRequired", selection == null)
                 .put("active", selection != null).put("taskId", selection?.taskId).put("lease", selection?.sessionId)
-                .put("access", current.access.name).put("accessibilityEnabled", current.enabled)
-                .put("accessibilityConnected", current.connected).put("rootGranted", current.rootGranted)
-                .put("shareScreenshots", current.shareScreenshots).toString())
+                .put("access", "Root").put("rootModeReady", current.enabled)
+                .put("virtualDisplayReady", current.connected).put("rootGranted", current.rootGranted)
+                .put("shareScreenshots", selection != null && current.shareScreenshots).toString())
         }
     }
 
     private fun overlayProgress(action: String, phase: ScreenOverlayPhase): ScreenOverlayProgress {
         val actionLabel = message(when (action) {
-            "install" -> R.string.screen_overlay_action_install
             "launch" -> R.string.screen_overlay_action_launch
+            "list_apps" -> R.string.screen_task_action_list_apps
             "observe" -> R.string.screen_overlay_action_observe
             "click", "long_click" -> R.string.screen_overlay_action_click
             "swipe", "scroll" -> R.string.screen_overlay_action_swipe
@@ -458,153 +335,11 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
             ScreenOverlayPhase.Ready -> R.string.screen_overlay_progress_ready
         }, actionLabel)
         val detail = if (phase == ScreenOverlayPhase.Succeeded) when (action) {
-            "install" -> message(R.string.screen_test_install_pending)
             "launch" -> message(R.string.screen_test_launch_requested)
             else -> ""
         } else ""
         return ScreenOverlayProgress(phase, action, title, detail)
     }
-
-    /** Suppress before removal so unrelated conversation emissions cannot recreate the window. */
-    private suspend fun suppressOverlay(selection: Selection, action: String) {
-        currentCoroutineContext().ensureActive()
-        synchronized(selectionLock) {
-            check(selected === selection && (mutableState.value.active || selection.apk != null)) { message(R.string.screen_test_stopped) }
-            mutableState.update { it.copy(overlaySuppressed = true, overlayProgress = overlayProgress(action, ScreenOverlayPhase.Acting)) }
-        }
-        overlay.hideForAction()
-        currentCoroutineContext().ensureActive()
-        check(selected === selection) { message(R.string.screen_test_stopped) }
-    }
-
-    private suspend fun install(selection: Selection): ScreenTestResult {
-        check(context.packageManager.canRequestPackageInstalls()) { message(R.string.screen_test_install_permission) }
-        // A rebuild may change bytes, but cannot change the package, signer, or debug-only boundary.
-        val job = currentCoroutineContext()[Job]
-        val copy = ApkInstallCopy(File(context.cacheDir, "apk-install")).prepare(projectRoot(selection.projectId), requireNotNull(selection.apk).relativePath) {
-            job?.ensureActive()
-        }
-        var handedOff = false
-        try {
-            val info = archiveInfo(copy) ?: error(message(R.string.screen_test_invalid_apk))
-            check(isAllowed(info) && info.packageName == requireNotNull(selection.apk).packageName && signatures(info) == selection.signatures) {
-                message(R.string.screen_test_changed_identity)
-            }
-            val installed = installedInfo(requireNotNull(selection.apk).packageName)
-            if (installed != null) check(isAllowed(installed) && signatures(installed) == selection.signatures) {
-                message(R.string.screen_test_changed_identity)
-            }
-            val digest = artifactDigest(copy)
-            currentCoroutineContext().ensureActive()
-            check(selected === selection) { message(R.string.screen_test_stopped) }
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.apk-files", copy)
-            suppressOverlay(selection, "install")
-            withContext(Dispatchers.Main.immediate) {
-                context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    .apply { clipData = ClipData.newRawUri("", uri) })
-            }
-            handedOff = true
-            selection.artifactDigest = digest
-            return ScreenTestResult(message(R.string.screen_test_install_pending))
-        } finally { if (!handedOff) copy.delete() }
-    }
-
-    private suspend fun launch(selection: Selection): ScreenTestResult {
-        verifyInstalled(selection)
-        val intent = context.packageManager.getLaunchIntentForPackage(requireNotNull(selection.apk).packageName)
-            ?: error("Selected Debug APK has no launcher activity")
-        check(intent.component?.packageName == requireNotNull(selection.apk).packageName) { message(R.string.screen_test_changed_identity) }
-        currentCoroutineContext().ensureActive()
-        check(selected === selection) { message(R.string.screen_test_stopped) }
-        suppressOverlay(selection, "launch")
-        withContext(Dispatchers.Main.immediate) { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        return ScreenTestResult(message(R.string.screen_test_launch_requested))
-    }
-
-    private suspend fun verifyInstalled(selection: Selection) {
-        val info = installedInfo(requireNotNull(selection.apk).packageName) ?: error(message(R.string.screen_test_not_installed))
-        check(isAllowed(info) && signatures(info) == selection.signatures) { message(R.string.screen_test_changed_identity) }
-        check(projectArtifactDigest(selection) == selection.artifactDigest &&
-            artifactDigest(File(requireNotNull(info.applicationInfo?.sourceDir))) == selection.artifactDigest) {
-            message(R.string.screen_test_artifact_changed)
-        }
-        val again = installedInfo(requireNotNull(selection.apk).packageName)
-        check(again?.applicationInfo?.sourceDir == info.applicationInfo?.sourceDir &&
-            signatures(requireNotNull(again)) == selection.signatures) { message(R.string.screen_test_artifact_changed) }
-    }
-
-    private suspend fun projectArtifactDigest(selection: Selection): String {
-        val root = projectRoot(selection.projectId)
-        require(root.isDirectory && !Files.isSymbolicLink(root.toPath()))
-        val boundary = root.canonicalFile.toPath()
-        fun source(): File {
-            var file = root
-            for (part in requireNotNull(selection.apk).relativePath.split('/')) {
-                file = File(file, part)
-                require(!Files.isSymbolicLink(file.toPath()) && file.canonicalFile.toPath().startsWith(boundary))
-            }
-            return file
-        }
-        val file = source()
-        val digest = artifactDigest(file)
-        require(source().canonicalFile == file.canonicalFile)
-        return digest
-    }
-
-    /** Hash immutable APK bytes, not versionCode: rebuilding with the same version is still distinct. */
-    private suspend fun artifactDigest(file: File): String {
-        currentCoroutineContext().ensureActive()
-        require(Files.isRegularFile(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS) && file.length() in 1..MAX_APK_BYTES)
-        val size = file.length()
-        val modified = file.lastModified()
-        val digest = MessageDigest.getInstance("SHA-256")
-        var total = 0L
-        Files.newInputStream(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS).use { input ->
-            val buffer = ByteArray(65536)
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                val count = input.read(buffer)
-                if (count < 0) break
-                total += count
-                require(total <= MAX_APK_BYTES)
-                digest.update(buffer, 0, count)
-            }
-        }
-        require(total == size && file.length() == size && file.lastModified() == modified)
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun archiveInfo(file: File): PackageInfo? = context.packageManager.getPackageArchiveInfo(file.absolutePath,
-        if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES)
-
-    @Suppress("DEPRECATION")
-    private fun installedInfo(packageName: String): PackageInfo? = try {
-        context.packageManager.getPackageInfo(packageName,
-            if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES)
-    } catch (_: PackageManager.NameNotFoundException) { null }
-
-    private fun isAllowed(info: PackageInfo): Boolean {
-        val app = info.applicationInfo ?: return false
-        // A single selected APK cannot attest to separately installed split code/resources.
-        return info.splitNames.isNullOrEmpty() && app.splitSourceDirs.isNullOrEmpty() &&
-            info.packageName != context.packageName && info.packageName !in setOf("android", "com.android.systemui") &&
-            app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0 &&
-            app.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0 &&
-            app.uid != android.os.Process.myUid()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun signatures(info: PackageInfo): Set<String> {
-        val certificates = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
-        return certificates.orEmpty().map { bytes ->
-            MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()).joinToString("") { "%02x".format(it) }
-        }.toSet()
-    }
-
-    private fun descriptor(info: PackageInfo, relative: String) = ScreenTestApk(relative, info.packageName,
-        info.packageName, info.versionName.orEmpty(), info.applicationInfo?.flags?.and(ApplicationInfo.FLAG_DEBUGGABLE) != 0)
 
     private fun reportFile(projectId: String): File {
         val key = MessageDigest.getInstance("SHA-256").digest(projectId.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -628,13 +363,13 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
     private fun enqueueReport(selection: Selection, action: String, passed: Boolean, detail: String, evidence: String? = null, feedback: JSONObject? = null): Deferred<Unit> {
         val outcome = when {
             !passed -> "failed"
-            action == "install" -> "awaiting_user_install_confirmation"
             action in setOf("launch", "click", "long_click", "input_text", "back", "swipe", "scroll") -> "requested_observe_to_verify"
             else -> "completed"
         }
         val entry = JSONObject().put("time", System.currentTimeMillis()).put("timeIso", java.time.Instant.now().toString())
-            .put("session", selection.sessionId).put("taskId", selection.taskId).put("scope", if (selection.taskId != null) "current_device" else "apk_installation")
-            .put("package", selection.apk?.packageName ?: selection.currentPackage).put("apkSha256", selection.artifactDigest)
+            .put("session", selection.sessionId).put("taskId", selection.taskId).put("scope", "virtual_display")
+            .put("displayId", selection.displayId)
+            .put("package", selection.currentPackage)
             .put("action", action).put("outcome", outcome).put("operationSucceeded", passed)
             .put("assertionPassed", if (action in setOf("assert_text", "wait_until")) passed else null)
             .put("detail", detail.take(300)).put("evidence", evidence).apply {
@@ -676,29 +411,32 @@ class ScreenTestController(context: Context, private val projectRoot: (String) -
 
     private fun safeError(error: Exception): ScreenTestException {
         if (error is ScreenTestException) return error
-        val known = listOf(R.string.screen_test_need_selection, R.string.screen_test_need_accessibility,
-            R.string.screen_test_wrong_foreground, R.string.screen_test_invalid_apk, R.string.screen_test_changed_identity,
-            R.string.screen_test_not_installed, R.string.screen_test_install_permission, R.string.screen_test_stale_snapshot,
-            R.string.screen_test_sensitive, R.string.screen_test_action_failed, R.string.screen_test_stopped,
-            R.string.screen_test_assert_failed, R.string.screen_test_screenshot_unsupported, R.string.screen_test_report_unavailable,
-            R.string.screen_test_root_screenshot_accessibility, R.string.screen_test_secure_screenshot,
-            R.string.screen_test_screenshot_failed, R.string.screen_test_screenshot_interval, R.string.screen_test_screenshot_overlay,
-            R.string.screen_test_artifact_changed, R.string.screen_test_lease_changed,
-            R.string.screen_test_device_task_required, R.string.screen_test_device_ready, R.string.screen_test_device_launch_unsupported,
-            R.string.screen_test_device_open_target)
+        val known = listOf(R.string.screen_test_stale_snapshot, R.string.screen_test_sensitive,
+            R.string.screen_test_action_failed, R.string.screen_test_stopped, R.string.screen_test_assert_failed,
+            R.string.screen_test_screenshot_unsupported, R.string.screen_test_report_unavailable,
+            R.string.screen_test_secure_screenshot, R.string.screen_test_screenshot_failed,
+            R.string.screen_test_screenshot_interval, R.string.screen_test_lease_changed,
+            R.string.screen_test_device_task_required, R.string.screen_test_device_ready,
+            R.string.virtual_screen_root_required, R.string.virtual_screen_sharing_required)
             .map(::message)
         return ScreenTestException(error.message?.takeIf { it in known } ?: message(R.string.screen_test_action_failed), error)
     }
 
+    private fun virtualLeaseValid(selection: Selection): Boolean {
+        val permissions = deviceAccess
+        val display = virtualScreen.state.value
+        return selection.rootGeneration == permissions.generation && permissions.state.value.mode == DeviceMode.Root &&
+            permissions.state.value.rootGranted && display.active && selection.displayId > 0 && selection.displayId == display.displayId
+    }
+
     private fun message(id: Int) = context.getString(id)
-    private data class Selection(val projectId: String, val apk: ScreenTestApk? = null, val signatures: Set<String> = emptySet(),
-        @Volatile var artifactDigest: String? = null, val sessionId: String, val taskId: String? = null, @Volatile var currentPackage: String? = null)
+    private data class Selection(val projectId: String, val sessionId: String, val taskId: String,
+        @Volatile var currentPackage: String? = null, val rootGeneration: Long, val displayId: Int)
 
     companion object {
         const val DEVICE_TASK_OWNER = "device-screen"
-        private const val MAX_APK_BYTES = 512L * 1024 * 1024
         private const val MAX_REPORT_BYTES = 512L * 1024
-        private val ACTIONS = setOf("status", "install", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
+        private val ACTIONS = setOf("status", "list_apps", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
     }
 }
 

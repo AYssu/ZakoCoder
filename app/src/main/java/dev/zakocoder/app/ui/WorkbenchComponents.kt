@@ -220,6 +220,9 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
                 }
             }
         }
+        // Miuix windows do not supply Material's content color. The sheet owns its
+        // foreground even when opened from a transparent page or a tinted control.
+        CompositionLocalProvider(LocalContentColor provides p.textPrimary) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).imePadding()
             .padding(bottom = Space.lg)
             .then(if (!shown) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
@@ -238,6 +241,7 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
                 LocalWorkbenchSheetAction provides finish) {
                 content()
             }
+        }
         }
     }
 }

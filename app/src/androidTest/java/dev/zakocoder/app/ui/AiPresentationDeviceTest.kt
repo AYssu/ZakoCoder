@@ -30,6 +30,11 @@ class AiPresentationDeviceTest {
                         Surface(Modifier.fillMaxSize()) {
                             Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                AiReadActivity(listOf(tool("mode", AiTool.SetTaskMode, "execute", AiToolStatus.Succeeded)))
+                                AiReadActivity(listOf(tool("single-command", AiTool.RunCommand, "git status", AiToolStatus.Succeeded),
+                                    tool("single-write", AiTool.WriteFile, "src/config.ts", AiToolStatus.Succeeded)))
+                                AiReadActivity(listOf(tool("command-a", AiTool.RunCommand, "git diff", AiToolStatus.Succeeded),
+                                    tool("command-b", AiTool.RunCommand, "npm test", AiToolStatus.Succeeded)))
                                 AiMessage(AiEntry("user", "修复登录页的校验，并运行测试。", role = AiRole.User), null, {}, {})
                                 AiPlanPanel(listOf(AiPlanStep("检查表单与已有测试", "completed"),
                                     AiPlanStep("修复校验并补充边界测试", "in_progress"),

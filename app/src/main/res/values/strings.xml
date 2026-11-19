@@ -252,10 +252,7 @@
 
     <string name="editor_back">返回文件列表</string>
     <string name="editor_saving">正在保存…</string>
-    <string name="editor_unsaved">未保存</string>
-    <string name="editor_saved">已保存</string>
     <string name="editor_save">保存</string>
-    <string name="editor_search">查找与替换</string>
     <string name="editor_find">查找文本</string>
     <string name="editor_replacement">替换为</string>
     <string name="editor_replace">替换</string>
@@ -642,7 +639,6 @@
     <string name="editor_tabs_limit">最多同时打开 8 个文件，请先关闭一个文件。</string>
     <string name="editor_open_file">打开其他文件</string>
     <string name="editor_drafts">恢复编辑草稿</string>
-    <string name="editor_draft_help">未保存内容保存在应用私有目录，通常在停止输入半秒后保存；卸载或清除数据会删除草稿。</string>
     <string name="project_command_timeout_value">命令超时：%1$d 秒</string>
     <string name="git_status_limited">修改超过 500 项，仅显示前 500 项；请在终端检查完整暂存区后提交。</string>
     <string name="project_other_busy">另一项目的操作尚未结束，请等待完成后重试。</string>

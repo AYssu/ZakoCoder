@@ -1,6 +1,7 @@
 <resources>
     <string name="ai_reasoning_in_progress">正在思考</string>
     <string name="ai_activity_preparation">任务准备</string>
+    <string name="ai_activity_tool_calls">%1$s · %2$d 次</string>
     <string name="ai_activity_read_files">读取 %1$d 个文件</string>
     <string name="ai_activity_searches">检索 %1$d 次</string>
     <string name="ai_activity_directories">浏览 %1$d 个目录</string>

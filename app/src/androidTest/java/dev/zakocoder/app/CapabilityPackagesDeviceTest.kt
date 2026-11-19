@@ -119,4 +119,78 @@ class CapabilityPackagesDeviceTest {
             assertFalse(packages.enabled(null, CapabilityPackage.Ssh))
         }
     }
+
+    @Test(timeout = 60000) fun existingVersionTwoScreenAndBrowserConsentNeverEnablesDeviceShell() = runBlocking {
+        isolated { context, root ->
+            val file = File(root, "capability-packages.json")
+            val previous = """{"version":2,"screen_enabled":true,"browser_enabled":true,"projects":{"project-a":["ssh"]}}"""
+            withContext(Dispatchers.IO) { file.writeText(previous) }
+            lateinit var packages: CapabilityPackages
+            main { packages = CapabilityPackages(context) }; await { packages.state.value.loaded }
+
+            assertNull(packages.state.value.error)
+            assertTrue(packages.enabled(null, CapabilityPackage.Screen))
+            assertTrue(packages.enabled(null, CapabilityPackage.Browser))
+            assertTrue(packages.enabled("project-a", CapabilityPackage.Ssh))
+            assertFalse(packages.state.value.deviceShellEnabled)
+            assertFalse(packages.enabled(null, CapabilityPackage.DeviceShell))
+            assertFalse(packages.enabled("project-a", CapabilityPackage.DeviceShell))
+            assertFalse(packages.snapshot("project-a").containsKey(CapabilityPackage.DeviceShell))
+            assertFalse(packages.snapshot("unconfigured-project").containsKey(CapabilityPackage.DeviceShell))
+            assertEquals("Reading an older store must not rewrite its consent", previous,
+                withContext(Dispatchers.IO) { file.readText() })
+        }
+    }
+
+    @Test(timeout = 60000) fun deviceShellIsGlobalAndPersistsWithFreshRevocableLeases() = runBlocking {
+        isolated { context, _ ->
+            val changes = mutableListOf<CapabilityPackage>()
+            lateinit var packages: CapabilityPackages
+            main { packages = CapabilityPackages(context) { _, kind -> changes += kind } }
+            await { packages.state.value.loaded }
+            assertFalse(packages.enabled(null, CapabilityPackage.DeviceShell))
+
+            // No workspace is created or supplied by the global settings operation.
+            main { packages.setDeviceShellEnabled(true) }; await { !packages.state.value.busy }
+            val originalLease = packages.snapshot("project-a")[CapabilityPackage.DeviceShell]
+            assertNotNull(originalLease)
+            assertTrue(packages.enabled(null, CapabilityPackage.DeviceShell))
+            assertTrue(packages.state.value.enabled.isEmpty())
+            assertEquals(originalLease, packages.snapshot("project-b")[CapabilityPackage.DeviceShell])
+            assertFalse(packages.enabled(null, CapabilityPackage.Screen))
+            assertFalse(packages.enabled(null, CapabilityPackage.Browser))
+
+            lateinit var recreated: CapabilityPackages
+            main { recreated = CapabilityPackages(context) { _, kind -> changes += kind } }
+            await { recreated.state.value.loaded }
+            assertNull(recreated.state.value.error)
+            assertTrue(recreated.enabled(null, CapabilityPackage.DeviceShell))
+            val recreatedLease = recreated.snapshot("project-a")[CapabilityPackage.DeviceShell]
+            assertNotNull(recreatedLease)
+            assertNotEquals(originalLease, recreatedLease)
+            assertEquals(recreatedLease, recreated.snapshot("project-b")[CapabilityPackage.DeviceShell])
+
+            main {
+                recreated.setDeviceShellEnabled(false)
+                assertTrue("Persistence has not completed at this assertion", recreated.state.value.busy)
+                assertFalse(recreated.state.value.deviceShellEnabled)
+                assertFalse(recreated.enabled(null, CapabilityPackage.DeviceShell))
+                assertFalse(recreated.snapshot("project-a").containsKey(CapabilityPackage.DeviceShell))
+                assertFalse(recreated.snapshot("project-b").containsKey(CapabilityPackage.DeviceShell))
+                assertEquals(CapabilityPackage.DeviceShell, changes.last())
+            }
+            await { !recreated.state.value.busy }
+            lateinit var disabled: CapabilityPackages
+            main { disabled = CapabilityPackages(context) }; await { disabled.state.value.loaded }
+            assertNull(disabled.state.value.error)
+            assertFalse(disabled.enabled(null, CapabilityPackage.DeviceShell))
+            assertTrue(disabled.snapshot("project-a").isEmpty())
+
+            main { recreated.setDeviceShellEnabled(true) }; await { !recreated.state.value.busy }
+            val nextLease = recreated.snapshot("project-a")[CapabilityPackage.DeviceShell]
+            assertNotNull(nextLease)
+            assertNotEquals(originalLease, nextLease)
+            assertNotEquals(recreatedLease, nextLease)
+        }
+    }
 }

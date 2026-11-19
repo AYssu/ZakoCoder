@@ -2,6 +2,7 @@ package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
@@ -31,6 +32,8 @@ internal fun WorkbenchPanelSheet(onDismiss: () -> Unit, darkBackdrop: Boolean = 
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().navigationBarsPadding()) { content(requestDismiss) }
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            Box(Modifier.fillMaxWidth().navigationBarsPadding()) { content(requestDismiss) }
+        }
     }
 }

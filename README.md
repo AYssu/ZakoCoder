@@ -20,7 +20,7 @@
   <a href="https://github.com/AYssu/ZakoCoder/issues/new/choose">反馈问题</a>
 </p>
 
-<img align="right" src="docs/assets/brand/mascots/05-welcome.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
+<img align="right" src="docs/assets/brand/mascots/06-idea.webp" alt="戴着小鱼帽、举着 README 手册的 ZakoCoder 看板娘" width="24%" />
 
 ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助手阅读和修改代码，在编辑器中检查结果，用手机上的 Linux 终端运行项目，再审阅变更与验证记录。
 
@@ -36,8 +36,8 @@ ZakoCoder 是一款开源的 Android 原生 AI 编码工作台。你可以让助
 
 | 版本 | 适合谁 | 包含什么 |
 | --- | --- | --- |
-| **Lite 轻量版** | 希望按需下载、减少安装包体积 | Ubuntu 可在线安装或本地导入；代理内核按需安装独立插件。 |
-| **Full 完整版** | 希望减少首次环境下载 | 内置基础 Ubuntu 和代理内核，确认后在本机初始化，无需另装内核插件。 |
+| **Lite 轻量版** | 希望按需下载、减少安装包体积 | Ubuntu 可在线安装或本地导入。 |
+| **Full 完整版** | 希望减少首次环境下载 | 内置基础 Ubuntu，确认后在本机初始化。 |
 
 - **ARM64 / arm64-v8a**：大多数 Android 手机。
 - **x86_64**：对应架构的设备与常见电脑 Android 模拟器。
@@ -68,7 +68,7 @@ Full 仍需按项目安装 Node.js、Python、Java 等开发工具，并自行�
 | **编辑与运行** | 原生代码编辑器、多文件切换、草稿恢复与 Markdown 预览；最多四个终端会话，运行服务后在手机浏览器预览。 |
 | **审阅与恢复** | 查看修改文件、增删行数与代码差异；使用任务检查点检查和恢复文件，核对实际构建与测试结果。 |
 | **同步 Git** | 克隆公开或私有 HTTPS 仓库，查看状态、暂存、提交、获取、拉取和推送，并处理分支与冲突。 |
-| **扩展助手** | 全局管理 Skill，导入 Markdown / ZIP 或选择 GitHub 公开仓库中的技能，连接 HTTP / SSE MCP；按需开启网页预览、屏幕操作和 SSH。 |
+| **扩展助手** | 全局管理 Skill，导入 Markdown / ZIP 或选择 GitHub 公开仓库中的技能，连接 HTTP / SSE MCP；按需开启网页预览、设备 Shell、Root 虚拟屏幕与 SSH。 |
 | **保留个人偏好** | 在本机管理跨对话记忆；助手提出的建议经你确认后才会使用，可编辑、停用或删除。 |
 | **了解用量** | 查看每轮输入、输出、缓存和耗时，以及按时间、工作区和模型汇总的本机用量。 |
 
@@ -79,10 +79,10 @@ Full 仍需按项目安装 Node.js、Python、Java 等开发工具，并自行�
 1. **完成初始化**：首次打开时选择开发用途，配置环境、模型、Skill 和所需权限；可跳过部分步骤，之后从「设置 → 初始化配置」重新进入。
 2. **添加工作区**：选择 Work 应用内副本或本地目录，也可以导入源码、克隆仓库。同一工作区的对话共用源码；导入副本不会同步修改原目录。
 3. **准备所需工具**：从环境页安装或初始化 Ubuntu，再选择项目需要的工具包。安装工具不会自动启用语言服务。
-4. **开始对话或编辑**：配置模型并测试连接，新建对话交代任务；也可以直接打开文件修改，手动保存源码。
+4. **开始对话或编辑**：配置模型并测试连接，新建对话交代任务；也可以直接打开文件修改，编辑器每 3 秒自动保存变更。
 5. **运行并检查**：执行构建、测试或启动命令，查看日志、变更和实际结果，再决定是否保留修改或提交 Git。
 
-Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不必先创建工作区；SSH 连接按工作区配置。系统权限可在「设置 → 权限管理」集中调整。
+Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不必先创建工作区；SSH 连接按工作区配置。系统权限可在「设置 → 权限配置」集中调整，基础 / Root 模式只影响设备能力，不改变 Ubuntu、SSH、网页与 AI 审批规则。设备 Shell 的普通身份是应用 UID；Root 虚拟屏幕需要 Android 11 及以上，独立显示仍与本机共享应用数据。详见[设备权限](docs/DEVICE_ACCESS.md)。
 
 需要验证网页时，可开启「网页预览」能力，在应用内真实浏览器中读取和操作页面。保持浏览器页在前台，外部网站访问需确认；向模型分享网页截图需要单独开启。它适合检查本机预览或网页交互，不提供后台浏览器或全设备控制，详见[AI 工作流](docs/AI_WORKFLOW.md#网页预览)。
 
@@ -95,11 +95,11 @@ Skill、MCP、记忆，以及屏幕和浏览器能力开关是全局配置，不
 - **模型与权限**：AI 读取的项目内容和附件会发送到所选服务；密钥在本机加密保存。执行工具前请核对权限与审批，HTTP 明文连接不加密。
 - **恢复与后台**：检查点只恢复覆盖范围内的文件，不能撤销依赖安装、网络或数据库等外部操作。PRoot 提供 Linux 兼容环境，不构成安全隔离；系统结束应用后，不保证终端任务继续运行。
 
-更多说明：[产品范围](docs/PRODUCT.md) · [AI 工作流](docs/AI_WORKFLOW.md) · [Git](docs/GIT.md) · [屏幕操作](docs/SCREEN_TESTING.md) · [网络代理](docs/PROXY.md)
+更多说明：[产品范围](docs/PRODUCT.md) · [AI 工作流](docs/AI_WORKFLOW.md) · [Git](docs/GIT.md) · [虚拟屏幕](docs/SCREEN_TESTING.md) · [网络代理](docs/PROXY.md)
 
 ## 反馈与参与
 
-遇到问题，可先在助手输入 `/doctor`，保存脱敏诊断包；再在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、订阅令牌或私人源码。
+遇到问题，可先在助手输入 `/doctor`，保存脱敏诊断包；再在 [Issues](https://github.com/AYssu/ZakoCoder/issues/new/choose) 提供应用版本、设备和 Android 版本、复现步骤，以及脱敏后的截图或日志。请勿提交 API 密钥、代理凭据或私人源码。
 
 欢迎贡献修复、翻译和功能建议。应用采用 Kotlin + Jetpack Compose 原生方案；源码构建、架构和协作流程分别见[开发文档](docs/DEVELOPMENT.md)、[架构说明](docs/ARCHITECTURE.md)和[贡献指南](CONTRIBUTING.md)。发布变化见[更新记录](CHANGELOG.md)。
 

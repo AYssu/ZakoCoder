@@ -389,7 +389,7 @@ class ProjectWorkflowDeviceTest {
             assertEquals(1, withContext(Dispatchers.IO) { tasks.commands("p") }.size)
         }
     }
-    @Test(timeout = 60000) fun cachedEditorDetectsExternalChangesWithoutReplacingBufferOrSaveBaseline() = runBlocking {
+    @Test(timeout = 60000) fun dirtyEditorDetectsExternalChangesWithoutReplacingBufferOrSaveBaseline() = runBlocking {
         Fixture(context).use { f ->
             val repo = ProjectRepository(f.wrapper, File(f.base, "workspaces").apply { mkdirs() })
             val project = withContext(Dispatchers.IO) { repo.create("owned external change fixture") }
@@ -399,11 +399,11 @@ class ProjectWorkflowDeviceTest {
             main { editor = EditorController(f.wrapper, repo, {}) }; await { !editor.state.value.loading }
             main { editor.open(project.id, "a.kt") }; await { !editor.state.value.loading }
             val original = editor.state.value.document!!
-            main { original.line = 1; original.column = 3; editor.open(project.id, "b.kt") }; await { !editor.state.value.loading }
+            main { original.line = 1; original.column = 3; original.content.replace(0, original.content.length, "local draft"); editor.changed(); editor.open(project.id, "b.kt") }; await { !editor.state.value.loading }
             withContext(Dispatchers.IO) { a.writeText("external a") }
             main { editor.open(project.id, "a.kt") }; await { !editor.state.value.diskChecking }
-            assertSame(original, editor.state.value.document); assertEquals("before a\nsecond line", original.content.toString())
-            assertEquals(1, original.line); assertEquals(3, original.column); assertFalse(editor.state.value.dirty)
+            assertSame(original, editor.state.value.document); assertEquals("local draft", original.content.toString())
+            assertEquals(1, original.line); assertEquals(3, original.column); assertTrue(editor.state.value.dirty)
             assertEquals(EditorDiskState.Changed, editor.state.value.diskState); assertEquals("external a", editor.state.value.diskVersion!!.text)
             assertEquals("before a\nsecond line", original.baseline.text)
             main { original.content.replace(0, original.content.length, "local draft"); editor.changed(); editor.checkDisk() }; await { !editor.state.value.diskChecking }

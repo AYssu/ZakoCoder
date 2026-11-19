@@ -1,20 +1,19 @@
 package dev.zakocoder.app
 
-import android.app.UiAutomation
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.BitmapFactory
-import android.graphics.Rect
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import android.util.Base64
-import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
+import android.util.Log
 import androidx.test.filters.SdkSuppress
+import androidx.core.content.FileProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
-import dev.zakocoder.app.screentest.ScreenTestAccess
-import dev.zakocoder.app.screentest.ScreenTestAccessibilityService
+import dev.zakocoder.app.device.DeviceAccessController
+import dev.zakocoder.app.device.VirtualScreenController
+import kotlinx.coroutines.flow.first
+import java.util.UUID
 import dev.zakocoder.app.screentest.ScreenTestController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -37,56 +36,60 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Local HTTPS model fixture -> real AI approval/executor -> real controller -> real installed app.
- * Requires /data/local/tmp/fixture.apk, its installed Debug app and explicitly enabled host service.
+ * Uses the androidTest launchable fixture on a real Root-owned display; no accessibility service.
  * Does not build/install pretend artifacts, change system settings or use a provider credential.
  */
 @SdkSuppress(minSdkVersion = 30)
 class AiAndroidWorkflowDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val base get() = instrumentation.targetContext
-    private val automation: UiAutomation
-        get() = instrumentation.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-
     @Test(timeout = 180000)
     fun approvedAiTaskObservesClicksVerifiesAndSharesActualPixelsThenRevokesDeviceTask() = runBlocking {
-        automation // Preserve the service explicitly enabled by the device test owner.
-        await { ScreenTestAccessibilityService.isConnected() }
         AiDeviceTest.Fixture(base, timeoutSeconds = 45, readTimeoutSeconds = 30).use { fixture ->
+            // The authority's shared strategy must resolve real app roots; resolving it first
+            // with an isolated ContextWrapper would contaminate later fixtures in this process.
+            FileProvider.getUriForFile(base, "${base.packageName}.apk-files",
+                File(base.filesDir, "screen-test/evidence/provider-root-fixture.png"))
+            val token = "ai-virtual-${UUID.randomUUID()}-"
+            val names = Collections.synchronizedSet(mutableSetOf<String>())
             val isolated = object : ContextWrapper(base) {
                 override fun getApplicationContext(): Context = this
-                override fun getFilesDir() = File(fixture.root, "controller-files").apply { mkdirs() }
+                override fun getFilesDir() = File(base.filesDir, "screen-test/evidence/$token").apply { mkdirs() }
+                override fun getSharedPreferences(name: String, mode: Int) =
+                    base.getSharedPreferences("$token$name".also { names.add(it) }, mode)
                 override fun getNoBackupFilesDir() = File(fixture.root, "controller-private").apply { mkdirs() }
                 override fun getCacheDir() = File(fixture.root, "controller-cache").apply { mkdirs() }
             }
             val project = withContext(Dispatchers.IO) { File(fixture.root, "project").apply { check(mkdirs()) } }
             val screenshots = Collections.synchronizedList(mutableListOf<Uri>())
-            val screen = ScreenTestController(isolated) { id -> check(id == PROJECT); project }
+            isolated.getSharedPreferences("device_access", Context.MODE_PRIVATE).edit().putString("mode", "root").commit()
+            val access = DeviceAccessController(isolated)
+            val virtual = VirtualScreenController(isolated, access)
+            val screen = ScreenTestController(isolated, virtual, access)
             var ai: AiController? = null
             try {
-                withContext(Dispatchers.IO) {
-                    automation.executeShellCommand("cat /data/local/tmp/fixture.apk").use { descriptor ->
-                        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
-                            File(project, "app-debug.apk").outputStream().use { output -> input.copyTo(output) }
-                        }
-                    }
-                }
-                shell("am force-stop $TARGET")
-                screen.setAccess(ScreenTestAccess.Accessibility)
-                val model = WorkflowModel()
+                withTimeout(10_000) { access.state.first { it.loaded } }
+                assertTrue("A real Root grant is required", access.ensureRoot())
+                val model = WorkflowModel(instrumentation.context.packageName)
                 fixture.server.dispatcher = model
                 main {
                     ai = AiController(isolated, { id -> check(id == PROJECT); project }, { _, _ -> false },
                         { _, _ -> error("This screen workflow must not run a host or guest command") }, {}, {},
                         fixture.transport, fixture.config, history = fixture.history,
                         capabilitySnapshot = { mapOf(dev.zakocoder.app.capabilities.CapabilityPackage.Screen to "screen-package-test") },
-            screenTestTool = { id, args, lease ->
+                        screenTestTool = { id, args, lease ->
                             check(ai?.state?.value?.let { it.active && it.projectId == id } == true)
                             check(id == PROJECT)
-                            screen.execute(id, args, lease).also { result -> result.imageUri?.let(screenshots::add) }
+                            val action = args.optString("action")
+                            Log.i("ZakoAiVirtualTest", "stage=tool_begin action=$action")
+                            screen.execute(id, args, lease).also { result ->
+                                result.imageUri?.let(screenshots::add)
+                                Log.i("ZakoAiVirtualTest", "stage=tool_complete action=$action")
+                            }
                         },
                         screenTestLease = screen::taskLease,
                         screenTestAuthorize = { id, taskId -> screen.authorizeDeviceTask(id, taskId) },
-                        screenTestDescription = { id -> "$id · ${screen.state.value.packageName.orEmpty()} · Accessibility" },
+                        screenTestDescription = { _ -> "专用虚拟屏幕" },
                         finishScreenTestTask = { id, lease -> screen.finishTask(id, lease) },
                         stopScreenTest = screen::stop,
                         shareScreenTestImages = { id -> screen.state.value.projectId == id && screen.state.value.shareScreenshots })
@@ -95,13 +98,14 @@ class AiAndroidWorkflowDeviceTest {
                 val controller = requireNotNull(ai)
                 await { controller.state.value.configured && !controller.state.value.permissionsLoading &&
                     !controller.state.value.skillsLoading && !controller.models.state.value.loading }
-                assertTrue(screen.state.value.enabled && screen.state.value.connected)
+                assertTrue(screen.state.value.enabled)
+                assertFalse(screen.state.value.connected)
                 assertNull(screen.taskLease(PROJECT))
                 assertFalse(screen.state.value.shareScreenshots)
 
-                main { assertTrue(controller.send("对用户已打开的界面执行屏幕测试：点击 Increment，验证 Counter: 1，再检查截图。不要声称执行了构建或安装。")) }
+                main { assertTrue(controller.send("在虚拟屏幕打开测试应用：点击 Increment，验证 Count: 1，再检查截图。不要声称执行了构建或安装。")) }
                 await { controller.state.value.approval != null }
-                assertTrue(controller.state.value.approval!!.detail.contains("当前设备屏幕"))
+                assertTrue(controller.state.value.approval!!.detail.contains("虚拟屏幕"))
                 assertEquals(0, controller.state.value.events.count { it.status == AiToolStatus.Succeeded })
                 assertNull(screen.taskLease(PROJECT))
                 main { controller.approve(AiDecision.TaskTool) }
@@ -109,22 +113,25 @@ class AiAndroidWorkflowDeviceTest {
                 val originalLease = requireNotNull(screen.taskLease(PROJECT))
                 // Explicit fixture-owner screenshot consent follows the actual task lease.
                 screen.setScreenshotSharing(PROJECT, true)
-                shell("monkey -p $TARGET -c android.intent.category.LAUNCHER 1")
                 await { !controller.state.value.active }
 
                 assertNull("Local model fixture validation: ${model.failure.get()}", model.failure.get())
                 assertEquals("", controller.state.value.error)
-                assertEquals(7, fixture.server.requestCount)
+                val observationCount = model.readinessObservations.get()
+                assertTrue("The fixture waits for consecutive equal real node projections", observationCount in 2..8)
+                assertEquals("Exactly one model-requested click is dispatched", 1, model.clickRequests.get())
+                assertEquals(7 + observationCount, fixture.server.requestCount)
                 assertTrue("Model used an actual observation snapshot and node ID", model.usedObservedNode.get())
                 assertTrue("Subsequent observation confirmed the actual UI counter", model.observedIncrement.get())
                 assertTrue("Next actual model request contains decodable captured pixels", model.receivedPixels.get())
-                assertEquals(6, controller.state.value.events.size)
+                assertEquals(6 + observationCount, controller.state.value.events.size)
                 assertTrue(controller.state.value.events.all { it.tool == AiTool.AndroidTest && it.status == AiToolStatus.Succeeded })
                 assertNull(controller.state.value.approval)
 
                 val report = screen.readReport(PROJECT)
                 val entries = report.lineSequence().filter { it.isNotBlank() }.map(::JSONObject).toList()
-                assertEquals(listOf("authorize", "observe", "click", "observe", "assert_text", "screenshot", "finish"),
+                assertEquals(listOf("authorize", "launch") + List(observationCount) { "observe" } +
+                    listOf("click", "observe", "assert_text", "screenshot", "finish"),
                     entries.map { it.getString("action") }.filter { it != "stop" })
                 assertEquals("task_finished", entries.single { it.getString("action") == "stop" }.getString("detail"))
                 assertTrue(entries.all { it.getBoolean("operationSucceeded") })
@@ -137,7 +144,7 @@ class AiAndroidWorkflowDeviceTest {
                 assertNull(screen.state.value.packageName)
 
                 val saved = fixture.history.load(PROJECT).state!!
-                assertEquals(6, saved.events.size)
+                assertEquals(6 + observationCount, saved.events.size)
                 assertTrue(saved.events.all { it.status == AiToolStatus.Succeeded })
                 assertFalse(saved.contextTurns.any { "data:image" in it || "zako_images" in it })
                 assertTrue(controller.state.value.requests.all { "data:image" !in it.request })
@@ -156,60 +163,91 @@ class AiAndroidWorkflowDeviceTest {
                 main { ai?.stop() }
                 await { ai?.state?.value?.active != true }
                 screen.stop()
-                shell("am force-stop $TARGET")
-                withContext(Dispatchers.IO) {
-                    // Only files produced by this fixture are removed, never another test's evidence.
-                    screenshots.forEach { uri -> File(base.filesDir, "screen-test/evidence/${uri.lastPathSegment}").delete() }
-                }
+                virtual.close()
+                withTimeout(15_000) { virtual.awaitStopped() }
+                access.stop()
+                names.toList().forEach(base::deleteSharedPreferences)
+                runCatching { screen.readReport(PROJECT) }
+                isolated.filesDir.deleteRecursively()
             }
         }
     }
 
     /** Each response is derived from the preceding real tool result, not a prewritten snapshot. */
-    private class WorkflowModel : Dispatcher() {
-        private val round = AtomicInteger()
+    private class WorkflowModel(private val target: String) : Dispatcher() {
+        private enum class Stage { Authorize, Launch, LaunchResult, ReadyObservation, ClickResult, UpdatedObservation, Assertion, Screenshot, Complete }
+        private var stage = Stage.Authorize
+        private var previousProjection: String? = null
+        private var observationId = ""
+        val readinessObservations = AtomicInteger()
+        val clickRequests = AtomicInteger()
         val failure = AtomicReference<String?>()
         val usedObservedNode = AtomicBoolean()
         val observedIncrement = AtomicBoolean()
         val receivedPixels = AtomicBoolean()
         override fun dispatch(request: RecordedRequest): MockResponse = try {
             val body = JSONObject(request.body.readUtf8())
-            when (round.getAndIncrement()) {
-                0 -> response("authorize")
-                1 -> {
-                    require(tool(body, "android-authorize").isNotBlank())
-                    awaitTargetReady()
-                    response("observe")
+            Log.i("ZakoAiVirtualTest", "stage=model_${stage.name}")
+            when (stage) {
+                Stage.Authorize -> {
+                    stage = Stage.Launch
+                    response("authorize")
                 }
-                2 -> {
-                    val observed = JSONObject(tool(body, "android-observe-initial"))
-                    require(observed.getString("package") == TARGET)
-                    require(nodes(observed).any { it.optString("text") == "Counter: 0" })
+                Stage.Launch -> {
+                    require(tool(body, "android-authorize").isNotBlank())
+                    stage = Stage.LaunchResult
+                    response("launch", JSONObject().put("package_name", target))
+                }
+                Stage.LaunchResult -> {
+                    require(toolObject(body, "android-launch").getBoolean("verified"))
+                    stage = Stage.ReadyObservation
+                    requestReadyObservation()
+                }
+                Stage.ReadyObservation -> {
+                    val observed = toolObject(body, observationId)
+                    require(observed.getString("package") == target)
+                    require(!observed.optBoolean("truncated"))
+                    require(nodes(observed).any { it.optString("text") == "Count: 0" })
                     val button = nodes(observed).single { it.optString("text") == "Increment" }
                     require(button.getBoolean("clickable") && !button.getBoolean("sensitive"))
-                    usedObservedNode.set(true)
-                    response("click", JSONObject().put("snapshot", observed.getString("snapshot")).put("node", button.getString("id")))
+                    val projection = observed.getJSONArray("nodes").toString()
+                    if (projection != previousProjection) {
+                        previousProjection = projection
+                        require(readinessObservations.get() < 8) { "Fixture layout did not settle after eight read-only observations" }
+                        requestReadyObservation()
+                    } else {
+                        // Never replay a write after a stale snapshot: only initial read-only
+                        // observations repeat, and the latest unchanged snapshot drives one click.
+                        usedObservedNode.set(true)
+                        check(clickRequests.incrementAndGet() == 1)
+                        stage = Stage.ClickResult
+                        response("click", JSONObject().put("snapshot", observed.getString("snapshot")).put("node", button.getString("id")))
+                    }
                 }
-                3 -> {
-                    val clicked = JSONObject(tool(body, "android-click"))
-                    require(clicked.getString("accepted") == "click" && !clicked.getBoolean("verified"))
-                    response("observe", id = "android-observe-updated", delayMillis = 350)
+                Stage.ClickResult -> {
+                    val clicked = toolObject(body, "android-click")
+                    require(clicked.getBoolean("dispatched") && !clicked.getBoolean("verified"))
+                    stage = Stage.UpdatedObservation
+                    response("observe", id = "android-observe-updated")
                 }
-                4 -> {
-                    val observed = JSONObject(tool(body, "android-observe-updated"))
-                    require(observed.getString("package") == TARGET)
-                    require(nodes(observed).any { it.optString("text") == "Counter: 1" })
+                Stage.UpdatedObservation -> {
+                    val observed = toolObject(body, "android-observe-updated")
+                    require(observed.getString("package") == target)
+                    require(nodes(observed).any { it.optString("text") == "Count: 1" })
                     observedIncrement.set(true)
-                    response("assert_text", JSONObject().put("text", "Counter: 1"))
+                    stage = Stage.Assertion
+                    response("assert_text", JSONObject().put("text", "Count: 1"))
                 }
-                5 -> {
-                    val assertion = JSONObject(tool(body, "android-assert_text"))
+                Stage.Assertion -> {
+                    val assertion = toolObject(body, "android-assert_text")
                     require(assertion.getString("assertion") == "passed")
+                    stage = Stage.Screenshot
                     response("screenshot")
                 }
-                6 -> {
-                    val captured = JSONObject(tool(body, "android-screenshot"))
-                    require(captured.getString("package") == TARGET)
+                Stage.Screenshot -> {
+                    val captured = toolObject(body, "android-screenshot")
+                    require(captured.getBoolean("captured"))
+                    require(captured.getInt("display_id") > 0)
                     val images = images(body)
                     require(images.size == 1)
                     val image = images.single()
@@ -218,74 +256,26 @@ class AiAndroidWorkflowDeviceTest {
                     val bitmap = requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
                     try { require(bitmap.width > 100 && bitmap.height > 100) } finally { bitmap.recycle() }
                     receivedPixels.set(true)
+                    stage = Stage.Complete
                     finalResponse()
                 }
-                else -> error("Unexpected additional model round")
+                Stage.Complete -> error("Unexpected additional model round")
             }
         } catch (error: Exception) {
-            failure.compareAndSet(null, "${error.javaClass.simpleName}: ${error.message}")
+            failure.compareAndSet(null, "stage=${stage.name}: ${error.javaClass.simpleName}: ${error.message}")
             MockResponse().setResponseCode(500).setBody("Local workflow fixture rejected the observed request")
         }
 
-        private fun awaitTargetReady() = runBlocking {
-            // The owner may need to confirm MIUI's first cross-app launch manually.
-            // Inspect only our fixture after checking its root package; never read permission UI.
-            // A foreground package alone does not mean the activity's launch animation has settled.
-            withTimeout(15_000) {
-                var previous: List<String>? = null
-                var stableSamples = 0
-                while (stableSamples < 8) {
-                    val current = withContext(Dispatchers.Main) {
-                        val root = ScreenTestAccessibilityService.instance?.rootInActiveWindow
-                        try {
-                            if (root?.packageName?.toString() == TARGET &&
-                                root.window?.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
-                                root.window?.isActive == true) fixtureLayout(root) else null
-                        } finally {
-                            @Suppress("DEPRECATION")
-                            root?.recycle()
-                        }
-                    }
-                    stableSamples = if (current != null && current == previous) stableSamples + 1
-                        else if (current != null) 1 else 0
-                    previous = current
-                    if (stableSamples < 8) delay(150)
-                }
-            }
+        private fun requestReadyObservation(): MockResponse {
+            observationId = "android-observe-ready-${readinessObservations.incrementAndGet()}"
+            return response("observe", id = observationId, delayMillis = 200)
         }
-
-        @Suppress("DEPRECATION")
-        private fun fixtureLayout(root: AccessibilityNodeInfo): List<String>? {
-            val layout = mutableListOf<String>()
-            var hasCounter = false
-            var hasIncrement = false
-            var visited = 0
-            var valid = true
-            fun visit(node: AccessibilityNodeInfo, depth: Int) {
-                if (++visited > 300 || depth > 20 || node.packageName?.toString() != TARGET) {
-                    valid = false
-                    return
-                }
-                val bounds = Rect().also(node::getBoundsInScreen)
-                val sensitive = node.isPassword
-                val text = if (sensitive) "" else node.text?.toString().orEmpty()
-                layout += listOf(node.className, node.viewIdResourceName, bounds.toShortString(), text,
-                    if (sensitive) "" else node.contentDescription, node.isVisibleToUser, node.isEnabled, node.isClickable,
-                    node.isEditable, node.childCount, sensitive).joinToString("\u001f")
-                if (node.isVisibleToUser && node.isEnabled) {
-                    hasCounter = hasCounter || text == "Counter: 0"
-                    hasIncrement = hasIncrement || (text == "Increment" && node.isClickable && !bounds.isEmpty)
-                }
-                if (sensitive) return // Keep geometry only; never read or visit password contents.
-                for (index in 0 until node.childCount.coerceAtMost(300)) {
-                    if (!valid) break
-                    node.getChild(index)?.let { child ->
-                        try { visit(child, depth + 1) } finally { child.recycle() }
-                    }
-                }
-            }
-            visit(root, 0)
-            return layout.takeIf { valid && hasCounter && hasIncrement }
+        private fun toolObject(body: JSONObject, id: String): JSONObject {
+            val output = tool(body, id)
+            // Preserve the actual controller error in the failure instead of reporting a
+            // misleading JSON decoding failure. No failed action is silently retried.
+            check(output.trimStart().startsWith("{")) { "Tool $id failed: ${output.take(240)}" }
+            return JSONObject(output)
         }
 
         private fun nodes(observed: JSONObject): List<JSONObject> = observed.getJSONArray("nodes").let { array ->
@@ -323,13 +313,7 @@ class AiAndroidWorkflowDeviceTest {
 
     private suspend fun main(action: () -> Unit) = withContext(Dispatchers.Main) { action() }
     private suspend fun await(condition: () -> Boolean) = withTimeout(60_000) { while (!condition()) delay(30) }
-    private suspend fun shell(command: String) = withContext(Dispatchers.IO) {
-        automation.executeShellCommand(command).use { descriptor ->
-            ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText().take(16384) }
-        }
-    }
     companion object {
-        private const val TARGET = "dev.zakocoder.screentest.fixture"
         private const val PROJECT = "ai-android-workflow-fixture"
     }
 }

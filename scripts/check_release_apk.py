@@ -165,7 +165,7 @@ def inspect_apk(apk: Path, aapt: Path) -> dict:
         if abi not in architectures:
             raise ValueError(f"Unsupported native ABI: {abi}")
         expected = {artifact["name"]: artifact["sha256"] for artifact in architectures[abi]["nativeArtifacts"]}
-        actual = {name: digest for name, digest in libraries.items() if name.startswith("libzakocoder") and name != "libzakocoder_xray.so"}
+        actual = {name: digest for name, digest in libraries.items() if name.startswith("libzakocoder")}
         if actual != expected:
             raise ValueError(f"Pinned runtime native files differ for {abi}")
     permissions = sorted({_string(node["attrs"].get("android:name"), "permission")

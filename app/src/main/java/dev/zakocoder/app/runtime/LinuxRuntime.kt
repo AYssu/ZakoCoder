@@ -241,21 +241,43 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             // Ubuntu's global zshrc otherwise runs compinit before our managed configuration.
             PrivateFiles.writeConfined(root, "etc/zakocoder/zsh/.zshenv", "skip_global_compinit=1\n")
             PrivateFiles.writeConfined(root, "etc/zakocoder/zsh/.zshrc", """
-                autoload -Uz compinit
+                autoload -Uz compinit add-zsh-hook
                 bindkey -e
+                alias ls='ls --color=auto'
                 if [[ -s /root/.zshrc ]]; then
                     # Existing user config may call compdef during startup.
                     compinit -i -d /root/.cache/zakocoder/zcompdump
-                else
-                    # PRoot makes completion-directory checks expensive. Pay that cost on first Tab,
-                    # retaining compinit's ownership/security checks and normal completion behavior.
-                    _zakocoder_complete() {
-                        bindkey '^I' expand-or-complete
-                        compinit -i -d /root/.cache/zakocoder/zcompdump
-                        zle expand-or-complete
+                elif [[ -o interactive ]] && zmodload zsh/zselect; then
+                    # A cold compinit can take tens of seconds under PRoot. Keep Zsh's built-in
+                    # file/command completion available while a child prepares the dump. Never
+                    # perform the cold scan from a ZLE widget or wait for the child on the UI path.
+                    exec {_ZAKOCODER_COMPLETION_FD}< <(
+                        if compinit -i -d /root/.cache/zakocoder/zcompdump </dev/null >/dev/null 2>&1 &&
+                            [[ -s /root/.cache/zakocoder/zcompdump && ! -L /root/.cache/zakocoder/zcompdump ]]; then
+                            print -r -- ready
+                        fi
+                    )
+                    _zakocoder_completion_close() {
+                        if (( ${'$'}{+_ZAKOCODER_COMPLETION_FD} )); then
+                            exec {_ZAKOCODER_COMPLETION_FD}<&-
+                        fi
                     }
-                    zle -N _zakocoder_complete
-                    bindkey '^I' _zakocoder_complete
+                    _zakocoder_completion_ready() {
+                        # Attach only between commands, never halfway through editing a line.
+                        zselect -r "${'$'}_ZAKOCODER_COMPLETION_FD" -t 0 || return 0
+                        local completion_result
+                        IFS= read -r -u "${'$'}_ZAKOCODER_COMPLETION_FD" completion_result
+                        _zakocoder_completion_close
+                        add-zsh-hook -d precmd _zakocoder_completion_ready
+                        add-zsh-hook -d zshexit _zakocoder_completion_close
+                        # Recheck directory permissions; do not use compinit -C to bypass auditing.
+                        if [[ ${'$'}completion_result == ready && -s /root/.cache/zakocoder/zcompdump &&
+                            ! -L /root/.cache/zakocoder/zcompdump ]]; then
+                            compinit -i -d /root/.cache/zakocoder/zcompdump
+                        fi
+                    }
+                    add-zsh-hook precmd _zakocoder_completion_ready
+                    add-zsh-hook zshexit _zakocoder_completion_close
                 fi
                 HISTFILE=/root/.cache/zakocoder/zsh_history
                 HISTSIZE=5000
@@ -266,6 +288,11 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
                 if [[ -r /root/.zshrc ]]; then source /root/.zshrc; fi
             """.trimIndent() + "\n")
             PrivateFiles.writeConfined(root, "root/.cache/zakocoder/.managed", "")
+        } else {
+            PrivateFiles.writeConfined(root, "etc/zakocoder/bash/bashrc", """
+                PS1='\[\e[38;5;114m\]zako\[\e[0m\]@ubuntu \${'$'} '
+                alias ls='ls --color=auto'
+            """.trimIndent() + "\n")
         }
     }
 
@@ -329,10 +356,12 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         args += "SHELL=${if (script == null) settings.terminalShell.executable else "/bin/bash"}"
         if (script == null && settings.terminalShell == TerminalShell.Zsh) {
             args += listOf("ZDOTDIR=/etc/zakocoder/zsh", "/usr/bin/zsh", "-i")
+        } else if (script == null) {
+            args += listOf("/bin/bash", "--noprofile", "--rcfile", "/etc/zakocoder/bash/bashrc", "-i")
         } else {
             // Installers and probes always use Bash, irrespective of the interactive preference.
             args += listOf("/bin/bash", "--noprofile", "--norc")
-            if (script == null) args += "-i" else args += listOf("-c", script)
+            args += listOf("-c", script)
         }
         RuntimeCommand(executable, args, mapOf(
             "PROOT_L2S_DIR" to links.canonicalPath,

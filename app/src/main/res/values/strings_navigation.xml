@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="editor_path_with_status">%1$s · %2$s</string>
+    <string name="home_back_confirm">再返回一次回到桌面</string>
     <string name="project_command_preview_help">命令摘要；配置或执行确认中可查看全文</string>
 </resources>

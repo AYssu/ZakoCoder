@@ -33,23 +33,13 @@ RC 需重点反馈：首次安装和覆盖升级后的项目/会话/草稿保留
 | Lite | `ZakoCoder-<版本>-lite-arm64-v8a.apk` | `ZakoCoder-<版本>-lite-x86_64.apk` |
 | Full | `ZakoCoder-<版本>-full-arm64-v8a.apk` | `ZakoCoder-<版本>-full-x86_64.apk` |
 
-Lite 按需下载 Ubuntu、可选安装独立代理内核插件；Full 在主 APK 内集成代理内核服务和对应架构的 Ubuntu 安装包，不内嵌插件 APK。Full 首次启动会初始化 Ubuntu，已有环境不被覆盖；开发工具包和模型服务仍由用户配置。x86_64 发行不等于手机专用 Android SDK / NDK 工具链已适配。
+Lite 按需下载或导入 Ubuntu；Full 在主 APK 内包含对应架构的 Ubuntu 安装包。两版都仅支持外部 HTTP／SOCKS5 代理，不包含代理内核或插件。Full 首次启动会初始化 Ubuntu，已有环境不被覆盖；开发工具包和模型服务仍由用户配置。x86_64 发行不等于手机专用 Android SDK / NDK 工具链已适配。
 
 四个 APK 使用相同包名、版本号、versionCode 和证书，允许用户主动覆盖切换；升级不应清除项目、配置或 Ubuntu。应用内更新仅选择当前 Lite / Full 与安装架构相符的包，不自动跨版切换。历史 `ZakoCoder-<版本>-arm64.apk` 仅可供 Lite ARM64 更新使用。公开附件为这四个 APK 和一份覆盖四包的 `SHA256SUMS.txt`，验证记录和源码归档保留在 Actions，发布正文提供固定提交的完整源码与许可证入口。
 
-CI 仍强制从源码重建两种 ABI 的 PRoot / loader 和 Xray 并比对锁定摘要；本地默认复用仓库已验证的原生产物。发布还检查实际 APK 的单 ABI、edition 标记、Ubuntu 文件长度和 SHA-256、内核摘要、无嵌套插件 APK、版本身份及相同签名。Lite / Full 的实际 x86_64 Release 包分别运行设备 UI smoke；同版 ARM64 包需通过代码/资源一致性比较，架构专属资源另按锁验证。这些检查不替代 ARM64 厂商真机和完整工具链验收。
+CI 仍强制从源码重建两种 ABI 的 PRoot / loader 并比对锁定摘要；本地默认复用仓库已验证的原生产物。发布还检查实际 APK 的单 ABI、edition 标记、Ubuntu 文件长度和 SHA-256、版本身份及相同签名。Lite / Full 的实际 x86_64 Release 包分别运行设备 UI smoke；同版 ARM64 包需通过代码/资源一致性比较，架构专属资源另按锁验证。这些检查不替代 ARM64 厂商真机和完整工具链验收。
 
 本地可指定 `-PdistributionEdition=lite|full`（默认 Lite）与 `-PcompatibilityAbis=arm64-v8a|x86_64`，保留 `:app:assembleDebug` / `:app:assembleRelease` 任务名。Full 构建首次需要获取校验后的 Ubuntu 包；离线缓存存在时复用。构建参数为 `-PbetaRelease=true -PbetaVersion=0.1.0 -PbetaVersionCode=1005`，未签名输出为后续签名的输入；不在 Gradle 中保存密钥。完整步骤以 [publish-beta.yml](../.github/workflows/publish-beta.yml) 和 `app/build.gradle.kts` 为准。
-
-### 可选代理内核插件
-
-Lite 主 APK 不包含 Xray，Full 已集成，无需安装独立插件。**Publish Release** 成功后自动调用 [Publish Kernel Plugin](../.github/workflows/release-kernel-plugin.yml)，构建 ARM64 与 x86_64 两个单 ABI 插件 Release，并沿用主程序签名配置。工作流下载刚发布的主 APK，校验摘要、签名与版本；只有插件与它同证书、插件 versionCode 与该主 APK 一致、内核 SHA-256 与构建锁一致时才允许发布。
-
-现有版本缺少插件时，可在 `main` 的 **Actions → Publish Kernel Plugin → Run workflow** 单独补发，`main_release_tag` 填已有主程序标签（例如 `v0.1.1`），无需重新发布主 APK。插件源码取该次可信 main 工作流提交，记录在插件 `BUILD.json` 和正文；不会改写主程序版本标签。
-
-应用当前下载地址固定为 `kernel-plugin-v1` 发布页下的 `kernel-plugin-arm64-v8a.apk` 与 `kernel-plugin-x86_64.apk`，按设备架构选择。该页是接口 v1 的更新通道，只有更高 versionCode 才更新附件；重复或降级发布会在上传前被拒绝。它不标为 Latest，不改变主程序 Latest。除 APK 和摘要外，保留构建身份及包含原始许可证的 Go 对应源码包，上传后回读校验；主程序发布正文会加入插件下载入口。
-
-用户可在代理设置中选择在线安装，或手动下载这个 APK 后选择本地安装；两种方式复用包名、签名、版本与兼容校验，最后由系统安装器确认。直连及手动 HTTP／SOCKS5 不依赖插件。MIUI 等系统可能还需允许插件自启动／关联启动。Debug 测试插件与正式主程序的证书可能不同，不能混用。
 
 ### 发布签名
 
@@ -71,10 +61,10 @@ CI 签名材料只在 Secrets 和临时 runner 中使用，不写入聊天、Iss
 每个主应用版本仅上传五个自定义 Release 附件：
 
 - `ZakoCoder-<version>-lite-arm64-v8a.apk`、`ZakoCoder-<version>-lite-x86_64.apk`：轻量版。
-- `ZakoCoder-<version>-full-arm64-v8a.apk`、`ZakoCoder-<version>-full-x86_64.apk`：内置 Ubuntu 和内核的完整包。
+- `ZakoCoder-<version>-full-arm64-v8a.apk`、`ZakoCoder-<version>-full-x86_64.apk`：内置 Ubuntu 的完整包。
 - `SHA256SUMS.txt`：覆盖以上四个 APK 的 SHA-256 校验摘要。
 
-发布正文面向用户说明安装、升级及已知限制；提交、versionCode、证书和构建验证信息放在可折叠的构建详情中。自动版本检查使用隐藏的元数据注释，不额外上传 `BUILD.txt`／`BUILD.json`。主程序版本递增检查会读取全部已发布主程序的隐藏记录或历史 `BUILD.json`；独立 `kernel-plugin-vN` 通道仅在记录包名为 `dev.zakocoder.app.kernel` 时排除。主程序记录缺失、包名或格式不符仍会阻止发布，不应通过删除历史记录绕过检查。
+发布正文面向用户说明安装、升级及已知限制；提交、versionCode、证书和构建验证信息放在可折叠的构建详情中。自动版本检查使用隐藏的元数据注释，不额外上传 `BUILD.txt`／`BUILD.json`。主程序版本递增检查会读取全部已发布主程序的隐藏记录或历史 `BUILD.json`；历史独立插件发布通道仍按其已记录的包名识别并排除；该兼容过滤仅用于读取已有发布记录，不再构建或发布插件。主程序记录缺失、包名或格式不符仍会阻止发布，不应通过删除历史记录绕过检查。
 
 发布页须清楚指出本次不可变提交与版本标签，并链接其 GitHub **Source code (zip / tar.gz)** 完整归档。归档中的 `native-runtime/` 已包含固定原始 `sources/`、`patches/`、构建脚本、工具链／产物锁、交叉编译输入及 `licenses/`，用于取得与 APK 对应的完整运行时源码和重建材料。发布前核对归档确实包含这些内容；不能用可变上游分支或限期 Actions Artifact 代替长期可得的对应源码。许可证与版权声明保留在 APK 和源码中，详见[第三方材料](../THIRD_PARTY.md)。
 
@@ -116,7 +106,7 @@ CI 的每次候选会生成自己的截图及绑定制品摘要的报告；本�
 
 ## 构建版本规则
 
-Debug 和 Release 的 Action 均接受基础 `version`，默认 `0.1.2`，每轮只解析一次版本，四种主 APK 共用版本身份。Debug 额外添加 `-dev`，如 `0.1.2111216-dev`；对应 Lite 插件也使用同轮的版本名和 versionCode。Debug 始终保留 `-dev` 标记，需要发布 Beta／RC 时使用发布入口。
+Debug 和 Release 的 Action 均接受基础 `version`，默认 `0.1.2`，每轮只解析一次版本，四种主 APK 共用版本身份。Debug 额外添加 `-dev`，如 `0.1.2111216-dev`。Debug 始终保留 `-dev` 标记，需要发布 Beta／RC 时使用发布入口。
 
 `versionCode` 默认取自 2020-01-01 00:00:00 UTC 起的完整秒数，与展示的 `MMddHH` 分开，跨年仍递增，且校验不超过 Android 的 2,100,000,000 上限。同一秒发起的构建可能共用 code；同一小时、同一基础版本生成的展示名称相同，正式发布会拒绝已存在的标签，需等下一小时或调整基础版本。版本时间属于构建开始时刻，不是完成时刻。拼接后的 patch 按数字规范去掉前导零，例如基础 `0.2.0` 在上述时刻生成 `0.2.111216`。自定义 code 过大可能阻止以后自动版本覆盖，非必要请留空。应用内更新优先比较发布记录的 versionCode，安装前仍校验实际 APK 版本、摘要和证书。
 
@@ -124,7 +114,7 @@ Debug 和 Release 的 Action 均接受基础 `version`，默认 `0.1.2`，每轮
 
 ## 手动打包测试 APK
 
-**Actions → Build Debug APK → Run workflow** 保留原入口。成功后，运行摘要提供 Lite／Full × ARM64／x86_64 四个安装包的独立下载链接；每份 Artifact 只含一个对应 APK、`SHA256SUMS.txt` 和 `BUILD.txt`，无需下载其他版本。Lite 可选内核插件也按 ARM64／x86_64 独立下载，Full 无需插件。源码、许可证及完整校验材料另存 `ZakoCoder-support-<run>-<attempt>`，不重复包含 APK。所有 Artifact 保留 14 天，需登录 GitHub。在所选安装包的解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
+**Actions → Build Debug APK → Run workflow** 保留原入口。成功后，运行摘要提供 Lite／Full × ARM64／x86_64 四个安装包的独立下载链接；每份 Artifact 只含一个对应 APK、`SHA256SUMS.txt` 和 `BUILD.txt`，无需下载其他版本。源码、许可证及完整校验材料另存 `ZakoCoder-support-<run>-<attempt>`，不重复包含 APK。所有 Artifact 保留 14 天，需登录 GitHub。在所选安装包的解压目录执行 `sha256sum -c SHA256SUMS.txt` 校验。
 
 该入口与默认 Beta 签名共用 `ZAKOCODER_DEBUG_KEYSTORE_BASE64` Secret：CI 专用 Debug keystore、`androiddebugkey` 别名及 Android 默认 Debug 口令。缺失时失败，不生成替代签名；它不得指向正式发布密钥。CI 在临时 runner 恢复并删除，不上传或缓存 keystore。
 

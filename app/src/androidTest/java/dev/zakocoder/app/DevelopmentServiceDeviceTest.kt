@@ -2,7 +2,6 @@ package dev.zakocoder.app
 
 import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.terminal.DevelopmentService
 import kotlinx.coroutines.*
 import org.junit.Assert.*
@@ -11,8 +10,7 @@ import org.junit.Test
 import java.io.File
 import java.util.UUID
 
-/** Opt-in target package only. Requires a signed Debug fixture at /data/local/tmp/fixture.apk.
- * No root, target launch, system setting edits, production data or provider configuration. */
+/** Opt-in isolated package and Root device only. Checks virtual-task foreground service ownership. */
 class DevelopmentServiceDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
@@ -41,22 +39,9 @@ class DevelopmentServiceDeviceTest {
     }
     private suspend fun runningPids() = shell("pidof ${context.packageName}").trim().split(Regex("\\s+"))
         .mapNotNull(String::toIntOrNull).toSet()
-    private suspend fun copyFixture(destination: File) = withContext(Dispatchers.IO) {
-        ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("cat /data/local/tmp/fixture.apk")).use { input ->
-            destination.outputStream().use { output ->
-                val buffer = ByteArray(8192); var countTotal = 0L
-                while (true) {
-                    val count = input.read(buffer); if (count < 0) break
-                    countTotal += count; check(countTotal <= 32L * 1024 * 1024) { "Fixture APK exceeds 32 MiB" }
-                    output.write(buffer, 0, count)
-                }
-                check(countTotal > 0) { "Provide /data/local/tmp/fixture.apk before this test" }
-            }
-        }
-    }
-
-    @Test(timeout = 120000) fun selectedNormalScreenTargetKeepsForegroundServiceAcrossHomeAndReleasesCpuLock() = runBlocking {
+    @Test(timeout = 120000) fun virtualScreenTaskKeepsForegroundServiceAcrossHomeAndReleasesCpuLock() = runBlocking {
         assumeTrue("This test must never operate on the production app", context.packageName == "dev.zakocoder.app.runtimecheck")
+        assumeTrue("Root device verification is opt-in", InstrumentationRegistry.getArguments().getString("allowRootDeviceTest") == "true")
         warmDeviceActivity()
         val workbench = (context.applicationContext as ZakoApplication).workbench
         await("Workbench initial load") { !workbench.state.value.loading }
@@ -67,23 +52,20 @@ class DevelopmentServiceDeviceTest {
             "Run this isolated fixture only after existing test tasks and terminals have stopped"
         }
         val screen = workbench.screenTests
-        val originalAccess = screen.state.value.access
-        val originalOverlay = screen.state.value.overlayEnabled
+        val originalMode = workbench.deviceAccess.state.value.mode
         val project = withContext(Dispatchers.IO) { workbench.projects.create("Service check ${UUID.randomUUID().toString().take(8)}") }
         val projectRoot = withContext(Dispatchers.IO) { workbench.projects.directory(project.id) }
         var service: DevelopmentService? = null
         var report: File? = null
         try {
-            copyFixture(File(projectRoot, "fixture.apk"))
-            main { screen.setOverlayEnabled(false); screen.setAccess(ScreenTestAccess.Normal) }
+            assertTrue("Root must be explicitly available", workbench.deviceAccess.enableRoot())
             screen.authorizeDeviceTask(project.id, UUID.randomUUID().toString())
             report = screen.state.value.reportPath?.let(::File)
             await("Selected screen target starts foreground service") { workbench.state.value.backgroundServiceRunning }
             assertFalse(workbench.state.value.backgroundServiceError)
             assertTrue(screen.state.value.active)
-            assertEquals(ScreenTestAccess.Normal, screen.state.value.access)
-            assertFalse(screen.state.value.overlayEnabled)
-            assertFalse(screen.state.value.overlayVisible)
+            assertTrue(workbench.virtualScreen.state.value.active)
+            assertTrue(requireNotNull(workbench.virtualScreen.state.value.displayId) > 0)
             assertTrue("System must report the actual foreground service", foreground(serviceDump()))
             assertFalse("An idle selected target must not hold the execution wake lock", taskLockHeld())
             main {
@@ -122,8 +104,7 @@ class DevelopmentServiceDeviceTest {
                 main {
                     service?.setTaskActive(false)
                     if (screen.state.value.projectId == project.id) screen.stop()
-                    screen.setAccess(originalAccess)
-                    screen.setOverlayEnabled(originalOverlay)
+                    if (originalMode == dev.zakocoder.app.device.DeviceMode.Basic) workbench.deviceAccess.useBasic()
                 }
                 await("Service cleanup") { !workbench.state.value.backgroundServiceRunning }
                 if (report != null) screen.readReport(project.id) // Drain only this fixture's final audit write before cleanup.

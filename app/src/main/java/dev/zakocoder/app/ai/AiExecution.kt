@@ -18,6 +18,7 @@ enum class AiTool(val wire: String, val label: Int, val description: Int, val wr
     StartTerminal("start_terminal", R.string.ai_terminal_start, R.string.ai_terminal_start_desc, true),
     SendTerminalInput("send_terminal_input", R.string.ai_terminal_input, R.string.ai_terminal_input_desc, true),
     CloseTerminal("close_terminal", R.string.ai_terminal_close, R.string.ai_terminal_close_desc, true),
+    DeviceShell("device_shell", R.string.ai_device_shell_tool, R.string.ai_device_shell_tool_desc, true),
     SshRemote("ssh_remote", R.string.ai_ssh_tool, R.string.ai_ssh_tool_desc, true),
     AndroidTest("android_test", R.string.ai_screen_test_tool, R.string.ai_screen_test_tool_desc, true),
     Browser("browser", R.string.browser_title, R.string.browser_tool_description, true),
