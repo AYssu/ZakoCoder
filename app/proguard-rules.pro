@@ -205,3 +205,8 @@
 -keep,allowoptimization class com.jcraft.jsch.jgss.GSSContextKrb5 { <init>(); }
 -if class com.jcraft.jzlib.ZStream
 -keep,allowoptimization class com.jcraft.jsch.jzlib.Compression { <init>(); }
+
+# libsu launches this own RootService by its class name in a separate root process.
+-keep class dev.zakocoder.app.device.VirtualScreenRootService { *; }
+-keep class dev.zakocoder.app.device.IVirtualScreen$Stub { *; }
+-keep class dev.zakocoder.app.device.IVirtualScreen$Stub$Proxy { *; }

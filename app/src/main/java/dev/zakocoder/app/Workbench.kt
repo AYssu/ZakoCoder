@@ -129,11 +129,15 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         if (ai.state.value.active && (kind != dev.zakocoder.app.capabilities.CapabilityPackage.Ssh || ai.state.value.projectId == id)) ai.stop()
         when (kind) {
             dev.zakocoder.app.capabilities.CapabilityPackage.Screen -> screenTests.stop()
+            dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell -> deviceAccess.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> ssh.stop()
             dev.zakocoder.app.capabilities.CapabilityPackage.Browser -> browser.close()
         }
     }
-    val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context, projects::directory)
+    val deviceAccess = dev.zakocoder.app.device.DeviceAccessController(context)
+    val virtualScreen = dev.zakocoder.app.device.VirtualScreenController(context, deviceAccess)
+    val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context,
+        virtualScreen = virtualScreen, deviceAccess = deviceAccess, projectRoot = projects::directory)
     internal val browser = dev.zakocoder.app.browser.BrowserController(context, scope)
     private val mutableBrowserNavigation = MutableStateFlow<String?>(null)
     val browserNavigation = mutableBrowserNavigation.asStateFlow()
@@ -178,9 +182,23 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }
         },
         browserImagesAllowed = { browser.state.value.shareImages && capabilityPackages.enabled(null, dev.zakocoder.app.capabilities.CapabilityPackage.Browser) },
-        capabilitySnapshot = { id -> capabilityPackages.snapshot(id).mapValues { (kind, token) ->
-            if (kind == dev.zakocoder.app.capabilities.CapabilityPackage.Ssh) token + "|" + (ssh.configurationLease(id) ?: "unconfigured") else token
-        } },
+        capabilitySnapshot = ::deviceCapabilitySnapshot,
+        deviceShellDescription = { context.getString(if (deviceAccess.state.value.mode == dev.zakocoder.app.device.DeviceMode.Root)
+            R.string.device_shell_root_identity else R.string.device_shell_basic_identity) },
+        deviceShellTool = { id, args, approved, output ->
+            check(ai.state.value.active && ai.state.value.projectId == id)
+            check(mutable.value.projects.any { it.id == id })
+            check(approved != null && deviceCapabilitySnapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell] == approved)
+            val approvedGeneration = approved.split('|').getOrNull(1)?.toLongOrNull()
+                ?: error("device_access_revoked")
+            val result = deviceAccess.execute(args.getString("command"), args.optInt("timeout_seconds", 120),
+                expectedGeneration = approvedGeneration, onOutput = output)
+            check(deviceCapabilitySnapshot(id)[dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell] == approved)
+            org.json.JSONObject().put("environment", "android_host").put("cwd", "/").put("uid", result.uid)
+                .put("identity", result.identity).put("exit_code", result.exitCode).put("stdout", result.stdout.takeLast(30000))
+                .put("stderr", result.stderr.takeLast(16000)).put("timed_out", result.timedOut)
+                .put("truncated", result.truncated || result.stdout.length > 30000 || result.stderr.length > 16000).toString()
+        },
         sshDescription = { id -> ssh.state.value.profiles.singleOrNull { it.id == id }?.let { "${it.username}@${it.host}:${it.port} · ${it.workingDirectory}" } ?: id },
         sshTool = { id, args, approved ->
             check(ai.state.value.active && ai.state.value.projectId == id)
@@ -201,18 +219,23 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             check(capabilityPackages.enabled(id, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
             screenTests.authorizeDeviceTask(id, taskId)
         },
-        screenTestDescription = { _ ->
-            val current = screenTests.state.value
-            context.getString(R.string.ai_screen_test_target_description,
-                context.getString(when (current.access) {
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Normal -> R.string.screen_test_access_normal
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Accessibility -> R.string.screen_test_access_accessibility
-                    dev.zakocoder.app.screentest.ScreenTestAccess.Root -> R.string.screen_test_access_root
-                }))
-        },
+        screenTestDescription = { _ -> context.getString(R.string.device_virtual_target) },
         finishScreenTestTask = { id, lease -> screenTests.finishTask(id, lease) }, stopScreenTest = { screenTests.stop() },
         shareScreenTestImages = { id -> screenTests.state.value.let { it.projectId == id && it.shareScreenshots } }, proxy = { settingsRepository.proxyForRuntime() },
         canStartTask = { !mutable.value.loading && !mutable.value.busy && !git.state.value.busy && !projectTasksActive() })
+    private fun deviceCapabilitySnapshot(id: String): Map<dev.zakocoder.app.capabilities.CapabilityPackage, String> {
+        val access = deviceAccess.state.value
+        return capabilityPackages.snapshot(id).mapNotNull { (kind, token) ->
+            when (kind) {
+                dev.zakocoder.app.capabilities.CapabilityPackage.Ssh -> kind to (token + "|" + (ssh.configurationLease(id) ?: "unconfigured"))
+                dev.zakocoder.app.capabilities.CapabilityPackage.Screen ->
+                    if (access.loaded && access.mode == dev.zakocoder.app.device.DeviceMode.Root) kind to (token + "|" + deviceAccess.generation) else null
+                dev.zakocoder.app.capabilities.CapabilityPackage.DeviceShell ->
+                    if (access.loaded) kind to (token + "|" + deviceAccess.generation + "|" + access.mode.name) else null
+                else -> kind to token
+            }
+        }.toMap()
+    }
     /** Called only after AiController permission approval, serialized with UI PTY access on Main. */
     internal suspend fun executeAiTerminal(id: String, tool: dev.zakocoder.app.ai.AiTool, args: org.json.JSONObject): String = withContext(Dispatchers.Main.immediate) {
         val project = mutable.value.projects.singleOrNull { it.id == id } ?: throw dev.zakocoder.app.ai.AiTerminalException(context.getString(R.string.ai_terminal_missing))
@@ -891,7 +914,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.create(project.id, project.name, prepared)
     }
     fun closeTerminal(id: String) { scope.launch { terminal.close(id); releaseService() } }
-    fun stopAll() { browser.stop(); ssh.stop(); screenTests.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
+    fun stopAll() { browser.stop(); ssh.stop(); screenTests.stop(); deviceAccess.stop(); virtualScreen.stop(); git.stop(); projectTasks.stop(); ai.stop(); mcp.closeAll(); scope.launch { toolCheckPending = false; operation?.cancelAndJoin(); toolCheckPending = false; toolCheckJob?.cancelAndJoin(); terminal.closeAll(); releaseService() } }
     fun referenceAi(projectId: String, reference: dev.zakocoder.app.ai.AiReference): Boolean {
         val accepted = ai.referenceProject(projectId, reference)
         if (!accepted) mutable.update { it.copy(message = ai.state.value.error.ifBlank { context.getString(R.string.ai_reference_error) }, messageIsError = true) }

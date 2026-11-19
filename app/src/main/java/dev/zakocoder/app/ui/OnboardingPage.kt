@@ -38,7 +38,6 @@ import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.ai.AiBuiltinSkills
 import dev.zakocoder.app.runtime.BundleStatus
 import dev.zakocoder.app.runtime.ToolBundles
-import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.settings.AptSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -60,11 +59,6 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
     val models by workbench.ai.models.state.collectAsStateWithLifecycle()
     val globalSkills by workbench.ai.globalSkills.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { workbench.ai.refreshGlobalSkills() }
-    val screen by workbench.screenTests.state.collectAsStateWithLifecycle()
-    var rootBusy by remember { mutableStateOf(false) }
-    var rootError by remember { mutableStateOf("") }
-    val rootDenied = stringResource(R.string.screen_test_root_denied)
-    val rootFailed = stringResource(R.string.screen_test_operation_failed)
     val titles = listOf(R.string.setup_purpose_title, R.string.setup_environment_title,
         R.string.setup_model_title, R.string.setup_skills_title, R.string.setup_packages_title,
         R.string.setup_permissions_title, R.string.setup_ready_title)
@@ -200,6 +194,7 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
                         SetupOperation(state, onCancel = workbench::cancel)
                     }
                     5 -> {
+                        DeviceModeConfiguration(workbench)
                         SetupSummary(stringResource(R.string.setup_permissions_system), stringResource(R.string.setup_permissions_system_hint))
                         SetupSummary(stringResource(R.string.setup_permissions_optional), stringResource(R.string.setup_permissions_optional_hint))
                         WorkbenchSecondaryButton(onClick = { detail = "permissions" }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.setup_manage_permissions)) }
@@ -307,18 +302,8 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
                 "models" -> AiModelsPage(workbench.ai, contentPadding = WindowInsets.systemBars.asPaddingValues(), close = { detail = "" })
                 "skills" -> AiExtensionsPage(workbench, state, contentPadding = WindowInsets.systemBars.asPaddingValues()) { detail = "" }
                 "permissions" -> {
-                    AppPermissionsPage(rootGranted = screen.rootGranted, rootBusy = rootBusy, rootError = rootError,
-                        onRequestRoot = {
-                            scope.launch {
-                                rootBusy = true; rootError = ""
-                                try {
-                                    workbench.screenTests.setAccess(ScreenTestAccess.Root)
-                                    if (!workbench.screenTests.requestRootAccess()) rootError = rootDenied
-                                } catch (cancelled: CancellationException) { throw cancelled }
-                                catch (_: Exception) { rootError = rootFailed }
-                                finally { rootBusy = false }
-                            }
-                        }, onToolPermissions = { workbench.ai.select(state.selectedId); detail = "tools" },
+                    DevicePermissionsPage(workbench,
+                        onToolPermissions = { workbench.ai.select(state.selectedId); detail = "tools" },
                         onBack = { detail = "" }, toolsEnabled = state.selectedId != null,
                         backgroundServiceRunning = state.backgroundServiceRunning, backgroundServiceError = state.backgroundServiceError,
                         embedded = true, backEnabled = detail == "permissions" && !state.busy && !entering)

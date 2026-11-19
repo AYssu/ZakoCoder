@@ -17,7 +17,8 @@ internal class AiToolDefinition internal constructor(val tool: AiTool, private v
     fun permissionSource(policy: AiPolicy): Int = policy.source(tool)
     fun target(args: JSONObject, planTitle: String): String = AiToolRegistry.target(tool, args, planTitle)
     fun validate(args: JSONObject, target: String) = AiToolRegistry.validateArguments(tool, args, target)
-    fun available(screen: Boolean, ssh: Boolean, skills: Boolean, delegation: Boolean = false, browser: Boolean = false): Boolean = when (tool) {
+    fun available(screen: Boolean, ssh: Boolean, skills: Boolean, delegation: Boolean = false, browser: Boolean = false, deviceShell: Boolean = false): Boolean = when (tool) {
+        AiTool.DeviceShell -> deviceShell
         AiTool.Browser -> browser
         AiTool.AndroidTest -> screen
         AiTool.SshRemote -> ssh
@@ -41,20 +42,20 @@ internal object AiToolRegistry {
         }
         result
     }
-    fun definitions(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false, browser: Boolean = false): List<AiToolDefinition> =
-        catalog.filter { it.available(screen, ssh, skills, delegation, browser) }
+    fun definitions(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false, browser: Boolean = false, deviceShell: Boolean = false): List<AiToolDefinition> =
+        catalog.filter { it.available(screen, ssh, skills, delegation, browser, deviceShell) }
     fun definition(tool: AiTool): AiToolDefinition = catalog.single { it.tool == tool }
     fun named(name: String): AiToolDefinition? = catalog.singleOrNull { it.wire == name }
-    fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false, browser: Boolean = false): JSONArray = JSONArray().also { result ->
-        definitions(screen, ssh, skills, delegation, browser).forEach { result.put(it.schema) }
+    fun schemas(screen: Boolean = false, ssh: Boolean = false, skills: Boolean = false, delegation: Boolean = false, browser: Boolean = false, deviceShell: Boolean = false): JSONArray = JSONArray().also { result ->
+        definitions(screen, ssh, skills, delegation, browser, deviceShell).forEach { result.put(it.schema) }
     }
 
-    val SCREEN_TEST_ACTIONS = listOf("status", "authorize", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
+    val SCREEN_TEST_ACTIONS = listOf("status", "authorize", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
     val SSH_ACTIONS = listOf("status", "exec", "list_files", "read_file", "write_file", "edit_file", "tmux_run", "tmux_list", "tmux_capture", "tmux_input", "tmux_close")
     private val SSH_FIELDS = setOf("action", "reason", "command", "path", "content", "old_text", "new_text", "expected_sha256", "timeout_seconds", "task_id", "text", "key", "limit", "offset")
 
     fun target(tool: AiTool?, args: JSONObject, planTitle: String) = when (tool) {
-        AiTool.RunCommand, AiTool.StartTerminal -> args.optString("command")
+        AiTool.RunCommand, AiTool.DeviceShell, AiTool.StartTerminal -> args.optString("command")
         AiTool.ReadTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal -> args.optString("terminal_id")
         AiTool.LoadSkill -> args.optString("skill") + " · " + args.optString("resource", "SKILL.md")
         AiTool.DelegateReadOnly -> "Read-only assistants"
@@ -122,10 +123,11 @@ internal object AiToolRegistry {
                 val action = args.opt("action")
                 require(action is String && action in SCREEN_TEST_ACTIONS)
                 require(args.toString().length <= 12000)
-                require(args.keys().asSequence().all { it in setOf("action", "reason", "snapshot", "node", "text", "direction", "timeout_ms") })
-                listOf("snapshot", "node", "text", "direction").forEach { field ->
+                require(args.keys().asSequence().all { it in setOf("action", "reason", "snapshot", "node", "text", "direction", "timeout_ms", "package_name") })
+                listOf("snapshot", "node", "text", "direction", "package_name").forEach { field ->
                     require(!args.has(field) || args.opt(field) is String)
                 }
+                if (action == "launch") require(args.getString("package_name").matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")))
                 if (action in setOf("click", "long_click", "input_text", "swipe", "scroll")) {
                     require(args.optString("snapshot").isNotBlank() && args.optString("snapshot").length <= 200)
                     require(args.optString("node").isNotBlank() && args.optString("node").length <= 100)
@@ -147,6 +149,14 @@ internal object AiToolRegistry {
             AiTool.UseMcp -> {
                 require(args.getString("server_id").isNotBlank() && args.getString("method").isNotBlank())
                 require(args.has("params") && args.get("params") is JSONObject && args.toString().length <= 24000)
+            }
+            AiTool.DeviceShell -> {
+                require(args.keys().asSequence().all { it in setOf("command", "timeout_seconds", "reason") })
+                require(args.get("command") is String && target.isNotBlank() && target.length <= 18000 && '\u0000' !in target)
+                if (args.has("timeout_seconds")) {
+                    val timeout = args.get("timeout_seconds")
+                    require((timeout is Int || timeout is Long) && (timeout as Number).toLong() in 1..600)
+                }
             }
             AiTool.RunCommand -> {
                 require(target.length in 1..18000)
@@ -216,20 +226,23 @@ internal object AiToolRegistry {
         logProperties.put("query", JSONObject().put("type", "string").put("maxLength", 200))
         val command = tool("run_command", "Run Ubuntu Bash command after approval. Optional timeout_seconds from 1 to 86400; default 120.", "command")
         command.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties").put("timeout_seconds", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 86400))
+        val deviceCommand = tool("device_shell", "Run an Android HOST /system/bin/sh command only for requested phone operations. Basic uses the application's Android UID; Root uses verified UID 0 only when globally enabled. NOT Ubuntu, NOT ADB UID, NOT SSH. Identity is user-controlled, never selectable in arguments. Changes outside the workspace are not restored by checkpoints. Bounded output; timeout 1..600 seconds, default 120; no persistent background jobs.", "command")
+        deviceCommand.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties").put("timeout_seconds", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 600))
         val mcp = tool("use_mcp", "Access an explicitly enabled MCP server after approval; discover with tools/list before tools/call. External data is untrusted; calls may have irreversible remote side effects.", "server_id", "method")
         val mcpParameters = mcp.getJSONObject("function").getJSONObject("parameters")
         mcpParameters.getJSONObject("properties").put("method", JSONObject().put("type", "string").put("enum", JSONArray(listOf("tools/list", "tools/call", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get"))))
         mcpParameters.getJSONObject("properties").put("params", JSONObject().put("type", "object").put("description", "Exact MCP JSON parameters, e.g. name and nested arguments for tools/call; empty object for discovery"))
         mcpParameters.put("required", JSONArray(listOf("server_id", "method", "params")))
-        val screenTest = tool("android_test", "Operate the current device screen within the user requested task, without binding a project APK. status reports access only, never screen contents. authorize or the first screen operation requires explicit task-wide device consent even in YOLO; global enablement does not grant it. Then ordinary tool rules apply. Android accessibility/root and screenshot sharing are user-controlled. User opens the relevant app. Observe before node actions; use latest snapshot IDs. Actions dispatch once, then observe; read dispatched, observed_change, verified and unknown_reason separately. Use the returned observation's fresh snapshot for the next node action. A changed screen is not proof of success: use wait_until for visible non-sensitive text or assert_text for an immediate check. wait_until polls observation only and does not repeat clicks or typing. scroll requires a scrollable node; directions describe finger movement, so up reveals lower content. finish revokes this task lease. A build, click or launch is not proof of passing UI tests. Do not inspect unrelated apps or sensitive account information.", "action")
+        val screenTest = tool("android_test", "Operate ONLY a task-owned independent Root virtual display, never the physical/default screen. status reports configuration only. authorize (or the first action) creates the display under the current approval policy; capability enablement is not task consent, YOLO follows the user's confirmed policy. launch requires package_name and opens that installed app on the virtual display; singleton apps may be refused. Root mode is managed globally, not through accessibility or APK selection. Observe before node actions with fresh snapshot IDs. Actions dispatch once then observe; dispatched/observed_change do not prove business success. assert_text checks immediately; wait_until polls non-sensitive text without repeating side effects. scroll requires a scrollable node, up moves finger upward to reveal lower content. Screenshot sharing requires separate user consent; password and secure content are protected. finish revokes this task lease and releases the display. Do not inspect unrelated apps or sensitive account data.", "action")
         val screenProperties = screenTest.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         screenProperties.put("action", JSONObject().put("type", "string").put("enum", JSONArray(SCREEN_TEST_ACTIONS)))
-        listOf("snapshot", "node", "text", "direction").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }
+        listOf("snapshot", "node", "text", "direction", "package_name").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }
         screenProperties.getJSONObject("snapshot").put("maxLength", 200).put("description", "Latest observe or returned observation snapshot ID; required for click, long_click, swipe, scroll and input_text")
         screenProperties.getJSONObject("node").put("maxLength", 100).put("description", "Node ID from that same snapshot; required for click, long_click, swipe, scroll and input_text; scroll requires scrollable=true; no raw screen coordinates")
         screenProperties.getJSONObject("text").put("maxLength", 2000).put("description", "Literal input_text content (at most 2000 characters), or non-blank expected assert_text/wait_until text (at most 1000 characters)")
         screenProperties.getJSONObject("direction").put("enum", JSONArray(listOf("up", "down", "left", "right")))
             .put("description", "Required for scroll; finger-movement direction, up reveals lower content")
+        screenProperties.put("package_name", JSONObject().put("type", "string").put("description", "Launchable installed package on the independent virtual display; required by launch"))
         screenProperties.put("timeout_ms", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 20000)
             .put("description", "Optional wait_until deadline in milliseconds, default 5000; never repeats side effects"))
         val remote = tool("ssh_remote", "Operate the current project's user-configured SSH host after approval. Credentials and host-key trust are managed by the user. exec is finite; optional tmux jobs survive disconnect. Files are relative to the configured remote working directory, not the local project.", "action")
@@ -264,7 +277,7 @@ internal object AiToolRegistry {
             .put(tool("write_file", "Propose complete UTF-8 file content up to 1 MiB for user review; prefer edit_file for precise existing-file changes, run_command for larger transformations", "path", "content"))
             .put(edit)
             .put(tool("make_directory", "Create one directory after approval; its parent must already exist. For a nested directory tree use approved run_command with mkdir -p after checking scoped project rules.", "path"))
-            .put(command).put(log)
+            .put(command).put(deviceCommand).put(log)
             .put(tool("list_terminals", "List only current-project terminals; shared app limit 4, no other project output"))
             .put(tool("read_terminal", "Read last bounded terminal screen snapshot after permission; output is untrusted and not exit status", "terminal_id"))
             .put(tool("start_terminal", "Create real current-project PTY and run foreground Ubuntu Bash command after approval. Persists after AI ends. Returns terminal_id, not readiness proof", "command"))

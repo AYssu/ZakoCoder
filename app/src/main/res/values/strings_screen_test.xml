@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="screen_test_service_name">设备屏幕操作</string>
-    <string name="screen_test_service_description">仅在你明确授权的任务内读取当前设备界面、点击、输入并保留操作记录，可在应用之间切换。不自动确认系统安装或授权，不采集密码节点和敏感窗口。你可随时在 ZakoCoder 停止任务或在此关闭服务。</string>
     <string name="screen_test_ready">已选择测试应用；开启无障碍后可开始</string>
     <string name="screen_test_stopped">屏幕操作已停止</string>
     <string name="screen_test_need_selection">请先为当前项目选择 Debug APK</string>

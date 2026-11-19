@@ -33,7 +33,7 @@ import dev.zakocoder.app.ai.*
 
 internal fun aiToolGlyph(tool: AiTool?): Glyph = when (tool) {
     AiTool.RunCommand, AiTool.ReadCommandLog, AiTool.ListTerminals, AiTool.ReadTerminal,
-    AiTool.StartTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal, AiTool.SshRemote -> Glyph.Terminal
+    AiTool.StartTerminal, AiTool.SendTerminalInput, AiTool.CloseTerminal, AiTool.SshRemote, AiTool.DeviceShell -> Glyph.Terminal
     AiTool.ReadFile, AiTool.WriteFile, AiTool.EditFile -> Glyph.File
     AiTool.ListFiles, AiTool.MakeDirectory -> Glyph.Projects
     AiTool.SearchFiles, AiTool.SearchMemory -> Glyph.Search

@@ -12,7 +12,7 @@ class AiToolRegistryDeviceTest {
         for (screen in listOf(false, true)) for (ssh in listOf(false, true)) for (skills in listOf(false, true)) for (delegation in listOf(false, true)) for (browser in listOf(false, true)) {
             val schema = AiController.schemas(screen, ssh, skills, delegation, browser)
             val names = (0 until schema.length()).map { schema.getJSONObject(it).getJSONObject("function").getString("name") }
-            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) && (delegation || it != AiTool.DelegateReadOnly) && (browser || it != AiTool.Browser) }.map { it.wire }
+            val expected = AiTool.entries.filter { (screen || it != AiTool.AndroidTest) && (ssh || it != AiTool.SshRemote) && (skills || it != AiTool.LoadSkill) && (delegation || it != AiTool.DelegateReadOnly) && (browser || it != AiTool.Browser) && it != AiTool.DeviceShell }.map { it.wire }
             assertEquals(expected.toSet(), names.toSet())
             assertEquals(expected.size, names.size)
             repeat(schema.length()) { index ->
@@ -26,7 +26,7 @@ class AiToolRegistryDeviceTest {
     }
 
     @Test fun descriptorsCoverMetadataPermissionTargetsAndUnknownNamesAreNotExecutable() {
-        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true, delegation = true, browser = true)
+        val all = AiToolRegistry.definitions(screen = true, ssh = true, skills = true, delegation = true, browser = true, deviceShell = true)
         assertEquals(AiTool.entries.toSet(), all.map { it.tool }.toSet())
         assertEquals(AiTool.entries.size, all.size)
         assertNull(AiToolRegistry.named("unregistered_tool"))
@@ -92,7 +92,8 @@ class AiToolRegistryDeviceTest {
         }
         assertEquals(AiToolRegistry.SCREEN_TEST_ACTIONS, actions("android_test"))
         assertTrue("authorize" in actions("android_test"))
-        assertTrue(actions("android_test").none { it in setOf("prepare", "install", "launch") })
+        assertTrue("launch" in actions("android_test"))
+        assertTrue(actions("android_test").none { it in setOf("prepare", "install") })
         assertEquals(AiToolRegistry.SSH_ACTIONS, actions("ssh_remote"))
     }
 
@@ -107,7 +108,7 @@ class AiToolRegistryDeviceTest {
         assertEquals("integer", timeout.getString("type"))
         assertEquals(1, timeout.getInt("minimum"))
         assertEquals(20000, timeout.getInt("maximum"))
-        assertTrue(schema.getString("description").contains("does not repeat clicks or typing"))
+        assertTrue(schema.getString("description").contains("without repeating side effects"))
         assertTrue(properties.getJSONObject("snapshot").getString("description").contains("returned observation"))
     }
 

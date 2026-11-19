@@ -22,6 +22,7 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
     // Read in this composition, not only inside packagesContent. Otherwise only that
     // child lambda is invalidated, leaving its captured screenOn/sshOn values stale.
     val packages = workbench.capabilityPackages.state.collectAsStateWithLifecycle().value
+    val deviceAccess by workbench.deviceAccess.state.collectAsStateWithLifecycle()
     val ssh by workbench.ssh.state.collectAsStateWithLifecycle()
     val ai by workbench.ai.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -30,6 +31,7 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
     val successText = stringResource(dev.zakocoder.app.R.string.ssh_package_test_success)
     val disconnectedText = stringResource(dev.zakocoder.app.R.string.ssh_package_disconnected)
     var details by remember(projectId) { mutableStateOf<CapabilityPackage?>(null) }
+    var permissionsOpen by remember { mutableStateOf(false) }
     var error by remember(projectId) { mutableStateOf<String?>(null) }
     var status by remember(projectId) { mutableStateOf<String?>(null) }
     var revision by remember(projectId) { mutableIntStateOf(0) }
@@ -52,22 +54,26 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
     }
     val packagesContent: @Composable () -> Unit = {
         CapabilityPackagesSheet(CapabilityPackagesUiModel(projectName, projectId != null, screenOn, sshOn,
-            !packages.loaded || packages.busy, packages.error, packages.browserEnabled),
+            !packages.loaded || packages.busy, packages.error, packages.browserEnabled,
+            deviceShellEnabled = packages.deviceShellEnabled, rootReady = deviceAccess.mode == dev.zakocoder.app.device.DeviceMode.Root && deviceAccess.rootGranted),
             onScreenEnabled = workbench.capabilityPackages::setScreenEnabled,
             onSshEnabled = { enabled -> projectId?.let { workbench.capabilityPackages.setEnabled(it, CapabilityPackage.Ssh, enabled) } },
             onScreenDetails = { if (screenOn) details = CapabilityPackage.Screen },
             onSshDetails = { if (sshOn) details = CapabilityPackage.Ssh },
+            onDeviceShellEnabled = workbench.capabilityPackages::setDeviceShellEnabled,
+            onPermissions = { permissionsOpen = true },
             onBrowserEnabled = workbench.capabilityPackages::setBrowserEnabled,
             onBrowserDetails = workbench::openBrowser, onDismiss = onDismiss, fullPage = fullPage, contentPadding = contentPadding)
     }
     Box(if (fullPage) Modifier.fillMaxSize() else Modifier) {
     // Preserve the full capability list, including its viewport, under its child window.
     // Replacing the list would expose the unrelated page below the capability destination.
-    if (fullPage) WorkbenchRetainedPage(covered = details != null, content = packagesContent)
-    else if (details == null) packagesContent()
+    if (fullPage) WorkbenchRetainedPage(covered = details != null || permissionsOpen, content = packagesContent)
+    else if (details == null && !permissionsOpen) packagesContent()
     when (details) {
         CapabilityPackage.Browser -> AgentBrowserPage(workbench.browser) { details = null }
-        CapabilityPackage.Screen -> ScreenTestSheet(workbench.screenTests, projectId, projectName) { details = null }
+        CapabilityPackage.Screen -> VirtualScreenPage(workbench) { details = null }
+        CapabilityPackage.DeviceShell -> Unit
         CapabilityPackage.Ssh -> {
             val profile = ssh.profiles.singleOrNull { it.id == projectId }
             val pending = ssh.pendingHostKey?.takeIf { it.profileId == projectId }
@@ -115,5 +121,6 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
         }
         null -> Unit
     }
+    if (permissionsOpen) DevicePermissionsPage(workbench, onBack = { permissionsOpen = false }, embedded = true)
     }
 }
