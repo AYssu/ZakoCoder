@@ -50,7 +50,7 @@ internal object AiToolRegistry {
         definitions(screen, ssh, skills, delegation, browser, deviceShell).forEach { result.put(it.schema) }
     }
 
-    val SCREEN_TEST_ACTIONS = listOf("status", "authorize", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
+    val SCREEN_TEST_ACTIONS = listOf("status", "authorize", "list_apps", "launch", "observe", "click", "long_click", "swipe", "scroll", "input_text", "back", "assert_text", "wait_until", "screenshot", "finish")
     val SSH_ACTIONS = listOf("status", "exec", "list_files", "read_file", "write_file", "edit_file", "tmux_run", "tmux_list", "tmux_capture", "tmux_input", "tmux_close")
     private val SSH_FIELDS = setOf("action", "reason", "command", "path", "content", "old_text", "new_text", "expected_sha256", "timeout_seconds", "task_id", "text", "key", "limit", "offset")
 
@@ -128,6 +128,7 @@ internal object AiToolRegistry {
                     require(!args.has(field) || args.opt(field) is String)
                 }
                 if (action == "launch") require(args.getString("package_name").matches(Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")))
+                if (action == "list_apps") require(args.optString("text").length <= 200 && args.optString("text").none(Char::isISOControl))
                 if (action in setOf("click", "long_click", "input_text", "swipe", "scroll")) {
                     require(args.optString("snapshot").isNotBlank() && args.optString("snapshot").length <= 200)
                     require(args.optString("node").isNotBlank() && args.optString("node").length <= 100)
@@ -233,13 +234,13 @@ internal object AiToolRegistry {
         mcpParameters.getJSONObject("properties").put("method", JSONObject().put("type", "string").put("enum", JSONArray(listOf("tools/list", "tools/call", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get"))))
         mcpParameters.getJSONObject("properties").put("params", JSONObject().put("type", "object").put("description", "Exact MCP JSON parameters, e.g. name and nested arguments for tools/call; empty object for discovery"))
         mcpParameters.put("required", JSONArray(listOf("server_id", "method", "params")))
-        val screenTest = tool("android_test", "Operate ONLY a task-owned independent Root virtual display, never the physical/default screen. status reports configuration only. authorize (or the first action) creates the display under the current approval policy; capability enablement is not task consent, YOLO follows the user's confirmed policy. launch requires package_name and opens that installed app on the virtual display; singleton apps may be refused. Root mode is managed globally, not through accessibility or APK selection. Observe before node actions with fresh snapshot IDs. Actions dispatch once then observe; dispatched/observed_change do not prove business success. assert_text checks immediately; wait_until polls non-sensitive text without repeating side effects. scroll requires a scrollable node, up moves finger upward to reveal lower content. Screenshot sharing requires separate user consent; password and secure content are protected. finish revokes this task lease and releases the display. Do not inspect unrelated apps or sensitive account data.", "action")
+        val screenTest = tool("android_test", "Operate ONLY a task-owned independent Root virtual display, never the physical/default screen. status reports configuration only. authorize (or the first action) creates the display under the current approval policy; capability enablement is not task consent, YOLO follows the user's confirmed policy. list_apps discovers launchable apps with labels and package names (optional text filter, at most 200 characters; at most 100 results with truncated); use it to choose the requested app without asking the user to select an APK. launch requires package_name and opens that installed app on the virtual display; singleton apps may be refused. Root mode is managed globally, not through accessibility or APK selection. Observe before node actions with fresh snapshot IDs. Actions dispatch once then observe; dispatched/observed_change do not prove business success. assert_text checks immediately; wait_until polls non-sensitive text without repeating side effects. scroll requires a scrollable node, up moves finger upward to reveal lower content. Screenshot sharing requires separate user consent; password and secure content are protected. finish revokes this task lease and releases the display. Do not inspect unrelated apps or sensitive account data.", "action")
         val screenProperties = screenTest.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         screenProperties.put("action", JSONObject().put("type", "string").put("enum", JSONArray(SCREEN_TEST_ACTIONS)))
         listOf("snapshot", "node", "text", "direction", "package_name").forEach { screenProperties.put(it, JSONObject().put("type", "string")) }
         screenProperties.getJSONObject("snapshot").put("maxLength", 200).put("description", "Latest observe or returned observation snapshot ID; required for click, long_click, swipe, scroll and input_text")
         screenProperties.getJSONObject("node").put("maxLength", 100).put("description", "Node ID from that same snapshot; required for click, long_click, swipe, scroll and input_text; scroll requires scrollable=true; no raw screen coordinates")
-        screenProperties.getJSONObject("text").put("maxLength", 2000).put("description", "Literal input_text content (at most 2000 characters), or non-blank expected assert_text/wait_until text (at most 1000 characters)")
+        screenProperties.getJSONObject("text").put("maxLength", 2000).put("description", "Optional list_apps label/package filter (at most 200 characters), literal input_text content (at most 2000 characters), or non-blank expected assert_text/wait_until text (at most 1000 characters)")
         screenProperties.getJSONObject("direction").put("enum", JSONArray(listOf("up", "down", "left", "right")))
             .put("description", "Required for scroll; finger-movement direction, up reveals lower content")
         screenProperties.put("package_name", JSONObject().put("type", "string").put("description", "Launchable installed package on the independent virtual display; required by launch"))

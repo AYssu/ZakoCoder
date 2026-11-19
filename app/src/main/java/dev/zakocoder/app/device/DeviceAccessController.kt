@@ -27,7 +27,6 @@ enum class DeviceMode { Basic, Root }
 data class DevicePermissionGrants(
     val notifications: Boolean = false,
     val allFiles: Boolean = false,
-    val overlay: Boolean = false,
     val installPackages: Boolean = false,
     val batteryUnrestricted: Boolean = false,
 )
@@ -189,7 +188,6 @@ class DeviceAccessController(context: Context) {
             (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED),
         allFiles = if (Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
             else context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED,
-        overlay = Settings.canDrawOverlays(context),
         installPackages = context.packageManager.canRequestPackageInstalls(),
         batteryUnrestricted = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
     )
@@ -201,7 +199,6 @@ class DeviceAccessController(context: Context) {
             if (Build.VERSION.SDK_INT >= 33) append("pm grant $name android.permission.POST_NOTIFICATIONS\n")
             if (Build.VERSION.SDK_INT >= 30) append("cmd appops set $name MANAGE_EXTERNAL_STORAGE allow\n")
             else append("pm grant $name android.permission.READ_EXTERNAL_STORAGE\npm grant $name android.permission.WRITE_EXTERNAL_STORAGE\n")
-            append("cmd appops set $name SYSTEM_ALERT_WINDOW allow\n")
             append("cmd appops set $name REQUEST_INSTALL_PACKAGES allow\n")
             append("dumpsys deviceidle whitelist +$name\n")
         }

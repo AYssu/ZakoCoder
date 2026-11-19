@@ -168,7 +168,6 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     val overlayOpen = shortcutPage != null || modelsOpen || extensionsOpen || browserOpen
     val baseCovered = overlayOpen || drawerUtility != null
-    val assistantNavigation by workbench.assistantNavigation.collectAsStateWithLifecycle()
     val backgroundNavigation by workbench.backgroundNavigation.collectAsStateWithLifecycle()
     val navigationContext = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(backgroundNavigation?.requestId) {
@@ -215,20 +214,6 @@ fun ZakoCoderApp(workbench: Workbench) {
         } finally {
             workbench.consumeBackgroundNavigation(request.requestId)
         }
-    }
-    LaunchedEffect(assistantNavigation?.requestId) {
-        val request = assistantNavigation ?: return@LaunchedEffect
-        val ai = workbench.ai.state.value
-        if (workbench.screenTests.taskLease(request.projectId) == request.screenLease &&
-            state.projects.any { it.id == request.projectId } && (!ai.active || ai.projectId == request.projectId)) {
-            if (ai.projectId != request.projectId) workbench.ai.select(request.projectId)
-            modelsOpen = false
-            modelsAdd = false
-            extensionsOpen = false
-            page = AppDestination.Ai
-            drawerState.close()
-        }
-        workbench.ackAssistantNavigation(request.requestId)
     }
     val inFiles = page == AppDestination.Project && state.projects.any { it.id == (openedProjectId ?: workspaceId) }
     val inTerminal = drawerUtility == AppDestination.Terminal

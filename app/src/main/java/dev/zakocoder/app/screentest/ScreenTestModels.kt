@@ -2,18 +2,6 @@ package dev.zakocoder.app.screentest
 
 import android.net.Uri
 
-data class ScreenTestApk(
-    val relativePath: String,
-    val packageName: String,
-    val label: String,
-    val versionName: String,
-    val debuggable: Boolean,
-)
-
-data class ScreenTestApkProposal(val apk: ScreenTestApk, val sha256: String)
-
-enum class ScreenTestAccess { Normal, Accessibility, Root }
-
 enum class ScreenOverlayPhase { Ready, Verifying, Acting, Succeeded, Failed, Cancelled }
 
 data class ScreenOverlayProgress(
@@ -26,25 +14,16 @@ data class ScreenOverlayProgress(
 data class ScreenTestState(
     val projectId: String? = null,
     val packageName: String? = null,
-    val apkPath: String? = null,
     val taskId: String? = null,
     val leaseId: String? = null,
     val enabled: Boolean = false,
     val connected: Boolean = false,
     val active: Boolean = false,
-    val access: ScreenTestAccess = ScreenTestAccess.Accessibility,
     val shareScreenshots: Boolean = false,
     val rootGranted: Boolean = false,
-    val installAllowed: Boolean = false,
     val busy: Boolean = false,
     val summary: String = "",
     val reportPath: String? = null,
-    val overlayEnabled: Boolean = false,
-    val overlayGranted: Boolean = false,
-    val overlayVisible: Boolean = false,
-    val overlayFailure: String = "",
-    val overlayConversation: String = "",
-    val overlaySuppressed: Boolean = false,
     val overlayProgress: ScreenOverlayProgress = ScreenOverlayProgress(),
 )
 
@@ -80,15 +59,9 @@ internal fun boundedScreenObservation(
     return ScreenTestObservationOutput(payload.toString(), count)
 }
 
-/** Includes artifact hashing and multiple bounded root commands; never retries input or installation. */
+/** Includes bounded Root display and node operations; never retries input. */
 internal fun screenActionTimeoutMillis(action: String): Long = when (action) {
-    "install", "launch" -> 60_000L
+    "launch" -> 60_000L
     "observe", "assert_text", "wait_until", "click", "long_click", "input_text", "swipe", "scroll", "back", "screenshot" -> 60_000L
     else -> 20_000L
-}
-
-internal fun boundedOverlayText(text: String): String {
-    val end = text.length.coerceAtMost(1200)
-    val safeEnd = if (end > 0 && end < text.length && Character.isHighSurrogate(text[end - 1])) end - 1 else end
-    return text.take(safeEnd)
 }

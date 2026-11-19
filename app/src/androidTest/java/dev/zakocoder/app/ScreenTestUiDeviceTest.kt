@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.zakocoder.app.screentest.ScreenTestAccess
 import dev.zakocoder.app.ui.*
 import dev.zakocoder.app.test.R as TestR
 import org.junit.Assert.*
@@ -28,6 +27,7 @@ import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /** Render-only fixture: never installs apps, grants accessibility/root, or reads user projects. */
@@ -116,25 +116,21 @@ class ScreenTestUiDeviceTest {
     @Test(timeout = 120000) fun darkScreenTestingStatesAndCallbacks() = review(true)
 
     private fun review(dark: Boolean) {
-        val choose = AtomicBoolean()
-        val enable = AtomicBoolean()
-        val installPermission = AtomicBoolean()
         val stopped = AtomicBoolean()
         val openedReport = AtomicBoolean()
         val shared = AtomicBoolean()
-        val overlaySettings = AtomicBoolean()
-        val overlayEnabled = AtomicReference<Boolean>()
-        val root = AtomicBoolean()
-        val access = AtomicReference<ScreenTestAccess>()
-        val fixtureReport = """# Android screen test
-Project: Screen test fixture
+        val fixtureReport = """# Virtual screen operations
 Target: dev.zakocoder.fixture
+Display: 7
 Result: FAILED
 1. launch: passed
 2. assert_text: failed — expected 保存成功
-No test result was invented; this is UI-only fixture content."""
+UI-only fixture: no real app or task was started."""
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var renderKey = 0
+            val committedRenderKey = AtomicInteger()
             fun show(content: @Composable () -> Unit) {
+                val currentRenderKey = ++renderKey
                 scenario.onActivity { activity -> activity.setContent {
                     val current = LocalConfiguration.current
                     val widthPx = LocalWindowInfo.current.containerSize.width
@@ -145,113 +141,87 @@ No test result was invented; this is UI-only fixture content."""
                     CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark,
                         LocalDensity provides Density(widthPx.coerceAtLeast(1) / 393f, 1f)) {
                         WorkbenchMiuixTheme(dark) {
-                            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+                            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                                // Each fixture is a new presentation. Reusing the same composition
+                                // slot would retain a dismissed dialog's remembered shown=false.
+                                key(currentRenderKey) {
+                                    content()
+                                    SideEffect { committedRenderKey.set(currentRenderKey) }
+                                }
+                            }
                         }
                     }
                 } }
+                // setContent schedules recomposition; matching text can still belong to
+                // the previous fixture until this presentation has actually committed.
+                await("Fixture composition committed: $currentRenderKey") {
+                    committedRenderKey.get() == currentRenderKey
+                }
             }
-            fun panel(model: ScreenTestUiModel, failure: String? = null) {
-                show { WorkbenchSheet(context.getString(R.string.screen_test_title), {}) {
-                    ScreenTestPanel(model, error = failure, onEnable = { enable.set(true) },
-                        onStop = { stopped.set(true) }, onReport = { openedReport.set(true) }, onAccess = { access.set(it) },
-                        onRoot = { root.set(true) }, onShare = { shared.set(it) },
-                        onOverlayEnabled = { overlayEnabled.set(it) }, onOverlaySettings = { overlaySettings.set(true) })
+            fun panel(model: VirtualScreenTaskUiModel) {
+                show { WorkbenchSheet(context.getString(R.string.virtual_screen_title), {}) {
+                    VirtualScreenTaskPanel(model, onShare = { shared.set(it) },
+                        onStop = { stopped.set(true) }, onReport = { openedReport.set(true) })
                 } }
             }
-            panel(ScreenTestUiModel())
-            await("Global screen scope without a workspace") { has(context.getString(R.string.screen_device_current)) }
-            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_no_project)))
-            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_choose_apk)))
-            assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_allow_install)))
-            click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
-            click(context.getString(R.string.screen_test_access_root)); assertEquals(ScreenTestAccess.Root, access.get())
-            capture(dark, "global-no-workspace")
-
-            val selected = ScreenTestUiModel(packageName = "dev.zakocoder.fixture", active = true, summary = "assert_text: failed — expected 保存成功", hasReport = true,
-                access = ScreenTestAccess.Accessibility)
-            val failure = "SCREEN_TEST_DISCONNECTED: 请开启屏幕交互后重试。"
-            panel(selected, failure)
-            await("Chosen target") { has(context.getString(R.string.screen_device_foreground, "dev.zakocoder.fixture")) }
-            click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
-            capture(dark, "accessibility-target")
-            click(context.getString(R.string.screen_test_stop)); assertTrue(stopped.get())
-            click(context.getString(R.string.screen_test_report)); assertTrue(openedReport.get())
-            reveal(failure)
-            capture(dark, "activity-error-report")
-
-            panel(selected.copy(access = ScreenTestAccess.Root, rootGranted = true))
-            click(context.getString(R.string.screen_test_root_request)); assertTrue(root.get())
-            await("Root granted") { has(context.getString(R.string.screen_test_root_granted)) }
-            nodes { all ->
-                val switch = switchControl(all, context.getString(R.string.screen_test_share_label))
-                assertTrue(switch.config[SemanticsActions.OnClick].action?.invoke() == true)
+            fun assertNoLegacyControls() {
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_no_project)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_choose_apk)))
+                assertFalse(has(instrumentation.context.getString(TestR.string.screen_test_allow_install)))
+                assertFalse(has(context.getString(R.string.screen_test_access)))
+                assertFalse(has(context.getString(R.string.screen_test_enable_service)))
+                assertFalse(has(context.getString(R.string.screen_overlay_title)))
+                assertFalse(has(context.getString(R.string.screen_overlay_open_settings)))
             }
-            assertTrue(shared.get())
-            reveal(context.getString(R.string.screen_test_report)); capture(dark, "root-share-stop")
-            click(context.getString(R.string.screen_test_details))
-            reveal(context.getString(R.string.screen_test_root_text_hint))
-            capture(dark, "root-capabilities")
-            enable.set(false)
-            reveal(context.getString(R.string.screen_test_enable_service))
-            click(context.getString(R.string.screen_test_enable_service)); assertTrue(enable.get())
-            capture(dark, "root-accessibility-entry")
+            panel(VirtualScreenTaskUiModel())
+            await("Task guidance without workspace or APK") { has(context.getString(R.string.screen_test_idle)) }
+            assertNoLegacyControls()
+            assertFalse(has(context.getString(R.string.virtual_screen_share)))
+            assertFalse(has(context.getString(R.string.screen_test_report)))
+            capture(dark, "virtual-task-idle")
 
-            val rootGuidance = context.getString(R.string.screen_test_root_denied)
-            panel(selected.copy(access = ScreenTestAccess.Root, rootGranted = false), rootGuidance)
-            await("Actionable root authorization guidance") { has(rootGuidance) }
-            assertFalse(rootGuidance.contains(context.packageName))
-            assertTrue(rootGuidance.contains("重试"))
-            assertFalse(has(context.getString(R.string.screen_test_root_granted)))
-            reveal(rootGuidance)
-            capture(dark, "root-permission-guidance")
-
-            // Render-only overlay states never request a real system permission or create a window.
-            panel(selected.copy(overlayEnabled = true, overlayGranted = false))
-            reveal(context.getString(R.string.screen_overlay_open_settings))
+            val active = VirtualScreenTaskUiModel(active = true, busy = true,
+                summary = "观察虚拟显示 7", actionTitle = "正在检查保存结果",
+                actionDetail = "等待界面出现保存成功；尚未确认结果。", hasReport = true)
+            panel(active)
+            await("Actual operation status") { has(active.actionTitle) && has(active.actionDetail) }
+            assertNoLegacyControls()
             nodes { all ->
-                val control = switchControl(all, context.getString(R.string.screen_overlay_switch))
-                assertNotNull(control.config.getOrNull(SemanticsProperties.Disabled))
-                assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
-            }
-            capture(dark, "overlay-permission-needed")
-            click(context.getString(R.string.screen_overlay_open_settings)); assertTrue(overlaySettings.get())
-            assertNull(overlayEnabled.get())
-
-            panel(selected.copy(overlayGranted = true))
-            reveal(context.getString(R.string.screen_overlay_off))
-            nodes { all ->
-                val control = switchControl(all, context.getString(R.string.screen_overlay_switch))
+                val control = switchControl(all, context.getString(R.string.virtual_screen_share))
                 assertEquals(androidx.compose.ui.state.ToggleableState.Off, control.config[SemanticsProperties.ToggleableState])
                 assertTrue(control.config[SemanticsActions.OnClick].action?.invoke() == true)
             }
-            assertEquals(true, overlayEnabled.get())
-            capture(dark, "overlay-authorized-off")
+            await("Screenshot sharing callback") { shared.get() }
+            click(context.getString(R.string.screen_test_stop))
+            await("Stop task callback") { stopped.get() }
+            reveal(context.getString(R.string.screen_test_report))
+            click(context.getString(R.string.screen_test_report))
+            await("Operation report callback") { openedReport.get() }
+            capture(dark, "virtual-task-active")
 
-            panel(selected.copy(overlayGranted = true, overlayEnabled = true, overlayVisible = true))
-            reveal(context.getString(R.string.screen_overlay_visible)); capture(dark, "overlay-visible-status")
-            panel(selected.copy(active = false, overlayGranted = true, overlayEnabled = true))
-            reveal(context.getString(R.string.screen_overlay_waiting_target)); capture(dark, "overlay-waiting-target")
-
-            listOf(
-                "window_permission" to R.string.screen_overlay_failure_permission,
-                "foreground_service" to R.string.screen_overlay_failure_background,
-                "window_token" to R.string.screen_overlay_failure_window,
-            ).forEach { (code, message) ->
-                panel(selected.copy(overlayGranted = code != "window_permission", overlayFailure = code))
-                reveal(context.getString(message))
-                assertFalse(has(code))
-                assertFalse(has(context.getString(R.string.screen_overlay_off)))
-                reveal(context.getString(R.string.screen_overlay_failure_fallback))
-                capture(dark, "overlay-failure-$code")
-                if (code != "window_permission") {
-                    overlayEnabled.set(null)
-                    reveal(context.getString(R.string.screen_overlay_retry))
-                    click(context.getString(R.string.screen_overlay_retry)); assertEquals(true, overlayEnabled.get())
-                } else {
-                    reveal(context.getString(R.string.screen_overlay_open_settings))
-                    click(context.getString(R.string.screen_overlay_open_settings))
-                }
+            panel(active.copy(busy = false, shareScreenshots = true))
+            await("Sharing state is visible") { nodes { all ->
+                switchControl(all, context.getString(R.string.virtual_screen_share))
+                    .config[SemanticsProperties.ToggleableState] == androidx.compose.ui.state.ToggleableState.On
+            } }
+            nodes { all ->
+                assertTrue(switchControl(all, context.getString(R.string.virtual_screen_share))
+                    .config[SemanticsActions.OnClick].action?.invoke() == true)
             }
+            await("Screenshot sharing revoked callback") { !shared.get() }
+            capture(dark, "virtual-task-sharing")
+
+            val failure = "assert_text: failed — expected 保存成功"
+            val failedTitle = context.getString(R.string.screen_overlay_progress_failed,
+                context.getString(R.string.screen_overlay_action_assert))
+            panel(VirtualScreenTaskUiModel(summary = failure, actionTitle = failedTitle,
+                errorMessage = failure, hasReport = true))
+            await("Failure reason remains visible below a non-empty progress title") { has(failedTitle) && has(failure) }
+            assertNoLegacyControls()
+            assertFalse(has(context.getString(R.string.virtual_screen_share)))
+            assertFalse(has(context.getString(R.string.screen_test_stop)))
+            click(context.getString(R.string.screen_test_report))
+            capture(dark, "virtual-task-failed-report")
 
             val consent = AtomicBoolean()
             val dismissed = AtomicBoolean()
@@ -259,9 +229,13 @@ No test result was invented; this is UI-only fixture content."""
             await("Screenshot consent") { has(context.getString(R.string.screen_test_share_confirm_title)) }
             assertFalse(consent.get())
             capture(dark, "screenshot-consent")
-            click(context.getString(R.string.cancel)); assertTrue(dismissed.get()); assertFalse(consent.get())
+            click(context.getString(R.string.cancel))
+            // The common dialog completes its exit animation before invoking the owner.
+            await("Screenshot consent dismiss callback after exit") { dismissed.get() }
+            assertFalse("Cancel must never grant screenshot sharing", consent.get())
             show { ScreenTestScreenshotConsent({ consent.set(true) }, {}) }
-            click(context.getString(R.string.screen_test_share_confirm_action)); assertTrue(consent.get())
+            click(context.getString(R.string.screen_test_share_confirm_action))
+            await("Screenshot consent confirmation callback after exit") { consent.get() }
 
             show { WorkbenchSheet(context.getString(R.string.screen_test_report_title), {}) { ScreenTestReport(fixtureReport) } }
             await("Actual report fixture") { has(fixtureReport) }

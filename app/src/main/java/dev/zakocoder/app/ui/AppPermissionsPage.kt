@@ -98,10 +98,7 @@ internal fun AppPermissionsPanel(states: List<AppPermissionStatus>?, rootGranted
             GroupDivider()
             PermissionRow(AppPermission.InstallPackages, states, onManage, onRequest)
         } }
-        item { PermissionGroup(stringResource(R.string.app_permissions_special)) {
-            PermissionRow(AppPermission.Overlay, states, onManage, onRequest)
-            if (showLegacyDevicePermissions) {
-            GroupDivider()
+        if (showLegacyDevicePermissions) item { PermissionGroup(stringResource(R.string.app_permissions_special)) {
             PermissionRow(AppPermission.Accessibility, states, onManage, onRequest)
             GroupDivider()
             PermissionContent(stringResource(R.string.app_permissions_root), stringResource(R.string.app_permissions_root_hint),
@@ -109,7 +106,6 @@ internal fun AppPermissionsPanel(states: List<AppPermissionStatus>?, rootGranted
                 rootGranted, Glyph.Shield, if (rootBusy) null else onRoot, stringResource(R.string.app_permissions_root_request))
             if (rootError.isNotBlank()) Text(rootError, Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
         } }
         item { PermissionGroup(stringResource(R.string.app_permissions_background)) {
             PermissionContent(stringResource(R.string.app_permissions_service),
@@ -150,7 +146,6 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
         AppPermission.Notifications -> R.string.app_permissions_notifications
         AppPermission.Files -> if (Build.VERSION.SDK_INT >= 30) R.string.app_permissions_files else R.string.app_permissions_files_legacy
         AppPermission.InstallPackages -> R.string.app_permissions_install
-        AppPermission.Overlay -> R.string.app_permissions_overlay
         AppPermission.Accessibility -> R.string.app_permissions_accessibility
         AppPermission.Battery -> R.string.app_permissions_battery
     }
@@ -158,7 +153,6 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
         AppPermission.Notifications -> R.string.app_permissions_notifications_hint
         AppPermission.Files -> if (Build.VERSION.SDK_INT >= 30) R.string.app_permissions_files_hint else R.string.app_permissions_files_legacy_hint
         AppPermission.InstallPackages -> R.string.app_permissions_install_hint
-        AppPermission.Overlay -> R.string.app_permissions_overlay_hint
         AppPermission.Accessibility -> R.string.app_permissions_accessibility_hint
         AppPermission.Battery -> R.string.app_permissions_battery_hint
     }

@@ -18,7 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-enum class AppPermission { Notifications, Files, InstallPackages, Overlay, Accessibility, Battery }
+enum class AppPermission { Notifications, Files, InstallPackages, Accessibility, Battery }
 data class AppPermissionStatus(val permission: AppPermission, val granted: Boolean?, val notificationStatus: RunningNotificationStatus? = null)
 
 /** Read-only capability queries and explicitly requested system navigation. Never grants permissions. */
@@ -34,7 +34,6 @@ class AppPermissions(private val context: Context) {
                     AppPermission.Files -> if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else
                         runtimePermissions(permission).all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
                     AppPermission.InstallPackages -> context.packageManager.canRequestPackageInstalls()
-                    AppPermission.Overlay -> Settings.canDrawOverlays(context)
                     AppPermission.Accessibility -> Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
                         ?.split(':')?.any { ComponentName.unflattenFromString(it) == ComponentName(context, ScreenTestAccessibilityService::class.java) } == true
                     AppPermission.Battery -> context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
@@ -59,7 +58,6 @@ class AppPermissions(private val context: Context) {
                     add(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 }
                 AppPermission.InstallPackages -> add(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri))
-                AppPermission.Overlay -> add(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, packageUri))
                 AppPermission.Accessibility -> add(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 AppPermission.Battery -> add(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             }

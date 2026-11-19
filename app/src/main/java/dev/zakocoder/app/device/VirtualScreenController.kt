@@ -121,6 +121,16 @@ class VirtualScreenController(context: Context, private val access: DeviceAccess
     suspend fun capture(): ByteArray = operation { service, requested -> readCapture(service, requested) }
 
     override suspend fun execute(packageName: String, args: JSONObject): ScreenTestResult {
+        if (args.optString("action") == "list_apps") {
+            // Discovery belongs to the current task's display lease; it never creates or
+            // reopens a display, and changing Root identity discards the query result.
+            return operation { _, requested ->
+                val page = selectLaunchableDeviceApps(launchableDeviceApps(context), args.optString("text"))
+                currentCoroutineContext().ensureActive()
+                checkCurrent(requested)
+                ScreenTestResult(launchableDeviceAppsResponse(page, checkNotNull(state.value.displayId)), packageName = state.value.packageName)
+            }
+        }
         if (args.optString("action") == "launch") {
             val target = args.optString("package", packageName).ifBlank { args.optString("package_name") }
             require(target.isNotBlank())
@@ -160,6 +170,9 @@ class VirtualScreenController(context: Context, private val access: DeviceAccess
     }
 
     fun close() { stop(); disconnectJob?.invokeOnCompletion { scope.cancel() } ?: scope.cancel() }
+
+    /** Display disappearance precedes automation disconnect; owners must await both on disposal. */
+    internal suspend fun awaitStopped() { disconnectJob?.join() }
 
     private suspend fun <T> operation(block: suspend (IVirtualScreen, Long) -> T): T = withContext(Dispatchers.IO) {
         operations.withLock {

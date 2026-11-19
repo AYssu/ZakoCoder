@@ -8,6 +8,4 @@
     <string name="ai_message_edit_label">本轮输入</string>
     <string name="ai_message_retry_unavailable">暂时无法重新生成，请确认当前会话、模型和输入长度后重试。</string>
     <string name="ai_message_edit_limit">最多 16000 个字符；可先精简输入。</string>
-    <string name="screen_overlay_user">你</string>
-    <string name="screen_overlay_assistant">助手</string>
 </resources>

@@ -96,6 +96,7 @@ class VirtualScreenDeviceTest {
             }
         } finally {
             screen.close()
+            withTimeout(15_000) { screen.awaitStopped() }
             access.stop()
             production.deleteSharedPreferences(prefix + "device_access")
         }
@@ -116,6 +117,7 @@ class VirtualScreenDeviceTest {
 class VirtualScreenFixtureActivity : Activity() {
     private var count = 0
     private var second = false
+    private var passwordPage = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
@@ -128,7 +130,15 @@ class VirtualScreenFixtureActivity : Activity() {
             setBackgroundColor(Color.WHITE)
         }
         fun label(text: String) = TextView(this).apply { this.text = text; textSize = 22f; setTextColor(Color.BLACK) }
-        if (second) layout.addView(label("Second virtual page")) else {
+        if (passwordPage) {
+            layout.addView(label("Protected fixture page"))
+            layout.addView(EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                setText("fixture-only-secret")
+                setTextColor(Color.BLACK)
+                showSoftInputOnFocus = false
+            })
+        } else if (second) layout.addView(label("Second virtual page")) else {
             layout.addView(label("Virtual screen fixture"))
             val counter = label("Count: $count").also(layout::addView)
             layout.addView(Button(this).apply { text = "Increment"; isAllCaps = false; setOnClickListener { count++; counter.text = "Count: $count" } })
@@ -137,9 +147,10 @@ class VirtualScreenFixtureActivity : Activity() {
                 setTextColor(Color.BLACK); setHintTextColor(Color.DKGRAY); showSoftInputOnFocus = false
             })
             layout.addView(Button(this).apply { text = "Next page"; isAllCaps = false; setOnClickListener { second = true; showPage() } })
+            layout.addView(Button(this).apply { text = "Password page"; isAllCaps = false; setOnClickListener { passwordPage = true; showPage() } })
         }
         setContentView(layout)
     }
     @Deprecated("Test fixture deliberately exercises display-specific BACK key input")
-    override fun onBackPressed() { if (second) { second = false; showPage() } else super.onBackPressed() }
+    override fun onBackPressed() { if (passwordPage) { passwordPage = false; showPage() } else if (second) { second = false; showPage() } else super.onBackPressed() }
 }

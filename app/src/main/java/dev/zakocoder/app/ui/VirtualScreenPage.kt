@@ -1,6 +1,5 @@
 package dev.zakocoder.app.ui
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
@@ -20,12 +19,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.device.DeviceMode
+import dev.zakocoder.app.device.LaunchableDeviceApp
+import dev.zakocoder.app.device.launchableDeviceApps
+import dev.zakocoder.app.screentest.ScreenOverlayPhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,8 +33,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private data class DebuggableDeviceApp(val packageName: String, val label: String)
 
 /** Only the controller can create or operate a display. The UI never targets the physical display. */
 @Composable
@@ -51,6 +49,8 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
     var confirmSharing by remember { mutableStateOf<Pair<String, String>?>(null) }
     var operationJob by remember { mutableStateOf<Job?>(null) }
     var operationSerial by remember { mutableLongStateOf(0L) }
+    var reportOpen by remember { mutableStateOf(false) }
+    var report by remember { mutableStateOf<String?>(null) }
     val fallback = stringResource(R.string.virtual_screen_operation_failed)
     val ready = access.mode == DeviceMode.Root && access.rootGranted
     val busy = state.busy || working
@@ -126,7 +126,6 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
                                 }
                             } else WorkbenchPrimaryButton(onClick = { operation {
                                 workbench.virtualScreen.start()
-                                choosingApp = true
                             } }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                                 Text(stringResource(R.string.virtual_screen_start))
                             }
@@ -150,23 +149,36 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
                         }
                     } else Text(stringResource(R.string.virtual_screen_preview_hint), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (screen.active) WorkbenchCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Text(stringResource(R.string.virtual_screen_share), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                                val shareLabel = stringResource(R.string.virtual_screen_share)
-                                WorkbenchSwitch(modifier = Modifier.semantics { contentDescription = shareLabel }, checked = screen.shareScreenshots, onCheckedChange = { enabled ->
-                                    val owner = screen.projectId
-                                    val lease = screen.leaseId
-                                    if (owner == null || lease == null) operationError = fallback
-                                    else if (enabled) confirmSharing = owner to lease
-                                    else sharing(owner, lease, false)
-                                })
+                    VirtualScreenTaskPanel(
+                        model = VirtualScreenTaskUiModel(active = screen.active, busy = screen.busy,
+                            summary = screen.summary, actionTitle = screen.overlayProgress.title,
+                            actionDetail = screen.overlayProgress.detail,
+                            errorMessage = screen.summary.takeIf { screen.overlayProgress.phase == ScreenOverlayPhase.Failed }.orEmpty(),
+                            hasReport = screen.reportPath != null && screen.projectId != null,
+                            shareScreenshots = screen.shareScreenshots),
+                        onShare = { enabled ->
+                            val owner = screen.projectId
+                            val lease = screen.leaseId
+                            if (owner == null || lease == null) operationError = fallback
+                            else if (enabled) confirmSharing = owner to lease
+                            else sharing(owner, lease, false)
+                        },
+                        onStop = workbench.screenTests::stop,
+                        onReport = {
+                            // Capture the report owner before suspending; never substitute the
+                            // currently viewed workspace for the task that produced this report.
+                            val reportOwner = screen.projectId
+                            if (reportOwner == null) operationError = fallback
+                            else {
+                                reportOpen = true; report = null
+                                scope.launch {
+                                    try { report = workbench.screenTests.readReport(reportOwner) }
+                                    catch (cancelled: CancellationException) { throw cancelled }
+                                    catch (_: Exception) { reportOpen = false; operationError = fallback }
+                                }
                             }
-                            Text(stringResource(R.string.virtual_screen_share_hint), style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+                        },
+                    )
                 }
                 state.error?.takeIf(String::isNotBlank)?.let { CapabilityNotice(it, error = true) }
                 operationError?.let { CapabilityNotice(it, error = true) }
@@ -182,6 +194,9 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
         preview = null
         operation { workbench.virtualScreen.launch(packageName); refreshPreview() }
     }
+    if (reportOpen) WorkbenchSheet(stringResource(R.string.screen_test_report_title), { reportOpen = false }) {
+        ScreenTestReport(report)
+    }
     confirmSharing?.let { (owner, lease) ->
         ScreenTestScreenshotConsent(onDismiss = { confirmSharing = null }, onConfirm = {
             confirmSharing = null
@@ -194,17 +209,11 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
 @Composable
 private fun VirtualScreenAppPicker(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     val context = LocalContext.current
-    var apps by remember { mutableStateOf<List<DebuggableDeviceApp>?>(null) }
+    var apps by remember { mutableStateOf<List<LaunchableDeviceApp>?>(null) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(context) {
         try {
-            apps = withContext(Dispatchers.IO) {
-                val pm = context.packageManager
-                pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-                    .filter { it.activityInfo.packageName != context.packageName }
-                    .map { DebuggableDeviceApp(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
-                    .distinctBy { it.packageName }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
-            }
+            apps = launchableDeviceApps(context)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: RuntimeException) { failed = true }
     }

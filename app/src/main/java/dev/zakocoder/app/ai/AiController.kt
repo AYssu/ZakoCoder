@@ -894,19 +894,6 @@ class AiController(private val context: Context, root: (String) -> File, private
     }
     fun approve(value: Boolean) = approve(if (value) AiDecision.Once else AiDecision.Reject)
     fun approve(value: AiDecision) { decision?.complete(value) }
-    internal fun screenOverlayTranscript(project: String, lease: String): String? {
-        val owner = screenTaskOwner ?: return null
-        val state = mutable.value
-        if (owner != Triple(project, lease, epoch) || state.projectId != project || !state.active) return null
-        return buildString {
-            append(context.getString(state.phase.label))
-            state.timeline.filter { it.turn == state.turn && it.toolId == null && it.role in setOf(AiRole.User, AiRole.Assistant) }
-                .takeLast(3).forEach { entry ->
-                    append("\n").append(context.getString(if (entry.role == AiRole.User) R.string.screen_overlay_user else R.string.screen_overlay_assistant))
-                        .append(": ").append((if (entry.role == AiRole.User) entry.originalInput else entry.text).take(400))
-                }
-        }
-    }
     fun stop() {
         if (mutable.value.restoring && !mutable.value.active) return
         stopScreenTest?.invoke()

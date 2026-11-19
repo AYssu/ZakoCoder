@@ -209,13 +209,12 @@ class LiveAndroidGameAcceptanceTest {
             await(30000) { workbench.capabilityPackages.state.value.loaded }
             main {
                 workbench.capabilityPackages.setEnabled(projectId, dev.zakocoder.app.capabilities.CapabilityPackage.Screen, true)
-                workbench.screenTests.setAccess(dev.zakocoder.app.screentest.ScreenTestAccess.Root)
             }
             await(30000) { !workbench.capabilityPackages.state.value.busy }
             check(workbench.capabilityPackages.enabled(projectId, dev.zakocoder.app.capabilities.CapabilityPackage.Screen))
-            check(workbench.screenTests.requestRootAccess()) { "Root manager did not authorize the app; no permission bypass" }
+            check(workbench.deviceAccess.enableRoot()) { "Root manager did not authorize the app; no permission bypass" }
         }
-        check(arguments.getString("authorizeAcceptanceScreen") == "true") { "Owner must explicitly permit current-device screen testing; each task still asks for device consent" }
+        check(arguments.getString("authorizeAcceptanceScreen") == "true") { "Owner must explicitly permit independent virtual-screen testing; each task still asks for device consent" }
         main { workbench.ai.select(projectId) }
         aiReady(workbench, projectId)
         val recorder = Recorder("screen", projectId)

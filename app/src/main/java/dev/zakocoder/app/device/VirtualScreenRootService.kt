@@ -122,50 +122,54 @@ class VirtualScreenRootService : RootService() {
             require(arguments.length <= 20_000) { "virtual_display_arguments_too_large" }
             val args = JSONObject(arguments)
             val action = args.getString("action")
-            check(target != null && (packageName.isEmpty() || packageName == target)) { "virtual_display_target_changed" }
-            val current = readFrame()
-            try {
-                when (action) {
-                    "observe" -> observe(current)
-                    "assert_text" -> {
-                        val text = args.getString("text")
-                        require(text.isNotBlank() && text.length <= 1000)
-                        check(current.nodes.any { !it.sensitive && (it.info.text?.contains(text) == true || it.info.contentDescription?.contains(text) == true) }) { "virtual_display_assert_failed" }
-                        JSONObject().put("assertion", "passed").put("verified", true).put("display_id", displayId()).toString()
-                    }
-                    "back" -> {
-                        clearSnapshot()
-                        injectKey(KeyEvent.KEYCODE_BACK)
-                        invalidatePixels()
-                        requested(action)
-                    }
-                    "click", "long_click", "input_text", "swipe", "scroll" -> {
-                        val old = checkNotNull(snapshot) { "virtual_display_stale_snapshot" }
-                        check(args.optString("snapshot") == old.token && SystemClock.elapsedRealtime() - old.at <= 60_000 && old.windowIds == current.windowIds && old.projection == current.projection) { "virtual_display_stale_snapshot" }
-                        val index = args.optString("node").removePrefix("n").toIntOrNull()?.minus(1)
-                        val node = index?.takeIf { it >= 0 && it < old.exposed }?.let(current.nodes::getOrNull) ?: error("virtual_display_stale_snapshot")
-                        check(!node.sensitive && node.info.isEnabled && !node.bounds.isEmpty) { "virtual_display_sensitive_node" }
-                        clearSnapshot()
-                        when (action) {
-                            "input_text" -> {
-                                val text = args.getString("text")
-                                require(text.length <= 2000)
-                                check(node.info.isEditable && node.info.isFocused) { "virtual_display_input_not_focused" }
-                                check(node.info.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) })) { "virtual_display_input_failed" }
-                            }
-                            "click" -> gesture(node.bounds, "tap", 80)
-                            "long_click" -> gesture(node.bounds, "tap", 700)
-                            else -> {
-                                check(action != "scroll" || node.info.isScrollable) { "virtual_display_node_not_scrollable" }
-                                gesture(node.bounds, args.optString("direction", "up"), 350)
-                            }
+            // Only fixed action names reach diagnostics; never log arbitrary model input.
+            val diagnosticAction = action.takeIf { it in setOf("observe", "assert_text", "back", "click", "long_click", "input_text", "swipe", "scroll") } ?: "unsupported"
+            timedStage("execute_action", diagnosticAction) {
+                check(target != null && (packageName.isEmpty() || packageName == target)) { "virtual_display_target_changed" }
+                val current = readFrame()
+                try {
+                    when (action) {
+                        "observe" -> observe(current)
+                        "assert_text" -> {
+                            val text = args.getString("text")
+                            require(text.isNotBlank() && text.length <= 1000)
+                            check(current.nodes.any { !it.sensitive && (it.info.text?.contains(text) == true || it.info.contentDescription?.contains(text) == true) }) { "virtual_display_assert_failed" }
+                            JSONObject().put("assertion", "passed").put("verified", true).put("display_id", displayId()).toString()
                         }
-                        invalidatePixels()
-                        requested(action)
+                        "back" -> {
+                            clearSnapshot()
+                            injectKey(KeyEvent.KEYCODE_BACK)
+                            invalidatePixels()
+                            requested(action)
+                        }
+                        "click", "long_click", "input_text", "swipe", "scroll" -> {
+                            val old = checkNotNull(snapshot) { "virtual_display_stale_snapshot" }
+                            check(args.optString("snapshot") == old.token && SystemClock.elapsedRealtime() - old.at <= 60_000 && old.windowIds == current.windowIds && old.projection == current.projection) { "virtual_display_stale_snapshot" }
+                            val index = args.optString("node").removePrefix("n").toIntOrNull()?.minus(1)
+                            val node = index?.takeIf { it >= 0 && it < old.exposed }?.let(current.nodes::getOrNull) ?: error("virtual_display_stale_snapshot")
+                            check(!node.sensitive && node.info.isEnabled && !node.bounds.isEmpty) { "virtual_display_sensitive_node" }
+                            clearSnapshot()
+                            when (action) {
+                                "input_text" -> {
+                                    val text = args.getString("text")
+                                    require(text.length <= 2000)
+                                    check(node.info.isEditable && node.info.isFocused) { "virtual_display_input_not_focused" }
+                                    check(node.info.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) })) { "virtual_display_input_failed" }
+                                }
+                                "click" -> gesture(node.bounds, "tap", 80)
+                                "long_click" -> gesture(node.bounds, "tap", 700)
+                                else -> {
+                                    check(action != "scroll" || node.info.isScrollable) { "virtual_display_node_not_scrollable" }
+                                    gesture(node.bounds, args.optString("direction", "up"), 350)
+                                }
+                            }
+                            invalidatePixels()
+                            requested(action)
+                        }
+                        else -> error("virtual_display_action_unsupported")
                     }
-                    else -> error("virtual_display_action_unsupported")
-                }
-            } finally { current.close() }
+                } finally { current.close() }
+            }
         }
 
         override fun capture(): ParcelFileDescriptor = checked("capture") {
@@ -190,7 +194,7 @@ class VirtualScreenRootService : RootService() {
     private fun <T> checked(stage: String, block: () -> T): T {
         check(Binder.getCallingUid() == applicationInfo.uid) { "virtual_display_caller_denied" }
         val identity = Binder.clearCallingIdentity()
-        return try { synchronized(lock) { block() } }
+        return try { timedStage("rpc", stage) { synchronized(lock) { block() } } }
         catch (error: Exception) {
             val chain = generateSequence(error as Throwable?) { it.cause }.take(6).toList()
             val code = chain.firstNotNullOfOrNull { it.message?.takeIf { message -> message.matches(Regex("virtual_display_[a-z0-9_]+")) } }
@@ -204,6 +208,19 @@ class VirtualScreenRootService : RootService() {
             android.util.Log.w("ZakoVirtualScreen", "stage=$stage error=$code types=${chain.joinToString(",") { it.javaClass.simpleName }}")
             throw IllegalStateException(code, error)
         } finally { Binder.restoreCallingIdentity(identity) }
+    }
+
+    /** Operational timing only: no package names, node contents or request arguments. */
+    private fun <T> timedStage(stage: String, action: String, block: () -> T): T {
+        val started = SystemClock.elapsedRealtime()
+        val pid = android.os.Process.myPid()
+        android.util.Log.i("ZakoVirtualScreen", "stage=$stage action=$action phase=begin pid=$pid")
+        var succeeded = false
+        try {
+            return block().also { succeeded = true }
+        } finally {
+            android.util.Log.i("ZakoVirtualScreen", "stage=$stage action=$action phase=end success=$succeeded elapsed_ms=${SystemClock.elapsedRealtime() - started} pid=$pid")
+        }
     }
 
     private fun <T> platformStage(stage: String, action: () -> T): T = try { action() }
@@ -416,33 +433,49 @@ class VirtualScreenRootService : RootService() {
         } finally { current.close() }
     }
 
-    private fun readFrame(deadline: Long = Long.MAX_VALUE): Frame {
+    private fun readFrame(deadline: Long = SystemClock.elapsedRealtime() + 8000): Frame {
         if (Build.VERSION.SDK_INT < 30) error("virtual_display_android_11_required")
         val id = displayId()
-        requireNoSecureWindow(deadline)
-        val windows = checkNotNull(automation) { "virtual_display_nodes_disconnected" }.windowsOnAllDisplays[id].orEmpty()
-        check(windows.isNotEmpty()) { "virtual_display_window_not_ready" }
+        requireReadBudget(deadline)
+        timedStage("nodes_secure", "read_frame") { requireNoSecureWindow(deadline) }
+        val windows = timedStage("nodes_windows", "read_frame") {
+            requireReadBudget(deadline)
+            checkNotNull(automation) { "virtual_display_nodes_disconnected" }.windowsOnAllDisplays[id].orEmpty()
+        }
         val nodes = mutableListOf<Node>()
         val ids = mutableListOf<Int>()
         try {
+            requireReadBudget(deadline)
+            check(windows.isNotEmpty()) { "virtual_display_window_not_ready" }
             for (window in windows) {
-                val root = window.root ?: error("virtual_display_unknown_window")
+                val root = timedStage("nodes_root", "read_frame") {
+                    requireReadBudget(deadline)
+                    window.root ?: error("virtual_display_unknown_window")
+                }
                 try {
+                    requireReadBudget(deadline)
                     val pkg = root.packageName?.toString().orEmpty()
                     check(pkg == target && !protectedDeviceScreenPackage(pkg, packageName, resolvedPermissionController(this))) { "virtual_display_foreign_or_sensitive_window" }
                     check(window.type == AccessibilityWindowInfo.TYPE_APPLICATION) { "virtual_display_system_window" }
                     ids += window.id
-                    walk(root, false, nodes, 0)
+                    timedStage("nodes_walk", "read_frame") { walk(root, false, nodes, 0, deadline) }
                 } finally { root.recycle() }
             }
+            requireReadBudget(deadline)
             check(ids.isNotEmpty() && nodes.isNotEmpty()) { "virtual_display_window_not_ready" }
             return Frame(ids.sorted(), nodes)
         } catch (error: Throwable) { nodes.forEach { it.info.recycle() }; throw error }
         finally { windows.forEach { it.recycle() } }
     }
 
+    private fun requireReadBudget(deadline: Long) {
+        displayId() // Includes immediate cancellation and display-ownership validation.
+        check(SystemClock.elapsedRealtime() < deadline) { "virtual_display_nodes_timeout" }
+    }
+
     @Suppress("DEPRECATION")
-    private fun walk(node: AccessibilityNodeInfo, sensitiveParent: Boolean, result: MutableList<Node>, depth: Int) {
+    private fun walk(node: AccessibilityNodeInfo, sensitiveParent: Boolean, result: MutableList<Node>, depth: Int, deadline: Long) {
+        requireReadBudget(deadline)
         check(depth <= 60 && result.size < 300) { "virtual_display_node_limit" }
         val sensitive = sensitiveParent || node.isPassword
         check(node.packageName?.toString() == target) { "virtual_display_foreign_node" }
@@ -453,8 +486,14 @@ class VirtualScreenRootService : RootService() {
             result += Node(AccessibilityNodeInfo.obtain(node), bounds, sensitive)
         }
         for (index in 0 until node.childCount) {
-            node.getChild(index)?.let { child -> try { walk(child, sensitive, result, depth + 1) } finally { child.recycle() } }
+            requireReadBudget(deadline)
+            val child = node.getChild(index)
+            try {
+                requireReadBudget(deadline)
+                if (child != null) walk(child, sensitive, result, depth + 1, deadline)
+            } finally { child?.recycle() }
         }
+        requireReadBudget(deadline)
     }
 
     private fun observe(frame: Frame): String {

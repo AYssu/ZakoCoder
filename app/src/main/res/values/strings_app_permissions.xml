@@ -16,8 +16,6 @@
     <string name="app_permissions_files_legacy_hint">在此 Android 版本中，绑定共享存储目录需要读写权限。</string>
     <string name="app_permissions_install">安装应用</string>
     <string name="app_permissions_install_hint">允许提交项目 APK 给系统安装器；每次安装仍由系统确认。</string>
-    <string name="app_permissions_overlay">悬浮窗</string>
-    <string name="app_permissions_overlay_hint">用于设备屏幕操作时的监看与停止入口；系统授权后仍需在能力包中开启。</string>
     <string name="app_permissions_accessibility">屏幕操作服务</string>
     <string name="app_permissions_accessibility_hint">用于读取当前设备界面节点并操作；完全访问自动授权当前任务，其他模式逐任务确认。</string>
     <string name="app_permissions_battery">电池优化</string>

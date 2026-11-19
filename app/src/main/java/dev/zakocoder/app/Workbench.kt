@@ -32,10 +32,6 @@ import kotlinx.coroutines.sync.withLock
     val settings: AppSettings = AppSettings(), val proxyDisplay: String = "", val sessions: List<TerminalItem> = emptyList(), val terminalRevision: Int = 0,
  ) { val project get() = projects.singleOrNull { it.id == selectedId } }
 
-/** One-shot UI navigation, always scoped to the screen session that requested it. */
-data class AssistantNavigationRequest(val projectId: String, val screenLease: String,
-    val requestId: String = java.util.UUID.randomUUID().toString())
-
 data class BackgroundConversationNavigation(val projectId: String, val conversationId: String,
     val requestId: String = java.util.UUID.randomUUID().toString())
 
@@ -58,11 +54,6 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private val onboardingMutex = Mutex()
     private val mutable = MutableStateFlow(WorkbenchState())
     val state = mutable.asStateFlow()
-    private val mutableAssistantNavigation = MutableStateFlow<AssistantNavigationRequest?>(null)
-    val assistantNavigation = mutableAssistantNavigation.asStateFlow()
-    fun ackAssistantNavigation(requestId: String) {
-        mutableAssistantNavigation.update { if (it?.requestId == requestId) null else it }
-    }
     private val mutableBackgroundNavigation = MutableStateFlow<BackgroundConversationNavigation?>(null)
     val backgroundNavigation = mutableBackgroundNavigation.asStateFlow()
     /** Intent identifiers are validated again against loaded workspaces and conversations by the UI. */
@@ -137,7 +128,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     val deviceAccess = dev.zakocoder.app.device.DeviceAccessController(context)
     val virtualScreen = dev.zakocoder.app.device.VirtualScreenController(context, deviceAccess)
     val screenTests = dev.zakocoder.app.screentest.ScreenTestController(context,
-        virtualScreen = virtualScreen, deviceAccess = deviceAccess, projectRoot = projects::directory)
+        virtualScreen = virtualScreen, deviceAccess = deviceAccess)
     internal val browser = dev.zakocoder.app.browser.BrowserController(context, scope)
     private val mutableBrowserNavigation = MutableStateFlow<String?>(null)
     val browserNavigation = mutableBrowserNavigation.asStateFlow()
@@ -319,43 +310,18 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     }
     private fun terminalItems(): List<TerminalItem> = terminal.sessions.toList()
     init {
-        screenTests.bindOverlayActions(returnToApp = { projectId, lease ->
-            if (screenTests.taskLease(projectId) == lease && mutable.value.projects.any { it.id == projectId }) {
-                val request = AssistantNavigationRequest(projectId, lease)
-                mutableAssistantNavigation.value = request
-                try {
-                    context.startActivity(Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-                } catch (_: android.content.ActivityNotFoundException) {
-                    ackAssistantNavigation(request.requestId)
-                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
-                } catch (_: SecurityException) {
-                    ackAssistantNavigation(request.requestId)
-                    mutable.update { it.copy(message = context.getString(R.string.screen_test_operation_failed), messageIsError = true) }
-                }
-            }
-        }, stopTask = { projectId, lease ->
-            if (screenTests.stopOverlayTask(projectId, lease)) ai.stopForScreenLease(projectId, lease)
-        })
         scope.launch {
             screenTests.state.collect {
                 if (!screenTestActive()) releaseService()
                 else try { service() }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: SecurityException) { screenTests.reportOverlayServiceFailure() }
+                catch (_: SecurityException) { mutable.update { it.copy(backgroundServiceError = true) } }
                 catch (_: IllegalStateException) {
                     // Includes Android's foreground/background service start restrictions.
                     // Keep this collector alive; a later explicit opt-in may retry.
-                    screenTests.reportOverlayServiceFailure()
+                    mutable.update { it.copy(backgroundServiceError = true) }
                 }
             }
-        }
-        scope.launch {
-            kotlinx.coroutines.flow.combine(ai.state, screenTests.state) { _, screen ->
-                val project = screen.projectId
-                val lease = project?.let(screenTests::taskLease)
-                if (project == null || lease == null) null else Triple(project, lease, ai.screenOverlayTranscript(project, lease).orEmpty())
-            }.collect { update -> update?.let { (project, lease, text) -> screenTests.updateOverlayConversation(project, lease, text) } }
         }
         scope.launch {
             ai.state.map(AiBackgroundTask::from).distinctUntilChanged().collect { task ->
