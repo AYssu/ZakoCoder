@@ -172,8 +172,9 @@ class AiFilesUiDeviceTest {
                 await { visibleText(context.getString(R.string.workspace_flow_empty)) }
                 main { w.create("setup-owned-fixture") }; await { !w.state.value.busy && w.state.value.projects.size == 1 }
                 click(context.getString(R.string.workspace_flow_open))
-                click(context.getString(R.string.nav_ai))
-                click(context.getString(R.string.ai_new_conversation))
+                click(context.getString(R.string.back_to_library))
+                click(context.getString(R.string.app_navigation_open))
+                click(context.getString(R.string.drawer_new_conversation))
                 await { !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                 click(context.getString(R.string.ai_models_add_first))
                 await { visibleText(context.getString(R.string.ai_settings)) }
