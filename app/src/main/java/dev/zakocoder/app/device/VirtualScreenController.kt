@@ -57,8 +57,12 @@ class VirtualScreenController(context: Context, private val access: DeviceAccess
 
     init {
         scope.launch {
-            access.state.collect { permissions ->
-                if (accessLease >= 0 && (permissions.mode != DeviceMode.Root || accessLease != access.generation || !permissions.rootGranted)) stop()
+            access.state.collect {
+                synchronized(stateLock) {
+                    // A delayed notification must not revoke a newer valid display lease.
+                    val permissions = access.state.value
+                    if (accessLease >= 0 && (permissions.mode != DeviceMode.Root || accessLease != access.generation || !permissions.rootGranted)) stop()
+                }
             }
         }
     }
