@@ -95,7 +95,7 @@ class DeviceRootUiDeviceTest {
         SystemClock.sleep(350)
         val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            val file = File(context.filesDir, "ui-review/device-root/$theme-$name.png").apply { parentFile!!.mkdirs() }
+            val file = File(context.cacheDir, "ui-review/device-root/$theme-$name.png").apply { parentFile!!.mkdirs() }
             file.outputStream().use { assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         } finally { screenshot.recycle() }
     }
