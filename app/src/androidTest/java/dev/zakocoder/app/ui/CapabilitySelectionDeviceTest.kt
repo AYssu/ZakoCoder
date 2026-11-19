@@ -105,8 +105,10 @@ class CapabilitySelectionDeviceTest {
         return result.get()
     }
 
-    /** Touch the native toggle, after accessibility scrolling has actually settled. */
-    private fun tapSwitch(label: String) {
+    private fun tapSwitch(label: String, enabled: Boolean = true) = tapControl(label, enabled, toggle = true)
+
+    /** Touch the actual control, after accessibility scrolling has actually settled. */
+    private fun tapControl(label: String, enabled: Boolean = true, toggle: Boolean = false) {
         ui.reveal(label)
         fun bounds(reveal: Boolean = false): Rect? {
             val result = AtomicReference<Rect?>()
@@ -114,10 +116,15 @@ class CapabilitySelectionDeviceTest {
                 var target: SemanticsNode? = null
                 fun walk(node: SemanticsNode, labelled: Boolean = false) {
                     val matches = labelled || node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
-                    if (matches && node.config.getOrNull(SemanticsProperties.ToggleableState) != null &&
+                    if (toggle && matches && node.config.getOrNull(SemanticsProperties.ToggleableState) != null &&
                         node.config.getOrNull(SemanticsActions.OnClick) != null &&
-                        node.config.getOrNull(SemanticsProperties.Disabled) == null) {
+                        (node.config.getOrNull(SemanticsProperties.Disabled) == null) == enabled) {
                         target = node
+                    } else if (!toggle && (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
+                            node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true)) {
+                        var action: SemanticsNode? = node
+                        while (action != null && action.config.getOrNull(SemanticsActions.OnClick) == null) action = action.parent
+                        if (action != null && (action.config.getOrNull(SemanticsProperties.Disabled) == null) == enabled) target = action
                     }
                     node.children.forEach { walk(it, matches) }
                 }
@@ -127,20 +134,20 @@ class CapabilitySelectionDeviceTest {
                     if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
                 }
                 android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
-                val toggle = target ?: return@runOnMainSync
-                val visible = toggle.boundsInWindow
+                val control = target ?: return@runOnMainSync
+                val visible = control.boundsInWindow
                 if (visible.width > 0 && visible.height > 0 &&
-                    visible.width >= toggle.size.width * .95f && visible.height >= toggle.size.height * .95f) {
+                    visible.width >= control.size.width * .95f && visible.height >= control.size.height * .95f) {
                     result.set(visible)
                 } else if (reveal) {
-                    val scroll = generateSequence(toggle.parent) { it.parent }.firstOrNull {
+                    val scroll = generateSequence(control.parent) { it.parent }.firstOrNull {
                         it.config.getOrNull(SemanticsActions.ScrollBy) != null &&
                             it.config.getOrNull(SemanticsProperties.VerticalScrollAxisRange) != null
-                    } ?: error("No native toggle scroll ancestor: $label")
-                    // The label wrapper can retain a 3px sliver while the toggle
+                    } ?: error("No native control scroll ancestor: $label")
+                    // The label wrapper can retain a 3px sliver while the control
                     // is completely clipped. Use the real, unclipped layout position.
-                    val centerY = toggle.layoutInfo.coordinates.localToWindow(Offset.Zero).y + toggle.size.height / 2f
-                    assertTrue("Scroll actual toggle into viewport: $label",
+                    val centerY = control.layoutInfo.coordinates.localToWindow(Offset.Zero).y + control.size.height / 2f
+                    assertTrue("Scroll actual control into viewport: $label",
                         scroll.config[SemanticsActions.ScrollBy].action?.invoke(0f, centerY - scroll.boundsInWindow.center.y) == true)
                 }
             }
@@ -157,7 +164,7 @@ class CapabilitySelectionDeviceTest {
         var missing = 0
         var changed = 0
         try {
-            ui.await("Stable native toggle: $label") {
+            ui.await("Stable native control: $label") {
                 val current = bounds()
                 if (current == null) missing++
                 if (current != previous) changed++
@@ -169,11 +176,11 @@ class CapabilitySelectionDeviceTest {
                 current != null && SystemClock.uptimeMillis() - stationarySince >= 350
             }
         } catch (failure: IllegalStateException) {
-            ui.capture("capability-selection/failed-stable-native-toggle")
+            ui.capture("capability-selection/failed-stable-native-control")
             error("${failure.message}; missing=$missing, changed=$changed, recent=$samples; control=[${controlDiagnostics(label)}]")
         }
-        // A label or its decorative thumb can have their own semantics; neither is
-        // the independent toggle's hit box. Keep real input rather than OnClick invocation.
+        // Text or a decorative thumb is not the actionable control's hit box.
+        // Keep real input rather than invoking the semantics OnClick action.
         val center = requireNotNull(target).center
         val time = SystemClock.uptimeMillis()
         val down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, center.x, center.y, 0)
@@ -216,30 +223,36 @@ class CapabilitySelectionDeviceTest {
             ui.reveal(screenConfigure)
             ui.await("Virtual screen configuration ready") { controlEnabled(screenConfigure) == true }
             ui.capture("capability-buttons/$mode-idle")
-            ui.tap(sshTitle)
+            tapSwitch(sshTitle)
             ui.await("SSH save in progress") { model.busy && model.sshEnabled }
             ui.reveal(screenConfigure)
             assertEquals("Unrelated save must not disable screen configuration", true, controlEnabled(screenConfigure))
             ui.capture("capability-buttons/$mode-saving-ssh")
-            ui.tap(screenConfigure)
+            tapControl(screenConfigure)
+            instrumentation.waitForIdleSync()
             assertEquals(1, details.get())
             // Saves still serialize: another switch cannot mutate the pending selection.
             assertEquals(false, controlEnabled(browserTitle))
-            // The browser title can be visible while its switch is still below
-            // the viewport; reveal the final notice to expose the entire card.
-            ui.reveal(context.getString(R.string.capability_packages_loading_hint))
-            ui.tap(browserTitle)
+            // Exercise the actual disabled native control, even if its label or
+            // wrapper is already visible while the switch itself is clipped.
+            tapSwitch(browserTitle, enabled = false)
+            instrumentation.waitForIdleSync()
+            assertTrue("Disabled browser touch must preserve the pending SSH save", model.busy)
             assertFalse(model.browserEnabled)
+            assertEquals(ToggleableState.Off, switchState(browserTitle))
             instrumentation.runOnMainSync { model = model.copy(busy = false) }
             // Wait for the switch's committed semantics, not the always-available
             // navigation button: model changes precede the next rendered frame.
             ui.await("Previous save finished") { controlEnabled(browserTitle) == true }
-            ui.click(browserTitle)
+            tapSwitch(browserTitle)
             ui.await("Browser save in progress") { model.busy && model.browserEnabled }
             for (label in listOf(screenConfigure, sshConfigure)) {
                 ui.reveal(label)
                 assertEquals("Browser save must not disable $label", true, controlEnabled(label))
-                ui.tap(label)
+                val before = details.get()
+                tapControl(label)
+                instrumentation.waitForIdleSync()
+                assertEquals("One physical touch must open $label", before + 1, details.get())
             }
             assertEquals(3, details.get())
             instrumentation.runOnMainSync { model = model.copy(busy = false) }
