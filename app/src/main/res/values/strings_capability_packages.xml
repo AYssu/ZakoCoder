@@ -3,10 +3,8 @@
     <string name="capability_packages_subtitle">按用途开启能力，设备权限集中配置</string>
     <string name="capability_packages_settings_hint">设备调试 · 网页调试 · 远程开发</string>
     <string name="capability_packages_project">当前项目 · %1$s</string>
-    <string name="capability_screen_configure">配置屏幕操作</string>
     <string name="capability_ssh_configure">配置 SSH 连接</string>
     <string name="capability_packages_loading_hint">设备与网页能力为全局配置，SSH 连接按工作区保存。开启能力不改变当前 AI 审批模式。</string>
-    <string name="capability_screen_title">Android 屏幕识别与操作</string>
     <string name="capability_ssh_title">SSH 远程开发</string>
     <string name="capability_ssh_description">连接远程主机，执行命令和管理文件；可选 tmux 保留长任务。</string>
     <string name="capability_ssh_hint">连接凭据保存在本机，不发送给模型。长任务可使用 tmux 保持运行。</string>

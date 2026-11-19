@@ -172,7 +172,9 @@ class AiFilesUiDeviceTest {
                 await { visibleText(context.getString(R.string.workspace_flow_empty)) }
                 main { w.create("setup-owned-fixture") }; await { !w.state.value.busy && w.state.value.projects.size == 1 }
                 click(context.getString(R.string.workspace_flow_open))
-                click(context.getString(R.string.workspace_threads_new))
+                click(context.getString(R.string.back_to_library))
+                click(context.getString(R.string.app_navigation_open))
+                click(context.getString(R.string.drawer_new_conversation))
                 await { !w.ai.state.value.permissionsLoading && !w.ai.state.value.skillsLoading }
                 click(context.getString(R.string.ai_models_add_first))
                 await { visibleText(context.getString(R.string.ai_settings)) }
@@ -215,15 +217,19 @@ class AiFilesUiDeviceTest {
                 val id = workbench.state.value.selectedId!!; owned = id
                 withContext(Dispatchers.IO) { val root = workbench.projects.directory(id); File(root, "a.py").writeText("print('original')\n"); File(root, "b.py").writeText("print('other')\n") }
                 click("浏览文件"); click("a.py"); await { !workbench.editor.state.value.loading }
-                val original = workbench.editor.state.value.document!!
+                val previousDocument = workbench.editor.state.value.document!!
                 assertEquals(0, workbench.runtime.execute("printf '%s\\n' \"print('guest update')\" > a.py", id, workbench.state.value.settings, timeoutMillis = 30000, output = {}).exitCode)
                 click(context.getString(R.string.editor_open_file)); click("b.py"); await { workbench.editor.state.value.path == "b.py" && !workbench.editor.state.value.loading }
-                click("a.py"); await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.diskState == dev.zakocoder.app.editor.EditorDiskState.Changed }
-                assertSame(original, workbench.editor.state.value.document); assertEquals("print('original')\n", original.content.toString())
-                assertTrue(visibleText(context.getString(R.string.editor_disk_changed_clean))); screenshot("editor-external-clean")
+                click("a.py"); await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.document?.content.toString() == "print('guest update')\n" }
+                val original = workbench.editor.state.value.document!!
+                assertNotSame(previousDocument, original)
+                assertEquals(dev.zakocoder.app.editor.EditorDiskState.Unchanged, workbench.editor.state.value.diskState)
+                assertFalse(visibleText(context.getString(R.string.editor_disk_changed_clean))); screenshot("editor-external-clean")
                 main { original.content.replace(0, original.content.length, "print('local draft')\n"); workbench.editor.changed() }
                 assertEquals(0, workbench.runtime.execute("printf '%s\\n' \"print('guest newer')\" > a.py", id, workbench.state.value.settings, timeoutMillis = 30000, output = {}).exitCode)
-                click(context.getString(R.string.editor_disk_check)); await { !workbench.editor.state.value.diskChecking }
+                withContext(Dispatchers.Main) { requireNotNull(workbench.editor.checkDisk()) }.join()
+                assertSame(original, workbench.editor.state.value.document)
+                assertEquals("print('local draft')\n", original.content.toString())
                 assertTrue(visibleText(context.getString(R.string.editor_disk_changed_dirty))); screenshot("editor-external-dirty")
                 click(context.getString(R.string.editor_disk_compare)); await { visibleText(context.getString(R.string.editor_disk_review_help)) }
                 await { reviewText()?.let { it.contains("@@") && it.contains("-print('local draft')") && it.contains("+print('guest newer')") } == true }
@@ -240,19 +246,23 @@ class AiFilesUiDeviceTest {
                 assertEquals("print('guest newer')\n", workbench.editor.state.value.document!!.content.toString())
                 screenshot("editor-external-loaded")
                 withContext(Dispatchers.IO) { File(workbench.projects.directory(id), "a.py").delete() }
-                click(context.getString(R.string.editor_disk_check)); await { !workbench.editor.state.value.diskChecking }
+                withContext(Dispatchers.Main) { requireNotNull(workbench.editor.checkDisk()) }.join()
                 assertTrue(visibleText(context.getString(R.string.editor_disk_unavailable))); screenshot("editor-external-missing")
                 val retained = workbench.editor.state.value.document!!
                 scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
                 withContext(Dispatchers.IO) { File(workbench.projects.directory(id), "a.py").writeText("print('while stopped')\n") }
                 scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
-                await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.diskVersion?.text == "print('while stopped')\n" }
-                assertSame(retained, workbench.editor.state.value.document); assertEquals("print('guest newer')\n", retained.content.toString())
-                assertTrue(visibleText(context.getString(R.string.editor_disk_changed_clean))); screenshot("editor-external-resumed")
+                await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.document?.content.toString() == "print('while stopped')\n" }
+                assertNotSame(retained, workbench.editor.state.value.document)
+                assertEquals("print('guest newer')\n", retained.content.toString())
+                assertEquals(dev.zakocoder.app.editor.EditorDiskState.Unchanged, workbench.editor.state.value.diskState)
+                assertFalse(visibleText(context.getString(R.string.editor_disk_changed_clean))); screenshot("editor-external-resumed")
                 withContext(Dispatchers.IO) { File(workbench.projects.directory(id), "a.py").writeText("print('before recreation')\n") }
                 scenario.recreate()
-                await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.diskVersion?.text == "print('before recreation')\n" }
-                assertSame(retained, workbench.editor.state.value.document); assertEquals("print('guest newer')\n", retained.content.toString())
+                await { !workbench.editor.state.value.diskChecking && workbench.editor.state.value.document?.content.toString() == "print('before recreation')\n" }
+                assertNotSame(retained, workbench.editor.state.value.document)
+                assertEquals("print('guest newer')\n", retained.content.toString())
+                assertEquals(dev.zakocoder.app.editor.EditorDiskState.Unchanged, workbench.editor.state.value.diskState)
                 screenshot("editor-external-recreated")
             } finally {
                 main { workbench.editor.state.value.tabs.filter { it.projectId == owned }.forEach { tab -> workbench.editor.open(tab.projectId, tab.path); workbench.editor.close() } }; delay(700)

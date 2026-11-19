@@ -267,7 +267,6 @@
     <string name="editor_disk_changed_clean">磁盘文件已变化，当前显示的是保留的编辑器版本。</string>
     <string name="editor_disk_changed_dirty">磁盘文件已变化，未保存的本地编辑已保留，保存前请先比较。</string>
     <string name="editor_disk_unavailable">无法确认磁盘版本，文件可能已移动、删除、不可读或不支持编辑。当前缓冲已保留。</string>
-    <string name="editor_disk_check">检查磁盘版本</string>
     <string name="editor_disk_compare">对比磁盘版本</string>
     <string name="editor_disk_load">加载磁盘版本</string>
     <string name="editor_buffer_version">当前编辑内容</string>

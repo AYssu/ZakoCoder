@@ -19,6 +19,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
+import dev.zakocoder.app.test.R as TestR
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.ai.AiEntry
 import dev.zakocoder.app.ai.AiRole
@@ -147,7 +148,7 @@ class WorkspaceNavigationDeviceTest {
                         }
                     } }
                     await("Alpha files open directly") { shown("source-0.py") }
-                    assertFalse("The obsolete conversation intermediate page must not appear", shown(base.getString(R.string.workspace_threads_heading)))
+                    assertFalse("The obsolete conversation intermediate page must not appear", shown(instrumentation.context.getString(TestR.string.workspace_threads_heading)))
                     capture(dark, "alpha-files")
                     main { selectedProject = projects[1]; assertTrue(host.openWorkspace(projects[1].id)) }
                     await("Beta files replace Alpha") { shown("source-1.py") && !shown("source-0.py") }

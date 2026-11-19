@@ -387,7 +387,7 @@ def publish(repo, directory, qa_apk, report_file):
              "- 自行配置模型，支持流式对话、文件与图片引用、工具审批、Skill 和 MCP。\n"
              "- 文件差异审阅、任务检查点、项目验证命令、Git 与按需启用的实验性多语言 LSP。\n\n"
              "### 安装与开始\n\n"
-             "按设备架构选择 Lite 或 Full APK 安装；Full 内置 Ubuntu 安装包与代理内核，Lite 按需下载。SHA256SUMS.txt 可用于校验文件。升级前请先备份重要项目。"
+             "按设备架构选择 Lite 或 Full APK 安装；Full 内置基础 Ubuntu 安装包，Lite 支持在线下载或本地导入。开发工具包仍需按需安装；代理仅支持外部 HTTP／SOCKS5 服务，不内置代理内核。SHA256SUMS.txt 可用于校验文件。升级前请先备份重要项目。"
              "首次进入可创建或导入项目；终端开发需按需安装 Ubuntu 和工具包，AI 功能需自行配置有额度的模型服务。\n\n"
              f"使用方法见 [项目介绍](https://github.com/{repo}/blob/{commit}/README.md) 和 "
              f"[Beta 测试指南](https://github.com/{repo}/blob/{commit}/docs/BETA_TESTING.md)。\n\n"
