@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Base version (e.g. 0.1.5, 0.1.5-beta.1 or 0.1.5-rc.1); Beijing MMddHH is appended
+        description: Base version (e.g. 0.1.6, 0.1.6-beta.1 or 0.1.6-rc.1); Beijing MMddHH is appended
         required: true
-        default: 0.1.5
+        default: 0.1.6
         type: string
       version_code:
         description: Optional Android versionCode override; blank generates an increasing time-based code
