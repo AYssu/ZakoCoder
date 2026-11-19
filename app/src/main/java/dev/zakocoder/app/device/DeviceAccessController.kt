@@ -1,5 +1,6 @@
 package dev.zakocoder.app.device
 
+import androidx.core.content.edit
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -73,7 +74,7 @@ class DeviceAccessController(context: Context) {
             check(result.uid == 0 && result.exitCode == 0 && !result.timedOut) { "device_root_unavailable" }
             synchronized(selectionLock) {
                 check(lease == generation) { "device_access_revoked" }
-                preferences.edit().putString("mode", "root").apply()
+                preferences.edit { putString("mode", "root") }
                 epoch.incrementAndGet()
                 mutableState.update { it.copy(mode = DeviceMode.Root, rootGranted = true) }
             }
@@ -108,7 +109,7 @@ class DeviceAccessController(context: Context) {
             epoch.incrementAndGet()
             mutableState.update { it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = false, error = null) }
             // apply changes memory synchronously; serialized with Root selection to preserve latest intent.
-            preferences.edit().putString("mode", "basic").apply()
+            preferences.edit { putString("mode", "basic") }
         }
         shell.stop()
     }
@@ -139,10 +140,18 @@ class DeviceAccessController(context: Context) {
         }
     }
 
-    suspend fun execute(command: String, timeoutSeconds: Int = 120, onOutput: (String) -> Unit = {}): DeviceShellResult {
-        check(mutableState.value.loaded) { "device_access_loading" }
-        val selected = mutableState.value.mode
-        val lease = generation
+    suspend fun execute(command: String, timeoutSeconds: Int = 120, expectedGeneration: Long? = null,
+        onOutput: (String) -> Unit = {}): DeviceShellResult {
+        // Approval belongs to the identity generation it observed. Validate and capture the
+        // selection atomically, so a revoke/re-enable between caller validation and this call
+        // cannot silently grant the old command a fresh identity lease.
+        val (selected, lease) = synchronized(selectionLock) {
+            val current = mutableState.value
+            check(current.loaded) { "device_access_loading" }
+            val currentGeneration = generation
+            check(expectedGeneration == null || expectedGeneration == currentGeneration) { "device_access_revoked" }
+            current.mode to currentGeneration
+        }
         try {
             // Each concrete session verifies its real UID before sending this command. Do not
             // open an extra Root probe first: that doubles su handshakes and optional prompts.

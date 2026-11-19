@@ -73,6 +73,36 @@ class DeviceAccessDeviceTest {
         }
     }
 
+    @Test(timeout = 30_000) fun staleExpectedGenerationRejectsBeforeAnyShellSideEffect() = runBlocking {
+        for (rootSelected in listOf(false, true)) Fixture(base).use { fixture ->
+            // Persisted selection alone never requests Root, including on unrooted devices.
+            if (rootSelected) fixture.rootSelected()
+            val access = DeviceAccessController(fixture.context)
+            access.state.first { it.loaded }
+            try {
+                val oldGeneration = access.generation
+                access.useBasic()
+                val marker = File(fixture.root, "must-not-execute")
+                val path = "'" + marker.absolutePath.replace("'", "'\\''") + "'"
+                var streamed = false
+                val failure = runCatching {
+                    access.execute("printf stale > $path", expectedGeneration = oldGeneration,
+                        onOutput = { streamed = true })
+                }.exceptionOrNull()
+                assertTrue(failure is IllegalStateException)
+                assertEquals("device_access_revoked", failure?.message)
+                assertFalse(marker.exists())
+                assertFalse(streamed)
+                assertEquals(DeviceMode.Basic, access.state.value.mode)
+                assertFalse(access.state.value.rootGranted)
+                // A fresh, explicit lease still runs under the actual Basic identity.
+                val current = access.execute("id -u", expectedGeneration = access.generation)
+                assertEquals(Process.myUid(), current.uid)
+                assertEquals(Process.myUid().toString(), current.stdout.trim())
+            } finally { access.stop() }
+        }
+    }
+
     @Test(timeout = 60_000) fun selectedRootUsesUidZeroAndBasicRevokesItsGeneration() = runBlocking {
         Fixture(base).use { fixture ->
             // Restored mode is not a restored grant. No automatic optional permission changes in this fixture.
