@@ -121,13 +121,15 @@ internal fun AiReadActivity(events: List<AiToolEvent>, preparation: List<AiEntry
         val grouped = otherTools.groupBy { requireNotNull(it.tool) }
         val primary = setOf(AiTool.WriteFile, AiTool.EditFile, AiTool.MakeDirectory, AiTool.RunCommand, AiTool.SendTerminalInput)
         grouped.filterKeys { it in primary }.forEach { (tool, calls) ->
-            add(stringResource(tool.label) + " " + calls.size)
+            val label = stringResource(tool.label)
+            add(if (calls.size > 1) stringResource(R.string.ai_activity_tool_calls, label, calls.size) else label)
         }
         if (reads > 0) add(stringResource(R.string.ai_activity_read_files, reads))
         if (searches > 0) add(stringResource(R.string.ai_activity_searches, searches))
         if (directories > 0) add(stringResource(R.string.ai_activity_directories, directories))
         grouped.filterKeys { it !in primary }.forEach { (tool, calls) ->
-            add(stringResource(tool.label) + " " + calls.size)
+            val label = stringResource(tool.label)
+            add(if (calls.size > 1) stringResource(R.string.ai_activity_tool_calls, label, calls.size) else label)
         }
     }
     Column {
