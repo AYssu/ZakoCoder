@@ -205,3 +205,7 @@ Lucide 0.468.0，来源 https://github.com/lucide-icons/lucide/tree/0.468.0/icon
 ## 品牌图片
 
 应用全彩图标、透明项目 Logo 与 README 角色插画由维护者提供。分发文件使用固定路径 `app/src/main/res/drawable-nodpi/ic_launcher_art.webp` 和 `docs/assets/brand/`，经过尺寸适配及无损 WebP 编码，透明插画保留透明通道。未加入其余宣传画报。系统单色主题与通知使用本项目绘制的简化鱼形编码标记。
+
+## Android 设备 Root 与服务
+
+使用 `com.github.topjohnwu.libsu:core:6.0.0` 与 `com.github.topjohnwu.libsu:service:6.0.0`，官方源码 https://github.com/topjohnwu/libsu/tree/6.0.0 (commit `8c3e80ffe466b89ff875471e542d77e6a1b480c5`) ，Apache-2.0。未修改上游库。完整许可证随 APK 的 `assets/licenses/Libsu-Apache-2.0.txt` 提供；源码头版权归 John “topjohnwu” Wu 及原贡献者所有。依赖仅承接设备已授予的 Root，不提供 Root 获取或绕过系统授权的能力。

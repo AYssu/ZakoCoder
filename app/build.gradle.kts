@@ -114,6 +114,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
         buildConfig = true
     }
     testOptions { unitTests.isReturnDefaultValues = true }
@@ -247,6 +248,8 @@ tasks.matching { it.name.contains("Release") }.configureEach {
 }
 
 dependencies {
+    implementation("com.github.topjohnwu.libsu:core:6.0.0")
+    implementation("com.github.topjohnwu.libsu:service:6.0.0")
     implementation(libs.miuix.ui)
     implementation(libs.navigationevent.compose)
     implementation(project(":terminal-view"))
