@@ -167,12 +167,19 @@ class WorkspaceHeaderReturnDeviceTest {
         assertEquals(reference.width, actual.width)
         assertEquals(reference.height, actual.height)
         assertTrue("Header title must be fully revealed during the gesture", title.right < exposedRight - 8f)
+        // API 35 can round text-edge colors differently when the retained page is
+        // composited behind the translating child. Allow only that small RGB drift;
+        // compare the exact same coordinates and keep the 98% coverage requirement.
+        fun samePixel(expected: Int, observed: Int) =
+            kotlin.math.abs(Color.red(expected) - Color.red(observed)) <= 4 &&
+                kotlin.math.abs(Color.green(expected) - Color.green(observed)) <= 4 &&
+                kotlin.math.abs(Color.blue(expected) - Color.blue(observed)) <= 4
         var equal = 0
         var total = 0
         for (y in floor(title.top).toInt().coerceAtLeast(0) until ceil(title.bottom).toInt().coerceAtMost(reference.height)) {
             for (x in floor(title.left).toInt().coerceAtLeast(0) until ceil(title.right).toInt().coerceAtMost(reference.width)) {
                 total++
-                if (reference.getPixel(x, y) == actual.getPixel(x, y)) equal++
+                if (samePixel(reference.getPixel(x, y), actual.getPixel(x, y))) equal++
             }
         }
         assertTrue("Retained header title must not disappear or reflow ($equal/$total pixels match)",

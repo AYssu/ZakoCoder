@@ -394,11 +394,27 @@ class TerminalLayoutDeviceTest {
                     click(R.string.terminal_actions)
                     await("bottom menu available") { nodes { it.any { node -> matches(node, R.string.terminal_preview) } } }
                     val menuWindow = modalWindow(R.string.terminal_preview)
+                    // Dialog semantics can arrive before WindowManager transfers input focus.
+                    // Back must target the menu, rather than the terminal's still-focused IME.
+                    await("terminal menu owns input focus before Back") {
+                        main { menuWindow.isAttachedToWindow && menuWindow.hasWindowFocus() && !view.hasWindowFocus() }
+                    }
                     instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-                    await("back fully dismisses menu without leaving terminal") {
-                        terminal(scenario) === view &&
-                            nodes { it.none { node -> matches(node, R.string.terminal_preview) } } &&
-                            main { !menuWindow.isAttachedToWindow }
+                    try {
+                        await("back fully dismisses menu without leaving terminal") {
+                            terminal(scenario) === view &&
+                                nodes { it.none { node -> matches(node, R.string.terminal_preview) } } &&
+                                main { !menuWindow.isAttachedToWindow }
+                        }
+                    } catch (failure: IllegalStateException) {
+                        capture("terminal-menu-back-failure-${if (dark) "night" else "day"}")
+                        val details = main {
+                            "menuAttached=${menuWindow.isAttachedToWindow}, menuFocused=${menuWindow.hasWindowFocus()}, " +
+                                "terminalFocused=${view.hasWindowFocus()}, imeVisible=" +
+                                ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime())
+                        }
+                        throw AssertionError("${failure.message}; terminalRetained=${terminal(scenario) === view}, " +
+                            "menuVisible=${nodes { all -> all.any { matches(it, R.string.terminal_preview) } }}; $details", failure)
                     }
                     await("menu cancellation restores terminal focus and the open keyboard") {
                         main { view.hasFocus() && view.hasWindowFocus() &&
