@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.DropdownItem
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
@@ -64,6 +66,7 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.zakocoder.app.editor.lsp.LspServer) -> Unit)? = null,
     lspEnabled: Boolean = false, onLspEnabledChanged: (Boolean) -> Unit = {}, fullScreen: Boolean = false,
     onConversation: (() -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
     onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)? = null) {
     if (fullScreen) {
         var requestClose by remember { mutableStateOf<() -> Unit>({}) }
@@ -87,15 +90,17 @@ internal fun CodeEditorPage(controller: EditorController, onInstallLsp: ((dev.za
                 onDispose { }
             }
             CodeEditorContent(controller, onInstallLsp, lspEnabled, onLspEnabledChanged, onReference, onConversation,
-                dialogWindow = true, onCloseReady = { requestClose = it })
+                onNavigateBack = onNavigateBack, dialogWindow = true, onCloseReady = { requestClose = it })
         }
-    } else CodeEditorContent(controller, onInstallLsp, lspEnabled, onLspEnabledChanged, onReference, onConversation)
+    } else CodeEditorContent(controller, onInstallLsp, lspEnabled, onLspEnabledChanged, onReference, onConversation,
+        onNavigateBack = onNavigateBack)
 }
 
 @Composable
 private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.zakocoder.app.editor.lsp.LspServer) -> Unit)?,
     lspEnabled: Boolean, onLspEnabledChanged: (Boolean) -> Unit, onReference: ((dev.zakocoder.app.ai.AiReference) -> Unit)?,
-    onConversation: (() -> Unit)? = null, dialogWindow: Boolean = false, onCloseReady: ((() -> Unit) -> Unit)? = null) {
+    onConversation: (() -> Unit)? = null, onNavigateBack: (() -> Unit)? = null,
+    dialogWindow: Boolean = false, onCloseReady: ((() -> Unit) -> Unit)? = null) {
     val state by controller.state.collectAsStateWithLifecycle()
     val document = state.document
     val language = document?.let { controller.languages.language(state.path, it.content.getLineString(0)) }
@@ -110,6 +115,7 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
     var matches by remember { mutableIntStateOf(0) }
     var leave by remember { mutableStateOf(false) }
     var closeTab by remember { mutableStateOf(false) }
+    val navigateBack by rememberUpdatedState(onNavigateBack)
     var picking by remember { mutableStateOf(false) }
     var directory by remember(state.projectId) { mutableStateOf("") }
     var directoryRetry by remember(state.projectId, directory) { mutableIntStateOf(0) }
@@ -150,7 +156,9 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         if (!state.saving) {
             clearNavigationFocus()
             closeTab = false
-            if (state.dirty) leave = true else controller.close()
+            if (state.dirty) leave = true
+            else if (navigateBack != null) navigateBack?.invoke()
+            else controller.close()
         }
     }
     val interactive = LocalWorkbenchPageInteractive.current
@@ -159,13 +167,14 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         resetKey = listOf(state.path, internalBack, leave), animateExit = !state.dirty && !state.saving, onBack = requestClose)
     // Search and Markdown preview are modes within this page, not navigation to the file list.
     // Consume their return without moving the whole editor and revealing the wrong destination.
-    SideEffect { onCloseReady?.invoke(back.close) }
     val closeInternalMode = {
         if (!state.saving) {
             if (showingPreview) preview = false
             else { searching = false; editor?.searcher?.stopSearch() }
         }
     }
+    val requestBack = if (onNavigateBack != null && internalBack) closeInternalMode else back.close
+    SideEffect { onCloseReady?.invoke(requestBack) }
     if (dialogWindow) NavigationBackHandler(state = rememberNavigationEventState(NavigationEventInfo.None),
         isBackEnabled = interactive && (state.saving || internalBack), onBackCompleted = closeInternalMode)
     else {
@@ -182,7 +191,7 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         .then(if (dialogWindow) Modifier.windowInsetsPadding(WindowInsets.systemBars).imePadding() else Modifier)) {
         Surface(color = PanelBackground) {
             Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = back.close, enabled = !state.loading && !state.saving) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.editor_back)) }
+                WorkbenchIconButton(onClick = requestBack, enabled = !state.loading && !state.saving) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.editor_back)) }
                 Column(Modifier.weight(1f)) {
                     Text(state.path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         fontSize = 14.sp, fontWeight = FontWeight.Medium)
@@ -190,24 +199,24 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Box {
-                    IconButton(onClick = { fileActions = true }, enabled = document != null && !state.loading && !state.saving) {
+                    WorkbenchIconButton(onClick = { fileActions = true }, enabled = document != null && !state.loading && !state.saving) {
                         WorkbenchIcon(Glyph.More, description = stringResource(R.string.editor_file_actions))
                     }
-                    DropdownMenu(expanded = fileActions, onDismissRequest = { fileActions = false }, shape = RoundedCornerShape(12.dp)) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.editor_select_line)) },
+                    WorkbenchActionMenu(expanded = fileActions, onDismissRequest = { fileActions = false }, items = buildList {
+                        add(DropdownItem(text = stringResource(R.string.editor_select_line),
                             onClick = { fileActions = false; editor?.let { view ->
                                 val line = view.cursor.leftLine
                                 view.setSelectionRegion(line, 0, line, view.text.getColumnCount(line))
-                            } }, enabled = !showingPreview)
-                        DropdownMenuItem(text = { Text(stringResource(R.string.editor_delete_line)) },
+                            } }, enabled = !showingPreview))
+                        add(DropdownItem(text = stringResource(R.string.editor_delete_line),
                             onClick = { fileActions = false; editor?.let { view ->
                                 val line = view.cursor.leftLine
                                 if (line < view.lineCount - 1) view.text.delete(line, 0, line + 1, 0)
                                 else if (line > 0) view.text.delete(line - 1, view.text.getColumnCount(line - 1), line, view.text.getColumnCount(line))
                                 else view.text.delete(0, 0, 0, view.text.getColumnCount(0))
-                            } }, enabled = !showingPreview)
+                            } }, enabled = !showingPreview))
                         listOf(R.string.editor_uppercase_line to true, R.string.editor_lowercase_line to false).forEach { (label, uppercase) ->
-                            DropdownMenuItem(text = { Text(stringResource(label)) }, onClick = {
+                            add(DropdownItem(text = stringResource(label), onClick = {
                                 fileActions = false
                                 editor?.let { view ->
                                     val line = view.cursor.leftLine
@@ -215,9 +224,9 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
                                     view.text.replace(line, 0, line, value.length,
                                         if (uppercase) value.uppercase(java.util.Locale.ROOT) else value.lowercase(java.util.Locale.ROOT))
                                 }
-                            }, enabled = !showingPreview)
+                            }, enabled = !showingPreview))
                         }
-                        if (onReference != null) DropdownMenuItem(text = { Text(stringResource(R.string.editor_reference_ai)) }, onClick = {
+                        if (onReference != null) add(DropdownItem(text = stringResource(R.string.editor_reference_ai), onClick = {
                             fileActions = false
                             editor?.let { view ->
                                 val left = view.cursor.left; val right = view.cursor.right
@@ -226,13 +235,13 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
                                 onReference(dev.zakocoder.app.ai.AiReference(state.path, selected.take(6000), if (right > left) "selection" else "file",
                                     if (right > left) view.cursor.leftLine + 1 else 1, state.dirty, selected.length > 6000))
                             }
-                        }, enabled = !showingPreview)
-                        DropdownMenuItem(text = { Text(stringResource(R.string.editor_find)) },
-                            onClick = { fileActions = false; replaceOpen = false; searching = true }, enabled = !showingPreview)
-                        DropdownMenuItem(text = { Text(stringResource(R.string.editor_replace)) },
-                            onClick = { fileActions = false; replaceOpen = true; searching = true }, enabled = !showingPreview)
+                        }, enabled = !showingPreview))
+                        add(DropdownItem(text = stringResource(R.string.editor_find),
+                            onClick = { fileActions = false; replaceOpen = false; searching = true }, enabled = !showingPreview))
+                        add(DropdownItem(text = stringResource(R.string.editor_replace),
+                            onClick = { fileActions = false; replaceOpen = true; searching = true }, enabled = !showingPreview))
 
-                    }
+                    })
                 }
             }
         }
@@ -256,11 +265,11 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
                     }
                 }
             }
-            IconButton(onClick = { closeTab = true; if (state.dirty) leave = true else controller.close(keepEditorOpen = true) },
+            WorkbenchIconButton(onClick = { closeTab = true; if (state.dirty) leave = true else controller.close(keepEditorOpen = true) },
                 modifier = Modifier.size(44.dp), enabled = !state.loading && !state.saving) {
                 WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.editor_close_tab))
             }
-            IconButton(onClick = { picking = true }, modifier = Modifier.size(44.dp), enabled = !state.loading && !state.saving) {
+            WorkbenchIconButton(onClick = { picking = true }, modifier = Modifier.size(44.dp), enabled = !state.loading && !state.saving) {
                 WorkbenchIcon(Glyph.Add, Modifier.size(16.dp), description = stringResource(R.string.editor_open_file))
             }
         }
@@ -276,14 +285,14 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         if (state.diskState == EditorDiskState.Changed || state.diskState == EditorDiskState.Unavailable) Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             if (compact) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(if (state.diskState == EditorDiskState.Unavailable) R.string.editor_disk_unavailable_short else R.string.editor_disk_changed_short), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                TextButton(onClick = { diskDetails = true }) { Text(stringResource(R.string.editor_disk_details)) }
+                WorkbenchTextButton(onClick = { diskDetails = true }) { Text(stringResource(R.string.editor_disk_details)) }
             } else Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(stringResource(if (state.diskState == EditorDiskState.Unavailable) R.string.editor_disk_unavailable else if (state.dirty) R.string.editor_disk_changed_dirty else R.string.editor_disk_changed_clean),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { reload = true }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_load)) }
+                    WorkbenchTextButton(onClick = { reload = true }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_load)) }
                     state.diskVersion?.let { disk ->
-                        TextButton(onClick = { document?.let { diskReview = dev.zakocoder.app.ai.AiReview(state.path, it.content.toString(), disk.text) } }, enabled = !state.loading && !state.saving && !state.diskChecking) {
+                        WorkbenchTextButton(onClick = { document?.let { diskReview = dev.zakocoder.app.ai.AiReview(state.path, it.content.toString(), disk.text) } }, enabled = !state.loading && !state.saving && !state.diskChecking) {
                             Text(stringResource(R.string.editor_disk_compare))
                         }
                     }
@@ -293,7 +302,7 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         if (state.error.isNotEmpty()) Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(state.error, Modifier.weight(1f), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                if (state.conflict || document == null) TextButton(onClick = { if (state.dirty) reload = true else controller.reload() }, enabled = !state.loading && !state.saving) {
+                if (state.conflict || document == null) WorkbenchTextButton(onClick = { if (state.dirty) reload = true else controller.reload() }, enabled = !state.loading && !state.saving) {
                     Text(stringResource(if (state.conflict) R.string.editor_reload else R.string.editor_retry), fontSize = 12.sp)
                 }
             }
@@ -306,7 +315,7 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
             onReplace = { editor?.searcher?.takeIf { it.hasQuery() }?.replaceCurrentMatch(replacement) },
             onReplaceAll = { controller.replaceAll(query, replacement) },
             onClose = { searching = false; replaceOpen = false })
-        if (state.loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Text(loadingDescription) } }
+        if (state.loading) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { WorkbenchCircularProgressIndicator(); Text(loadingDescription) } }
         else if (showingPreview) {
             val snapshot = remember(document, state.revision, showingPreview) { requireNotNull(document).content.toString() }
             key(document) { EditorMarkdownPreview(snapshot, Modifier.weight(1f).fillMaxWidth()) }
@@ -363,7 +372,7 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
                         if (drag < -swipeThreshold) { picking = true; change.consume() }
                     }
                 }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { picking = true }, contentPadding = PaddingValues(horizontal = 4.dp),
+                WorkbenchTextButton(onClick = { picking = true }, contentPadding = PaddingValues(horizontal = 4.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                     WorkbenchIcon(Glyph.Up, Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
@@ -394,22 +403,22 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 val canEdit = document != null && !state.loading && !state.saving
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).testTag("editor-shortcuts")) {
-                IconButton(onClick = { editor?.undo(); controller.changed() }, enabled = state.canUndo && canEdit) { WorkbenchIcon(Glyph.Undo, description = stringResource(R.string.editor_undo)) }
-                IconButton(onClick = { editor?.redo(); controller.changed() }, enabled = state.canRedo && canEdit) { WorkbenchIcon(Glyph.Redo, description = stringResource(R.string.editor_redo)) }
-                    TextButton(onClick = { editor?.let { it.indentOrCommitTab(); it.requestFocus() } }, enabled = canEdit,
+                WorkbenchIconButton(onClick = { editor?.undo(); controller.changed() }, enabled = state.canUndo && canEdit) { WorkbenchIcon(Glyph.Undo, description = stringResource(R.string.editor_undo)) }
+                WorkbenchIconButton(onClick = { editor?.redo(); controller.changed() }, enabled = state.canRedo && canEdit) { WorkbenchIcon(Glyph.Redo, description = stringResource(R.string.editor_redo)) }
+                    WorkbenchTextButton(onClick = { editor?.let { it.indentOrCommitTab(); it.requestFocus() } }, enabled = canEdit,
                         modifier = Modifier.size(48.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                         Text(stringResource(R.string.editor_indent_key), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                     }
                     listOf("{", "}", "(", ")", "[", "]", ";", "=", "\"", "'").forEach { symbol ->
-                        TextButton(onClick = { editor?.let { it.commitText(symbol); it.requestFocus() } }, enabled = canEdit,
+                        WorkbenchTextButton(onClick = { editor?.let { it.commitText(symbol); it.requestFocus() } }, enabled = canEdit,
                             modifier = Modifier.size(48.dp), colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             Text(symbol, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                         }
                     }
                 }
-                if (onConversation != null) IconButton(onClick = onConversation, enabled = !state.loading) {
+                if (onConversation != null) WorkbenchIconButton(onClick = onConversation, enabled = !state.loading) {
                     WorkbenchIcon(Glyph.Ai, description = stringResource(R.string.editor_conversation))
-                } else if (onReference != null) IconButton(onClick = {
+                } else if (onReference != null) WorkbenchIconButton(onClick = {
                     val view = editor
                     val doc = document
                     if (view != null && doc != null) {
@@ -426,35 +435,43 @@ private fun CodeEditorContent(controller: EditorController, onInstallLsp: ((dev.
         title = { Text(stringResource(R.string.editor_disk_details)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(stringResource(if (state.diskState == EditorDiskState.Unavailable) R.string.editor_disk_unavailable else if (state.dirty) R.string.editor_disk_changed_dirty else R.string.editor_disk_changed_clean))
-            TextButton(onClick = { diskDetails = false; reload = true }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_load)) }
+            WorkbenchTextButton(onClick = { diskDetails = false; reload = true }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_load)) }
             state.diskVersion?.let { disk ->
-                TextButton(onClick = { document?.let { diskReview = dev.zakocoder.app.ai.AiReview(state.path, it.content.toString(), disk.text) }; diskDetails = false }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_compare)) }
+                WorkbenchTextButton(onClick = { document?.let { diskReview = dev.zakocoder.app.ai.AiReview(state.path, it.content.toString(), disk.text) }; diskDetails = false }, enabled = !state.loading && !state.saving && !state.diskChecking) { Text(stringResource(R.string.editor_disk_compare)) }
             }
         } },
         confirmButton = { WorkbenchDialogButton(onClick = { diskDetails = false }) { Text(stringResource(R.string.close)) } })
     if (picking) WorkbenchSheet(stringResource(R.string.editor_workspace_files), { picking = false }) {
         val finish = LocalWorkbenchSheetAction.current
         Text(directory.ifEmpty { stringResource(R.string.project_root) }, style = MaterialTheme.typography.bodySmall)
-        if (directory.isNotEmpty()) TextButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { Text(stringResource(R.string.parent_directory)) }
+        if (directory.isNotEmpty()) WorkbenchTextButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { Text(stringResource(R.string.parent_directory)) }
         when {
-            listing.loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            listing.loading -> WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             pickerError -> {
                 Text(stringResource(R.string.directory_read_error), color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = { directoryRetry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
+                WorkbenchTextButton(onClick = { directoryRetry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.directory_retry))
                 }
             }
             choices.isEmpty() -> Text(stringResource(R.string.directory_empty), style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        LazyColumn(Modifier.heightIn(max = 400.dp)) { items(choices, key = { it.relative }) { file -> TextButton(onClick = { if (file.directory) directory = file.relative else { val id = state.projectId ?: return@TextButton; finish { controller.open(id, file.relative) } } }, modifier = Modifier.fillMaxWidth()) { Text(file.name, Modifier.weight(1f)) } } }
+        LazyColumn(Modifier.heightIn(max = 400.dp)) { items(choices, key = { it.relative }) { file -> WorkbenchTextButton(onClick = { if (file.directory) directory = file.relative else { val id = state.projectId ?: return@WorkbenchTextButton; finish { controller.open(id, file.relative) } } }, modifier = Modifier.fillMaxWidth()) { Text(file.name, Modifier.weight(1f)) } } }
     }
     if (leave) WorkbenchAlertDialog(onDismissRequest = { leave = false }, title = { Text(stringResource(R.string.editor_leave_title)) },
         text = { Text(stringResource(R.string.editor_leave_message)) },
-        confirmButton = { WorkbenchDialogButton(onClick = { leave = false; controller.save(closeAfter = true, keepEditorOpen = closeTab) }) { Text(stringResource(R.string.editor_save_leave)) } },
+        confirmButton = { WorkbenchDialogButton(onClick = {
+            leave = false
+            controller.save(closeAfter = true, keepEditorOpen = closeTab,
+                onClosed = if (!closeTab) navigateBack else null)
+        }) { Text(stringResource(R.string.editor_save_leave)) } },
         dismissButton = { Row {
             WorkbenchDialogButton(onClick = { leave = false }) { Text(stringResource(R.string.editor_keep_editing)) }
-            WorkbenchDialogButton(onClick = { leave = false; controller.close(keepEditorOpen = closeTab) }) { Text(stringResource(R.string.editor_discard)) }
+            WorkbenchDialogButton(onClick = {
+                leave = false
+                controller.close(keepEditorOpen = closeTab)
+                if (!closeTab && controller.state.value.projectId == null) navigateBack?.invoke()
+            }) { Text(stringResource(R.string.editor_discard)) }
         } })
     if (reload) WorkbenchAlertDialog(onDismissRequest = { reload = false }, title = { Text(stringResource(R.string.editor_reload)) },
         text = { Text(stringResource(R.string.editor_reload_message)) },

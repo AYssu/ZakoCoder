@@ -53,8 +53,46 @@ class ModelOptionsDraftTest {
         assertEquals("1050000", draft.windowTokens)
         assertEquals(80, draft.context().compressionThresholdPercent)
         draft.modelChanged("unknown-large-model")
-        assertEquals("128000", draft.windowTokens)
+        assertEquals("1000000", draft.windowTokens)
     }
+    @Test fun newUnknownModelUsesMillionTokensWhileSavedOverridesStayUntouched() {
+        val fresh = ModelOptionsDraft(null)
+        assertEquals("1000000", fresh.windowTokens)
+        fresh.modelChanged("custom-service/unlisted-model")
+        assertEquals(1_000_000, fresh.context().contextWindowTokens)
+
+        for (tokens in listOf(64_000, 128_000, 256_000)) {
+            val profile = AiProfile("saved-$tokens", "Saved", "https://example.invalid", "unlisted-model", false,
+                AiParameters(), context = AiContextOptions(contextWindowTokens = tokens))
+            val draft = ModelOptionsDraft(profile)
+            assertEquals(tokens.toString(), draft.windowTokens)
+            draft.modelChanged("UNLISTED-MODEL")
+            assertEquals(tokens, draft.context().contextWindowTokens)
+            assertFalse(draft.dirty(profile))
+        }
+    }
+    @Test fun newlyCataloguedModelsApplyTheirOwnWindowWhenSelected() {
+        val draft = ModelOptionsDraft(null)
+        mapOf(
+            "openai/gpt-6.2-sol" to 1_050_000,
+            "openai/gpt-6.2-astra" to 1_050_000,
+            "google/gemini-4-carbon" to 1_048_576,
+            "anthropic/claude-sonnet-5-5" to 1_000_000,
+            "anthropic/claude-sonnet-4-5" to 200_000,
+            "x-ai/grok-4.6" to 500_000,
+            "z-ai/glm-5.3" to 1_000_000,
+            "moonshot/kimi-k3.1-pro" to 1_048_576,
+            "unlisted-next-model" to 1_000_000,
+        ).forEach { (model, tokens) ->
+            draft.modelChanged(model)
+            assertEquals(model, tokens, draft.context().contextWindowTokens)
+            assertTrue(model, draft.valid())
+            draft.windowTokens = "256000"
+            draft.modelChanged(model.uppercase(java.util.Locale.ROOT))
+            assertEquals(model, 256_000, draft.context().contextWindowTokens)
+        }
+    }
+
     @Test fun newModelUsesMatchingWindowAndPromptParticipatesInValidationAndDirtyState() {
         val draft = ModelOptionsDraft(null)
         draft.modelChanged("openai/gpt-6.1-sol")

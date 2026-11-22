@@ -1,7 +1,6 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,7 +19,7 @@ internal fun AiRetryStatus(notice: String) {
         color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            WorkbenchCircularProgressIndicator(size = 16.dp, strokeWidth = 2.dp)
             Text(notice, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

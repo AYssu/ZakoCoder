@@ -52,14 +52,22 @@ class ScreenTestUiDeviceTest {
         }
         return result.get()
     }
-    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode {
-        val labelled = all.single { label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
-        fun find(node: SemanticsNode): SemanticsNode? {
-            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) return node
-            return node.children.firstNotNullOfOrNull(::find)
+    /** Match the title first, then its nearest preference row containing one real toggle. */
+    private fun findSwitchControl(all: List<SemanticsNode>, label: String): SemanticsNode? {
+        fun controls(node: SemanticsNode): List<SemanticsNode> = buildList {
+            // Disabled native switches can retain state while removing OnClick.
+            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) add(node)
+            node.children.forEach { addAll(controls(it)) }
         }
-        return requireNotNull(find(labelled)) { "Switch semantics for $label" }
+        return all.asSequence().filter {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == label } == true ||
+                label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        }.firstNotNullOfOrNull { title ->
+            generateSequence(title) { it.parent }.firstNotNullOfOrNull { controls(it).singleOrNull() }
+        }
     }
+    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode =
+        requireNotNull(findSwitchControl(all, label)) { "Switch semantics for $label" }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
     private fun has(label: String) = nodes { all -> all.any { text(it) == label } }
     private fun await(label: String, predicate: () -> Boolean) {
@@ -201,8 +209,8 @@ UI-only fixture: no real app or task was started."""
 
             panel(active.copy(busy = false, shareScreenshots = true))
             await("Sharing state is visible") { nodes { all ->
-                switchControl(all, context.getString(R.string.virtual_screen_share))
-                    .config[SemanticsProperties.ToggleableState] == androidx.compose.ui.state.ToggleableState.On
+                findSwitchControl(all, context.getString(R.string.virtual_screen_share))
+                    ?.config?.getOrNull(SemanticsProperties.ToggleableState) == androidx.compose.ui.state.ToggleableState.On
             } }
             nodes { all ->
                 assertTrue(switchControl(all, context.getString(R.string.virtual_screen_share))

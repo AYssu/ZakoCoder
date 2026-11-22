@@ -99,7 +99,7 @@ internal fun AiConversationTransferSheet(ai: AiController, state: AiState, actio
             else -> R.string.conversation_export_hint
         }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (busy) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             Text(stringResource(R.string.conversation_transfer_busy), style = MaterialTheme.typography.labelSmall)
         }
         feedback?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall,

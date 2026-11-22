@@ -232,7 +232,7 @@ internal fun WorkbenchSheet(title: String, onDismiss: () -> Unit, subtitle: Stri
                 leading?.invoke()
                 Text(title, Modifier.weight(1f), style = Type.section, color = p.textPrimary)
                 status?.invoke()
-                IconButton(onClick = dismiss, enabled = dismissible, modifier = Modifier.size(Touch48)) {
+                WorkbenchIconButton(onClick = dismiss, enabled = dismissible, modifier = Modifier.size(Touch48)) {
                     WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close), size = IconSize.sm)
                 }
             }

@@ -36,12 +36,12 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.tool_bundles), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-            TextButton(onClick = workbench::doctor,
+            WorkbenchTextButton(onClick = workbench::doctor,
                 enabled = !state.busy && !state.checkingTools && !state.checkingPlans,
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                 Text(stringResource(R.string.refresh), fontSize = 12.sp)
             }
-            TextButton(onClick = { managing = !managing; if (!managing) onSelected(emptyList()) },
+            WorkbenchTextButton(onClick = { managing = !managing; if (!managing) onSelected(emptyList()) },
                 modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                 Text(stringResource(if (managing) R.string.done else R.string.manage_tools), fontSize = 12.sp)
             }
@@ -61,7 +61,7 @@ internal fun ToolBundleList(workbench: Workbench, state: WorkbenchState, selecte
             }
         }
         if (state.checkingTools) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             Text(stringResource(R.string.checking_tools), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (state.toolCheckError.isNotEmpty()) Text(state.toolCheckError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -196,7 +196,7 @@ internal fun ToolBundleInstallAction(workbench: Workbench, state: WorkbenchState
             if ("flutter" in ids) Text(stringResource(R.string.flutter_install_details), style = MaterialTheme.typography.bodySmall)
             if ("android" in ids) {
                 Text(stringResource(R.string.android_install_details), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = {
+                WorkbenchTextButton(onClick = {
                     try {
                         context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
                             "https://developer.android.com/studio/terms".toUri()))

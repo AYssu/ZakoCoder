@@ -1,15 +1,20 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material3.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.*
@@ -66,9 +71,28 @@ internal fun AiMarkdown(
     streaming: Boolean = false,
     onReadingInteraction: () -> Unit = {},
     bodyFontSize: TextUnit = 12.sp,
+    revealRequest: String? = null,
     onLink: (String) -> Unit,
 ) {
     var document by remember { mutableStateOf(AiMarkdownCache.get(text.take(AiTextPages.MARKDOWN_LIMIT))) }
+    val selection = rememberSelectionState()
+    var heldDocument by remember { mutableStateOf<Node?>(null) }
+    var heldLength by remember { mutableIntStateOf(0) }
+    var pressed by remember { mutableStateOf(false) }
+    val selected = selection.selectedTexts.isNotEmpty()
+    val readingInteraction by rememberUpdatedState(onReadingInteraction)
+    val latestDocument by rememberUpdatedState(document)
+    val latestLength by rememberUpdatedState(text.length)
+    val latestSelected by rememberUpdatedState(selected)
+    // Keep native selectable nodes and their text stable from down through Copy/dismiss.
+    // Receiving and parsing continue; only the displayed document is temporarily held.
+    LaunchedEffect(pressed, selected) {
+        if (selected) readingInteraction()
+        if (!pressed && !selected) heldDocument = null
+    }
+    LaunchedEffect(revealRequest) {
+        if (revealRequest != null) { selection.clear(); heldDocument = null; pressed = false }
+    }
     var fullTextLength by rememberSaveable { mutableStateOf<Int?>(null) }
     val current by rememberUpdatedState(text)
     LaunchedEffect(Unit) {
@@ -83,19 +107,37 @@ internal fun AiMarkdown(
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkbenchSecondaryButton(onClick = { onReadingInteraction(); fullTextLength = text.length }) { Text(stringResource(R.string.ai_full_text_open)) }
         }
-        SelectionContainer {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                document?.let { root ->
-                    val blocks = AiMarkdownDocument.children(root)
-                    val live = LocalTextArrival.current
-                    blocks.forEachIndexed { index, block -> key(index, block.javaClass) {
-                        ProcessArrival(live) {
-                            CompositionLocalProvider(LocalTextArrival provides (live && index == blocks.lastIndex)) {
-                                MarkdownBlock(block, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction, bodyFontSize)
-                            }
-                        }
-                    } }
+        SelectionContainer(state = selection, modifier = Modifier
+            .pointerInput(selection) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (!latestSelected) { heldDocument = latestDocument; heldLength = latestLength }
+                    pressed = true
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val pointer = event.changes.firstOrNull { it.id == down.id }
+                        } while (pointer?.pressed == true)
+                    } finally { pressed = false }
                 }
+            }) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    (heldDocument ?: document)?.let { root ->
+                        val blocks = AiMarkdownDocument.children(root)
+                        val live = LocalTextArrival.current && heldDocument == null
+                        blocks.forEachIndexed { index, block -> key(index, block.javaClass) {
+                            ProcessArrival(live) {
+                                CompositionLocalProvider(LocalTextArrival provides (live && index == blocks.lastIndex)) {
+                                    MarkdownBlock(block, onLink, 0, projectId, onOpenProjectPath, streaming, text.length > AiTextPages.MARKDOWN_LIMIT, onReadingInteraction, bodyFontSize)
+                                }
+                            }
+                        } }
+                    }
+            }
+        }
+        if (selected && heldDocument != null && text.length != heldLength) {
+            TextButton(onClick = { selection.clear(); heldDocument = null; readingInteraction() }) {
+                Text(stringResource(R.string.ai_latest))
             }
         }
         if (text.length > AiTextPages.MARKDOWN_LIMIT) {
@@ -114,9 +156,11 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
     if (depth > 16) return
     val children = AiMarkdownDocument.children(node)
     when (node) {
-        is Heading -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
-            fontSize = (bodyFontSize.value + when (node.level) { 1 -> 6; 2 -> 3; else -> 1 }).sp, lineHeight = (bodyFontSize.value + 10).sp)
-        is org.commonmark.node.Paragraph -> ArrivalText(inline(node, onLink, projectId, onOpenProjectPath), fontSize = bodyFontSize, lineHeight = bodyFontSize * 1.5f)
+        is Heading -> SelectableMarkdownText(inline(node, onLink, projectId, onOpenProjectPath), fontWeight = FontWeight.SemiBold,
+            fontSize = (bodyFontSize.value + when (node.level) { 1 -> 6; 2 -> 3; else -> 1 }).sp, lineHeight = (bodyFontSize.value + 10).sp,
+            inlineCodeBackground = MaterialTheme.colorScheme.surfaceContainerHigh)
+        is org.commonmark.node.Paragraph -> SelectableMarkdownText(inline(node, onLink, projectId, onOpenProjectPath), fontSize = bodyFontSize, lineHeight = bodyFontSize * 1.5f,
+            inlineCodeBackground = MaterialTheme.colorScheme.surfaceContainerHigh)
         is FencedCodeBlock -> CodeBlock(node.literal, node.info.orEmpty().substringBefore(' ').take(40), streaming, sourceLimited, onReadingInteraction)
         is IndentedCodeBlock -> CodeBlock(node.literal, "", streaming, sourceLimited, onReadingInteraction)
         is BlockQuote -> Row(Modifier.fillMaxWidth()) {
@@ -156,8 +200,9 @@ private fun MarkdownBlock(node: Node, onLink: (String) -> Unit, depth: Int, proj
                                 Surface(modifier = Modifier.width(widths[index] + extra).fillMaxHeight(),
                                     border = BorderStroke(.5.dp, MaterialTheme.colorScheme.outlineVariant),
                                     color = if (header) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surface) {
-                                    ArrivalText(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = bodyFontSize, lineHeight = (bodyFontSize.value + 7).sp,
-                                        fontWeight = if (header) FontWeight.SemiBold else null)
+                                    SelectableMarkdownText(text, Modifier.fillMaxWidth().padding(8.dp), fontSize = bodyFontSize, lineHeight = (bodyFontSize.value + 7).sp,
+                                        fontWeight = if (header) FontWeight.SemiBold else null,
+                                        inlineCodeBackground = MaterialTheme.colorScheme.surfaceContainerHigh)
                                 }
                             }
                         } }
@@ -177,12 +222,19 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
     val colors = MaterialTheme.colorScheme
     val linkAction = rememberUpdatedState(onLink)
     val pathAction = rememberUpdatedState(onOpenProjectPath)
+    // New AST nodes must not change the identity of otherwise unchanged link annotations:
+    // Compose releases the native selection when its AnnotatedString changes.
+    val projectListener = remember { LinkInteractionListener { link ->
+        (link as? LinkAnnotation.Clickable)?.tag?.let { pathAction.value?.invoke(it.removePrefix("project:")) }
+    } }
+    val externalListener = remember { LinkInteractionListener { link ->
+        (link as? LinkAnnotation.Clickable)?.tag?.let { linkAction.value(it) }
+    } }
     return remember(node, colors, projectId, onOpenProjectPath != null) { buildAnnotatedString {
         fun projectLink(label: String, relative: String) {
             withLink(LinkAnnotation.Clickable("project:$relative",
-                TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
-                pathAction.value?.invoke(relative)
-            }) { append(label) }
+                TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)),
+                projectListener)) { append(label) }
         }
         fun appendReferences(value: String, whole: Boolean = false) {
             val resolved = if (whole && onOpenProjectPath != null) AiProjectPaths.resolve(value, projectId) else null
@@ -200,7 +252,13 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
             if (depth > 32) return
             when (current) {
                 is org.commonmark.node.Text -> if (allowPaths) appendReferences(current.literal) else append(current.literal)
-                is Code -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = colors.surfaceContainerHigh, color = colors.primary)) { if (allowPaths) appendReferences(current.literal, whole = true) else append(current.literal) }
+                is Code -> {
+                    pushStringAnnotation(INLINE_CODE_ANNOTATION, "")
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = colors.primary)) {
+                        if (allowPaths) appendReferences(current.literal, whole = true) else append(current.literal)
+                    }
+                    pop()
+                }
                 is SoftLineBreak -> append(" ")
                 is HardLineBreak -> append("\n")
                 is HtmlInline -> append(current.literal)
@@ -210,9 +268,8 @@ private fun inline(node: Node, onLink: (String) -> Unit, projectId: String?, onO
                     val relative = if (onOpenProjectPath != null) AiProjectPaths.resolve(current.destination, projectId) else null
                     val target = if (AiMarkdownDocument.externalLink(current.destination)) current.destination else null
                     if (relative != null || target != null) withLink(LinkAnnotation.Clickable(relative ?: target!!,
-                        TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline))) {
-                        if (relative != null) pathAction.value?.invoke(relative) else linkAction.value(target!!)
-                    }) {
+                        TextLinkStyles(SpanStyle(color = colors.primary, textDecoration = TextDecoration.Underline)),
+                        if (relative != null) projectListener else externalListener)) {
                         AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
                     } else AiMarkdownDocument.children(current).forEach { appendNode(it, depth + 1, false) }
                 }

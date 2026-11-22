@@ -3,6 +3,8 @@ package dev.zakocoder.app.ui
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.SystemClock
+import android.util.Log
+import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.WindowInsets
@@ -36,20 +38,32 @@ class CapabilitySelectionDeviceTest {
     private val context get() = instrumentation.targetContext
     private val ui = UpgradeUiHarness()
 
+    /** Match the title first, then its nearest preference row containing one real toggle. */
+    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode? {
+        fun controls(node: SemanticsNode): List<SemanticsNode> = buildList {
+            // Disabled native switches can retain state while removing OnClick.
+            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) add(node)
+            node.children.forEach { addAll(controls(it)) }
+        }
+        return all.asSequence().filter {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == label } == true ||
+                label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        }.firstNotNullOfOrNull { title ->
+            generateSequence(title) { it.parent }.firstNotNullOfOrNull { controls(it).singleOrNull() }
+        }
+    }
     private fun switchState(label: String): ToggleableState? {
         val result = AtomicReference<ToggleableState?>()
         instrumentation.runOnMainSync {
-            fun walk(node: SemanticsNode, labelled: Boolean = false) {
-                val matches = labelled || node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
-                if (matches) node.config.getOrNull(SemanticsProperties.ToggleableState)?.let(result::set)
-                node.children.forEach { walk(it, matches) }
-            }
+            val all = mutableListOf<SemanticsNode>()
+            fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
             fun visit(view: android.view.View) {
                 if (!view.isShown) return
-                if (view is ViewRootForTest) walk(view.semanticsOwner.unmergedRootSemanticsNode)
+                if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
                 if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
             }
             android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
+            result.set(switchControl(all, label)?.config?.getOrNull(SemanticsProperties.ToggleableState))
         }
         return result.get()
     }
@@ -57,24 +71,25 @@ class CapabilitySelectionDeviceTest {
     private fun controlEnabled(label: String): Boolean? {
         val result = AtomicReference<Boolean?>()
         instrumentation.runOnMainSync {
-            fun actionWithin(node: SemanticsNode): SemanticsNode? =
-                if (node.config.getOrNull(SemanticsActions.OnClick) != null) node
-                else node.children.firstNotNullOfOrNull(::actionWithin)
-            fun walk(node: SemanticsNode) {
-                if (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
-                    node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true) {
-                    var control: SemanticsNode? = actionWithin(node) ?: node
-                    while (control != null && control.config.getOrNull(SemanticsActions.OnClick) == null) control = control.parent
-                    control?.let { result.set(it.config.getOrNull(SemanticsProperties.Disabled) == null) }
-                }
-                node.children.forEach(::walk)
-            }
+            val all = mutableListOf<SemanticsNode>()
+            fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
             fun visit(view: android.view.View) {
                 if (!view.isShown) return
-                if (view is ViewRootForTest) walk(view.semanticsOwner.unmergedRootSemanticsNode)
+                if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
                 if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
             }
             android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
+            // Navigation rows retain their own action during unrelated saves. Fall back
+            // to the title-associated toggle when disabled switches remove OnClick.
+            val control = all.asReversed().firstNotNullOfOrNull { node ->
+                if (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
+                    label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) {
+                    generateSequence(node) { it.parent }.firstOrNull {
+                        it.config.getOrNull(SemanticsActions.OnClick) != null
+                    }
+                } else null
+            } ?: switchControl(all, label)
+            control?.let { result.set(it.config.getOrNull(SemanticsProperties.Disabled) == null) }
         }
         return result.get()
     }
@@ -113,27 +128,24 @@ class CapabilitySelectionDeviceTest {
         fun bounds(reveal: Boolean = false): Rect? {
             val result = AtomicReference<Rect?>()
             instrumentation.runOnMainSync {
-                var target: SemanticsNode? = null
-                fun walk(node: SemanticsNode, labelled: Boolean = false) {
-                    val matches = labelled || node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
-                    if (toggle && matches && node.config.getOrNull(SemanticsProperties.ToggleableState) != null &&
-                        node.config.getOrNull(SemanticsActions.OnClick) != null &&
-                        (node.config.getOrNull(SemanticsProperties.Disabled) == null) == enabled) {
-                        target = node
-                    } else if (!toggle && (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
-                            node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true)) {
-                        var action: SemanticsNode? = node
-                        while (action != null && action.config.getOrNull(SemanticsActions.OnClick) == null) action = action.parent
-                        if (action != null && (action.config.getOrNull(SemanticsProperties.Disabled) == null) == enabled) target = action
-                    }
-                    node.children.forEach { walk(it, matches) }
-                }
+                val all = mutableListOf<SemanticsNode>()
+                fun collect(node: SemanticsNode) { all += node; node.children.forEach(::collect) }
                 fun visit(view: android.view.View) {
                     if (!view.isShown) return
-                    if (view is ViewRootForTest) walk(view.semanticsOwner.unmergedRootSemanticsNode)
+                    if (view is ViewRootForTest) collect(view.semanticsOwner.unmergedRootSemanticsNode)
                     if (view is android.view.ViewGroup) repeat(view.childCount) { visit(view.getChildAt(it)) }
                 }
                 android.view.inspector.WindowInspector.getGlobalWindowViews().forEach(::visit)
+                val target = if (toggle) switchControl(all, label) else all.asReversed().firstNotNullOfOrNull { node ->
+                    if (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
+                        label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()) {
+                        generateSequence(node) { it.parent }.firstOrNull {
+                            it.config.getOrNull(SemanticsActions.OnClick) != null
+                        }
+                    } else null
+                }
+                if (target != null && (target.config.getOrNull(SemanticsProperties.Disabled) == null) != enabled)
+                    return@runOnMainSync
                 val control = target ?: return@runOnMainSync
                 val visible = control.boundsInWindow
                 if (visible.width > 0 && visible.height > 0 &&
@@ -181,14 +193,33 @@ class CapabilitySelectionDeviceTest {
         }
         // Text or a decorative thumb is not the actionable control's hit box.
         // Keep real input rather than invoking the semantics OnClick action.
-        val center = requireNotNull(target).center
+        val hitBounds = requireNotNull(target)
+        val center = hitBounds.center
+        instrumentation.runOnMainSync {
+            android.view.inspector.WindowInspector.getGlobalWindowViews().filter { it.isShown }.forEach { window ->
+                val screen = IntArray(2).also(window::getLocationOnScreen)
+                val local = IntArray(2).also(window::getLocationInWindow)
+                Log.i("ZakoUiTest", "tap label=$label bounds=$hitBounds size=${window.width}x${window.height} " +
+                    "screenOffset=${screen.toList()} windowOffset=${local.toList()} " +
+                    "screenMinusWindow=${screen[0] - local[0]},${screen[1] - local[1]}")
+            }
+        }
         val time = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, center.x, center.y, 0)
-        val up = MotionEvent.obtain(time, time + 40, MotionEvent.ACTION_UP, center.x, center.y, 0)
+        val down = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, center.x, center.y, 0).apply {
+            source = InputDevice.SOURCE_TOUCHSCREEN
+        }
         try {
+            Log.i("ZakoUiTest", "DOWN label=$label x=${center.x} y=${center.y} time=$time source=${down.source}")
             assertTrue(instrumentation.uiAutomation.injectInputEvent(down, true))
-            assertTrue(instrumentation.uiAutomation.injectInputEvent(up, true))
-        } finally { down.recycle(); up.recycle() }
+            SystemClock.sleep(80)
+            val up = MotionEvent.obtain(time, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, center.x, center.y, 0).apply {
+                source = InputDevice.SOURCE_TOUCHSCREEN
+            }
+            try {
+                Log.i("ZakoUiTest", "UP label=$label x=${center.x} y=${center.y} time=${up.eventTime} source=${up.source}")
+                assertTrue(instrumentation.uiAutomation.injectInputEvent(up, true))
+            } finally { up.recycle() }
+        } finally { down.recycle() }
     }
 
     @Test(timeout = 90_000) fun lightConfigurationButtonsStayAvailableDuringOtherPackageSaves() = verifyConfigurationButtons(false)

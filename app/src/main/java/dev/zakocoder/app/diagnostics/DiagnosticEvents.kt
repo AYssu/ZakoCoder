@@ -40,7 +40,18 @@ internal enum class DiagnosticOutcome { Started, Headers, FirstByte, Progress, R
 internal enum class DiagnosticCode {
     Available, Unavailable, Denied, Disconnected, Timeout, Io, InvalidConfiguration, InvalidResponse, Interrupted, Recovered,
     AuthenticationFailed, HostKeyChanged, HostKeyUntrusted, HandshakeFailed, NameResolutionFailed, Storage, Limit,
-    TlsFailed, ConnectFailed, StreamIncomplete, MalformedResponse
+    TlsFailed, ConnectFailed, StreamIncomplete, MalformedResponse,
+    RepeatedToolFailure, TaskRequestLimit, TaskToolLimit, TaskTimeLimit, TaskTokenLimit
+}
+
+/** Only application-owned stop codes cross the export boundary, never diagnostic free text. */
+internal fun taskStopDiagnosticCode(diagnostic: String): DiagnosticCode? = when (diagnostic.substringBefore('\n').substringBefore('\r')) {
+    "task_budget:repeated_tool_failure", "task_budget:child_repeated_tool_failure" -> DiagnosticCode.RepeatedToolFailure
+    "task_budget:requests" -> DiagnosticCode.TaskRequestLimit
+    "task_budget:tools" -> DiagnosticCode.TaskToolLimit
+    "task_budget:elapsed" -> DiagnosticCode.TaskTimeLimit
+    "task_budget:tokens" -> DiagnosticCode.TaskTokenLimit
+    else -> null
 }
 
 /** Locally generated correlation identifier; URLs, model names and external IDs cannot enter it. */
@@ -61,7 +72,8 @@ internal data class DiagnosticEvent(
     val turn: Int? = null, val round: Int? = null, val attempt: Int? = null,
     val httpStatus: Int? = null, val bytes: Long? = null, val events: Int? = null,
     val elapsedMillis: Long? = null, val delayMillis: Long? = null, val requestBytes: Int? = null,
-    val inputTokens: Long? = null, val outputTokens: Long? = null, val cachedTokens: Long? = null
+    val inputTokens: Long? = null, val outputTokens: Long? = null, val cachedTokens: Long? = null,
+    val operation: DiagnosticId? = null
 )
 
 internal data class DiagnosticSnapshot(val jsonl: String, val droppedEvents: Long, val writeFailures: Long)
@@ -195,6 +207,7 @@ internal class DiagnosticEvents private constructor(private val directory: File)
         internal fun encode(event: DiagnosticEvent, time: Long): JSONObject = JSONObject().apply {
             put("time", time); put("stage", event.stage.name); put("outcome", event.outcome.name); put("id", event.id.value)
             event.owner?.let { put("owner", it.value) }
+            event.operation?.let { put("operation", it.value) }
             mapOf("phase" to event.phase, "tool" to event.tool, "toolStatus" to event.toolStatus,
                 "failure" to event.failure, "protocol" to event.protocol, "code" to event.code).forEach { (key, value) -> value?.let { put(key, it.name) } }
             event.active?.let { put("active", it) }
@@ -217,7 +230,8 @@ internal class DiagnosticEvents private constructor(private val directory: File)
                         phase = enumValue<AiPhase>(input, "phase"), tool = enumValue<AiTool>(input, "tool"),
                         toolStatus = enumValue<AiToolStatus>(input, "toolStatus"), failure = enumValue<AiFailure>(input, "failure"),
                         protocol = enumValue<AiApiProtocol>(input, "protocol"), code = enumValue<DiagnosticCode>(input, "code"),
-                        active = input.opt("active") as? Boolean)
+                        active = input.opt("active") as? Boolean,
+                        operation = input.optString("operation").takeIf { it.isNotEmpty() }?.let(DiagnosticId::parse))
                     encode(event, time).apply {
                         for (key in listOf("turn", "round", "attempt", "httpStatus", "bytes", "events", "elapsedMillis", "delayMillis", "requestBytes", "inputTokens", "outputTokens", "cachedTokens")) {
                             val value = input.opt(key) as? Number

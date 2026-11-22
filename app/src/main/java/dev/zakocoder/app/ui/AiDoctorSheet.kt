@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -101,7 +100,7 @@ internal fun AiDoctorSheet(doctor: DoctorController, onDismiss: () -> Unit) {
         Text(stringResource(R.string.doctor_scope), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (busy) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             Text(stringResource(when (stage) {
                 DoctorExportStage.Choosing -> R.string.doctor_choose_destination
                 DoctorExportStage.Saving -> R.string.doctor_saving

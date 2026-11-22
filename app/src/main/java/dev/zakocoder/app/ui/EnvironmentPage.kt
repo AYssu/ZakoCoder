@@ -1,9 +1,11 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import dev.zakocoder.app.ui.theme.Type
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -84,7 +86,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                     Text(stringResource(if (state.checkingTools) R.string.checking_tools else if (state.bundleTools.isEmpty()) R.string.bundle_unknown else R.string.tools_check_complete),
                         Modifier.weight(1f), style = Type.meta, color = TertiaryText)
                     val maintenanceDescription = stringResource(R.string.environment_maintenance)
-                    TextButton(onClick = { maintenance = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = maintenanceDescription }) {
+                    WorkbenchTextButton(onClick = { maintenance = true }, contentPadding = PaddingValues(0.dp), modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = maintenanceDescription }) {
                         Text(stringResource(R.string.maintenance_short), style = Type.meta)
                         Spacer(Modifier.width(4.dp))
                         WorkbenchIcon(Glyph.Next, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
@@ -101,23 +103,20 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
                 title = state.operation, error = state.message.takeIf { state.messageIsError })
         }
         item { DetailGroup(stringResource(R.string.project_selected)) {
-            Row(Modifier.fillMaxWidth().clickable(enabled = !state.busy) { if (project == null) onProjects() else profiles = true }
-                .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                IconTile(Glyph.Projects, Modifier.size(38.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(project?.name ?: stringResource(R.string.select_project_first), style = MaterialTheme.typography.bodyMedium)
-                    if (project != null) ProjectKindsText(project)
-                }
-                WorkbenchIcon(Glyph.Next, Modifier.size(17.dp), tint = TertiaryText)
-            }
+            ArrowPreference(title = project?.name ?: stringResource(R.string.select_project_first),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = !state.busy,
+                onClick = { if (project == null) onProjects() else profiles = true },
+                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                startAction = { IconTile(Glyph.Projects, Modifier.size(38.dp)) },
+                bottomAction = { if (project != null) Box(Modifier.padding(top = 4.dp)) { ProjectKindsText(project) } })
         } }
         item { ToolBundleList(workbench, state, selectedBundles, { selectedBundles = it }, onTerminal) }
         if (project != null) {
             item { DetailGroup(stringResource(R.string.project_dependencies)) {
-                if (state.plansProjectId != project.id || state.checkingPlans) LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
+                if (state.plansProjectId != project.id || state.checkingPlans) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
                 else if (state.plansError) Column(Modifier.padding(16.dp)) {
                     Text(stringResource(R.string.dependency_scan_failed), color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = workbench::refreshDependencies) { Text(stringResource(R.string.editor_retry)) }
+                    WorkbenchTextButton(onClick = workbench::refreshDependencies) { Text(stringResource(R.string.editor_retry)) }
                 }
                 else if (state.plans.isEmpty()) Text(stringResource(R.string.no_dependency_plan), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else state.plans.forEachIndexed { index, plan ->
@@ -127,7 +126,7 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
             } }
             item { DetailGroup(stringResource(R.string.dependency_run_history)) {
                 when {
-                    dependencyRuns.loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
+                    dependencyRuns.loading -> WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
                     dependencyRuns.failure != null -> Text(stringResource(R.string.project_tasks_load_error), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
                     dependencyRuns.entries.isEmpty() -> Text(stringResource(R.string.dependency_run_empty), Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
                     else -> dependencyRuns.entries.forEachIndexed { index, run ->
@@ -152,10 +151,12 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         var kinds by remember(project.id, project.kinds) { mutableStateOf(project.kinds) }
         WorkbenchSheet(stringResource(R.string.configure_project), { profiles = false }, stringResource(R.string.profile_help)) {
             val dismissSheet = LocalWorkbenchSheetDismiss.current
-            ProjectKind.entries.forEach { kind -> Row(Modifier.fillMaxWidth().clickable { kinds = if (kind in kinds) kinds - kind else kinds + kind }, verticalAlignment = Alignment.CenterVertically) {
-                WorkbenchCheckbox(kind in kinds, onCheckedChange = { checked -> kinds = if (checked) kinds + kind else kinds - kind })
-                Text(stringResource(kind.label))
-            } }
+            ProjectKind.entries.forEach { kind ->
+                CheckboxPreference(title = stringResource(kind.label), checked = kind in kinds,
+                    onCheckedChange = { checked -> kinds = if (checked) kinds + kind else kinds - kind },
+                    enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
+            }
             WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { profiles = false; workbench.kinds(kinds) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save_settings)) }
             WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
         }

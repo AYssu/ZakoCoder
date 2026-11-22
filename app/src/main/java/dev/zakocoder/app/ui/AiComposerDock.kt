@@ -32,6 +32,7 @@ internal fun AiComposerDock(
     onAttach: () -> Unit,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
+    focusDismissState: ComposerFocusDismissState? = null,
     configuration: @Composable RowScope.() -> Unit,
 ) {
     val dark = LocalWorkbenchDark.current
@@ -43,7 +44,8 @@ internal fun AiComposerDock(
         border = BorderStroke(1.dp, border)) {
         Column(Modifier.padding(start = 8.dp, top = 12.dp, end = 8.dp, bottom = 4.dp)) {
             BasicTextField(input, onInput, enabled = inputEnabled,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 28.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp).heightIn(min = 28.dp)
+                    .composerFocusTarget(focusDismissState),
                 maxLines = 4,
                 textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, lineHeight = 18.sp, color = text),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -56,14 +58,14 @@ internal fun AiComposerDock(
                     }
                 })
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onAttach, enabled = attachEnabled, modifier = Modifier.width(44.dp).height(48.dp)) {
+                WorkbenchIconButton(onClick = onAttach, enabled = attachEnabled, modifier = Modifier.width(44.dp).height(48.dp)) {
                     WorkbenchIcon(Glyph.Add, Modifier.offset(x = 4.dp).size(24.dp), description = stringResource(R.string.ai_context_attach),
                         tint = if (attachEnabled) hint else hint.copy(alpha = .38f))
                 }
                 configuration()
                 // Keep a 48dp target while matching the reference's restrained 36dp circle.
                 val sendDescription = stringResource(if (running) R.string.ai_stop else R.string.ai_send)
-                IconButton(onClick = onSend, enabled = sendEnabled,
+                WorkbenchIconButton(onClick = onSend, enabled = sendEnabled,
                     modifier = Modifier.size(48.dp).semantics { contentDescription = sendDescription }) {
                     val background = when {
                         running -> if (dark) Color(0xFF343D49) else Color(0xFFEEF1F6)
@@ -74,7 +76,7 @@ internal fun AiComposerDock(
                     Surface(Modifier.size(36.dp), shape = CircleShape, color = background) {
                         Box(contentAlignment = Alignment.Center) {
                             if (running) {
-                                CircularProgressIndicator(Modifier.size(20.dp).clearAndSetSemantics {},
+                                WorkbenchCircularProgressIndicator(Modifier.clearAndSetSemantics {}, size = 20.dp,
                                     color = hint.copy(alpha = if (sendEnabled) 1f else .5f),
                                     strokeWidth = 2.dp, trackColor = hint.copy(alpha = .15f))
                             } else {

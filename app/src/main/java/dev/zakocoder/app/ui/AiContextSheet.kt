@@ -30,7 +30,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
     var errorText by remember(state.projectId) { mutableStateOf("") }
     var tab by remember(state.projectId) { mutableIntStateOf(0) }
     var rulesExpanded by remember(state.projectId) { mutableStateOf(false) }
-    val canReference = !state.active && state.references.size < 4
+    val canReference = !state.active && !state.imagesLoading && state.references.size < 4
     WorkbenchSheet(stringResource(R.string.ai_context_attach), close,
         subtitle = stringResource(R.string.ai_attachment_subtitle)) {
         val finish = LocalWorkbenchSheetAction.current
@@ -46,11 +46,11 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
             AttachmentAction(stringResource(R.string.ai_attachment_build_log), Glyph.Terminal, tab == 1, !state.active,
                 Modifier.weight(1f), { tab = 1 })
         }
-        if (state.imagesLoading) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+        state.shareImport?.let { AiSharedFileImportProgress(it) } ?: run { if (state.imagesLoading) {
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             Text(stringResource(R.string.ai_images_loading), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        } }
         if (onImages != null) Text(
             stringResource(R.string.ai_attachment_image_count, state.pendingImages.size, AiImages.MAX_PER_TURN),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -74,7 +74,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
         } else {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (directory.isNotEmpty()) IconButton(onClick = { directory = directory.substringBeforeLast('/', "") },
+                if (directory.isNotEmpty()) WorkbenchIconButton(onClick = { directory = directory.substringBeforeLast('/', "") },
                     modifier = Modifier.size(48.dp)) {
                     WorkbenchIcon(Glyph.Back, description = stringResource(R.string.editor_back))
                 } else WorkbenchIcon(Glyph.Projects, Modifier.size(20.dp))
@@ -87,14 +87,14 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
                 when {
                     listing.loading -> Column(Modifier.fillMaxWidth().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                         Text(stringResource(R.string.ai_attachment_loading_files),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     listing.failure != null -> Column(Modifier.fillMaxWidth().padding(16.dp)) {
                         Text(stringResource(R.string.directory_read_error), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error)
-                        TextButton(onClick = { directoryRetry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
+                        WorkbenchTextButton(onClick = { directoryRetry++ }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(stringResource(R.string.directory_retry))
                         }
                     }
@@ -133,7 +133,7 @@ internal fun AiContextSheet(ai: AiController, state: AiState, onImages: (() -> U
         if (state.active) Text(stringResource(R.string.ai_attachment_wait), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.ruleSources.isNotEmpty() || state.rulesLimited || state.policy.permission(AiTool.ReadFile) != AiPermission.Allow) {
-            TextButton(onClick = { rulesExpanded = !rulesExpanded }, modifier = Modifier.heightIn(min = 48.dp)) {
+            WorkbenchTextButton(onClick = { rulesExpanded = !rulesExpanded }, modifier = Modifier.heightIn(min = 48.dp)) {
                 WorkbenchIcon(Glyph.Shield, Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.ai_attachment_rules))

@@ -12,23 +12,9 @@
 
 本轮只修复共同请求构造，不向任意兼容端点新增缓存请求字段，也不为提高命中率自动发送额外付费请求。其他供应商缓存策略是独立兼容事项。
 
-## 上游对比与来源
+## 协议资料
 
-仅阅读协议设计与小范围相关实现，没有复制参考项目产品代码或将本地参考设为构建依赖。
-
-| 来源 | 核对位置与结论 | 本轮采用范围 |
-| --- | --- | --- |
-| DeepSeek 官方上下文缓存文档 | 匹配已持久化的完整前缀单元；提供 `prompt_cache_hit_tokens`／`prompt_cache_miss_tokens`；构建和保留为尽力而为 | 保持请求前缀稳定，正确理解命中统计；不承诺百分比 |
-| Operit 本地参考 v1.12.2，提交 `dbf71916fae9750cfdc9f9a774f5a0fee56633fb` | `OpenAIResponsesProvider.kt` 条件附加 `prompt_cache_key`；`ClaudeProvider.kt` 对工具、系统与最新内容块设置缓存断点 | 作为供应商显式适配的对比；未移植相关实现 |
-| opencode 官方 `dev`，查阅时提交 `5030a55fd203a23be80eb7089cf9b84a89c3a4e4` | `packages/core/src/plugin/provider/prompt-cache-key.ts` 按已审核供应商设置兼容标记，避免把部分模型／路由支持当成全供应商支持 | 不向任意服务盲加缓存字段；当前路径已不同于旧版 `packages/opencode` |
-
-参考链接：
-
-- [DeepSeek：Context Caching](https://api-docs.deepseek.com/guides/kv_cache)
-- [Operit：v1.12.2 参考提交](https://github.com/AAswordman/Operit/commit/dbf71916fae9750cfdc9f9a774f5a0fee56633fb)
-- [opencode：供应商缓存键兼容范围](https://github.com/anomalyco/opencode/blob/5030a55fd203a23be80eb7089cf9b84a89c3a4e4/packages/core/src/plugin/provider/prompt-cache-key.ts)
-
-上述源码对比只证明相应实现存在，不代表已实测这些项目的命中率，也不证明任意第三方网关兼容。
+[DeepSeek 官方上下文缓存说明](https://api-docs.deepseek.com/guides/kv_cache)介绍完整前缀匹配及 `prompt_cache_hit_tokens`／`prompt_cache_miss_tokens` 字段。缓存构建和保留为尽力而为；客户端保持前缀稳定，不承诺固定命中率，也不据此推断其他服务的兼容性。
 
 ## 屏幕授权与悬浮入口
 

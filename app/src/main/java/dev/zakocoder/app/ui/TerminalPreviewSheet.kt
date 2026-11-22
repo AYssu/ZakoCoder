@@ -38,7 +38,7 @@ internal fun TerminalPreviewSheet(item: TerminalItem, discover: () -> List<Strin
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.terminal_preview), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+                WorkbenchIconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
             }
             Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -46,7 +46,7 @@ internal fun TerminalPreviewSheet(item: TerminalItem, discover: () -> List<Strin
                 Text(stringResource(R.string.terminal_preview_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.terminal_preview_candidates), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                    TextButton(onClick = { candidates = discover() }) { Text(stringResource(R.string.terminal_preview_refresh)) }
+                    WorkbenchTextButton(onClick = { candidates = discover() }) { Text(stringResource(R.string.terminal_preview_refresh)) }
                 }
                 if (candidates.isEmpty()) Text(stringResource(R.string.terminal_preview_empty), style = MaterialTheme.typography.bodySmall)
                 candidates.forEach { candidate ->

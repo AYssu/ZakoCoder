@@ -1,5 +1,9 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.preference.CheckboxLocation
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -15,7 +19,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import top.yukonga.miuix.kmp.anim.folmeSpring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -103,11 +106,11 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
             scaleY = scaleX
         }) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (displayedStep > 0) IconButton(onClick = { if (interactive) stepBack.close() }, enabled = !entering && !state.busy) {
+                if (displayedStep > 0) WorkbenchIconButton(onClick = { if (interactive) stepBack.close() }, enabled = !entering && !state.busy) {
                     WorkbenchIcon(Glyph.Back, description = stringResource(R.string.setup_previous))
                 } else Spacer(Modifier.size(48.dp))
                 Text(stringResource(R.string.setup_brand), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                if (state.onboarding.completed) TextButton(onClick = { if (interactive) onExit() }, enabled = !state.busy && !entering) {
+                if (state.onboarding.completed) WorkbenchTextButton(onClick = { if (interactive) onExit() }, enabled = !state.busy && !entering) {
                     Text(stringResource(R.string.setup_exit))
                 }
             }
@@ -116,8 +119,7 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                LinearProgressIndicator(progress = { if (interactive) progress else (displayedStep + 1) / 7f }, modifier = Modifier.weight(1f).height(3.dp),
-                    drawStopIndicator = {})
+                WorkbenchLinearProgressIndicator(progress = { if (interactive) progress else (displayedStep + 1) / 7f }, modifier = Modifier.weight(1f).height(3.dp))
                 Text(stringResource(R.string.setup_step, displayedStep + 1, 7), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -172,7 +174,7 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
                     3 -> {
                         val skills = globalSkills.skills.filter { it.builtIn }
                         val skillsEditable = !globalSkills.active && !globalSkills.skillsLoading && !globalSkills.skillError
-                        if (globalSkills.skillsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (globalSkills.skillsLoading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                         if (globalSkills.skillError) Text(stringResource(R.string.ai_skills_global_error),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         skills.forEach { skill -> SetupToggle(skill.name, skill.description,
@@ -207,7 +209,7 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
                         AnimatedContent(entering, label = "setup-enter") { active -> if (active) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 24.dp), verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                                WorkbenchCircularProgressIndicator(size = 24.dp, strokeWidth = 2.dp)
                                 Text(stringResource(R.string.setup_entering), style = MaterialTheme.typography.bodyMedium)
                             }
                         } else Spacer(Modifier.height(24.dp)) }
@@ -236,13 +238,13 @@ internal fun OnboardingPage(workbench: Workbench, state: WorkbenchState, onCompl
             }
             if (state.busy) Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                WorkbenchCircularProgressIndicator(size = 20.dp, strokeWidth = 2.dp)
                 Text(state.operation, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = workbench::cancel) { Text(stringResource(R.string.cancel)) }
+                WorkbenchTextButton(onClick = workbench::cancel) { Text(stringResource(R.string.cancel)) }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (displayedStep in 1..5) TextButton(onClick = { if (interactive) step++ }, enabled = !entering && !state.busy) { Text(stringResource(R.string.setup_later)) }
+                if (displayedStep in 1..5) WorkbenchTextButton(onClick = { if (interactive) step++ }, enabled = !entering && !state.busy) { Text(stringResource(R.string.setup_later)) }
                 WorkbenchPrimaryButton(onClick = { if (interactive) { if (step < 6) step++ else entering = true } }, enabled = !entering && !state.busy,
                     modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) {
                     Text(stringResource(if (displayedStep == 6) R.string.setup_enter else R.string.setup_continue))
@@ -322,25 +324,18 @@ private fun SetupChoice(title: String, description: String, selected: Boolean, e
         if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         animationSpec = tween(220), label = "setup-choice-color")
     WorkbenchCard(color = background) {
-        Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = action).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            top.yukonga.miuix.kmp.basic.RadioButton(selected, onClick = null, enabled = enabled, modifier = Modifier.size(24.dp))
-            Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        RadioButtonPreference(title = title, summary = description, selected = selected,
+            enabled = enabled, onClick = action, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
     }
 }
 
 @Composable
 private fun SetupToggle(title: String, description: String, checked: Boolean, enabled: Boolean, action: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = action).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        WorkbenchCheckbox(checked = checked, onCheckedChange = { action() }, enabled = enabled)
-    }
+    CheckboxPreference(title = title, summary = description, checked = checked,
+        onCheckedChange = { action() }, enabled = enabled, checkboxLocation = CheckboxLocation.End,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        insideMargin = PaddingValues(horizontal = 0.dp, vertical = 12.dp))
 }
 
 @Composable
@@ -357,8 +352,8 @@ private fun SetupSummary(title: String, value: String) {
 private fun SetupOperation(state: WorkbenchState, onCancel: () -> Unit) {
     if (state.busy || state.log.isNotBlank() || state.message.isNotBlank()) {
         if (state.busy) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchTextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
         }
         if (state.operation.isNotBlank()) Text(state.operation, style = MaterialTheme.typography.bodySmall)
         if (state.message.isNotBlank()) Text(state.message, style = MaterialTheme.typography.bodySmall,

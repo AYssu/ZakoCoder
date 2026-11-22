@@ -63,7 +63,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
             if (failed) Text(stringResource(R.string.git_credentials_error), color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall)
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (busy) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             WorkbenchPrimaryButton(onClick = {
                 busy = true; failed = false
                 scope.launch {
@@ -76,7 +76,7 @@ internal fun GitCredentialsSheet(projectId: String, remoteUrl: String, store: Gi
                 }
             }, enabled = !busy && username.isNotBlank() && token.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 shape = RoundedCornerShape(12.dp)) { Text(stringResource(R.string.git_credentials_save)) }
-            if (saved) TextButton(onClick = { confirmingRemoval = true }, enabled = !busy,
+            if (saved) WorkbenchTextButton(onClick = { confirmingRemoval = true }, enabled = !busy,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.git_credentials_remove), color = MaterialTheme.colorScheme.error)
             }

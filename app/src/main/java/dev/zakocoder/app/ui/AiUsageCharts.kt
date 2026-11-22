@@ -88,14 +88,14 @@ internal fun UsageTrendCard(buckets: List<AiUsageBucket>, daily: Boolean, zone: 
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selected-- }, enabled = selected > 0) {
+                WorkbenchIconButton(onClick = { selected-- }, enabled = selected > 0) {
                     WorkbenchIcon(Glyph.Back, description = stringResource(R.string.usage_chart_previous))
                 }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(selectedBucket?.let { formatter.format(Instant.ofEpochMilli(it.started)) }.orEmpty(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(selectedValue, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
-                IconButton(onClick = { selected++ }, enabled = selected < buckets.lastIndex) {
+                WorkbenchIconButton(onClick = { selected++ }, enabled = selected < buckets.lastIndex) {
                     WorkbenchIcon(Glyph.Next, description = stringResource(R.string.usage_chart_next))
                 }
             }
@@ -115,7 +115,7 @@ internal fun UsageModelDistribution(models: List<AiUsageModelCount>) {
                 val progress by animateFloatAsState(share, tween(300), label = "usageModelShare")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(entry.model.ifBlank { stringResource(R.string.ai_usage_missing_model) }, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(4.dp))
+                    WorkbenchLinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(4.dp))
                     Text(stringResource(R.string.usage_chart_model_value, entry.requests, String.format(Locale.ROOT, "%.1f", share * 100)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

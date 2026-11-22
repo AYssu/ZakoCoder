@@ -4,7 +4,7 @@ package dev.zakocoder.app.ai
 data class AiTurnTiming(val turn: Int, val started: Long, val finished: Long? = null)
 
 data class AiTurnUsage(val input: Long?, val output: Long?, val partial: Boolean, val outputSeconds: Double, val cached: Long? = null, val cachePercent: Double? = null) {
-    val total: Long? get() = if (input != null && output != null) input + output else null
+    val total: Long? get() = if (input != null && output != null && input >= 0 && output >= 0 && output <= Long.MAX_VALUE - input) input + output else null
     val tokensPerSecond: Double? get() = output?.takeIf { outputSeconds > 0 }?.div(outputSeconds)
 }
 

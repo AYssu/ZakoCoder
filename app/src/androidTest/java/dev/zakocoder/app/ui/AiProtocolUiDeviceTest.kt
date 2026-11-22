@@ -83,6 +83,32 @@ class AiProtocolUiDeviceTest {
         while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
         assertTrue(requireNotNull(node).config[SemanticsActions.OnClick].action?.invoke() == true)
     }
+    /** Radio preferences can expose Role on both the row and its indicator. */
+    private fun protocolControl(all: List<SemanticsNode>, protocol: AiApiProtocol): SemanticsNode? {
+        val title = context.getString(protocolLabel(protocol))
+        fun selectedControls(node: SemanticsNode): List<SemanticsNode> = buildList {
+            if (node.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton &&
+                node.config.contains(SemanticsProperties.Selected)) add(node)
+            node.children.forEach { addAll(selectedControls(it)) }
+        }
+        return all.asReversed().asSequence().filter {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == title } == true
+        }.firstNotNullOfOrNull { label ->
+            val row = generateSequence(label) { it.parent }.firstOrNull {
+                it.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton
+            } ?: return@firstNotNullOfOrNull null
+            if (row.config.contains(SemanticsProperties.Selected)) row
+            else selectedControls(row).singleOrNull()
+        }
+    }
+    private fun chooseProtocol(protocol: AiApiProtocol) = nodes { all ->
+        val selected = requireNotNull(protocolControl(all, protocol)) { "Protocol radio: $protocol" }
+        val action = requireNotNull(generateSequence(selected) { it.parent }.firstOrNull {
+            it.config.getOrNull(SemanticsActions.OnClick) != null
+        }) { "Actionable protocol radio: $protocol" }
+        assertNull("Protocol enabled: $protocol", action.config.getOrNull(SemanticsProperties.Disabled))
+        assertTrue(action.config[SemanticsActions.OnClick].action?.invoke() == true)
+    }
     private fun field(label: Int): String = nodes { all ->
         all.last { context.getString(label) in description(it) && it.config.contains(SemanticsProperties.EditableText) }
             .config[SemanticsProperties.EditableText].text
@@ -124,17 +150,32 @@ class AiProtocolUiDeviceTest {
                     } }
                 }
                 await("actual editor ready") { !ai.get().models.state.value.loading && nodes { all -> all.any { text(it).contains(base + "/chat/completions") } } }
+                var selectedProtocol = AiApiProtocol.ChatCompletions
                 AiApiProtocol.entries.forEach { protocol ->
                     click(context.getString(R.string.ai_protocol_choose))
-                    await("protocol picker opened") { nodes { all -> all.count { it.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton } == 4 } }
+                    await("protocol picker opened with four distinct stateful choices") { nodes { all ->
+                        val controls = AiApiProtocol.entries.map { protocolControl(all, it) }
+                        controls.none { it == null } && controls.filterNotNull().map { it.id }.distinct().size == 4 &&
+                            AiApiProtocol.entries.all { option -> protocolControl(all, option)?.config
+                                ?.getOrNull(SemanticsProperties.Selected) == (option == selectedProtocol) }
+                    } }
                     if (protocol == AiApiProtocol.ChatCompletions) capture(dark, "protocol-picker") {
-                        nodes { all -> assertEquals(4, all.count { it.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton &&
-                            it.boundsInWindow.width > 0 && it.boundsInWindow.height >= it.size.height * .95f }) }
+                        AiApiProtocol.entries.forEach { option ->
+                            assertTrue("Protocol title visible: $option", visible(context.getString(protocolLabel(option))))
+                            nodes { all ->
+                                val control = requireNotNull(protocolControl(all, option))
+                                assertTrue("Protocol radio fully visible: $option", control.boundsInWindow.width > 0 &&
+                                    control.boundsInWindow.height >= control.size.height * .95f)
+                                assertEquals("Protocol selected state: $option", option == selectedProtocol,
+                                    control.config[SemanticsProperties.Selected])
+                            }
+                        }
                     }
-                    click(context.getString(protocolLabel(protocol)))
+                    chooseProtocol(protocol)
                     val expected = AiProviderRouting.requestAddress(base, protocol, model)
                     await("selected protocol updates real request address") { nodes { all -> all.any { text(it).contains(expected) } } }
                     assertEquals(base, field(R.string.ai_endpoint)); assertEquals(model, field(R.string.ai_model))
+                    selectedProtocol = protocol
                     capture(dark, "editor-${protocol.name.lowercase()}")
                 }
                 click(context.getString(R.string.ai_provider_choose))
@@ -185,7 +226,7 @@ class AiProtocolUiDeviceTest {
         } }
         CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark,
             LocalDensity provides Density(width.coerceAtLeast(1) / 360f, 1.3f)) {
-            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+            WorkbenchMiuixTheme(dark) {
                 Surface(Modifier.fillMaxSize().safeDrawingPadding(), content = content)
             }
         }

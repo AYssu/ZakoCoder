@@ -74,7 +74,7 @@ internal fun ProjectRunLog(workbench: Workbench, projectId: String, run: Project
             if (run.truncated) Text(stringResource(R.string.project_log_limited), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 WorkbenchTextField(query, { if (it.length <= 200) { query = it; matchAt = -1; tailReference = false; pendingTailJump = 0 }; missing = false }, label = stringResource(R.string.project_log_search), singleLine = true, modifier = Modifier.weight(1f))
-                TextButton(onClick = {
+                WorkbenchTextButton(onClick = {
                     tailReference = false; pendingTailJump = 0
                     var found = text.indexOf(query, startIndex = maxOf(0, matchAt + 1), ignoreCase = true)
                     if (found < 0 && matchAt >= 0) found = text.indexOf(query, ignoreCase = true)
@@ -84,24 +84,24 @@ internal fun ProjectRunLog(workbench: Workbench, projectId: String, run: Project
             }
             if (missing) Text(stringResource(R.string.project_log_no_match), style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                TextButton(onClick = { offset = maxOf(0, start - 16000); tailReference = false; pendingTailJump = 0 }, enabled = start > 0) { Text(stringResource(R.string.project_log_previous)) }
+                WorkbenchTextButton(onClick = { offset = maxOf(0, start - 16000); tailReference = false; pendingTailJump = 0 }, enabled = start > 0) { Text(stringResource(R.string.project_log_previous)) }
                 Text(stringResource(R.string.project_log_range, start, end, text.length), style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { offset = end; tailReference = false; pendingTailJump = 0 }, enabled = end < text.length) { Text(stringResource(R.string.project_log_next)) }
+                WorkbenchTextButton(onClick = { offset = end; tailReference = false; pendingTailJump = 0 }, enabled = end < text.length) { Text(stringResource(R.string.project_log_next)) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
+                WorkbenchTextButton(onClick = {
                     offset = maxOf(0, text.length - 16000)
                     matchAt = -1; missing = false; tailReference = true
                     tailJump++; pendingTailJump = tailJump
                 }, enabled = text.isNotEmpty() && !loading, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.project_log_latest)) }
-                if (onAi != null) TextButton(onClick = {
+                if (onAi != null) WorkbenchTextButton(onClick = {
                     if (workbench.referenceAi(projectId, AiCommandLogReference.create(run.id, text, start, end, run.truncated, referenceName, preferEnd = tailReference))) { close(); onAi(projectId) }
                 }, enabled = page.isNotBlank() && !ai.active && !ai.restoring, modifier = Modifier.weight(1f)) {
                     Text(stringResource(if (tailReference) R.string.project_log_reference_tail else R.string.project_log_reference_page))
                 }
             }
         }
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (loading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (failed) Text(stringResource(R.string.project_log_load_failed), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
         key(tailJump) {
             SelectionContainer(Modifier.weight(1f)) {

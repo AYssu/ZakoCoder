@@ -25,6 +25,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.*
+import dev.zakocoder.app.warmDeviceActivity
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
@@ -79,11 +80,70 @@ class AiComposerDockDeviceTest {
         instrumentation.waitForIdleSync()
         Thread.sleep(350)
         val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        File(context.getExternalFilesDir(null), "composer-$name.png").outputStream().use {
+        val directory = File(context.cacheDir, "ui-review/composer-dock").apply { mkdirs() }
+        File(directory, "composer-$name.png").outputStream().use {
             image.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
         image.recycle()
     }
+    @Test fun loadingRingIsCenteredInsideTheSendBackgroundInBothThemes() {
+        warmDeviceActivity()
+        val dark = mutableStateOf(false)
+        val enabled = mutableStateOf(true)
+        val stops = AtomicInteger()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity -> activity.setContent {
+                WorkbenchMiuixTheme(dark.value) {
+                    Surface(Modifier.fillMaxSize()) {
+                        Box(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
+                            AiComposerDock("检查项目构建", {}, true, false, true, true, enabled.value,
+                                {}, { stops.incrementAndGet() }, configuration = { Spacer(Modifier.weight(1f)) })
+                        }
+                    }
+                }
+            } }
+            for (night in listOf(false, true)) for (clickable in listOf(true, false)) {
+                instrumentation.runOnMainSync { dark.value = night; enabled.value = clickable }
+                await("Stop button mounted") { nodes { all -> all.any { matching(it, context.getString(R.string.ai_stop)) } } }
+                Thread.sleep(400)
+                val bounds = nodes { all -> all.first { matching(it, context.getString(R.string.ai_stop)) }.boundsInWindow }
+                val density = context.resources.displayMetrics.density
+                val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+                try {
+                    val dir = File(context.cacheDir, "ui-review/send-loading").apply { mkdirs() }
+                    File(dir, "${if (night) "night" else "day"}-${if (clickable) "running" else "stopping"}.png")
+                        .outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    // A full track is always present, so this measures the actual painted ring,
+                    // independently of the indeterminate foreground's rotation and sweep angle.
+                    val background = if (night) 0x343D49 else 0xEEF1F6
+                    val center = bounds.center
+                    val radius = 15f * density
+                    val pixels = mutableListOf<Pair<Int, Int>>()
+                    for (y in (center.y - radius).toInt()..(center.y + radius).toInt()) {
+                        for (x in (center.x - radius).toInt()..(center.x + radius).toInt()) {
+                            val dx = x + .5f - center.x; val dy = y + .5f - center.y
+                            if (dx * dx + dy * dy > radius * radius) continue
+                            val color = bitmap.getPixel(x, y)
+                            val contrast = listOf(0, 8, 16).maxOf { shift ->
+                                kotlin.math.abs((color shr shift and 255) - (background shr shift and 255))
+                            }
+                            if (contrast >= 10) pixels += x to y
+                        }
+                    }
+                    assertTrue("The ring must remain visible", pixels.size > 20)
+                    val left = pixels.minOf { it.first }; val right = pixels.maxOf { it.first }
+                    val top = pixels.minOf { it.second }; val bottom = pixels.maxOf { it.second }
+                    val ringX = (left + right + 1) / 2f; val ringY = (top + bottom + 1) / 2f
+                    assertEquals("Painted ring must align horizontally with its background", center.x, ringX, density * .75f)
+                    assertEquals("Painted ring must align vertically with its background", center.y, ringY, density * .75f)
+                    assertEquals("Ring diameter follows its 20dp layout", 20f * density, (right - left + 1).toFloat(), density * 1.5f)
+                } finally { bitmap.recycle() }
+                if (clickable) click(context.getString(R.string.ai_stop))
+            }
+            assertEquals("Running control still stops the task", 2, stops.get())
+        }
+    }
+
     @Test(timeout = 180000) fun callbacksDraftStopAndKeyboardInLightDark() {
         val component = ComponentName(context.packageName, MainActivity::class.java.name).flattenToString()
         require(component.matches(Regex("[A-Za-z0-9_./]+")))

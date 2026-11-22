@@ -24,8 +24,16 @@ class AiTokenBudgetTest {
         AiContextOptions(contextWindowTokens = 2097152).validate()
         assertThrows(IllegalArgumentException::class.java) { AiContextOptions(contextWindowTokens = 8191).validate() }
         assertThrows(IllegalArgumentException::class.java) { AiContextOptions(contextWindowTokens = 2097153).validate() }
-        assertEquals(128000, AiContextOptions().contextWindowTokens)
+        assertEquals(1_000_000, AiContextOptions().contextWindowTokens)
         assertEquals(90, AiContextOptions().compressionThresholdPercent)
+    }
+    @Test fun unconfiguredDefaultsDoNotCompressAtThePreviousWindowSize() {
+        val options = AiContextOptions()
+        val budget = AiTokenBudget(150_000, options.contextWindowTokens, 8192, options.compressionThresholdPercent)
+        assertFalse(budget.shouldCompress)
+        assertTrue(budget.fits)
+        assertEquals(1_000_000, AiState().contextWindowTokens)
+        assertEquals(1_000_000, AiConfig().context.contextWindowTokens)
     }
     @Test fun summaryOutputNeverUsesMoreSpaceThanTheNormalOutputReservation() {
         val smallWindow = AiConfig(context = AiContextOptions(contextWindowTokens = 8192))

@@ -19,6 +19,12 @@ class AiTokenBudgetDeviceTest {
         assertEquals(128000, decodeContextOptions(JSONObject().put("maxContextChars", 96000)).contextWindowTokens)
         assertEquals(1048576, decodeContextOptions(old.put("contextWindowTokens", 1048576)).contextWindowTokens)
     }
+    @Test fun missingContextUsesNewDefaultAndExplicitSavedBudgetsRemainUnchanged() {
+        assertEquals(1_000_000, decodeContextOptions(JSONObject()).contextWindowTokens)
+        for (tokens in listOf(64_000, 128_000, 256_000, 1_050_000)) {
+            assertEquals(tokens, decodeContextOptions(JSONObject().put("contextWindowTokens", tokens)).contextWindowTokens)
+        }
+    }
     @Test fun schemaAndOutputReserveCountTowardTheActualRequestBudget() {
         val messages = JSONArray().put(JSONObject().put("role", "system").put("content", "rules"))
         val config = AiConfig(parameters = AiParameters(maxTokens = 32768), context = AiContextOptions(contextWindowTokens = 8192))

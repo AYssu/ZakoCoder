@@ -18,6 +18,37 @@ import java.nio.file.attribute.FileTime
 class DiagnosticEventsTest {
     @get:Rule val temporary = TemporaryFolder()
 
+    @Test fun taskStopReasonsAcceptOnlyExactApplicationCodesOnFirstLine() {
+        val codes = mapOf("repeated_tool_failure" to DiagnosticCode.RepeatedToolFailure,
+            "child_repeated_tool_failure" to DiagnosticCode.RepeatedToolFailure,
+            "requests" to DiagnosticCode.TaskRequestLimit, "tools" to DiagnosticCode.TaskToolLimit,
+            "elapsed" to DiagnosticCode.TaskTimeLimit, "tokens" to DiagnosticCode.TaskTokenLimit)
+        for ((value, expected) in codes) {
+            assertEquals(expected, taskStopDiagnosticCode("task_budget:$value"))
+            assertEquals(expected, taskStopDiagnosticCode("task_budget:$value\r\nprivate-provider-text"))
+        }
+        for (value in listOf("", "tokens", "task_budget:unknown-private-value", "task_budget:tokens secret-value",
+            "private-prefix task_budget:tokens", "provider-text\ntask_budget:tokens", "task_budget:https://private.invalid")) {
+            assertNull(taskStopDiagnosticCode(value))
+        }
+    }
+
+    @Test fun operationCorrelationRoundTripsOnlyCanonicalLocalIdentifiers() {
+        val now = System.currentTimeMillis()
+        val operation = DiagnosticId.create()
+        val encoded = DiagnosticEvents.encode(DiagnosticEvent(DiagnosticStage.Tool,
+            DiagnosticOutcome.Started, DiagnosticId.create(), operation = operation), now)
+        assertEquals(operation.value, encoded.getString("operation"))
+        val restored = requireNotNull(DiagnosticEvents.decode(encoded.toString(), now - 1))
+        assertEquals(operation.value, restored.getString("operation"))
+        for (invalid in listOf("https://private.invalid/read", "private-command-or-file-path", " ${operation.value}")) {
+            encoded.put("operation", invalid)
+            val filtered = requireNotNull(DiagnosticEvents.decode(encoded.toString(), now - 1))
+            assertFalse(filtered.has("operation"))
+            assertFalse(filtered.toString().contains(invalid))
+        }
+    }
+
     @Test fun snapshotRebuildsOnlyTypedWhitelistAndRejectsInvalidIdentifiers() {
         val time = System.currentTimeMillis()
         val valid = DiagnosticEvents.encode(DiagnosticEvent(DiagnosticStage.Request,

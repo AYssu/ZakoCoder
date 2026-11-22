@@ -33,7 +33,7 @@ internal fun TerminalLibraryPage(workbench: Workbench, state: WorkbenchState, on
     val groups = state.sessions.groupBy { it.projectId }.entries.sortedBy { if (it.key == state.selectedId) 0 else 1 }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         PageHeading(stringResource(R.string.nav_terminal)) {
-            if (state.sessions.isNotEmpty()) TextButton(onClick = { creating = true }, enabled = canCreate) {
+            if (state.sessions.isNotEmpty()) WorkbenchTextButton(onClick = { creating = true }, enabled = canCreate) {
                 WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(stringResource(R.string.new_terminal), style = Type.body)
@@ -134,7 +134,7 @@ internal fun NewTerminalSheet(workbench: Workbench, state: WorkbenchState, onDis
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.new_terminal), Modifier.weight(1f), style = Type.section)
-                IconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
+                WorkbenchIconButton(onClick = requestDismiss) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.close)) }
             }
             Text(stringResource(R.string.terminal_choose_project), Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 style = Type.meta, color = MaterialTheme.colorScheme.onSurfaceVariant)

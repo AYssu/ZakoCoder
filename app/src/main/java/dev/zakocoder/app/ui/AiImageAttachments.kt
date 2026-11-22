@@ -36,7 +36,7 @@ internal fun AiImageAttachments(images: List<AiImageAttachment>, load: suspend (
                         Text(image.displayName, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text("${image.width} × ${image.height}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (onRemove != null) IconButton(onClick = { onRemove(image.id) }, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                    if (onRemove != null) WorkbenchIconButton(onClick = { onRemove(image.id) }, enabled = enabled, modifier = Modifier.size(48.dp)) {
                         WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.ai_images_remove, image.displayName))
                     }
                 }

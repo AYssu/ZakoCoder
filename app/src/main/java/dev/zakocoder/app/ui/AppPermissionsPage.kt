@@ -1,5 +1,8 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.basic.BasicComponent
+
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,7 +68,7 @@ internal fun AppPermissionsPage(rootGranted: Boolean, rootBusy: Boolean = false,
         Surface(Modifier.fillMaxSize().then(back.modifier), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = back.close, enabled = backEnabled) {
+                    WorkbenchIconButton(onClick = back.close, enabled = backEnabled) {
                         WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close))
                     }
                     Text(stringResource(R.string.app_permissions_title), style = MaterialTheme.typography.titleMedium)
@@ -88,7 +91,7 @@ internal fun AppPermissionsPanel(states: List<AppPermissionStatus>?, rootGranted
         if (deviceConfiguration != null) item { deviceConfiguration() }
         item { Text(stringResource(R.string.app_permissions_intro), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (states == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.app_permissions_loading),
+        if (states == null) item { WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.app_permissions_loading),
             Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall) }
         if (navigationError) item { Text(stringResource(R.string.app_permissions_settings_unavailable), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         item { PermissionGroup(stringResource(R.string.app_permissions_system)) {
@@ -169,7 +172,7 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
     // Runtime grants are separate from the always-available settings route, including permanent denial.
     if (state?.granted == false && ((permission == AppPermission.Notifications && state.notificationStatus == RunningNotificationStatus.PermissionRequired) ||
             (permission == AppPermission.Files && Build.VERSION.SDK_INT < 30))) {
-        TextButton(onClick = { onRequest(permission) }, modifier = Modifier.padding(start = 48.dp, end = 16.dp).heightIn(min = 48.dp)) {
+        WorkbenchTextButton(onClick = { onRequest(permission) }, modifier = Modifier.padding(start = 48.dp, end = 16.dp).heightIn(min = 48.dp)) {
             Text(stringResource(R.string.app_permissions_root_request))
         }
     }
@@ -178,17 +181,27 @@ private fun PermissionRow(permission: AppPermission, states: List<AppPermissionS
 @Composable
 private fun PermissionContent(title: String, hint: String, status: String, granted: Boolean?, glyph: Glyph,
     onClick: (() -> Unit)?, actionLabel: String) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyMedium)
-                if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall,
-                    color = if (granted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (actionLabel.isNotEmpty()) TextButton(onClick = { onClick?.invoke() }, enabled = onClick != null, modifier = Modifier.heightIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)) { Text(actionLabel, style = MaterialTheme.typography.labelMedium) }
+    val statusContent: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.labelSmall,
+                color = if (granted == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    val icon: @Composable () -> Unit = {
+        WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (onClick != null) {
+        ArrowPreference(title = title, onClick = onClick, startAction = icon,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            endActions = {
+                if (actionLabel.isNotEmpty()) Text(actionLabel, style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }, bottomAction = statusContent)
+    } else {
+        BasicComponent(title = title, startAction = icon, bottomAction = statusContent,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
     }
 }

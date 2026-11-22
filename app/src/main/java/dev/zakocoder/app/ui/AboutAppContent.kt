@@ -88,7 +88,7 @@ private fun CommunityEntry() {
                 }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.community_join))
                 }
-                TextButton(onClick = {
+                WorkbenchTextButton(onClick = {
                     val clipboard = context.getSystemService(ClipboardManager::class.java)
                     try {
                         if (clipboard == null) {
@@ -122,7 +122,7 @@ private fun LicenseOriginalsEntry() {
     val context = LocalContext.current
     var choosing by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<String?>(null) }
-    TextButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+    WorkbenchTextButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(stringResource(R.string.about_license_originals))
     }
     if (choosing) {
@@ -164,7 +164,7 @@ private fun LicenseOriginalsEntry() {
                 document.content == null -> Text(stringResource(R.string.loading))
                 else -> SelectionContainer { Text(document.content.orEmpty(), style = MaterialTheme.typography.bodySmall) }
             }
-            TextButton(onClick = dismissSheet, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            WorkbenchTextButton(onClick = dismissSheet, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.close))
             }
         }

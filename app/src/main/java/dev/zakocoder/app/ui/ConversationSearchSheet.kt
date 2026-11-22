@@ -65,13 +65,13 @@ internal fun ConversationSearchSheet(
             query.isBlank() -> Text(stringResource(R.string.conversation_search_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             searching -> {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+                WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                 Text(stringResource(R.string.conversation_search_loading), style = MaterialTheme.typography.bodySmall)
             }
             failed -> {
                 Text(stringResource(R.string.conversation_search_failed), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = { retry++ }) { Text(stringResource(R.string.conversation_search_retry)) }
+                WorkbenchTextButton(onClick = { retry++ }) { Text(stringResource(R.string.conversation_search_retry)) }
             }
             else -> result?.let { found ->
                 if (found.partial) Text(stringResource(R.string.conversation_search_partial, found.unreadableConversations),

@@ -195,7 +195,7 @@ SSH 能力包使用 Maven Central `com.github.mwiede:jsch:2.28.8`，官方来源
 
 ## Miuix
 
-Miuix UI 0.9.4 (`top.yukonga.miuix.kmp:miuix-ui`), upstream https://github.com/compose-miuix-ui/miuix/tree/v0.9.4 , commit `39c40f99844227b853f0049a0933b1f3ae6c00ba`. Copyright 2025, compose-miuix-ui contributors. Apache-2.0. Includes its same-version miuix-core and miuix-squircle modules. Unmodified Maven Central artifacts; original license is bundled as `assets/licenses/Miuix-Apache-2.0.txt`. Used for native theme, controls and grouped surfaces.
+Miuix UI / Preference 0.9.4 (`top.yukonga.miuix.kmp:miuix-ui`, `top.yukonga.miuix.kmp:miuix-preference`), upstream https://github.com/compose-miuix-ui/miuix/tree/v0.9.4 , commit `39c40f99844227b853f0049a0933b1f3ae6c00ba`. Copyright 2025, compose-miuix-ui contributors. Apache-2.0. Includes its same-version miuix-core and miuix-squircle modules. Unmodified Maven Central artifacts; original license is bundled as `assets/licenses/Miuix-Apache-2.0.txt`. Used for native theme, controls, grouped setting preferences, menus and progress indicators.
 
 
 ## 侧栏快捷图标

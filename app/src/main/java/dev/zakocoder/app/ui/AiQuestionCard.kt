@@ -13,8 +13,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import top.yukonga.miuix.kmp.basic.RadioButton
 import androidx.compose.material3.Surface
@@ -165,7 +163,7 @@ internal fun AiQuestionCard(
                             minLines = 1,
                             maxLines = 4,
                             trailingIcon = {
-                                IconButton(
+                                WorkbenchIconButton(
                                     onClick = { custom = ""; customExpanded = false; focus.clearFocus() },
                                     enabled = canReply,
                                     modifier = Modifier.size(48.dp),
@@ -183,7 +181,7 @@ internal fun AiQuestionCard(
                     }
                 }
                 if (!customExpanded && custom.isEmpty()) {
-                    TextButton(
+                    WorkbenchTextButton(
                         onClick = { customExpanded = true },
                         enabled = canReply,
                         modifier = Modifier.heightIn(min = 48.dp),

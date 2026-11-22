@@ -72,7 +72,7 @@ internal fun OperationLogPanel(
                 WorkbenchIcon(Glyph.Terminal, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(title.ifBlank { stringResource(R.string.execution_log) }, Modifier.weight(1f),
                     style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (running) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
+                if (running) WorkbenchCircularProgressIndicator(size = 14.dp, strokeWidth = 1.5.dp)
                 WorkbenchIcon(if (expanded) Glyph.Up else Glyph.ChevronDown, Modifier.size(16.dp))
             }
             if (expanded) {
@@ -81,7 +81,7 @@ internal fun OperationLogPanel(
                     Text(stringResource(if (following) R.string.operation_log_following else R.string.operation_log_paused),
                         Modifier.weight(1f), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { following = true }, enabled = !following,
+                    WorkbenchTextButton(onClick = { following = true }, enabled = !following,
                         modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(R.string.operation_log_latest), style = MaterialTheme.typography.labelSmall)
                     }

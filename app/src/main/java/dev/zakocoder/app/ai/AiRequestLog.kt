@@ -22,7 +22,7 @@ data class AiRequestLog(
     val inputTokens: Long? = null, val outputTokens: Long? = null, val cachedTokens: Long? = null,
     val finish: String = "", val diagnostic: String = "", val failure: AiFailure? = null, val complete: Boolean = false,
     val compaction: Boolean = false, val request: String = "", val response: String = "", val truncated: Boolean = false, val points: List<AiStreamPoint> = emptyList(),
-    val estimatedContextTokens: Long = 0, val contextWindowTokens: Int = 128000, val contextOutputReserveTokens: Int = 8192,
+    val estimatedContextTokens: Long = 0, val contextWindowTokens: Int = AiModelContextWindows.DEFAULT_TOKENS, val contextOutputReserveTokens: Int = 8192,
     val retryGroup: String = "", val attempt: Int = 1, val maxAttempts: Int = 1, val retryDelayMs: Long = 0, val retryReason: String = "",
     val apiProtocol: String = "ChatCompletions", val agent: String = ""
 ) {

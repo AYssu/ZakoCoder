@@ -107,9 +107,9 @@ class AiConversationUiDeviceTest {
                 while (action != null && action.config.getOrNull(SemanticsActions.OnClick) == null) action = action.parent
                 val density = context.resources.displayMetrics.density
                 val bounds = requireNotNull(action).boundsInWindow
-                assertTrue("Copy action stays compact", bounds.width <= 128 * density)
+                assertTrue("Copy action stays compact", bounds.width <= 240 * density)
                 assertTrue("Copy action retains a 48dp touch target", bounds.height >= 48 * density - 1)
-                assertTrue("Copy action avoids menu vertical padding", bounds.height <= 56 * density)
+                assertTrue("Native Miuix action stays compact", bounds.height <= 80 * density)
                 assertTrue(requireNotNull(action).config[SemanticsActions.OnClick].action!!.invoke())
             }
             await("menu dismissed") { nodes { list -> list.none { text(it) == copyLabel } } }

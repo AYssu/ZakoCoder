@@ -29,6 +29,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -100,6 +104,20 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     var openedProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var workspaceId by rememberSaveable { mutableStateOf<String?>(null) }
+    var workspaceFromAssistant by rememberSaveable { mutableStateOf(false) }
+    fun closeAssistantWorkspace() {
+        page = AppDestination.Ai
+        workspaceFromAssistant = false
+        openedProjectId = null; workspaceId = null; referencedPath = null
+    }
+    val workspaceMotion = rememberConversationWorkspaceMotion(::closeAssistantWorkspace)
+    fun openAssistantWorkspace(projectId: String? = workbench.ai.state.value.projectId, path: String? = null, fromGesture: Boolean = false) {
+        focus.clearFocus(); keyboard?.hide()
+        workspaceFromAssistant = projectId != null
+        workspaceId = projectId; openedProjectId = if (path != null) projectId else null
+        referencedPath = path; page = AppDestination.Project
+        if (projectId != null && !fromGesture) workspaceMotion.open()
+    }
     var drawerOpening by remember { mutableStateOf(false) }
     var drawerOpenError by remember { mutableStateOf(false) }
     var drawerNavigationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -125,7 +143,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     val ready = workbench.ai.state.value
                     if (workbench.state.value.selectedId != project || ready.projectId != project) return@withTimeoutOrNull false
                     if (ready.historyError) {
-                        workspaceId = project; openedProjectId = null; page = AppDestination.Project
+                        workspaceFromAssistant = false; workspaceId = project; openedProjectId = null; page = AppDestination.Project
                         modelsOpen = false; extensionsOpen = false; shortcutPage = null
                         drawerOpening = false
                         drawerState.close()
@@ -170,6 +188,18 @@ fun ZakoCoderApp(workbench: Workbench) {
     val baseCovered = overlayOpen || drawerUtility != null
     val backgroundNavigation by workbench.backgroundNavigation.collectAsStateWithLifecycle()
     val navigationContext = androidx.compose.ui.platform.LocalContext.current
+    val shareNavigation by workbench.incomingShares.navigation.collectAsStateWithLifecycle()
+    LaunchedEffect(shareNavigation) {
+        val request = shareNavigation ?: return@LaunchedEffect
+        cancelDrawerNavigation()
+        focus.clearFocus(); keyboard?.hide()
+        modelsOpen = false; modelsAdd = false; extensionsOpen = false; shortcutPage = null
+        browserOpen = false; proxyOpen = false; updatesOpen = false; setupOpen = false
+        searchConversations = false; drawerUtility = null; openedProjectId = null; utilityTerminalId = null
+        workspaceFromAssistant = false; workspaceId = null; page = AppDestination.Ai
+        drawerState.close()
+        workbench.incomingShares.consumeNavigation(request)
+    }
     LaunchedEffect(backgroundNavigation?.requestId) {
         val request = backgroundNavigation ?: return@LaunchedEffect
         try {
@@ -272,7 +302,7 @@ fun ZakoCoderApp(workbench: Workbench) {
     }
     CompositionLocalProvider(LocalWorkbenchDark provides dark, LocalMinimumInteractiveComponentSize provides 48.dp) {
     WorkbenchMiuixTheme(dark) {
-    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && !browserOpen && page != AppDestination.Project && page != AppDestination.Ai && !inTerminal &&
+    val mainBack = rememberWorkbenchBackMotion(resetKey = page, enabled = drawerUtility == null && shortcutPage == null && !browserOpen && !inFiles && page != AppDestination.Ai && !inTerminal &&
         !modelsOpen && !extensionsOpen && !updatesOpen && !proxyOpen && !drawerState.isOpen &&
         drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning && !setupOpen && !state.onboarding.required) {
         page = AppDestination.Ai
@@ -337,7 +367,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     onManage = {
                         if (!drawerOpening) {
                             modelsOpen = false; extensionsOpen = false; shortcutPage = null; openedProjectId = null; workspaceId = null
-                            referencedPath = null; drawerUtility = null; page = AppDestination.Project
+                            referencedPath = null; workspaceFromAssistant = false; drawerUtility = null; page = AppDestination.Project
                             navigationScope.launch { drawerState.close() }
                         }
                     })
@@ -359,7 +389,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                     if (destination == AppDestination.Terminal) openTerminal() else drawerUtility = destination
                 } else {
                     drawerUtility = null
-                    if (destination == AppDestination.Project) { openedProjectId = null; workspaceId = null; referencedPath = null }
+                    if (destination == AppDestination.Project) { workspaceFromAssistant = false; openedProjectId = null; workspaceId = null; referencedPath = null }
                     page = destination
                 }
                 if (drawerUtility == null) navigationScope.launch { drawerState.close() }
@@ -386,7 +416,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                         Column(Modifier.fillMaxSize().padding(foregroundPadding)
                             .consumeWindowInsets(foregroundPadding).imePadding()) {
                             Row(Modifier.fillMaxWidth().heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
+                                WorkbenchIconButton(onClick = utilityBack.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                                 Text(stringResource((if (terminalDetail) terminalReturnUtility ?: destination else destination).label), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                             }
                             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -395,7 +425,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                                     AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) {
                                         EnvironmentPage(workbench, state,
                                             onTerminal = { openTerminal() },
-                                            onProjects = { drawerUtility = null; openedProjectId = null; workspaceId = null; page = AppDestination.Project },
+                                            onProjects = { workspaceFromAssistant = false; drawerUtility = null; openedProjectId = null; workspaceId = null; page = AppDestination.Project },
                                             onAi = { drawerUtility = null; page = AppDestination.Ai })
                                     }
                                     AppDestination.Terminal -> Unit
@@ -439,7 +469,7 @@ fun ZakoCoderApp(workbench: Workbench) {
                 color = MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(12.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
                     Row(Modifier.padding(start = 14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(state.message, Modifier.weight(1f).heightIn(max = 96.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall, color = if (state.messageIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
-                        IconButton(onClick = workbench::dismissMessage) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.dismiss)) }
+                        WorkbenchIconButton(onClick = workbench::dismissMessage) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.dismiss)) }
                     }
                 }
                     }
@@ -447,7 +477,8 @@ fun ZakoCoderApp(workbench: Workbench) {
             }) {
         Scaffold(containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.systemBars) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()
+                .onSizeChanged { workspaceMotion.updateViewportWidth(it.width.toFloat()) }) {
             // The assistant is a single retained composition, shared by foreground and back preview.
             // It never runs a second model task or duplicates the saveable-state provider.
             val blockBackground = Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
@@ -459,56 +490,77 @@ fun ZakoCoderApp(workbench: Workbench) {
             // only explicitly opened pages may retain an in-app return destination.
             Box(Modifier.fillMaxSize()
                 .then(if (page == AppDestination.Ai) mainBack.modifier else Modifier)
-                .then(if (page != AppDestination.Ai || baseCovered) blockBackground else Modifier)) {
-CompositionLocalProvider(LocalWorkbenchPageInteractive provides (page == AppDestination.Ai && !baseCovered && !updatesOpen && !proxyOpen)) {
+                .graphicsLayer {
+                    if (workspaceFromAssistant && workspaceMotion.transitioning) {
+                        val amount = workspaceMotion.progress
+                        translationX = -size.width * .88f * amount
+                        scaleX = 1f - .045f * amount; scaleY = scaleX
+                        transformOrigin = TransformOrigin(1f, .5f)
+                        shape = RoundedCornerShape(20.dp * amount); clip = true
+                    }
+                }
+                .then(if ((page != AppDestination.Ai && !workspaceMotion.dragging) || baseCovered) blockBackground else Modifier)) {
+CompositionLocalProvider(LocalWorkbenchPageInteractive provides ((page == AppDestination.Ai || workspaceMotion.dragging) && !baseCovered && !updatesOpen && !proxyOpen)) {
 WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.value) { aiPageState.SaveableStateProvider("ai") { AiPage(workbench, state, onMemory = { shortcutPage = "memory" }, onBrowser = workbench::openBrowser, historyRequest = historyRequest, onHistoryRequestConsumed = { historyRequest = 0 }, onConversations = {
-                        workspaceId = workbench.ai.state.value.projectId; openedProjectId = null; page = AppDestination.Project
-                    }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openedProjectId = null; workspaceId = null; page = AppDestination.Project }, onTerminal = { id ->
+                        openAssistantWorkspace()
+                    }, onOpenNavigation = openNavigation, onModels = { modelsOpen = true }, onProjects = { openAssistantWorkspace(null) }, onTerminal = { id ->
                         if (state.sessions.any { it.id == id && it.projectId == workbench.ai.state.value.projectId }) {
                             openTerminal(workbench.ai.state.value.projectId, id)
                         }
-                    }, onOpenTerminals = { openTerminal(workbench.ai.state.value.projectId) }, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
+                    }, onOpenTerminals = { openTerminal(workbench.ai.state.value.projectId) },
+                        onSwipeWorkspace = if (state.selectedId != null && !state.busy && !assistantEntry.loading) ({ openAssistantWorkspace(fromGesture = true) }) else null, workspaceMotion = workspaceMotion, onExtensions = { focus.clearFocus(); keyboard?.hide(); extensionsOpen = true },
                         onAddModel = { focus.clearFocus(); keyboard?.hide(); modelsAdd = true; modelsOpen = true },
                         onSkills = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "skill" },
                         onMcp = { focus.clearFocus(); keyboard?.hide(); shortcutPage = "mcp" },
                         onProjectPath = { projectId, path ->
-                            workbench.select(projectId); referencedPath = path; openedProjectId = projectId; workspaceId = projectId
-                            focus.clearFocus(); keyboard?.hide(); page = AppDestination.Project
+                            workbench.select(projectId); openAssistantWorkspace(projectId, path)
                         }) } }
                 }
             }
+            if (workspaceFromAssistant) androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                if (workspaceMotion.transitioning) drawRect(androidx.compose.ui.graphics.Color.Black.copy(
+                    alpha = .22f * workspaceMotion.progress))
+            }
             if (page != AppDestination.Ai) {
-            CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!baseCovered && !updatesOpen && !proxyOpen)) {
+            CompositionLocalProvider(LocalWorkbenchPageInteractive provides (!baseCovered && !updatesOpen && !proxyOpen && !workspaceMotion.transitioning)) {
             // Keep the actual destination composed behind child pages, including its scroll and drafts.
             // Its pixels are the predictive-back destination; input and accessibility stay on the overlay.
-            Column(Modifier.fillMaxSize().then(mainBack.modifier)
-                .then(if (baseCovered) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
+            Column(Modifier.fillMaxSize()
+                .then(if (workspaceFromAssistant) Modifier.graphicsLayer {
+                    if (workspaceMotion.transitioning) translationX = size.width * (1f - workspaceMotion.progress)
+                }.testTag("assistant-workspace-panel") else Modifier)
+                .then(if (page != AppDestination.Project || !inFiles) mainBack.modifier else Modifier)
+                .then(if (baseCovered || (workspaceFromAssistant && workspaceMotion.transitioning)) Modifier.clearAndSetSemantics {}.pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                     }
                 } else Modifier)) {
-                if (!inFiles && page != AppDestination.Ai) Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
+                val destinationHeader: @Composable () -> Unit = {
+                Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 8.dp, end = 20.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    IconButton(onClick = openNavigation, modifier = Modifier.size(48.dp)) {
+                    WorkbenchIconButton(onClick = openNavigation, modifier = Modifier.size(48.dp)) {
                         WorkbenchIcon(Glyph.Menu, description = stringResource(R.string.app_navigation_open))
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 16.5.sp)
                 }
+                }
+                if (page != AppDestination.Project) destinationHeader()
                 if (state.loading) { WorkbenchLoading(); return@Column }
                 if (state.busy && state.showProgress) Surface(color = MaterialTheme.colorScheme.primaryContainer) {
                     Column {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                             Text(state.operation, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = workbench::cancel) { Text(stringResource(R.string.cancel)) }
+                            WorkbenchTextButton(onClick = workbench::cancel) { Text(stringResource(R.string.cancel)) }
                         }
                     }
                 }
                 val contentDestination = page.name
                 AnimatedContent(contentDestination, modifier = Modifier.weight(1f), transitionSpec = {
-                    (fadeIn(tween(240, delayMillis = 40)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 18 }) togetherWith
+                    if (workspaceFromAssistant) androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+                    else (fadeIn(tween(240, delayMillis = 40)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { it / 18 }) togetherWith
                         (fadeOut(tween(140)) + slideOutHorizontally(tween(240, easing = FastOutSlowInEasing)) { -it / 24 })
                 }, label = "workbench-page") { shownDestination ->
                 when (AppDestination.valueOf(shownDestination)) {
@@ -519,9 +571,11 @@ WorkbenchEntrance("assistant", assistantReady, animate = entryAnimationFinished.
                             } else if (workbench.openWorkspace(id)) { workspaceId = id; openedProjectId = null }
                         },
                         workspaceId = workspaceId, onWorkspace = { workspaceId = it },
-                        backEnabled = !overlayOpen && !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning,
+                        libraryHeader = destinationHeader, directReturnToConversation = workspaceFromAssistant,
+                        onCloseWorkspace = ::closeAssistantWorkspace,
+                        backEnabled = !workspaceMotion.transitioning && !overlayOpen && !drawerState.isOpen && drawerState.targetValue != DrawerValue.Open && !drawerState.isAnimationRunning,
                         referencedPath = referencedPath, onTerminal = { projectId -> workbench.select(projectId); openTerminal(projectId) })
-                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { openTerminal() }, onProjects = { openedProjectId = null; workspaceId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
+                    AppDestination.Environment -> Box(Modifier.padding(horizontal = 20.dp)) { EnvironmentPage(workbench, state, onTerminal = { openTerminal() }, onProjects = { workspaceFromAssistant = false; openedProjectId = null; workspaceId = null; page = AppDestination.Project }, onAi = { page = AppDestination.Ai }) }
                     AppDestination.Terminal -> Unit
                     AppDestination.Ai -> Unit
                     AppDestination.Settings -> settingsContent()

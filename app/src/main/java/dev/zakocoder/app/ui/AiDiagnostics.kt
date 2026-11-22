@@ -1,9 +1,12 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.basic.BasicComponentDefaults
+
 import androidx.core.graphics.drawable.toDrawable
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -41,7 +44,7 @@ internal fun AiRequestsPanel(state: AiState, modifier: Modifier = Modifier, usag
         item { AiSessionUsageSummary(usageState, state.projectId, state.conversationId, onRefreshUsage) }
         item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_request_retained, state.requests.size), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            IconButton(onClick = { limits = true }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Info, Modifier.size(16.dp), description = stringResource(R.string.ai_data_details)) }
+            WorkbenchIconButton(onClick = { limits = true }, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Info, Modifier.size(16.dp), description = stringResource(R.string.ai_data_details)) }
         } }
         if (state.taskDiagnostic.isNotBlank()) item {
             Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -173,28 +176,25 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_skills_selected, state.enabledSkills.size, AiSkills.MAX_ENABLED), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { controller.refreshGlobalSkills() }, enabled = canRetry,
+                    WorkbenchTextButton(onClick = { controller.refreshGlobalSkills() }, enabled = canRetry,
                         modifier = Modifier.semantics { contentDescription = refreshLabel }) {
                         Text(stringResource(R.string.refresh))
                     }
-                    TextButton(onClick = { controller.recommendedGlobalSkills() }, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
+                    WorkbenchTextButton(onClick = { controller.recommendedGlobalSkills() }, enabled = editable) { Text(stringResource(R.string.ai_skills_recommended)) }
                 }
                 Text(stringResource(R.string.ai_skills_detail), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val onDemandLabel = stringResource(R.string.ai_skill_on_demand)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(onDemandLabel, style = MaterialTheme.typography.bodyMedium)
-                        Text(stringResource(R.string.ai_skill_on_demand_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    WorkbenchSwitch(checked = state.skillOnDemand, onCheckedChange = { controller.setGlobalSkillOnDemand(it) }, enabled = editable,
-                        modifier = Modifier.semantics { contentDescription = onDemandLabel })
-                }
+                SwitchPreference(checked = state.skillOnDemand,
+                    onCheckedChange = { controller.setGlobalSkillOnDemand(it) }, enabled = editable,
+                    title = onDemandLabel, summary = stringResource(R.string.ai_skill_on_demand_hint),
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
                 AiCustomSkillActions(state, controller)
                 val searchLabel = stringResource(R.string.ai_skills_search)
                 WorkbenchTextField(value = query, onValueChange = { query = it.take(200) }, label = searchLabel, singleLine = true,
                     leadingIcon = { WorkbenchIcon(Glyph.Search, description = null) },
                     trailingIcon = if (query.isNotEmpty()) ({
-                        IconButton(onClick = { query = "" }) {
+                        WorkbenchIconButton(onClick = { query = "" }) {
                             WorkbenchIcon(Glyph.Close, description = stringResource(R.string.ai_skills_clear_search))
                         }
                     }) else null,
@@ -202,19 +202,19 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                 if (state.skillsLoading) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(stringResource(R.string.ai_skills_loading_local), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 if (state.skillError) {
                     Text(stringResource(R.string.ai_skills_global_error), color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { confirmingReset = true }, enabled = canRetry) {
+                    WorkbenchTextButton(onClick = { confirmingReset = true }, enabled = canRetry) {
                         Text(stringResource(R.string.ai_skills_reset_configuration))
                     }
                 }
                 if (!state.skillsLoading && filtered.isEmpty()) Text(stringResource(R.string.ai_skills_empty))
                 state.enabledSkills.filter { path -> state.skills.none { it.path == path && it.valid } }.forEach { path ->
                     Text(stringResource(R.string.ai_skill_missing, path), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                    TextButton(onClick = { controller.enableGlobalSkill(path, false) }, enabled = editable) { Text(stringResource(R.string.remove)) }
+                    WorkbenchTextButton(onClick = { controller.enableGlobalSkill(path, false) }, enabled = editable) { Text(stringResource(R.string.remove)) }
                 }
             }
         }
@@ -233,17 +233,27 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
                         val maySelect = skill.path in state.enabledSkills || state.enabledSkills.size < AiSkills.MAX_ENABLED ||
                             (skill.path in AiBuiltinSkills.expressionStyles && state.enabledSkills.any { it in AiBuiltinSkills.expressionStyles })
                         val toggleLabel = stringResource(R.string.ai_skill_toggle, skill.name)
-                        WorkbenchCheckbox(modifier = Modifier.semantics { contentDescription = toggleLabel }, checked = skill.path in state.enabledSkills, onCheckedChange = { controller.enableGlobalSkill(skill.path, it) }, enabled = skill.valid && editable && maySelect)
-                        Column(Modifier.weight(1f).padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(skill.name, style = MaterialTheme.typography.titleSmall)
-                            if (skill.recommended) Text(stringResource(R.string.ai_skill_recommended), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            Text(if (skill.valid) skill.description else stringResource(R.string.ai_skill_invalid), style = MaterialTheme.typography.bodySmall, color = if (skill.valid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
-                            if (!skill.builtIn) Text(skill.path, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                        }
-                        IconButton(onClick = { viewing = skill }, enabled = skill.valid) {
+                        CheckboxPreference(title = skill.name,
+                            checked = skill.path in state.enabledSkills,
+                            onCheckedChange = { controller.enableGlobalSkill(skill.path, it) },
+                            enabled = skill.valid && editable && maySelect,
+                            summary = if (skill.valid) skill.description else stringResource(R.string.ai_skill_invalid),
+                            summaryColor = BasicComponentDefaults.summaryColor(color = if (skill.valid)
+                                MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).semantics { contentDescription = toggleLabel },
+                            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            bottomAction = {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (skill.recommended) Text(stringResource(R.string.ai_skill_recommended),
+                                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    if (!skill.builtIn) Text(skill.path, fontFamily = FontFamily.Monospace,
+                                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            })
+                        WorkbenchIconButton(onClick = { viewing = skill }, enabled = skill.valid) {
                             WorkbenchIcon(Glyph.Info, Modifier.size(18.dp), description = stringResource(R.string.ai_skill_view, skill.name))
                         }
-                        if (!skill.builtIn) IconButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
+                        if (!skill.builtIn) WorkbenchIconButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
                             WorkbenchIcon(Glyph.Trash, Modifier.size(18.dp), description = stringResource(R.string.ai_skill_delete_named, skill.name),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -274,11 +284,11 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(stringResource(if (skill.builtIn) R.string.ai_skill_builtin_source else R.string.ai_skill_global_source), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Text(skill.description, style = MaterialTheme.typography.bodyMedium)
-                if (!skill.builtIn) TextButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
+                if (!skill.builtIn) WorkbenchTextButton(onClick = { deleting = skill; deleteFailed = false }, enabled = editable && !deleteBusy) {
                     Text(stringResource(R.string.ai_skill_delete), color = MaterialTheme.colorScheme.error)
                 }
                 if (failed) Text(stringResource(R.string.ai_skill_invalid), color = MaterialTheme.colorScheme.error)
-                else if (text == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                else if (text == null) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                 else AiMarkdown(text.orEmpty()) {}
             }
         }
@@ -288,10 +298,10 @@ internal fun AiSkillsPanel(state: AiState, controller: AiController, modifier: M
         text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.ai_skill_delete_confirm, skill.name))
             if (deleteFailed) Text(stringResource(R.string.ai_skill_delete_error), color = MaterialTheme.colorScheme.error)
-            if (deleteBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (deleteBusy) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         } },
         confirmButton = { val finish = LocalWorkbenchDialogAction.current
-            TextButton(enabled = editable && !deleteBusy, onClick = {
+            WorkbenchTextButton(enabled = editable && !deleteBusy, onClick = {
             deleteBusy = true; deleteFailed = false
             scope.launch {
                 try {
@@ -330,7 +340,7 @@ internal fun AiFullScreen(title: String, close: () -> Unit, animateExit: Boolean
         Surface(Modifier.fillMaxSize().then(back.modifier), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
+                    WorkbenchIconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                     Text(title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -350,7 +360,7 @@ private fun requestElapsed(request: AiRequestLog): Long {
 
 @Composable
 internal fun AiSectionTab(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    TextButton(onClick = rememberWorkbenchClickFeedback(onClick), modifier = modifier, colors = ButtonDefaults.textButtonColors(contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
+    WorkbenchTextButton(onClick = rememberWorkbenchClickFeedback(onClick), modifier = modifier, colors = ButtonDefaults.textButtonColors(contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(IntrinsicSize.Max)) {
             Text(label, maxLines = 1, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))

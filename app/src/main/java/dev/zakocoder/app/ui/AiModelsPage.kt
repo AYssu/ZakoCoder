@@ -48,16 +48,16 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
     Column(Modifier.fillMaxSize().then(back.modifier).padding(contentPadding)
         .consumeWindowInsets(contentPadding).imePadding()) {
         ModelNavigation(stringResource(R.string.ai_settings), back.close) {
-            TextButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active && !state.loading && !state.saving && state.catalog.profiles.size < 32) {
+            WorkbenchTextButton(onClick = { profile = null; ai.models.clearError(); editing = true }, enabled = !task.active && !state.loading && !state.saving && state.catalog.profiles.size < 32) {
                 WorkbenchIcon(Glyph.Add, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ai_models_add))
             }
         }
-        if (state.loading || state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (state.loading || state.saving) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (task.active) Text(stringResource(R.string.ai_models_task_locked), Modifier.padding(horizontal = 20.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(state.error, Modifier.weight(1f), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = ai.models::retry) { Text(stringResource(R.string.editor_retry)) }
+            WorkbenchTextButton(onClick = ai.models::retry) { Text(stringResource(R.string.editor_retry)) }
         }
         if (!state.loading && state.error.isEmpty() && state.catalog.profiles.isEmpty()) Column(Modifier.weight(1f).fillMaxWidth().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(20.dp)) { Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Ai, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary) } }
@@ -80,12 +80,12 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
                         Text(URI(item.endpoint).host, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(stringResource(protocolLabel(item.protocol)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { ai.models.activate(item.id) }, enabled = !selected && !task.active && !state.saving) { Text(stringResource(if (selected) R.string.ai_models_in_use else R.string.ai_models_use)) }
+                            WorkbenchTextButton(onClick = { ai.models.activate(item.id) }, enabled = !selected && !task.active && !state.saving) { Text(stringResource(if (selected) R.string.ai_models_in_use else R.string.ai_models_use)) }
                             Spacer(Modifier.weight(1f))
                             val editDescription = stringResource(R.string.ai_models_edit_named, item.name)
-                            TextButton(onClick = { profile = item; ai.models.clearError(); editing = true }, modifier = Modifier.semantics { contentDescription = editDescription }) { Text(stringResource(R.string.ai_models_edit)) }
+                            WorkbenchTextButton(onClick = { profile = item; ai.models.clearError(); editing = true }, modifier = Modifier.semantics { contentDescription = editDescription }) { Text(stringResource(R.string.ai_models_edit)) }
                             val deleteDescription = stringResource(R.string.ai_models_delete_named, item.name)
-                            IconButton(onClick = { deleting = item }, enabled = !task.active && !state.saving) { WorkbenchIcon(Glyph.Trash, Modifier.size(18.dp), description = deleteDescription) }
+                            WorkbenchIconButton(onClick = { deleting = item }, enabled = !task.active && !state.saving) { WorkbenchIcon(Glyph.Trash, Modifier.size(18.dp), description = deleteDescription) }
                         }
                     }
                 }
@@ -104,7 +104,7 @@ internal fun AiModelsPage(ai: AiController, startAdding: Boolean = false, onStar
 private fun ModelNavigation(title: String, back: () -> Unit, actions: @Composable RowScope.() -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = back) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_models_back)) }
+            WorkbenchIconButton(onClick = back) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_models_back)) }
             Text(title, Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             actions()
         }
@@ -168,9 +168,9 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
         .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding()) {
         ModelNavigation(stringResource(if (original == null) R.string.ai_models_add else R.string.ai_models_edit_title), back.close) {
-            TextButton(onClick = { savingRevision = state.revision; ai.models.save(draft()) }, enabled = editable && !state.loading && valid) { Text(stringResource(R.string.editor_save)) }
+            WorkbenchTextButton(onClick = { savingRevision = state.revision; ai.models.save(draft()) }, enabled = editable && !state.loading && valid) { Text(stringResource(R.string.editor_save)) }
         }
-        if (state.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (state.saving) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.error.isNotEmpty()) Text(state.error, Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             if (task.active) Text(stringResource(R.string.ai_models_task_locked), style = MaterialTheme.typography.bodySmall)
@@ -178,7 +178,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
             ModelSection(stringResource(R.string.ai_models_connection)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_protocol_heading), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                    TextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_provider_choose)) }
+                    WorkbenchTextButton(onClick = { templates = true }, enabled = editable) { Text(stringResource(R.string.ai_provider_choose)) }
                 }
                 AiProtocolOptions(protocol, editable, ::selectProtocol)
                 if (!protocolParametersValid) {
@@ -204,7 +204,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                 ModelField(model, ::selectModel, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.ai_models_manual_hint), Modifier.weight(1f), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { picker = true; ai.models.discover(draft()) }, enabled = editable && normalized != null && parametersValid) { WorkbenchIcon(Glyph.Refresh, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_models_fetch)) }
+                    WorkbenchTextButton(onClick = { picker = true; ai.models.discover(draft()) }, enabled = editable && normalized != null && parametersValid) { WorkbenchIcon(Glyph.Refresh, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(5.dp)); Text(stringResource(R.string.ai_models_fetch)) }
                 }
                 // The value stays visible while the numeric controls remain in advanced options.
                 AiModelContextSummary(model, options.windowTokens)
@@ -223,7 +223,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                 Text(stringResource(R.string.ai_models_test_hint), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (state.probeMessage.isNotEmpty() && !picker) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                 if (!picker && state.probeProgress != null) AiModelProbeProgressContent(state)
-                if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); TextButton(onClick = ai.models::stopProbe) { Text(stringResource(R.string.cancel)) } }
+                if (state.probing) Row(verticalAlignment = Alignment.CenterVertically) { WorkbenchCircularProgressIndicator(size = 18.dp, strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.ai_models_testing), fontSize = 12.sp); Spacer(Modifier.weight(1f)); WorkbenchTextButton(onClick = ai.models::stopProbe) { Text(stringResource(R.string.cancel)) } }
                 else WorkbenchSecondaryButton(onClick = { ai.models.test(draft()) }, enabled = editable && normalized != null && modelValid && parametersValid, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.ai_models_test_button)) }
             }
             Spacer(Modifier.height(4.dp))
@@ -235,9 +235,9 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
         val dismissSheet = LocalWorkbenchSheetDismiss.current
         Column(Modifier.fillMaxWidth().heightIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ModelField(query, { query = it }, R.string.ai_models_search)
-            if (state.probe == AiProbe.Models) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.probe == AiProbe.Models) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.probeMessage.isNotEmpty()) Text(state.probeMessage, fontSize = 12.sp, color = if (state.probe == AiProbe.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { ai.models.discover(draft()) }, enabled = !state.probing) { Text(stringResource(R.string.ai_models_refresh)) }
+            WorkbenchTextButton(onClick = { ai.models.discover(draft()) }, enabled = !state.probing) { Text(stringResource(R.string.ai_models_refresh)) }
             LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
                 items(state.available.filter { it.contains(query, ignoreCase = true) }, key = { it }) { id ->
                     val description = stringResource(R.string.ai_models_choose_named, id)
@@ -247,7 +247,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                     }
                 }
             }
-            TextButton(onClick = dismissSheet) { Text(stringResource(R.string.ai_models_keep_manual)) }
+            WorkbenchTextButton(onClick = dismissSheet) { Text(stringResource(R.string.ai_models_keep_manual)) }
         }
         }
     }

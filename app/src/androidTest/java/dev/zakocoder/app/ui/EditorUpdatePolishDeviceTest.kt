@@ -85,7 +85,7 @@ class EditorUpdatePolishDeviceTest {
     }
     @Composable private fun Theme(dark: Boolean, content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalWorkbenchDark provides dark) {
-            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+            WorkbenchMiuixTheme(dark) {
                 Surface(Modifier.fillMaxSize().systemBarsPadding().imePadding(), content = content)
             }
         }
@@ -215,7 +215,7 @@ class EditorUpdatePolishDeviceTest {
                     assertFalse(has(context.getString(R.string.editor_reload)))
                     capture("editor-menu-${if (dark) "night" else "day"}")
                     click(context.getString(R.string.editor_select_line))
-                    assertEquals("Beta", view.text.toString().substring(view.cursor.left, view.cursor.right))
+                    await("menu dismissal completes line selection") { view.text.toString().substring(view.cursor.left, view.cursor.right) == "Beta" }
                     click(context.getString(R.string.editor_file_actions)); click(context.getString(R.string.editor_uppercase_line))
                     await("line uppercased") { view.text.getLineString(1) == "BETA" }
                     click(context.getString(R.string.editor_file_actions)); click(context.getString(R.string.editor_lowercase_line))
@@ -245,6 +245,7 @@ class EditorUpdatePolishDeviceTest {
                     val x = bounds.center.x; val y = bounds.center.y
                     fun touch(action: Int, dy: Float, elapsed: Long) {
                         val event = android.view.MotionEvent.obtain(downTime, downTime + elapsed, action, x, y + dy, 0)
+                        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
                         try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
                     }
                     touch(android.view.MotionEvent.ACTION_DOWN, 0f, 0)
@@ -302,9 +303,11 @@ class EditorUpdatePolishDeviceTest {
                     val viewport = nodes { all -> all.single { it.config.getOrNull(SemanticsProperties.TestTag) == "ai-message-viewport" }.boundsInWindow }
                     val downTime = android.os.SystemClock.uptimeMillis()
                     for (step in 0..12) {
-                        val event = android.view.MotionEvent.obtain(downTime, downTime + step * 20L,
+                        if (step > 0) android.os.SystemClock.sleep(20)
+                        val event = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(),
                             if (step == 0) android.view.MotionEvent.ACTION_DOWN else if (step == 12) android.view.MotionEvent.ACTION_UP else android.view.MotionEvent.ACTION_MOVE,
                             viewport.center.x, viewport.top + viewport.height * (.25f + step / 12f * .45f), 0)
+                        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
                         try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
                     }
                     await("latest appears while reviewing history") { nodes { all -> all.any { it.config.getOrNull(SemanticsProperties.TestTag) == "ai-latest-overlay" } } }

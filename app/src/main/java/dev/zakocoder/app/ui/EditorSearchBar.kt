@@ -57,7 +57,7 @@ internal fun EditorSearchBar(
             SearchInput(replacement, onReplacementChange, stringResource(R.string.editor_replacement),
                 Modifier.weight(1f), enabled, { if (canAct) onReplace() })
             SearchAction(Glyph.Swap, R.string.editor_replace, canAct, onReplace)
-            TextButton(onClick = onReplaceAll, enabled = canAct, modifier = Modifier.height(44.dp),
+            WorkbenchTextButton(onClick = onReplaceAll, enabled = canAct, modifier = Modifier.height(44.dp),
                 contentPadding = PaddingValues(horizontal = 8.dp)) {
                 Text(stringResource(R.string.editor_replace_all), fontSize = 12.sp)
             }
@@ -90,7 +90,7 @@ private fun SearchInput(value: String, onValueChange: (String) -> Unit, label: S
 
 @Composable
 private fun SearchAction(glyph: Glyph, label: Int, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick, Modifier.size(44.dp), enabled = enabled) {
+    WorkbenchIconButton(onClick, Modifier.size(44.dp), enabled = enabled) {
         WorkbenchIcon(glyph, Modifier.size(16.dp), description = stringResource(label))
     }
 }

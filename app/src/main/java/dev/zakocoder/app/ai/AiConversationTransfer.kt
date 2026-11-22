@@ -17,7 +17,8 @@ data class TransferDocument(
     val timings: List<AiTurnTiming> = emptyList(),
     val usage: List<TransferUsage> = emptyList(),
     val handoff: String = "",
-    val limited: Boolean = false
+    val limited: Boolean = false,
+    val turnStatistics: List<AiTurnStatistics> = emptyList()
 ) {
     val entryCount: Int get() = timeline.size
     val preview: String get() = timeline.firstOrNull { it.role == AiRole.User }?.text.orEmpty().take(1200)
@@ -58,6 +59,7 @@ object AiConversationTransfer {
             name = clean(event.name), callId = "", permission = AiPermission.Ask) },
         plan = state.plan.map { it.copy(title = clean(it.title)) }, error = clean(state.error),
         timings = state.turnTimings,
+        turnStatistics = state.retainedTurnStatistics(seal = true),
         usage = state.requests.map { TransferUsage(it.turn, clean(it.model), it.started, it.elapsed,
             it.inputTokens, it.outputTokens, it.cachedTokens, it.complete) },
         handoff = clean(listOfNotNull(
@@ -123,7 +125,7 @@ object AiConversationTransfer {
             "\n[续接上下文省略了中间部分。完整导入记录仍可查看；依赖缺失细节前，应询问用户或重新核对原文。]\n" +
             full.takeLast(6700)
         return AiState(projectId = projectId, timeline = timeline, events = events, plan = checked.plan,
-            error = checked.error, turnTimings = checked.timings,
+            error = checked.error, turnTimings = checked.timings, turnStatistics = checked.turnStatistics,
             turn = (timeline.map { it.turn } + events.map { it.turn }).maxOrNull() ?: 0,
             requests = checked.usage.map { AiRequestLog(turn = it.turn, model = it.model, started = it.started,
                 elapsed = it.elapsed, inputTokens = it.inputTokens, outputTokens = it.outputTokens,
@@ -161,7 +163,7 @@ object AiConversationTransfer {
     private fun validate(document: TransferDocument): TransferDocument {
         check(document.timeline.isNotEmpty() || document.handoff.isNotBlank(), AiConversationTransferProblem.Empty)
         check(document.timeline.size <= 512 && document.events.size <= 64 && document.plan.size <= 10 &&
-            document.timings.size <= 512 && document.usage.size <= 32, AiConversationTransferProblem.TooLarge)
+            document.timings.size <= 512 && document.usage.size <= 32 && document.turnStatistics.size <= 512, AiConversationTransferProblem.TooLarge)
         var total = 0L
         fun text(value: String, max: Int = MAX_TEXT_CHARS) {
             check(value.length <= max, AiConversationTransferProblem.TooLarge)
@@ -189,6 +191,15 @@ object AiConversationTransfer {
         check(document.plan.count { it.status == "in_progress" } <= 1)
         document.plan.forEach { text(it.title, 200); check(it.title.isNotBlank()); check(it.status in setOf("pending", "in_progress", "completed")) }
         document.timings.forEach { turn(it.turn); time(it.started); time(it.finished); check(it.finished == null || it.finished >= it.started) }
+        check(document.turnStatistics.map { it.turn }.distinct().size == document.turnStatistics.size)
+        val lastTurn = (document.timeline.map { it.turn } + document.events.map { it.turn }).maxOrNull() ?: 0
+        document.turnStatistics.forEach { statistics ->
+            turn(statistics.turn)
+            check(statistics.turn <= lastTurn)
+            // Only immutable numeric summaries cross this boundary, never a live request replay.
+            check(statistics == statistics.sealed())
+            AiTurnStatistics.fromJson(statistics.toJson())
+        }
         document.usage.forEach {
             turn(it.turn); text(it.model, 200); time(it.started); time(it.elapsed)
             time(it.inputTokens); time(it.outputTokens); time(it.cachedTokens)
@@ -209,6 +220,7 @@ object AiConversationTransfer {
             .put("started", it.started).put("finished", it.finished).put("turn", it.turn) }))
         .put("plan", JSONArray(document.plan.map { JSONObject().put("title", it.title).put("status", it.status) }))
         .put("timings", JSONArray(document.timings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
+        .put("turnStatistics", JSONArray(document.turnStatistics.map { it.toJson() }))
         .put("usage", JSONArray(document.usage.map { JSONObject().put("turn", it.turn).put("model", it.model)
             .put("started", it.started).put("elapsed", it.elapsed).put("inputTokens", it.inputTokens)
             .put("outputTokens", it.outputTokens).put("cachedTokens", it.cachedTokens).put("complete", it.complete) }))
@@ -233,7 +245,8 @@ object AiConversationTransfer {
             timings = entries("timings", 512) { AiTurnTiming(it.exactInt("turn"), it.exactLong("started"), it.nullableLong("finished")) },
             usage = entries("usage", 32) { TransferUsage(it.exactInt("turn"), it.getString("model"), it.exactLong("started"),
                 it.exactLong("elapsed"), it.nullableLong("inputTokens"), it.nullableLong("outputTokens"),
-                it.nullableLong("cachedTokens"), it.getBoolean("complete")) }, handoff = root.getString("handoff"), limited = root.optBoolean("limited", false))
+                it.nullableLong("cachedTokens"), it.getBoolean("complete")) }, handoff = root.getString("handoff"), limited = root.optBoolean("limited", false),
+            turnStatistics = if (root.has("turnStatistics")) entries("turnStatistics", 512) { AiTurnStatistics.fromJson(it) } else emptyList())
     }
 
     private fun JSONObject.exactLong(name: String): Long {

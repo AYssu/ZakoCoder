@@ -368,6 +368,55 @@ open class AiHistoryStore(private val directory: File) {
         }
         return references
     }
+    /** Complete, fail-closed attachment ownership scan. Backup/new records may still own files.
+     * The controller holds its history mutex until collection finishes; failed scans never prune.
+     */
+    fun fileAttachmentReferences(): Set<String> {
+        val attributes = try { Files.readAttributes(directory.toPath(), BasicFileAttributes::class.java, NOFOLLOW_LINKS) }
+        catch (_: NoSuchFileException) { return emptySet() }
+        require(attributes.isDirectory && !attributes.isSymbolicLink)
+        val projects = requireNotNull(directory.listFiles())
+        require(projects.size <= 1024)
+        val references = linkedSetOf<String>()
+        var bytes = 0L
+        var files = 0
+        projects.forEach { root ->
+            require(root.name.matches(Regex("[a-f0-9]{64}")) && Files.isDirectory(root.toPath(), NOFOLLOW_LINKS))
+            val entries = requireNotNull(root.listFiles())
+            require(entries.size <= 64)
+            entries.forEach { file ->
+                require(++files <= 8192 && Files.isRegularFile(file.toPath(), NOFOLLOW_LINKS))
+                val name = file.name.removeSuffix(".bak").removeSuffix(".new")
+                require(file.name in setOf(name, "$name.bak", "$name.new"))
+                require(name == "selected.json" || (name.endsWith(".json") && AiFileAttachments.validId(name.removeSuffix(".json"))))
+                val size = Files.size(file.toPath())
+                require(size in 1..(64L * 1024 * 1024))
+                bytes += size
+                require(bytes <= 256L * 1024 * 1024)
+                val json = Files.newInputStream(file.toPath(), NOFOLLOW_LINKS).use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        require(output.size() + count <= 64 * 1024 * 1024)
+                        output.write(buffer, 0, count)
+                    }
+                    require(output.size().toLong() == size)
+                    JSONObject(output.toString(Charsets.UTF_8.name()))
+                }
+                require(json.opt("schemaVersion") == 1 && AiFileAttachments.validId(json.getString("id")))
+                if (name != "selected.json") {
+                    require(json.getString("id") == name.removeSuffix(".json"))
+                    val state = decode(json)
+                    references += state.fileAttachments.map { it.id }
+                    state.timeline.forEach { entry -> references += entry.inputReferences.mapNotNull { it.attachment?.id } }
+                }
+            }
+        }
+        return references
+    }
+
     private val sources = listOf(R.string.ai_permission_default_rule, R.string.ai_permission_tool_rule,
         R.string.ai_permission_task_rule, R.string.ai_permission_rejected_rule, R.string.ai_permission_once_rule,
         R.string.ai_permission_yolo_rule, R.string.ai_edit_inherited_permission, R.string.ai_permission_mode_rule)
@@ -375,12 +424,15 @@ open class AiHistoryStore(private val directory: File) {
         .put("title", (state.conversations.firstOrNull { it.id == state.conversationId }?.title?.takeIf { it.isNotBlank() } ?: state.timeline.firstOrNull { it.role == AiRole.User }?.text)?.replace('\n', ' ')?.take(80).orEmpty())
         .put("checkpointId", state.checkpointId).put("updated", System.currentTimeMillis()).put("turn", state.turn).put("active", state.active)
         .put("turnTimings", JSONArray(state.turnTimings.map { JSONObject().put("turn", it.turn).put("started", it.started).put("finished", it.finished) }))
+        .put("turnStatistics", JSONArray(state.retainedTurnStatistics(seal = !state.active && state.questionContinuation == null).map { it.toJson() }))
         .put("phase", state.phase.name).put("trimmed", state.historyTrimmed)
         .put("round", state.round).put("toolCount", state.toolCount)
         .put("automaticDelegation", state.automaticDelegation)
         .put("planningMode", state.planningMode)
         .put("taskUsage", JSONObject().put("requests", state.taskUsage.requests).put("tools", state.taskUsage.tools)
             .put("tokens", state.taskUsage.tokens).put("estimatedRequests", state.taskUsage.estimatedRequests).put("elapsedMs", state.taskUsage.elapsedMs))
+        .put("fileAttachments", JSONArray(state.fileAttachments.map(::encodeFileAttachment)))
+        .put("fileDraftIds", JSONArray(state.fileDraftIds))
         .put("queuedMessages", AiTaskQueue.encode(state.queuedMessages))
         .put("questions", JSONArray(state.questions.map { it.encode() }))
         .put("questionContinuation", state.questionContinuation?.encode())
@@ -403,6 +455,7 @@ open class AiHistoryStore(private val directory: File) {
         .put("taskDiagnostic", state.taskDiagnostic.take(2048)).put("error", state.error.take(500)).put("failureKind", state.failureKind?.name)
         .also {
             validateTimeline(state.timeline)
+            validateFileOwnership(state)
             require(state.queuedMessages.all { it.turn <= state.turn })
             validateQuestions(state.questions, state.questionContinuation, state.events, state.turn)
         }
@@ -413,6 +466,7 @@ open class AiHistoryStore(private val directory: File) {
             require(it.inputLength == null || (it.role == AiRole.User && it.inputLength in 0..minOf(16000, it.text.length)))
             require(it.role == AiRole.User || it.inputReferences.isEmpty())
             require(it.inputReferences.size <= 4 && it.inputReferences.all { ref -> ref.text.length <= 6000 })
+            it.inputReferences.forEach(::validateFileReference)
             require(it.reasoning.length <= AI_REASONING_DISPLAY_LIMIT)
             require(it.role == AiRole.Assistant || (it.reasoning.isEmpty() && !it.reasoningTruncated))
             require(it.role == AiRole.User || it.images.isEmpty())
@@ -459,7 +513,7 @@ open class AiHistoryStore(private val directory: File) {
                 if (it.has("reasoning")) it.getString("reasoning") else "",
                 if (it.has("reasoningTruncated")) it.getBoolean("reasoningTruncated") else false,
                 if (it.has("images")) decodeAiImages(it.getJSONArray("images")) else emptyList(),
-                if (it.isNull("inputLength")) null else it.getInt("inputLength"), decodeRetryReferences(it.optJSONArray("inputReferences")))
+                if (it.isNull("inputLength")) null else it.getInt("inputLength"), decodeRetryReferences(if (it.has("inputReferences")) it.getJSONArray("inputReferences") else null))
         } }
         validateTimeline(timeline)
         require(json.getInt("turn") in 0..1000000)
@@ -549,14 +603,24 @@ open class AiHistoryStore(private val directory: File) {
         val timings = (0 until timingArray.length()).map { index -> timingArray.getJSONObject(index).let {
             AiTurnTiming(it.getInt("turn"), it.getLong("started"), if (it.isNull("finished")) null else it.getLong("finished"))
         } }
+        val statisticsArray = if (json.has("turnStatistics")) json.getJSONArray("turnStatistics") else JSONArray()
+        require(statisticsArray.length() <= 512)
+        val statistics = (0 until statisticsArray.length()).map { AiTurnStatistics.fromJson(statisticsArray.getJSONObject(it)) }
+        require(statistics.map { it.turn }.distinct().size == statistics.size && statistics.all { it.turn in 0..json.getInt("turn") })
         val taskUsage = json.optJSONObject("taskUsage")?.let {
             AiTaskUsage(it.getInt("requests"), it.getInt("tools"), it.getLong("tokens"), it.getInt("estimatedRequests"), it.getLong("elapsedMs")).also { usage ->
                 require(usage.requests >= 0 && usage.tools >= 0 && usage.tokens >= 0 && usage.estimatedRequests in 0..usage.requests && usage.elapsedMs >= 0)
             }
         } ?: AiTaskUsage()
-        val state = AiState(planningMode = json.optBoolean("planningMode", false), automaticDelegation = json.optBoolean("automaticDelegation", false), taskUsage = taskUsage, queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
+        val fileAttachments = if (json.has("fileAttachments")) decodeFileAttachments(json.getJSONArray("fileAttachments")) else emptyList()
+        val fileDraftIds = if (json.has("fileDraftIds")) {
+            val ids = json.getJSONArray("fileDraftIds")
+            require(ids.length() <= 4)
+            (0 until ids.length()).map { index -> (ids.get(index) as? String ?: error("invalid_attachment_id")).also { require(AiFileAttachments.validId(it)) } }
+        } else emptyList()
+        val state = AiState(fileAttachments = fileAttachments, fileDraftIds = fileDraftIds, planningMode = json.optBoolean("planningMode", false), automaticDelegation = json.optBoolean("automaticDelegation", false), taskUsage = taskUsage, queuedMessages = AiTaskQueue.decode(json.optJSONArray("queuedMessages")), questions = questions, questionContinuation = continuation,
             round = if (continuation != null) json.optInt("round").also { require(it >= 0) } else 0,
-            toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
+            toolCount = if (continuation != null) json.optInt("toolCount").also { require(it >= 0) } else 0, turnTimings = timings, turnStatistics = statistics, checkpointId = checkpointId, conversationId = json.getString("id"), turn = json.getInt("turn"), timeline = timeline, events = restored, plan = plan,
             contextSummary = summary, contextCompactions = compactions, contextChars = contextChars,
             estimatedContextTokens = json.optLong("estimatedContextTokens", 0).coerceAtLeast(0), contextWindowTokens = json.optInt("contextWindowTokens", 128000).coerceIn(8192, 2097152),
             contextOutputReserveTokens = json.optInt("contextOutputReserveTokens", 8192).coerceAtLeast(0),
@@ -567,10 +631,13 @@ open class AiHistoryStore(private val directory: File) {
             failureKind = json.optString("failureKind").takeIf { it.isNotBlank() && it != "null" }?.let(AiFailure::valueOf),
             historyTrimmed = json.optBoolean("trimmed"), interrupted = json.getBoolean("active") && continuation == null,
             phase = if (continuation != null) AiPhase.AwaitingAnswer else if (json.getBoolean("active")) AiPhase.Cancelled else AiPhase.valueOf(json.getString("phase")))
+        val restoredStatistics = state.retainedTurnStatistics()
+        val restoredState = state.copy(turnStatistics = restoredStatistics)
+        validateFileOwnership(state)
         require(state.queuedMessages.all { it.turn <= state.turn })
         val interrupted = json.getBoolean("active") && continuation == null
         val legacyFailed = !json.has("recovery") && state.phase == AiPhase.Failed
-        return if (continuation == null && (pendingRecovery.isNotBlank() || interrupted || legacyFailed)) state.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else state
+        return if (continuation == null && (pendingRecovery.isNotBlank() || interrupted || legacyFailed)) restoredState.copy(recoveryNotes = boundedRecovery(recovery + pendingRecovery.ifBlank { recoveryNote(state, AiFailure.Interrupted) })) else restoredState
     }
 }
 
@@ -578,6 +645,7 @@ open class AiHistoryStore(private val directory: File) {
 private fun encodeRetryReference(reference: AiReference): JSONObject = JSONObject().put("path", reference.path)
     .put("text", reference.text).put("kind", reference.kind).put("line", reference.startLine)
     .put("unsaved", reference.unsaved).put("truncated", reference.truncated).put("name", reference.displayName)
+    .apply { reference.attachment?.let { put("attachment", encodeFileAttachment(it)) } }
 private fun decodeRetryReferences(array: JSONArray?): List<AiReference> {
     if (array == null) return emptyList()
     require(array.length() <= 4)
@@ -586,6 +654,48 @@ private fun decodeRetryReferences(array: JSONArray?): List<AiReference> {
         val text = ref.getString("text").also { require(it.length <= 6000) }
         val kind = ref.getString("kind").also { require(it.length <= 64) }
         val name = if (ref.isNull("name")) null else ref.getString("name").also { require(it.length <= 1000) }
-        AiReference(path, text, kind, if (ref.isNull("line")) null else ref.getInt("line"), ref.getBoolean("unsaved"), ref.getBoolean("truncated"), name)
+        val attachment = if (ref.has("attachment")) decodeFileAttachment(ref.getJSONObject("attachment")) else null
+        AiReference(path, text, kind, if (ref.isNull("line")) null else ref.getInt("line"), ref.getBoolean("unsaved"), ref.getBoolean("truncated"), name, attachment).also(::validateFileReference)
+    } }
+}
+
+/** Stored names and MIME values remain untrusted metadata; only app-owned IDs locate bytes. */
+private fun encodeFileAttachment(file: AiFileAttachment): JSONObject {
+    AiFileAttachments.validate(file)
+    return JSONObject().put("id", file.id).put("displayName", file.displayName).put("mimeType", file.mimeType)
+        .put("bytes", file.bytes).put("sha256", file.sha256)
+}
+private fun decodeFileAttachment(json: JSONObject): AiFileAttachment {
+    fun string(name: String): String = json.get(name) as? String ?: error("invalid_attachment_metadata")
+    val size = json.get("bytes").also { require(it is Int || it is Long) }
+    return AiFileAttachment(string("id"), string("displayName"), string("mimeType"), (size as Number).toLong(), string("sha256"))
+        .also(AiFileAttachments::validate)
+}
+private fun decodeFileAttachments(array: JSONArray): List<AiFileAttachment> {
+    require(array.length() <= AiFileAttachments.MAX_CONVERSATION_FILES)
+    return (0 until array.length()).map { decodeFileAttachment(array.getJSONObject(it)) }.also { files ->
+        require(files.map { it.id }.distinct().size == files.size)
+    }
+}
+private fun validateFileReference(reference: AiReference) {
+    val file = reference.attachment
+    if (file != null) {
+        AiFileAttachments.validate(file)
+        require(reference.path == "attachment:${file.id}" && reference.kind == "attachment" && reference.text.isEmpty())
+        require(reference.displayName == file.displayName && reference.startLine == null && !reference.unsaved && !reference.truncated)
+    } else {
+        require(reference.kind != "attachment" && !reference.path.startsWith("attachment:"))
+    }
+}
+private fun validateFileOwnership(state: AiState) {
+    require(state.fileAttachments.size <= AiFileAttachments.MAX_CONVERSATION_FILES)
+    val files = state.fileAttachments.associateBy { it.id }
+    require(files.size == state.fileAttachments.size)
+    state.fileAttachments.forEach(AiFileAttachments::validate)
+    require(state.fileDraftIds.size <= 4 && state.fileDraftIds.distinct().size == state.fileDraftIds.size)
+    require(state.fileDraftIds.all { AiFileAttachments.validId(it) && files.containsKey(it) })
+    state.timeline.forEach { entry -> entry.inputReferences.forEach { reference ->
+        validateFileReference(reference)
+        reference.attachment?.let { require(files[it.id] == it) }
     } }
 }

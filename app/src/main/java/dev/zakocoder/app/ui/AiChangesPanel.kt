@@ -144,7 +144,7 @@ internal fun AiConversationChangeCard(
         else -> if (limited) R.string.ai_changes_short_limited else if (read.snapshot.checkpoint?.restored == true) R.string.ai_changes_short_restored else null
     }
     val compactDescription = stringResource(R.string.ai_file_changes_title)
-    if (compact) TextButton(onClick = { open = true }, modifier = modifier.heightIn(min = 48.dp)
+    if (compact) WorkbenchTextButton(onClick = { open = true }, modifier = modifier.heightIn(min = 48.dp)
         .semantics { contentDescription = compactDescription },
         contentPadding = PaddingValues(horizontal = 8.dp)) {
         WorkbenchIcon(Glyph.File, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -220,7 +220,7 @@ private fun ChangeReviewSheet(turn: Int, rows: List<AiReview>, summaries: Map<St
                 }
                 summaries?.let { ChangeNumbers(AiLineSummary(it.values.sumOf { count -> count.added },
                     it.values.sumOf { count -> count.removed })) }
-                IconButton(onClick = requestDismiss) {
+                WorkbenchIconButton(onClick = requestDismiss) {
                     WorkbenchIcon(Glyph.Close, Modifier.size(18.dp), description = stringResource(R.string.close))
                 }
             }
@@ -249,7 +249,7 @@ internal fun AiChangesPanel(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.ai_file_changes_title), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Normal)
             if (selectedTurn > 0) Box {
-                TextButton(onClick = { turnMenu = true }) { Text(stringResource(R.string.project_validation_turn, selectedTurn)) }
+                WorkbenchTextButton(onClick = { turnMenu = true }) { Text(stringResource(R.string.project_validation_turn, selectedTurn)) }
                 DropdownMenu(turnMenu, { turnMenu = false }) {
                     turns.forEach { turn -> DropdownMenuItem(text = { Text(stringResource(R.string.project_validation_turn, turn)) },
                         onClick = { selectedTurn = turn; turnMenu = false }) }
@@ -285,8 +285,8 @@ private fun ChangesStatus(snapshot: AiChangesSnapshot, empty: Boolean, retry: ()
     }
     message?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall,
         color = if (snapshot.status == AiChangesStatus.Failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
-    if (snapshot.status == AiChangesStatus.Loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-    if (snapshot.status == AiChangesStatus.Failed) TextButton(onClick = retry) { Text(stringResource(R.string.editor_retry)) }
+    if (snapshot.status == AiChangesStatus.Loading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
+    if (snapshot.status == AiChangesStatus.Failed) WorkbenchTextButton(onClick = retry) { Text(stringResource(R.string.editor_retry)) }
 }
 
 @Composable
@@ -318,7 +318,7 @@ private fun ChangesList(state: AiState, turn: Int, snapshot: AiChangesSnapshot, 
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         summaries?.get(item.path)?.let { ChangeNumbers(it) }
-                        if (expanded == item.path) IconButton(onClick = { fullReview = item }, modifier = Modifier.size(48.dp)) {
+                        if (expanded == item.path) WorkbenchIconButton(onClick = { fullReview = item }, modifier = Modifier.size(48.dp)) {
                             WorkbenchIcon(Glyph.File, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 description = stringResource(R.string.ai_changes_full_review))
                         }
@@ -330,7 +330,7 @@ private fun ChangesList(state: AiState, turn: Int, snapshot: AiChangesSnapshot, 
                 if (expanded == item.path) {
                     InlineChangeDiff(item)
                     val undo = if (turn == state.turn) aiCurrentTurnEditorChanges(state).lastOrNull { it.path == item.path } else null
-                    if (undo != null) TextButton(onClick = { onUndo(undo) },
+                    if (undo != null) WorkbenchTextButton(onClick = { onUndo(undo) },
                         enabled = !state.active && !state.restoring && !state.permissionsLoading) {
                         Text(stringResource(R.string.ai_file_changes_undo_last))
                     }
@@ -402,7 +402,7 @@ private fun InlineChangeDiff(review: AiReview) {
         review.beforeMode ?: stringResource(R.string.ai_review_mode_unknown), review.afterMode ?: stringResource(R.string.ai_review_mode_unknown)),
         fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (review.before == review.after) Text(stringResource(R.string.ai_review_body_unchanged), style = MaterialTheme.typography.bodySmall)
-    if (text == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (text == null) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
     else if (text.isNotEmpty()) CompactDiffPreview(text)
 }
 

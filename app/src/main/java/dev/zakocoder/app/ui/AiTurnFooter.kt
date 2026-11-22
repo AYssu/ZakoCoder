@@ -43,12 +43,10 @@ internal data class TurnUsageContext(val used: Long, val capacity: Int) {
 
 /** A historical turn must never borrow the latest turn's context or cumulative token usage. */
 internal fun turnUsageContext(state: AiState, turn: Int): TurnUsageContext? {
-    val requests = state.requests.filter { it.turn == turn }
-    val latest = requests.lastOrNull { !it.compaction }
-    if (latest != null) return latest.takeIf { it.estimatedContextTokens > 0 && it.contextWindowTokens > 0 }
-        ?.let { TurnUsageContext(it.estimatedContextTokens, it.contextWindowTokens) }
-    return if (requests.isEmpty() && turn == state.turn && state.estimatedContextTokens > 0 && state.contextWindowTokens > 0)
-        TurnUsageContext(state.estimatedContextTokens, state.contextWindowTokens) else null
+    val statistics = state.statisticsForTurn(turn) ?: return null
+    val used = statistics.lastContextTokens ?: return null
+    val capacity = statistics.contextWindowTokens ?: return null
+    return TurnUsageContext(used, capacity)
 }
 
 internal data class TurnUsageColors(val faint: Color, val secondary: Color, val number: Color, val strong: Color, val track: Color)
@@ -60,10 +58,11 @@ internal fun turnUsageColors(): TurnUsageColors = if (LocalWorkbenchDark.current
 
 @Composable
 internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifier) {
-    val usage = remember(state.requests, turn) { turnUsage(state.requests, turn) }
-    val context = remember(state.requests, state.turn, state.estimatedContextTokens, state.contextWindowTokens, turn) { turnUsageContext(state, turn) }
+    val statistics = remember(state.turnStatistics, state.requests, turn) { state.statisticsForTurn(turn) }
+    val usage = statistics?.usage() ?: turnUsage(emptyList(), turn)
+    val context = remember(statistics) { turnUsageContext(state, turn) }
     val timing = state.turnTimings.lastOrNull { it.turn == turn }
-    val compacted = state.requests.any { it.turn == turn && it.compaction }
+    val compacted = statistics?.compacted == true
     val colors = turnUsageColors()
     val textStyle = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace,
         fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal)
@@ -76,12 +75,10 @@ internal fun AiTurnFooter(state: AiState, turn: Int, modifier: Modifier = Modifi
     val durationLabel = stringResource(R.string.turn_usage_duration)
     val cacheLabel = stringResource(R.string.turn_usage_cache)
     val summaryLabel = stringResource(R.string.turn_usage_summary)
-    val turnRecords = state.requests.filter { it.turn == turn }
     val summaryValue = when {
         compacted -> stringResource(R.string.turn_usage_summary_triggered)
-        turnRecords.isEmpty() -> "—"
-        state.historyTrimmed || state.requests.size >= 32 || turnRecords.filter { it.round > 0 }.minOfOrNull { it.round }?.let { it != 1 } == true ->
-            stringResource(R.string.turn_usage_summary_unrecorded)
+        statistics == null -> "—"
+        statistics.partial -> stringResource(R.string.turn_usage_summary_unrecorded)
         else -> stringResource(R.string.turn_usage_summary_none)
     }
     val contextLabel = stringResource(R.string.turn_usage_context)

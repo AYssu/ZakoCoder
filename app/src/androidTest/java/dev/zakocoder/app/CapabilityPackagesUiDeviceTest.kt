@@ -51,6 +51,20 @@ class CapabilityPackagesUiDeviceTest {
         }
         return result.get()
     }
+    /** Match the title first, then its nearest preference row containing one real toggle. */
+    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode? {
+        fun controls(node: SemanticsNode): List<SemanticsNode> = buildList {
+            // Disabled native switches can retain state while removing OnClick.
+            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) add(node)
+            node.children.forEach { addAll(controls(it)) }
+        }
+        return all.asSequence().filter {
+            it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == label } == true ||
+                label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        }.firstNotNullOfOrNull { title ->
+            generateSequence(title) { it.parent }.firstNotNullOfOrNull { controls(it).singleOrNull() }
+        }
+    }
     private fun text(node: SemanticsNode) = node.config.getOrNull(SemanticsProperties.Text)?.joinToString("\n") { it.text }.orEmpty()
     private fun matches(node: SemanticsNode, label: String) = text(node) == label ||
         label in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
@@ -190,21 +204,33 @@ class CapabilityPackagesUiDeviceTest {
             await("Global screen available without workspace") { has(context.getString(R.string.virtual_screen_title)) }
             assertFalse(has(instrumentation.context.getString(TestR.string.capability_packages_no_project)))
             nodes { all ->
-                val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
-                assertEquals(4, switches.size)
-                switches.take(3).forEach { assertNull(it.config.getOrNull(SemanticsProperties.Disabled)) }
-                assertNotNull(switches.last().config.getOrNull(SemanticsProperties.Disabled))
+                val labels = listOf(R.string.capability_device_shell_title, R.string.virtual_screen_title,
+                    R.string.browser_title, R.string.capability_ssh_title).map(context::getString)
+                assertEquals(4, all.count { it.config.getOrNull(SemanticsProperties.ToggleableState) != null })
+                labels.forEach { label ->
+                    val control = requireNotNull(switchControl(all, label)) { "Switch: $label" }
+                    assertEquals(androidx.compose.ui.state.ToggleableState.Off,
+                        control.config[SemanticsProperties.ToggleableState])
+                    assertEquals("Only SSH requires a workspace: $label", label == context.getString(R.string.capability_ssh_title),
+                        control.config.getOrNull(SemanticsProperties.Disabled) != null)
+                }
             }
             capture(dark, "no-project")
             packages(CapabilityPackagesUiModel(projectName = "Screen test fixture", hasProject = true, rootReady = true))
             await("All packages default off") { has(context.getString(R.string.virtual_screen_title)) }
             nodes { all ->
-                val switches = all.filter { it.config.getOrNull(SemanticsProperties.Role) == androidx.compose.ui.semantics.Role.Switch }
-                assertEquals(4, switches.size)
-                switches.forEach { assertEquals(androidx.compose.ui.state.ToggleableState.Off,
-                    it.config.getOrNull(SemanticsProperties.ToggleableState)) }
-                assertTrue(switches[1].config[SemanticsActions.OnClick].action?.invoke() == true)
-                assertTrue(switches.last().config[SemanticsActions.OnClick].action?.invoke() == true)
+                val labels = listOf(R.string.capability_device_shell_title, R.string.virtual_screen_title,
+                    R.string.browser_title, R.string.capability_ssh_title).map(context::getString)
+                assertEquals(4, all.count { it.config.getOrNull(SemanticsProperties.ToggleableState) != null })
+                labels.forEach { label ->
+                    val control = requireNotNull(switchControl(all, label)) { "Switch: $label" }
+                    assertEquals(androidx.compose.ui.state.ToggleableState.Off,
+                        control.config[SemanticsProperties.ToggleableState])
+                    assertNull("Enabled with workspace: $label", control.config.getOrNull(SemanticsProperties.Disabled))
+                }
+                for (label in listOf(R.string.virtual_screen_title, R.string.capability_ssh_title).map(context::getString)) {
+                    assertTrue(requireNotNull(switchControl(all, label)).config[SemanticsActions.OnClick].action?.invoke() == true)
+                }
             }
             assertTrue(screen.get()); assertTrue(ssh.get())
             capture(dark, "packages-default-off-360-font130")

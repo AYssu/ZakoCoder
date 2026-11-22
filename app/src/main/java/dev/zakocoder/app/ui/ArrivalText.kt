@@ -9,6 +9,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -21,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 
 internal val LocalTextArrival = compositionLocalOf { false }
 internal const val TEXT_REVEAL_MS = 200
@@ -33,10 +37,16 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
     lineHeight: TextUnit = TextUnit.Unspecified, maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip, softWrap: Boolean = true,
     style: TextStyle = LocalTextStyle.current, animated: Boolean = LocalTextArrival.current,
-    durationMillis: Int = TEXT_REVEAL_MS, maxPendingLines: Int = Int.MAX_VALUE) {
+    durationMillis: Int = TEXT_REVEAL_MS, maxPendingLines: Int = Int.MAX_VALUE,
+    inlineCodeBackground: Color = Color.Unspecified,
+    onTextLayout: (TextLayoutResult) -> Unit = {}) {
     val cursor = remember { Animatable(if (animated) 0f else text.length.toFloat()) }
     var previous by remember { mutableStateOf(text.text) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val codeBackgrounds = remember(layout, inlineCodeBackground) {
+        if (inlineCodeBackground == Color.Unspecified) emptyList()
+        else layout?.let(::inlineCodeBackgrounds).orEmpty()
+    }
     val boundaries = remember(text.text, animated) {
         if (!animated) intArrayOf() else buildList {
             add(0)
@@ -55,6 +65,16 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
     }
     Text(text, modifier.drawWithContent {
         val result = layout
+        fun paintText() {
+            val codePadding = 3.dp.toPx()
+            if (result?.layoutInput?.text == text) codeBackgrounds.forEach { box ->
+                drawRoundRect(inlineCodeBackground,
+                    topLeft = Offset(box.left - codePadding, box.top),
+                    size = Size(box.width + codePadding * 2, box.height),
+                    cornerRadius = CornerRadius(3.dp.toPx()))
+            }
+            drawContent()
+        }
         // A following viewport can already be at the measured end while a busy stream
         // outruns the drawing cursor. Bound the hidden tail for that viewport so it cannot
         // become entirely blank. Ordinary text keeps the unrestricted arrival animation.
@@ -62,13 +82,13 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
             result.getLineStart((result.lineCount - maxPendingLines.coerceAtLeast(1)).coerceAtLeast(0)).toFloat() else 0f
         val position = if (animated) maxOf(cursor.value, visibleFloor).coerceIn(0f, text.length.toFloat()) else text.length.toFloat()
         if (result == null || result.layoutInput.text != text || position >= text.length || !animated) {
-            drawContent()
+            paintText()
         } else if (position > 0f && boundaries.size > 1) {
             val found = boundaries.binarySearch(position.toInt())
             val at = if (found >= 0) found else (-found - 2).coerceAtLeast(0)
             val base = boundaries[at]
             val next = boundaries.getOrElse(at + 1) { text.length }
-            if (base > 0) clipPath(result.getPathForRange(0, base)) { this@drawWithContent.drawContent() }
+            if (base > 0) clipPath(result.getPathForRange(0, base)) { paintText() }
             if (next > base) {
                 val fraction = ((position - base) / (next - base)).coerceIn(0f, 1f)
                 val glyph = result.getBoundingBox(base)
@@ -79,14 +99,14 @@ internal fun ArrivalText(text: AnnotatedString, modifier: Modifier = Modifier,
                 if (right > left && fraction > 0f) {
                     val canvas = drawContext.canvas
                     canvas.saveLayer(Rect(left, glyph.top, right, glyph.bottom), Paint().apply { alpha = fraction })
-                    clipRect(left, glyph.top, right, glyph.bottom) { this@drawWithContent.drawContent() }
+                    clipRect(left, glyph.top, right, glyph.bottom) { paintText() }
                     canvas.restore()
                 }
             }
         }
     }, color = color, fontSize = fontSize, fontFamily = fontFamily, fontWeight = fontWeight,
         lineHeight = lineHeight, maxLines = maxLines, overflow = overflow, softWrap = softWrap,
-        style = style, onTextLayout = { layout = it })
+        style = style, onTextLayout = { layout = it; onTextLayout(it) })
 }
 
 @Composable

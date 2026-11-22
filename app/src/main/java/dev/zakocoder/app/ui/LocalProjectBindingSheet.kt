@@ -79,18 +79,18 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
                     Text(state.current?.path.orEmpty(), style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            if (state.parent != null) TextButton(onClick = { state.parent?.let(browser::open) }, enabled = enabled && !state.loading) {
+            if (state.parent != null) WorkbenchTextButton(onClick = { state.parent?.let(browser::open) }, enabled = enabled && !state.loading) {
                 WorkbenchIcon(Glyph.Back, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.local_browser_up))
             }
             when {
                 state.loading -> Row(Modifier.heightIn(min = 80.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    WorkbenchCircularProgressIndicator(size = 20.dp, strokeWidth = 2.dp)
                     Text(stringResource(R.string.local_browser_loading))
                 }
                 state.error.isNotEmpty() -> {
                     Text(state.error, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { browser.open(state.current?.path) }) { Text(stringResource(R.string.local_browser_retry)) }
+                    WorkbenchTextButton(onClick = { browser.open(state.current?.path) }) { Text(stringResource(R.string.local_browser_retry)) }
                 }
                 state.directories.isEmpty() -> Text(stringResource(R.string.local_browser_empty), Modifier.padding(vertical = 16.dp),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -107,7 +107,7 @@ internal fun LocalProjectBindingSheet(enabled: Boolean, onDismiss: () -> Unit, o
                     }
                 }
             }
-            if (state.truncated) TextButton(onClick = browser::more, enabled = enabled && !state.loading) { Text(stringResource(R.string.local_browser_more)) }
+            if (state.truncated) WorkbenchTextButton(onClick = browser::more, enabled = enabled && !state.loading) { Text(stringResource(R.string.local_browser_more)) }
             Text(stringResource(if (state.selectable) R.string.local_browser_original_notice else R.string.local_browser_choose_project),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             WorkbenchPrimaryButton(onClick = { state.current?.path?.let { path -> finish { onBind(path) } } },

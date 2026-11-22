@@ -11,9 +11,9 @@
     <string name="app_permissions_notifications">运行通知</string>
     <string name="app_permissions_notifications_hint">显示终端、构建与 AI 任务的运行状态和停止入口。</string>
     <string name="app_permissions_files">本地文件访问</string>
-    <string name="app_permissions_files_hint">绑定真实本地目录时使用。导入项目副本无需开启所有文件访问。</string>
+    <string name="app_permissions_files_hint">用于绑定本地目录，以及让 Ubuntu 终端和获批的 AI 命令访问手机共享文件。导入副本无需开启；授权后新建命令或终端生效。</string>
     <string name="app_permissions_files_legacy">共享存储读写</string>
-    <string name="app_permissions_files_legacy_hint">在此 Android 版本中，绑定共享存储目录需要读写权限。</string>
+    <string name="app_permissions_files_legacy_hint">用于绑定本地目录及 Ubuntu 访问手机共享文件。授权后新建命令或终端生效；修改的是原文件。</string>
     <string name="app_permissions_install">安装应用</string>
     <string name="app_permissions_install_hint">允许提交项目 APK 给系统安装器；每次安装仍由系统确认。</string>
     <string name="app_permissions_accessibility">屏幕操作服务</string>

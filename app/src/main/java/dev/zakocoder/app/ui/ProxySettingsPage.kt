@@ -106,7 +106,7 @@ internal fun ProxySettingsContent(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(stringResource(if (busy) R.string.proxy_manual_saving else R.string.proxy_manual_save))
                 }
-                if (endpoint.isNotEmpty()) TextButton(onClick = { save("") }, enabled = !busy,
+                if (endpoint.isNotEmpty()) WorkbenchTextButton(onClick = { save("") }, enabled = !busy,
                     modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.proxy_direct_save))
                 }
