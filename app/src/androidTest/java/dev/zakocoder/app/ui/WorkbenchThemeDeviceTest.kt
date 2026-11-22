@@ -153,6 +153,7 @@ class WorkbenchThemeDeviceTest {
                 ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                     for (dark in listOf(false, true)) {
                         var foreground = Color.Unspecified
+                        var nativeForeground = Color.Unspecified
                         var secondary = Color.Unspecified
                         var background = Color.Unspecified
                         fun render(page: String) {
@@ -162,7 +163,8 @@ class WorkbenchThemeDeviceTest {
                                 activity.setContent {
                                     WorkbenchMiuixTheme(dark) {
                                         val colors = MaterialTheme.colorScheme
-                                        SideEffect { foreground = colors.onSurface; secondary = colors.onSurfaceVariant; background = colors.background; composed = true }
+                                        val preferenceTitle = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onBackground
+                                        SideEffect { foreground = colors.onSurface; nativeForeground = preferenceTitle; secondary = colors.onSurfaceVariant; background = colors.background; composed = true }
                                         Scaffold(containerColor = Color.Transparent) { padding ->
                                             when (page) {
                                                 "skills", "mcp" -> AiExtensionsPage(workbench, workbench.state.collectAsState().value,
@@ -186,12 +188,14 @@ class WorkbenchThemeDeviceTest {
                         assertColor(R.string.ai_skills, foreground.toArgb())
                         val skills = workbench.ai.globalSkills.value
                         assertColor(context.getString(R.string.ai_skills_selected, skills.enabledSkills.size, AiSkills.MAX_ENABLED), foreground.toArgb())
-                        assertColor(R.string.ai_skill_on_demand, foreground.toArgb())
+                        assertColor(R.string.ai_skill_on_demand, nativeForeground.toArgb())
+                        assertTrue("Native preference title remains readable", ColorUtils.calculateContrast(nativeForeground.toArgb(), background.toArgb()) >= 4.5)
                         assertColor(R.string.extensions_global_scope, secondary.toArgb())
                         capture("skills")
                         ui.setField(R.string.ai_skills_search, "配色检查")
-                        assertColor(custom.name, foreground.toArgb())
-                        assertColor(custom.path, foreground.toArgb())
+                        assertColor(custom.name, nativeForeground.toArgb())
+                        assertColor(custom.path, secondary.toArgb())
+                        assertTrue("Custom skill path remains readable", ColorUtils.calculateContrast(secondary.toArgb(), background.toArgb()) >= 4.5)
                         capture("custom-skill")
                         ui.setField(R.string.ai_skills_search, "no-such-skill-theme-check")
                         assertColor(R.string.ai_skills_empty, foreground.toArgb())
@@ -205,7 +209,17 @@ class WorkbenchThemeDeviceTest {
                         capture("mcp-about")
                         render("transport")
                         ui.click(R.string.mcp_design_protocol)
-                        assertColor(R.string.mcp_transport_sse, foreground.toArgb())
+                        val transportName = context.getString(R.string.mcp_transport_sse)
+                        ui.reveal(transportName)
+                        ui.await("Transport choice laid out") { textColors(transportName).isNotEmpty() }
+                        // The Miuix choice and its summary may share a label; both text
+                        // roles must follow this theme and retain readable contrast.
+                        textColors(transportName).forEach { actual ->
+                            assertTrue("Transport follows primary or summary text role",
+                                actual == foreground.toArgb() || actual == nativeForeground.toArgb() || actual == secondary.toArgb())
+                            assertTrue("Transport choice remains readable",
+                                ColorUtils.calculateContrast(actual, background.toArgb()) >= 4.5)
+                        }
                         capture("mcp-protocol")
 
                         render("capabilities")

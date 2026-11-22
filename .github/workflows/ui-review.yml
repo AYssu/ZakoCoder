@@ -18,7 +18,7 @@ concurrency:
 jobs:
   screenshots:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -64,6 +64,7 @@ jobs:
           # Injected key events expose a hardware keyboard; still exercise phone IME layouts.
           adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 1
       - name: Verify navigation and streaming, capture both themes
+        id: core-ui
         run: |
           set -euo pipefail
           adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
@@ -77,9 +78,10 @@ jobs:
           adb -s emulator-5554 shell am instrument -w -r -e class dev.zakocoder.app.ui.AppNavigationDeviceTest dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/navigation-night.txt
           grep -Eq '^OK \([0-9]+ tests?\)' out/ui-review/navigation-night.txt
       - name: Verify recent interaction, attachment and per-task recovery changes
+        if: ${{ !cancelled() && (steps.core-ui.outcome == 'success' || steps.core-ui.outcome == 'failure') }}
         run: |
           set -euo pipefail
-          classes='dev.zakocoder.app.ui.MiuixControlsDeviceTest,dev.zakocoder.app.ui.CapabilityPermissionNavigationDeviceTest,dev.zakocoder.app.ui.CapabilityChildWindowDeviceTest,dev.zakocoder.app.ui.ComposerPasteDismissDeviceTest,dev.zakocoder.app.ui.WorkspaceHeaderReturnDeviceTest,dev.zakocoder.app.ui.MenuIconSpacingDeviceTest,dev.zakocoder.app.ui.MessageCopyPopupDeviceTest,dev.zakocoder.app.ui.AiMarkdownSelectionDeviceTest,dev.zakocoder.app.ui.InlineCodeBackgroundDeviceTest,dev.zakocoder.app.AiFileAttachmentStoreDeviceTest,dev.zakocoder.app.AiAttachmentAccessDeviceTest,dev.zakocoder.app.AiAttachmentRecoveryDeviceTest,dev.zakocoder.app.IncomingFileSharesDeviceTest,dev.zakocoder.app.SharedStorageDeviceTest,dev.zakocoder.app.AiTurnStatisticsPersistenceDeviceTest'
+          classes='dev.zakocoder.app.ui.MiuixControlsDeviceTest,dev.zakocoder.app.ui.CapabilityPermissionNavigationDeviceTest,dev.zakocoder.app.ui.CapabilityChildWindowDeviceTest,dev.zakocoder.app.ui.ComposerPasteDismissDeviceTest,dev.zakocoder.app.ui.WorkspaceHeaderReturnDeviceTest,dev.zakocoder.app.ui.MenuIconSpacingDeviceTest,dev.zakocoder.app.ui.MessageCopyPopupDeviceTest,dev.zakocoder.app.ui.AiMarkdownSelectionDeviceTest,dev.zakocoder.app.ui.InlineCodeBackgroundDeviceTest,dev.zakocoder.app.AiFileAttachmentStoreDeviceTest,dev.zakocoder.app.ai.AiAttachmentAccessDeviceTest,dev.zakocoder.app.AiAttachmentRecoveryDeviceTest,dev.zakocoder.app.IncomingFileSharesDeviceTest,dev.zakocoder.app.SharedStorageDeviceTest,dev.zakocoder.app.AiTurnStatisticsPersistenceDeviceTest'
           adb -s emulator-5554 shell am instrument -w -r -e class "$classes" dev.zakocoder.app.runtimecheck.test/androidx.test.runner.AndroidJUnitRunner | tee out/ui-review/recent-changes.txt
           grep -Eq '^OK \([0-9]+ tests?\)' out/ui-review/recent-changes.txt
           for phase in saveBeforeProcessDeath verifyAfterProcessDeath; do

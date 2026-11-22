@@ -10,9 +10,13 @@ import android.view.ViewGroup
 import android.view.inspector.WindowInspector
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -243,7 +247,8 @@ class CapabilityChildWindowDeviceTest {
             }
             val workbench = main { Workbench(isolated) }.also { host = it }
             await("Isolated workbench initialized") {
-                !workbench.state.value.loading && workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
+                !workbench.state.value.loading && !workbench.ai.models.state.value.loading &&
+                    workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
             }
             block(workbench)
         } finally {
@@ -259,14 +264,22 @@ class CapabilityChildWindowDeviceTest {
     }
 
     private fun showApp(scenario: ActivityScenario<MainActivity>, host: Workbench, dark: Boolean) {
+        val mountedRoot = "capability-child-root-${UUID.randomUUID()}"
         scenario.onActivity { activity -> activity.setContent {
             val configuration = Configuration(LocalConfiguration.current).apply {
                 uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                     if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
             }
-            CompositionLocalProvider(LocalConfiguration provides configuration) { ZakoCoderApp(host) }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                Box(Modifier.fillMaxSize().testTag(mountedRoot)) { ZakoCoderApp(host) }
+            }
         } }
+        // Wait for this content, rather than the Activity's outgoing real Workbench.
+        await("Isolated root mounted") { nodes { all -> all.any {
+            visible(it) && it.config.getOrNull(SemanticsProperties.TestTag) == mountedRoot
+        } } }
         await("Root ready") { shown(R.string.app_navigation_open) }
+        settle()
     }
 
     private fun checkWindowWidth(marker: Int) {

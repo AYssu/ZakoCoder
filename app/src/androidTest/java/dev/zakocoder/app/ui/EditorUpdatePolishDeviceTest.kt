@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.navigationevent.DirectNavigationEventInput
@@ -348,21 +347,15 @@ class EditorUpdatePolishDeviceTest {
             assertTrue(nodes { all -> all.any { text(it).contains("git status") } })
             capture("updates-${if (dark) "night" else "day"}")
             val before = opened.size
-            nodes { all ->
-                val value = all.first { text(it) == "查看说明" }.config[SemanticsProperties.Text].single()
-                val annotation = value.getLinkAnnotations(0, value.length).single().item as LinkAnnotation.Clickable
-                requireNotNull(annotation.linkInteractionListener).onClick(annotation)
-            }
+            // Selectable Markdown exposes link actions on dedicated accessibility nodes;
+            // its selectable text intentionally contains no native LinkAnnotation ranges.
+            click("查看说明")
             await("external link requires confirmation") { has(context.getString(R.string.ai_open_link)) }
             assertEquals(before, opened.size)
             click(context.getString(R.string.cancel))
             assertEquals(before, opened.size)
             await("link confirmation dismissed") { !has(context.getString(R.string.ai_open_link)) }
-            nodes { all ->
-                val value = all.first { text(it) == "查看说明" }.config[SemanticsProperties.Text].single()
-                val annotation = value.getLinkAnnotations(0, value.length).single().item as LinkAnnotation.Clickable
-                requireNotNull(annotation.linkInteractionListener).onClick(annotation)
-            }
+            click("查看说明")
             click(context.getString(R.string.ai_open_browser))
             await("browser opens after the confirmation exit") { opened.size == before + 1 }
             assertEquals(before + 1, opened.size)

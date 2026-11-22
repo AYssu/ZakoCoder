@@ -13,10 +13,14 @@ import android.view.ViewGroup
 import android.view.inspector.WindowInspector
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -240,7 +244,8 @@ class WorkspaceHeaderReturnDeviceTest {
             }
             val workbench = main { Workbench(isolated) }.also { host = it }
             await("Isolated workbench initialized") {
-                !workbench.state.value.loading && workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
+                !workbench.state.value.loading && !workbench.ai.models.state.value.loading &&
+                    workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
             }
             block(workbench)
         } finally {
@@ -264,13 +269,18 @@ class WorkspaceHeaderReturnDeviceTest {
     }
 
     private fun setApp(scenario: ActivityScenario<MainActivity>, host: Workbench, dark: Boolean) {
+        val mountedRoot = "workspace-header-root-${UUID.randomUUID()}"
         scenario.onActivity { activity -> activity.setContent {
             val configuration = Configuration(LocalConfiguration.current).apply {
                 uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                     if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
             }
-            CompositionLocalProvider(LocalConfiguration provides configuration) { ZakoCoderApp(host) }
+            CompositionLocalProvider(LocalConfiguration provides configuration) {
+                Box(Modifier.fillMaxSize().testTag(mountedRoot)) { ZakoCoderApp(host) }
+            }
         } }
+        // Do not interact with MainActivity's previous app tree before setContent commits.
+        await("Isolated root mounted") { tagged(mountedRoot) }
         await("Assistant root ready") { tagged("ai-message-viewport") && shown(R.string.app_navigation_open) }
         settle()
     }
@@ -609,14 +619,7 @@ class WorkspaceHeaderReturnDeviceTest {
         for (dark in listOf(false, true)) ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             var stage = "root"
             try {
-                scenario.onActivity { activity -> activity.setContent {
-                    val configuration = Configuration(LocalConfiguration.current).apply {
-                        uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-                            if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
-                    }
-                    CompositionLocalProvider(LocalConfiguration provides configuration) { ZakoCoderApp(host) }
-                } }
-                await("Assistant root ready") { shown(R.string.app_navigation_open) }
+                setApp(scenario, host, dark)
                 click(R.string.app_navigation_open)
                 await("Workspace management ready") { shown(R.string.drawer_manage_workspaces) }
                 click(R.string.drawer_manage_workspaces)

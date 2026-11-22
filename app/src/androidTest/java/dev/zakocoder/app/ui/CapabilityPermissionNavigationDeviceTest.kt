@@ -10,9 +10,13 @@ import android.view.ViewGroup
 import android.view.inspector.WindowInspector
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -243,7 +247,8 @@ class CapabilityPermissionNavigationDeviceTest {
             }
             val workbench = main { Workbench(isolated) }.also { host = it }
             await("Isolated workbench initialized") {
-                !workbench.state.value.loading && workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
+                !workbench.state.value.loading && !workbench.ai.models.state.value.loading &&
+                    workbench.capabilityPackages.state.value.loaded && workbench.deviceAccess.state.value.loaded
             }
             block(workbench)
         } finally {
@@ -269,14 +274,23 @@ class CapabilityPermissionNavigationDeviceTest {
         for (dark in listOf(false, true)) ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             var stage = "root"
             try {
+                val mountedRoot = "capability-permission-root-${UUID.randomUUID()}"
                 scenario.onActivity { activity -> activity.setContent {
                     val configuration = Configuration(LocalConfiguration.current).apply {
                         uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                             if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                     }
-                    CompositionLocalProvider(LocalConfiguration provides configuration) { ZakoCoderApp(host) }
+                    CompositionLocalProvider(LocalConfiguration provides configuration) {
+                        Box(Modifier.fillMaxSize().testTag(mountedRoot)) { ZakoCoderApp(host) }
+                    }
                 } }
+                // setContent schedules recomposition; the Activity's previous app tree can
+                // still expose the same navigation label until this isolated root commits.
+                await("Isolated root mounted") { nodes { all -> all.any {
+                    visible(it) && it.config.getOrNull(SemanticsProperties.TestTag) == mountedRoot
+                } } }
                 await("Root ready") { shown(R.string.app_navigation_open) }
+                settle()
                 click(R.string.app_navigation_open)
                 await("Drawer ready") { shown(R.string.conversation_search_title) }
                 if (fromSettings) {
