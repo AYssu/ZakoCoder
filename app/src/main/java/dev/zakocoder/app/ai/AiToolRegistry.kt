@@ -205,7 +205,7 @@ internal object AiToolRegistry {
                     .put("old_text", JSONObject().put("type", "string").put("minLength", 1))
                     .put("new_text", JSONObject().put("type", "string")))
                     .put("required", JSONArray(listOf("old_text", "new_text"))).put("additionalProperties", false)))
-        val read = tool("read_file", "Read UTF-8 file up to 1 MiB before editing; returns a character range, default offset 0 / limit 64000", "path")
+        val read = tool("read_file", "Read project UTF-8 file up to 1 MiB before editing; default offset 0 / limit 64000. For a conversation attachment use path=attachment:<id>: read-only UTF-8, offset/limit only, default/max page 12000, response has next_offset/has_more. Binary formats need a supported parser; never invent missing text.", "path")
         val readProperties = read.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         readProperties.put("offset", JSONObject().put("type", "integer").put("minimum", 0).put("description", "UTF-16 character offset"))
         readProperties.put("limit", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 64000))
@@ -215,7 +215,7 @@ internal object AiToolRegistry {
         val listingProperties = listing.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         listingProperties.put("depth", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 8))
         listingProperties.put("limit", JSONObject().put("type", "integer").put("minimum", 1).put("maximum", 500))
-        val search = tool("search_files", "Search literal code with line numbers, or filenames=true to find paths. Optional path scopes a subdirectory; glob supports *, ** and ?. Excludes generated/dependency directories; narrow scope if truncated. Empty query allowed only for filenames=true", "query")
+        val search = tool("search_files", "Search literal code with line numbers, or filenames=true to find paths. Optional path scopes a subdirectory; glob supports *, ** and ?. Excludes generated/dependency directories; narrow scope if truncated. Empty query allowed only for filenames=true. For conversation attachments use path=attachment:<id> and a single-line literal query up to 256 characters; at most 100 bounded matches. glob and filenames modes do not apply to attachments.", "query")
         val searchProperties = search.getJSONObject("function").getJSONObject("parameters").getJSONObject("properties")
         listOf("path", "glob").forEach { searchProperties.put(it, JSONObject().put("type", "string")) }
         listOf("filenames", "case_sensitive").forEach { searchProperties.put(it, JSONObject().put("type", "boolean")) }

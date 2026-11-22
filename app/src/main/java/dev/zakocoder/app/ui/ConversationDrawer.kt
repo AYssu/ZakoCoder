@@ -56,7 +56,7 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
             onOpen(project, conversation)
         }, onDismiss = onSearchDismiss)
     Column(Modifier.fillMaxSize()) {
-        TextButton(onClick = { state.selectedId?.let { onOpen(it, null) } ?: onManage() }, enabled = canCreate,
+        WorkbenchTextButton(onClick = { state.selectedId?.let { onOpen(it, null) } ?: onManage() }, enabled = canCreate,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 48.dp)) {
             WorkbenchIcon(Glyph.Add, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
@@ -65,9 +65,9 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
         Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.drawer_conversations), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = onManage, enabled = !busy) { Text(stringResource(R.string.drawer_manage_workspaces), fontSize = 12.sp) }
+            WorkbenchTextButton(onClick = onManage, enabled = !busy) { Text(stringResource(R.string.drawer_manage_workspaces), fontSize = 12.sp) }
         }
-        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
+        if (busy) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
         if (error) Text(stringResource(R.string.drawer_open_failed), Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 12.dp)) {
@@ -107,7 +107,7 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
                             val conversations = if (current) threads.conversations else stored
                             when {
                                 isLoading -> Text(stringResource(R.string.loading), Modifier.padding(start = 40.dp, top = 12.dp, bottom = 12.dp), style = MaterialTheme.typography.bodySmall)
-                                isFailed -> TextButton(onClick = { if (current) onManage() else retry++ }, modifier = Modifier.padding(start = 28.dp)) {
+                                isFailed -> WorkbenchTextButton(onClick = { if (current) onManage() else retry++ }, modifier = Modifier.padding(start = 28.dp)) {
                                     Text(stringResource(R.string.drawer_history_retry), fontSize = 12.sp)
                                 }
                                 else -> {
@@ -123,7 +123,7 @@ internal fun ConversationDrawer(workbench: Workbench, state: WorkbenchState, vis
                                             maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, lineHeight = 18.sp,
                                             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    TextButton(onClick = { onOpen(project.id, null) }, enabled = canCreate,
+                                    WorkbenchTextButton(onClick = { onOpen(project.id, null) }, enabled = canCreate,
                                         modifier = Modifier.padding(start = 28.dp).heightIn(min = 48.dp)) {
                                         WorkbenchIcon(Glyph.Add, modifier = Modifier.size(14.dp)); Spacer(Modifier.width(8.dp))
                                         Text(stringResource(R.string.drawer_new_conversation), fontSize = 12.sp)

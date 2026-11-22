@@ -185,14 +185,14 @@ class EditorController(private val context: Context, private val projects: Proje
             revision = it.revision + 1, saved = false, tabs = tabs()) }
         queueDrafts()
     }
-    fun save(closeAfter: Boolean = false, keepEditorOpen: Boolean = false) {
+    fun save(closeAfter: Boolean = false, keepEditorOpen: Boolean = false, onClosed: (() -> Unit)? = null) {
         val current = mutable.value
         val doc = current.document ?: return
         if (current.saving || current.loading) return
-        if (!current.dirty) { if (closeAfter) close(keepEditorOpen); return }
-        persist(doc, doc.content.toString(), closeAfter, keepEditorOpen)
+        if (!current.dirty) { if (closeAfter) { close(keepEditorOpen); onClosed?.invoke() }; return }
+        persist(doc, doc.content.toString(), closeAfter, keepEditorOpen, onClosed)
     }
-    private fun persist(doc: EditorDocument, text: String, closeAfter: Boolean = false, keepEditorOpen: Boolean = false): Job? {
+    private fun persist(doc: EditorDocument, text: String, closeAfter: Boolean = false, keepEditorOpen: Boolean = false, onClosed: (() -> Unit)? = null): Job? {
         if (mutable.value.saving || mutable.value.loading) return null
         invalidateDisk()
         mutable.update { it.copy(saving = true, diskChecking = false) }
@@ -211,7 +211,10 @@ class EditorController(private val context: Context, private val projects: Proje
                 queueDrafts(immediate = true)
                 if (mutable.value.document === doc) {
                     checkDisk()
-                    if (closeAfter && !mutable.value.dirty) close(keepEditorOpen)
+                    if (closeAfter && !mutable.value.dirty) {
+                        close(keepEditorOpen)
+                        onClosed?.invoke()
+                    }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {

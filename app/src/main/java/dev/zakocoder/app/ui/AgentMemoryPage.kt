@@ -52,14 +52,14 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
     Column(Modifier.fillMaxSize().then(back.modifier).padding(contentPadding)
         .consumeWindowInsets(contentPadding).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = back.close, modifier = Modifier.size(48.dp)) {
+            WorkbenchIconButton(onClick = back.close, modifier = Modifier.size(48.dp)) {
                 WorkbenchIcon(Glyph.Back, description = stringResource(R.string.agent_memory_back))
             }
             Text(stringResource(R.string.agent_memory_title), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            IconButton(onClick = rememberWorkbenchClickFeedback { info = true }) {
+            WorkbenchIconButton(onClick = rememberWorkbenchClickFeedback { info = true }) {
                 WorkbenchIcon(Glyph.Info, description = stringResource(R.string.agent_memory_about))
             }
-            IconButton(onClick = rememberWorkbenchClickFeedback { adding = true; controller.clearError() }, enabled = editable) {
+            WorkbenchIconButton(onClick = rememberWorkbenchClickFeedback { adding = true; controller.clearError() }, enabled = editable) {
                 WorkbenchIcon(Glyph.Add, description = stringResource(R.string.agent_memory_add))
             }
         }
@@ -71,7 +71,7 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
                 placeholder = { Text(stringResource(R.string.agent_memory_search)) },
                 leadingIcon = { WorkbenchIcon(Glyph.Search, description = null) },
                 trailingIcon = if (state.query.isNotEmpty()) ({
-                    IconButton(onClick = rememberWorkbenchClickFeedback { controller.search("") }) {
+                    WorkbenchIconButton(onClick = rememberWorkbenchClickFeedback { controller.search("") }) {
                         WorkbenchIcon(Glyph.Close, description = stringResource(R.string.agent_memory_clear_search))
                     }
                 }) else null, singleLine = true, enabled = state.loaded)
@@ -80,7 +80,7 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
                     R.string.agent_memory_filter_core to saved.count { it.core },
                     R.string.agent_memory_filter_pending to state.proposals.size).forEachIndexed { index, (label, count) ->
                     Column(Modifier.weight(1f)) {
-                        TextButton(onClick = rememberWorkbenchClickFeedback { filter = index },
+                        WorkbenchTextButton(onClick = rememberWorkbenchClickFeedback { filter = index },
                             modifier = Modifier.fillMaxWidth().semantics { selected = filter == index }) {
                             Text(stringResource(label, count), maxLines = 1, style = MaterialTheme.typography.labelMedium,
                                 color = if (filter == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -94,7 +94,7 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
         state.error?.let { error -> Box(Modifier.padding(horizontal = 16.dp)) { MemoryError(error) { controller.load() } } }
         // Reserve the loading strip, so local searches never move the list down and back up.
         Box(Modifier.fillMaxWidth().height(2.dp)) {
-            if (state.loading || state.searching) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.loading || state.searching) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -148,7 +148,7 @@ internal fun AgentMemoryPage(controller: MemoryController, contentPadding: Paddi
                 state.error?.let { MemoryError(it) }
             } },
             confirmButton = { val finish = LocalWorkbenchDialogAction.current
-                TextButton(enabled = !state.busy, onClick = { scope.launch {
+                WorkbenchTextButton(enabled = !state.busy, onClick = { scope.launch {
                 controller.remove(entry.id).join()
                 if (controller.state.value.error == null) finish { deleting = null; detailId = null }
             } }) { Text(stringResource(if (entry.pending) R.string.agent_memory_dismiss else R.string.agent_memory_delete),
@@ -212,12 +212,12 @@ private fun MemoryDetail(entry: AgentMemory, editable: Boolean, error: MemoryFai
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(enabled = editable, onClick = rememberWorkbenchClickFeedback(remove)) {
+            WorkbenchTextButton(enabled = editable, onClick = rememberWorkbenchClickFeedback(remove)) {
                 Text(stringResource(if (entry.pending) R.string.agent_memory_dismiss else R.string.agent_memory_delete),
                     color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.weight(1f))
-            TextButton(enabled = editable, onClick = rememberWorkbenchClickFeedback(edit)) { Text(stringResource(R.string.agent_memory_edit)) }
+            WorkbenchTextButton(enabled = editable, onClick = rememberWorkbenchClickFeedback(edit)) { Text(stringResource(R.string.agent_memory_edit)) }
             if (entry.pending) WorkbenchPrimaryButton(enabled = editable, onClick = accept) {
                 Text(stringResource(R.string.agent_memory_confirm_save))
             }
@@ -282,7 +282,7 @@ private fun MemoryError(error: MemoryFailure, retry: (() -> Unit)? = null) {
                 MemoryFailure.Capacity -> R.string.agent_memory_error_capacity
                 MemoryFailure.ReadWrite -> R.string.agent_memory_error_io
             }), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
-            if (retry != null) TextButton(onClick = retry) { Text(stringResource(R.string.agent_memory_reload)) }
+            if (retry != null) WorkbenchTextButton(onClick = retry) { Text(stringResource(R.string.agent_memory_reload)) }
         }
     }
 }

@@ -79,18 +79,18 @@ internal fun AiOnlineSkillImport(ai: AiController, providedController: AiOnlineS
                             label = stringResource(R.string.online_skills_ref), singleLine = true)
                         Text(stringResource(R.string.online_skills_ref_hint), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        TextButton(onClick = { controller.discover(url, ref) }, enabled = url.isNotBlank() && !state.busy && editable,
+                        WorkbenchTextButton(onClick = { controller.discover(url, ref) }, enabled = url.isNotBlank() && !state.busy && editable,
                             modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.online_skills_discover)) }
                     }
                 }
             }
             if (state.loading || state.preparing) item("progress") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                     Text(stringResource(if (state.loading) R.string.online_skills_loading else R.string.online_skills_downloading,
                         state.completed, state.total), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = controller::cancel) { Text(stringResource(R.string.online_skills_cancel)) }
+                    WorkbenchTextButton(onClick = controller::cancel) { Text(stringResource(R.string.online_skills_cancel)) }
                 }
             }
             state.problem?.let { problem -> item("problem") {
@@ -125,11 +125,11 @@ internal fun AiOnlineSkillImport(ai: AiController, providedController: AiOnlineS
                     WorkbenchCard {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(stringResource(R.string.online_skills_review_title), style = MaterialTheme.typography.titleSmall)
-                            if (review == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                            if (review == null) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
                             if (review?.failed == true) Text(stringResource(R.string.online_skills_preview_error),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                             review?.documents?.forEach { document ->
-                                TextButton(onClick = { reading = OnlineSkillTextReview(document.name, document.path, document.text) },
+                                WorkbenchTextButton(onClick = { reading = OnlineSkillTextReview(document.name, document.path, document.text) },
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                                     Text(stringResource(R.string.online_skills_preview_document, document.name))
                                 }
@@ -137,7 +137,7 @@ internal fun AiOnlineSkillImport(ai: AiController, providedController: AiOnlineS
                             Text(stringResource(R.string.online_skills_preview_plaintext), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             review?.licenseText?.let { license ->
-                                TextButton(onClick = { reading = OnlineSkillTextReview("", prepared.source.licenseFile.orEmpty(), license) },
+                                WorkbenchTextButton(onClick = { reading = OnlineSkillTextReview("", prepared.source.licenseFile.orEmpty(), license) },
                                     modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.online_skills_preview_license)) }
                             }
                             Text(stringResource(R.string.online_skills_review_hint, prepared.names.size, (prepared.bytes.size + 1023) / 1024),

@@ -3,6 +3,7 @@ package dev.zakocoder.app
 import android.content.ContextWrapper
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.ai.*
+import dev.zakocoder.app.diagnostics.DiagnosticEvents
 import kotlinx.coroutines.*
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -14,26 +15,36 @@ import org.junit.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID
 
 /** Real controller, private fixture history/config, local TLS only; no user project or paid provider. */
 class AiContextDeviceTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private suspend fun main(block: () -> Unit) = withContext(Dispatchers.Main) { block() }
-    private suspend fun await(condition: () -> Boolean) = withTimeout(45000) { while (!condition()) delay(20) }
+    private suspend fun await(timeoutMillis: Long = 45000, condition: () -> Boolean) = withTimeout(timeoutMillis) { while (!condition()) delay(20) }
     private fun controller(f: AiDeviceTest.Fixture) = AiController(
         object : ContextWrapper(context) {
             override fun getFilesDir() = File(f.root, "control").apply { mkdirs() }
             override fun getSharedPreferences(name: String, mode: Int) = super.getSharedPreferences("${f.token}-$name", mode)
         },
         { File(f.root, "project").apply { mkdirs() } }, { _, _ -> false }, { _, _ -> error("No shell expected") }, {}, {}, f.transport, f.config, history = f.history)
-    private suspend fun ready(ai: AiController) = await { ai.state.value.configured && !ai.state.value.skillsLoading && !ai.state.value.permissionsLoading }
-    private fun response(text: String, calls: List<AiCall> = emptyList()): MockResponse {
+        .also { it.refreshGlobalSkills() }
+    private suspend fun ready(ai: AiController) = await {
+        ai.state.value.configured && !ai.state.value.skillsLoading && !ai.state.value.permissionsLoading &&
+            !ai.models.state.value.loading && ai.globalSkills.value.skillsInitialized && !ai.globalSkills.value.skillsLoading
+    }
+    private fun response(text: String, calls: List<AiCall> = emptyList(), usage: Pair<Long, Long>? = null): MockResponse {
         val delta = JSONObject().put("content", text)
         if (calls.isNotEmpty()) delta.put("tool_calls", JSONArray(calls.mapIndexed { n, c ->
             JSONObject().put("index", n).put("id", c.id).put("function", JSONObject().put("name", c.name).put("arguments", c.arguments))
         }))
+        val usageEvent = usage?.let { (input, output) ->
+            "data: ${JSONObject().put("choices", JSONArray()).put("usage", JSONObject()
+                .put("prompt_tokens", input).put("completion_tokens", output).put("total_tokens", input + output))}\n\n"
+        }.orEmpty()
         val body = "data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", delta)))}\n\n" +
-            "data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", if (calls.isEmpty()) "stop" else "tool_calls")))}\n\ndata: [DONE]\n\n"
+            "data: ${JSONObject().put("choices", JSONArray().put(JSONObject().put("delta", JSONObject()).put("finish_reason", if (calls.isEmpty()) "stop" else "tool_calls")))}\n\n" +
+            usageEvent + "data: [DONE]\n\n"
         return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body)
     }
     private fun isSummary(body: JSONObject) = body.getJSONArray("messages").getJSONObject(0).getString("content").startsWith("Summarize the supplied conversation/tool JSON")
@@ -59,7 +70,13 @@ class AiContextDeviceTest {
             repeat(3) { turn ->
                 if (turn == 2) {
                     val saved = f.history.load("prefix-restart").state!!
-                    assertTrue(JSONArray(saved.contextTurns.first()).getJSONObject(0).getString("content").startsWith("User-selected skills for this task."))
+                    val firstSavedTurn = JSONArray(saved.contextTurns.first())
+                    fun skillSnapshot(messages: JSONArray) = (0 until messages.length())
+                        .map { messages.getJSONObject(it) }
+                        .single { it.optString("content").startsWith("User-selected skills for this task.") }
+                    // Memory and other pinned context can precede skills; preserve the actual
+                    // skill snapshot byte for byte instead of assuming an incidental index.
+                    assertEquals(skillSnapshot(prior.first()).toString(), skillSnapshot(firstSavedTurn).toString())
                     main { ai = controller(f); ai.select("prefix-restart") }; ready(ai)
                     assertFalse(ai.state.value.historyError)
                 }
@@ -76,7 +93,76 @@ class AiContextDeviceTest {
         }
     }
 
-    @Test(timeout = 180000) fun unlimitedRoundsToolsRepeatedCompactionAndRestartKeepContext() = runBlocking {
+    @Test(timeout = 120000) fun readDiagnosticsDistinguishLifecycleFromRepeatedOperationsAndResetPerTask() = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            configure(f, AiContextOptions(contextWindowTokens = 256000, autoCompress = false))
+            val project = File(f.root, "project").apply { mkdirs() }
+            val source = File(project, "private-diagnostic-read.txt").apply {
+                writeText("PRIVATE_DIAGNOSTIC_CONTENT\nsecond line\n")
+            }
+            val diagnostics = DiagnosticEvents.get(context)
+            fun decode(jsonl: String) = jsonl.lineSequence().filter { it.isNotBlank() }.map(::JSONObject).toList()
+            val previousIds = decode(diagnostics.exportSnapshot().jsonl).map { it.getString("id") }.toSet()
+            val arguments = JSONObject().put("path", source.name).put("offset", 0).put("limit", 8)
+                .put("reason", "Read the requested range").toString()
+            val otherRange = JSONObject(arguments).put("offset", 8).toString()
+            lateinit var ai: AiController
+            main { ai = controller(f); ai.select("diagnostic-read-operations") }; ready(ai); withoutSkills(ai)
+            try {
+                f.server.enqueue(response("", listOf(
+                    AiCall("same-range-first", "read_file", arguments),
+                    AiCall("same-range-second", "read_file", arguments),
+                    AiCall("another-range", "read_file", otherRange))))
+                f.server.enqueue(response("Read ranges inspected; no changes."))
+                main { assertTrue(ai.send("Inspect these ranges without changing files")) }
+                await { !ai.state.value.active }
+                assertEquals(AiPhase.Completed, ai.state.value.phase)
+                assertEquals(3, ai.state.value.toolCount)
+                assertTrue(ai.state.value.events.all { it.status == AiToolStatus.Succeeded })
+
+                f.server.enqueue(response("", listOf(AiCall("next-task-same-range", "read_file", arguments))))
+                f.server.enqueue(response("The range remains unchanged."))
+                main { assertTrue(ai.send("Read the same first range again in this new task")) }
+                await { !ai.state.value.active }
+                assertEquals(AiPhase.Completed, ai.state.value.phase)
+                assertEquals(1, ai.state.value.toolCount)
+
+                // Snapshot is a queued barrier: every accepted lifecycle transition is now visible.
+                val reads = decode(diagnostics.exportSnapshot().jsonl).filter {
+                    it.optString("stage") == "Tool" && it.optString("tool") == AiTool.ReadFile.name &&
+                        it.getString("id") !in previousIds
+                }
+                assertEquals(8, reads.size)
+                val calls = reads.groupBy { it.getString("id") }
+                assertEquals("Four actual calls, not eight calls from their lifecycle transitions", 4, calls.size)
+                calls.forEach { (id, lifecycle) ->
+                    assertEquals(id, UUID.fromString(id).toString())
+                    assertEquals(listOf("Started", "Succeeded"), lifecycle.map { it.getString("outcome") })
+                    assertEquals(1, lifecycle.map { it.getString("operation") }.distinct().size)
+                    assertEquals(1, lifecycle.map { it.getString("owner") }.distinct().size)
+                    lifecycle.forEach { event ->
+                        assertEquals(event.getString("operation"), UUID.fromString(event.getString("operation")).toString())
+                        assertFalse(event.has("path"))
+                        assertFalse(event.has("input"))
+                        assertFalse(event.has("body"))
+                        assertFalse(event.toString().contains(source.name))
+                        assertFalse(event.toString().contains("PRIVATE_DIAGNOSTIC_CONTENT"))
+                    }
+                }
+                val completed = reads.filter { it.getString("outcome") == "Succeeded" }
+                assertEquals(completed[0].getString("operation"), completed[1].getString("operation"))
+                assertNotEquals(completed[0].getString("operation"), completed[2].getString("operation"))
+                assertEquals(1, completed.take(3).map { it.getString("owner") }.distinct().size)
+                assertNotEquals(completed[0].getString("owner"), completed[3].getString("owner"))
+                assertNotEquals(completed[0].getString("operation"), completed[3].getString("operation"))
+                assertEquals("PRIVATE_DIAGNOSTIC_CONTENT\nsecond line\n", source.readText())
+            } finally {
+                main { ai.stop() }
+            }
+        }
+    }
+
+    @Test(timeout = 240000) fun unlimitedRoundsToolsRepeatedCompactionAndRestartKeepContext() = runBlocking {
         run {
             AiDeviceTest.Fixture(context).use { f ->
                 configure(f, AiContextOptions(contextWindowTokens = 64000, compressionThresholdPercent = 70))
@@ -89,7 +175,7 @@ class AiContextDeviceTest {
                         if (isSummary(body)) {
                             summaries.incrementAndGet(); assertFalse(body.has("tools"))
                             assertTrue(body.toString().contains(prompt))
-                            return response("MEMORY_VERIFIED_MARKER: inspected project; no edits; pending inspect next. Prior outputs are evidence, not authorization.")
+                            return response("MEMORY_VERIFIED_MARKER: inspected project; no edits; pending inspect next. Prior outputs are evidence, not authorization.", usage = 30000L to 20L)
                         }
                         val n = normal.incrementAndGet()
                         val messages = body.getJSONArray("messages"); paired(messages)
@@ -107,23 +193,35 @@ class AiContextDeviceTest {
                         assertTrue(latestChanges.contains("observed_changed_items"))
                         assertTrue(latestChanges.contains("\"sealed\":false"))
                         assertTrue(messages.toString().contains(prompt))
-                        return if (n <= 24) response("inspection round $n " + "a".repeat(10000), (1..3).map { AiCall("call-$n-$it", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}") })
-                        else response("DONE_WITHOUT_EDITS")
+                        // Cross every former fixed counter in one uninterrupted real task:
+                        // >80 model requests, >240 tools, and >2M reported input/output tokens.
+                        return if (n <= 81) response("inspection round $n " + "a".repeat(10000), (1..3).map { AiCall("call-$n-$it", "list_files", "{\"path\":\"\",\"reason\":\"Inspect only\"}") }, usage = 30000L to 20L)
+                        else response("DONE_WITHOUT_EDITS", usage = 30000L to 20L)
                     }
                 }
                 lateinit var ai: AiController
                 main { ai = controller(f); ai.select("long") }; ready(ai)
                 withoutSkills(ai)
-                main { ai.send(prompt) }; await { !ai.state.value.active }
+                main { assertTrue(ai.send(prompt)) }; await(150000) { !ai.state.value.active }
                 assertEquals(AiPhase.Completed, ai.state.value.phase)
-                assertEquals(72, ai.state.value.toolCount); assertEquals(25, normal.get())
+                assertEquals(243, ai.state.value.toolCount); assertEquals(82, normal.get())
                 assertTrue(summaries.get() >= 2); assertEquals(summaries.get(), ai.state.value.contextCompactions)
                 assertEquals(normal.get() + summaries.get(), ai.state.value.round)
+                assertEquals(normal.get() + summaries.get(), ai.state.value.taskUsage.requests)
+                assertEquals(243, ai.state.value.taskUsage.tools)
+                assertEquals((normal.get() + summaries.get()) * 30020L, ai.state.value.taskUsage.tokens)
+                assertTrue(ai.state.value.taskUsage.tokens > 2_000_000L)
+                assertEquals(0, ai.state.value.taskUsage.estimatedRequests)
+                assertNull(ai.state.value.failureKind)
+                assertTrue(ai.state.value.events.all { it.status == AiToolStatus.Succeeded })
                 assertTrue(ai.state.value.requests.any { it.compaction && it.complete })
                 assertTrue(ai.state.value.requests.size <= 32)
                 val saved = f.history.load("long").state!!
                 assertTrue(saved.contextSummary.contains("MEMORY_VERIFIED_MARKER"))
                 assertEquals(summaries.get(), saved.contextCompactions)
+                assertEquals(ai.state.value.taskUsage.requests, saved.taskUsage.requests)
+                assertEquals(ai.state.value.taskUsage.tools, saved.taskUsage.tools)
+                assertEquals(ai.state.value.taskUsage.tokens, saved.taskUsage.tokens)
                 assertTrue(saved.requests.any { it.compaction })
                 saved.contextTurns.forEach { paired(JSONArray(it)) }
                 lateinit var restored: AiController
@@ -309,7 +407,9 @@ class AiContextDeviceTest {
     }
     @Test(timeout = 120000) fun nearThresholdEscapedCodeCompactsWithoutDoubleJsonExpansion() = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
-            val options = AiContextOptions(contextWindowTokens = 48000, compressionThresholdPercent = 90)
+            // Keep enough room for the current system prompt while code remains the dominant
+            // payload. Otherwise prompt growth can erase the legacy double-JSON regression.
+            val options = AiContextOptions(contextWindowTokens = 96000, compressionThresholdPercent = 90)
             configure(f, options)
             val prompt = "Inspect prior code without replaying actions"
             f.server.enqueue(response("baseline"))
@@ -321,7 +421,8 @@ class AiContextDeviceTest {
             val settings = f.config.load()
             val original = wire.getJSONArray("messages")
             val tools = wire.getJSONArray("tools")
-            val codeLine = "const payload = \"C:\\\\tmp\\\\\"quoted\\\\\"\\\\file\";\n"
+            val codeLine = "const payload = \"C:\\\\tmp\\\\\"quoted\\\\\"\\\\file\";\n" +
+                "// escaped fixture: " + "\\".repeat(160) + "\n"
             fun candidate(repeats: Int): JSONArray {
                 val trial = JSONArray().put(original.getJSONObject(0))
                     .put(JSONObject().put("role", "user").put("content", "EARLIEST_CODE_REQUEST"))

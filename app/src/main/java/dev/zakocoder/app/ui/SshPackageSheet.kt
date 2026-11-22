@@ -1,19 +1,14 @@
 package dev.zakocoder.app.ui
 
-import top.yukonga.miuix.kmp.basic.RadioButton
-import androidx.compose.foundation.BorderStroke
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -105,15 +100,15 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
             supportingText = { Text(stringResource(R.string.ssh_package_working_directory_hint)) },
             modifier = Modifier.fillMaxWidth())
         Text(stringResource(R.string.ssh_package_auth), style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth()) {
             SshAuthUi.entries.forEach { option ->
-                Row(Modifier.weight(1f).heightIn(min = 48.dp).selectable(selected = auth == option, enabled = !model.busy,
-                    role = Role.RadioButton, onClick = { auth = option; secret = ""; passphrase = ""; visible = false }),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = auth == option, onClick = null)
-                    Text(stringResource(if (option == SshAuthUi.Password) R.string.ssh_package_password_auth else R.string.ssh_package_key_auth),
-                        style = MaterialTheme.typography.bodyMedium)
-                }
+                RadioButtonPreference(
+                    title = stringResource(if (option == SshAuthUi.Password) R.string.ssh_package_password_auth else R.string.ssh_package_key_auth),
+                    selected = auth == option, enabled = !model.busy,
+                    onClick = { auth = option; secret = ""; passphrase = ""; visible = false },
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                )
             }
         }
         WorkbenchTextField(value = secret, onValueChange = { secret = it }, label = credentialLabel,
@@ -122,7 +117,7 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth())
-        TextButton(onClick = { visible = !visible }, enabled = !model.busy,
+        WorkbenchTextButton(onClick = { visible = !visible }, enabled = !model.busy,
             modifier = Modifier.heightIn(min = 48.dp)) { Text(revealLabel) }
         if (auth == SshAuthUi.PrivateKey) WorkbenchTextField(value = passphrase, onValueChange = { passphrase = it },
             label = stringResource(R.string.ssh_package_passphrase), singleLine = true, enabled = !model.busy,
@@ -132,13 +127,10 @@ internal fun SshPackagePanel(model: SshPackageUiModel, onSave: (SshConnectionDra
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     SshSection(stringResource(R.string.ssh_package_tmux)) {
-        val label = stringResource(R.string.ssh_package_tmux)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ssh_package_tmux_hint), Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            WorkbenchSwitch(checked = tmux, onCheckedChange = { tmux = it }, enabled = !model.busy,
-                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = label })
-        }
+        SwitchPreference(checked = tmux, onCheckedChange = { tmux = it }, enabled = !model.busy,
+            title = stringResource(R.string.ssh_package_tmux), summary = stringResource(R.string.ssh_package_tmux_hint),
+            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
         model.tmuxAvailable?.let { available -> Text(stringResource(if (available) R.string.ssh_package_tmux_ready else R.string.ssh_package_tmux_missing),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
@@ -165,12 +157,12 @@ internal fun SshConnectionStatus(model: SshPackageUiModel, canTest: Boolean,
     SshSection(stringResource(if (model.connected) R.string.ssh_package_connected else R.string.ssh_package_disconnected)) {
         model.status?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (model.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (model.busy) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         WorkbenchSecondaryButton(onClick = onTest, enabled = canTest && !model.busy,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(if (model.busy) R.string.ssh_package_testing else R.string.ssh_package_test))
         }
-        if (model.connected || model.busy) TextButton(onClick = onDisconnect, enabled = true,
+        if (model.connected || model.busy) WorkbenchTextButton(onClick = onDisconnect, enabled = true,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ssh_package_disconnect)) }
     }
     val fingerprint = model.pendingFingerprint ?: model.trustedFingerprint
@@ -184,7 +176,7 @@ internal fun SshConnectionStatus(model: SshPackageUiModel, canTest: Boolean,
             WorkbenchSecondaryButton(onClick = onTrustHost, enabled = !model.busy && canTest && !model.fingerprintChanged,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ssh_package_trust)) }
         }
-        if (model.trustedFingerprint != null) TextButton(onClick = onForgetHost, enabled = !model.busy,
+        if (model.trustedFingerprint != null) WorkbenchTextButton(onClick = onForgetHost, enabled = !model.busy,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.ssh_package_forget_host)) }
     }
 }

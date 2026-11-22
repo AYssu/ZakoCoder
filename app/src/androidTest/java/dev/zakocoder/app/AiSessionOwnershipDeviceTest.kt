@@ -91,10 +91,11 @@ class AiSessionOwnershipDeviceTest {
             var deletion: Deferred<Unit>? = null
             try {
                 armed.set(true)
-                main { ai.recommendedSkills() }
+                // Skill selection is global now; use conversation-owned settings to queue saves.
+                main { ai.setAutomaticDelegation(true) }
                 withContext(Dispatchers.IO) { assertTrue(entered.await(10, TimeUnit.SECONDS)) }
                 // Queue a second persist, then invalidate this owner before either can finish.
-                main { ai.recommendedSkills() }
+                main { ai.setAutomaticDelegation(false) }
                 deletion = async(Dispatchers.Main) { ai.deleteProjectHistory("deleted") }
                 main { /* Wait until the earlier queued deletion has invalidated this generation. */ }
                 release.countDown()

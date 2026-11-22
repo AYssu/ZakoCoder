@@ -38,6 +38,36 @@ class AiModelChoicesDeviceTest {
             assertEquals(0, f.server.requestCount)
         }
     }
+    @Test(timeout = 45000) fun recentModelWindowsPersistWithoutMakingProviderRequests(): Unit = runBlocking {
+        AiDeviceTest.Fixture(context).use { f ->
+            val old = f.config.load()
+            val windows = linkedMapOf(
+                "openai/gpt-6.2-sol" to 1_050_000,
+                "google/gemini-4-carbon" to 1_048_576,
+                "anthropic/claude-sonnet-5-5" to 1_000_000,
+                "anthropic/claude-sonnet-4-5" to 200_000,
+                "x-ai/grok-4.6" to 500_000,
+                "z-ai/glm-5.3" to 1_000_000,
+                "moonshot/kimi-k3.1-pro" to 1_048_576,
+                "unlisted-next-model" to 1_000_000,
+            )
+            f.config.saveProfile(AiModelDraft("legacy", "fixture", old.endpoint, old.model, null,
+                old.parameters, old.context.copy(contextWindowTokens = 240_000, compressionThresholdPercent = 85),
+                protocol = old.protocol, modelChoices = windows.keys.toList()))
+            val store = AiConfigStore(context, f.token, f.alias)
+            windows.forEach { (model, tokens) ->
+                store.selectModel("legacy", model)
+                val loaded = AiConfigStore(context, f.token, f.alias).load()
+                assertEquals(model, loaded.model)
+                assertEquals(model, tokens, loaded.context.contextWindowTokens)
+                assertEquals(85, loaded.context.compressionThresholdPercent)
+                assertEquals(old.parameters, loaded.parameters)
+                assertEquals(old.key, loaded.key)
+            }
+            assertEquals(0, f.server.requestCount)
+        }
+    }
+
     @Test(timeout = 45000) fun explicitDiscoveryPersistsAcrossReloadAndActiveTaskLocksChanges(): Unit = runBlocking {
         AiDeviceTest.Fixture(context).use { f ->
             var active = false

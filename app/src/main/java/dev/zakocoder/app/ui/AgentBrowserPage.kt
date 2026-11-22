@@ -7,12 +7,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -84,7 +81,7 @@ internal fun AgentBrowserPage(controller: BrowserController, taskState: dev.zako
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.browser_task_state, stringResource(taskState.phase.label)),
                         Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = onBack) { Text(stringResource(R.string.browser_return_conversation)) }
+                    WorkbenchTextButton(onClick = onBack) { Text(stringResource(R.string.browser_return_conversation)) }
                 }
             }
             Surface(color = MaterialTheme.colorScheme.surface) {
@@ -99,15 +96,15 @@ internal fun AgentBrowserPage(controller: BrowserController, taskState: dev.zako
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                             keyboardActions = KeyboardActions(onGo = { navigate() }),
                         )
-                        IconButton(onClick = { navigate() }, enabled = !state.busy && displayedAddress.isNotBlank()) {
+                        WorkbenchIconButton(onClick = { navigate() }, enabled = !state.busy && displayedAddress.isNotBlank()) {
                             WorkbenchIcon(Glyph.Right, description = stringResource(R.string.browser_go))
                         }
                     }
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = controller::requestBack, enabled = state.canGoBack && !state.busy) {
+                        WorkbenchIconButton(onClick = controller::requestBack, enabled = state.canGoBack && !state.busy) {
                             WorkbenchIcon(Glyph.Back, description = stringResource(R.string.browser_back))
                         }
-                        IconButton(onClick = if (state.loading || state.busy) controller::stop else controller::requestReload,
+                        WorkbenchIconButton(onClick = if (state.loading || state.busy) controller::stop else controller::requestReload,
                             enabled = state.url.isNotBlank() || state.busy) {
                             WorkbenchIcon(if (state.loading || state.busy) Glyph.Close else Glyph.Refresh,
                                 description = stringResource(if (state.loading || state.busy) R.string.browser_stop else R.string.browser_reload))
@@ -137,7 +134,7 @@ internal fun AgentBrowserPage(controller: BrowserController, taskState: dev.zako
                     }
                 }
             }
-            if (state.loading) LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth().height(2.dp))
+            if (state.loading) WorkbenchLinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth().height(2.dp))
             else Spacer(Modifier.height(2.dp))
             Box(Modifier.fillMaxWidth().weight(1f).clipToBounds()) {
                 // Keep the real WebView mounted even before navigation: AI operations wait for
@@ -168,13 +165,13 @@ internal fun AgentBrowserPage(controller: BrowserController, taskState: dev.zako
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (state.busy || state.loading) {
                             Spacer(Modifier.height(16.dp))
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            WorkbenchLinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                             Spacer(Modifier.height(8.dp))
                             Text(browserActionText(state.action), style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         } else if (loadFailed && state.url.isNotBlank()) {
                             Spacer(Modifier.height(16.dp))
-                            TextButton(onClick = controller::requestReload) { Text(stringResource(R.string.browser_retry)) }
+                            WorkbenchTextButton(onClick = controller::requestReload) { Text(stringResource(R.string.browser_retry)) }
                         }
                     }
                 }

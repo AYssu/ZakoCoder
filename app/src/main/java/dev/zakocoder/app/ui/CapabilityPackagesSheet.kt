@@ -1,5 +1,8 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -11,8 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
 
@@ -41,7 +42,7 @@ internal fun CapabilityPackagesSheet(model: CapabilityPackagesUiModel,
         Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
             .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding().padding(horizontal = 16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
+                WorkbenchIconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
                 Text(stringResource(R.string.capability_packages_title), style = MaterialTheme.typography.titleMedium)
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -67,7 +68,7 @@ internal fun CapabilityPackagesPanel(model: CapabilityPackagesUiModel,
     if (!model.rootReady) {
         Text(stringResource(R.string.capability_device_root_hint), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onPermissions, modifier = Modifier.heightIn(min = 48.dp)) {
+        WorkbenchTextButton(onClick = onPermissions, modifier = Modifier.heightIn(min = 48.dp)) {
             WorkbenchIcon(Glyph.Shield, Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.device_permissions_open))
@@ -110,29 +111,28 @@ private fun CapabilityPackageCard(title: String, description: String, hint: Stri
                                   scopeLabel: String, enabled: Boolean, busy: Boolean, onEnabled: (Boolean) -> Unit, onDetails: () -> Unit) {
     WorkbenchCard(cornerRadius = 12.dp,
         border = if (enabled) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = .35f)) else null) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                        WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        Column(Modifier.fillMaxWidth()) {
+            SwitchPreference(title = title, summary = scopeLabel, checked = enabled,
+                onCheckedChange = onEnabled, enabled = !busy,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                startAction = {
+                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                            WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
                     }
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, style = MaterialTheme.typography.bodyMedium)
-                    Text(scopeLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                WorkbenchSwitch(checked = enabled, onCheckedChange = onEnabled, enabled = !busy,
-                    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics { contentDescription = title })
-            }
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }, bottomAction = {
+                    Text(description, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                })
             if (enabled) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                // Opening settings does not mutate the package selection. A save in
-                // another card must not dim and re-enable this navigation button.
-                WorkbenchSecondaryButton(onClick = onDetails, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text(configureLabel)
-                }
+                GroupDivider()
+                // Configuration remains available while the package state is saving.
+                // Navigating to details must not mutate the selected capability.
+                ArrowPreference(title = configureLabel, summary = hint, onClick = onDetails,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
             }
         }
     }

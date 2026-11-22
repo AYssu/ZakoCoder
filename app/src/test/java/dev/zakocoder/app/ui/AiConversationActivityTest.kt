@@ -146,4 +146,47 @@ class AiConversationActivityTest {
         assertEquals(setOf("read"), display.tools.keys)
     }
 
+    @Test fun toolRoundCommentaryNeverAcquiresFinalAnswerActions() {
+        val progress = AiEntry("progress", "Read the file first", role = AiRole.Assistant, turn = 1)
+        val empty = AiEntry("transport", role = AiRole.Assistant, turn = 1)
+        val state = AiState(turn = 1, timeline = listOf(progress, entry("read"), empty), events = listOf(event("read")))
+        val display = aiDisplayActivity(state, emptySet())
+        assertTrue("No answer exists after the tool result", display.finalAnswers().isEmpty())
+        assertTrue("Ending or pausing a tool-only task must not turn commentary into an answer", display.answerActionIds(state).isEmpty())
+        assertEquals("Progress remains available to read and select", progress, display.entries.first())
+    }
+
+    @Test fun finalActionsAppearOnlyAfterTheWholeTaskFinishesAndStayOnItsLastAnswer() {
+        val progress = AiEntry("progress", "Inspecting", role = AiRole.Assistant, turn = 1)
+        val answer = AiEntry("answer", "Finished", role = AiRole.Assistant, turn = 1)
+        val state = AiState(active = true, turn = 1, timeline = listOf(progress, entry("read"), answer), events = listOf(event("read")))
+        val display = aiDisplayActivity(state, emptySet())
+        assertEquals(mapOf(1 to answer), display.finalAnswers())
+        assertTrue(display.answerActionIds(state).isEmpty())
+        assertEquals(setOf("answer"), display.answerActionIds(state.copy(active = false)))
+        assertTrue(display.answerActionIds(state.copy(active = false,
+            questionContinuation = AiQuestionContinuation("question", "call", "[]", 0))).isEmpty())
+        assertEquals(setOf("answer"), display.answerActionIds(state.copy(turn = 2)))
+    }
+
+    @Test fun preparationGroupedWithToolsCannotLeaveActionsOnEarlierCommentary() {
+        val progress = AiEntry("progress", "Preparing to inspect", role = AiRole.Assistant, turn = 1)
+        val prep = AiEntry("prep", "checkpoint", turn = 1)
+        val state = AiState(turn = 1, timeline = listOf(progress, prep, entry("read")), events = listOf(event("read")))
+        val display = aiDisplayActivity(state, setOf("checkpoint"))
+        assertTrue(display.tools.containsKey("prep"))
+        assertTrue(display.finalAnswers().isEmpty())
+        assertTrue(display.answerActionIds(state).isEmpty())
+    }
+
+    @Test fun resumedHistoryKeepsOnlyOneAnswerPerTurnAndRetainsReasoningOnlyAnswer() {
+        val oldProgress = AiEntry("old-progress", "Inspecting", role = AiRole.Assistant, turn = 1)
+        val oldAnswer = oldProgress.copy(id = "old-answer", text = "Done")
+        val thinking = AiEntry("reasoning-only", role = AiRole.Assistant, reasoning = "Retained explanation", turn = 2)
+        val state = AiState(turn = 2, timeline = listOf(oldProgress, entry("read"), oldAnswer, thinking), events = listOf(event("read")))
+        val display = aiDisplayActivity(state, emptySet())
+        assertEquals(setOf("old-answer", "reasoning-only"), display.answerActionIds(state))
+        assertEquals(setOf("old-answer"), display.answerActionIds(state.copy(active = true)))
+    }
+
 }

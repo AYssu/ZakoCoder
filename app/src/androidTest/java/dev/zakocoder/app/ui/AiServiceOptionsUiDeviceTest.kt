@@ -98,7 +98,7 @@ class AiServiceOptionsUiDeviceTest {
             scenario.onActivity { activity -> activity.setContent {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f), LocalWorkbenchDark provides dark.value) {
-                    MaterialTheme(colorScheme = if (dark.value) WorkbenchDarkColors else WorkbenchColors) {
+                    WorkbenchMiuixTheme(dark.value) {
                         Surface(Modifier.fillMaxSize()) {
                             Column(Modifier.safeDrawingPadding().width(360.dp).verticalScroll(rememberScrollState()).padding(16.dp)) {
                                 AiModelProbeProgressContent(state.value)
@@ -149,7 +149,7 @@ class AiServiceOptionsUiDeviceTest {
                 activity.setContent {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f), LocalWorkbenchDark provides dark) {
-                    MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors) {
+                    WorkbenchMiuixTheme(dark) {
                         Surface(Modifier.fillMaxSize()) {
                             Box(Modifier.fillMaxSize()) {
                             key(protocol.value) {

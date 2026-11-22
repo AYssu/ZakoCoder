@@ -14,7 +14,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.navigationevent.DirectNavigationEventInput
@@ -85,7 +84,7 @@ class EditorUpdatePolishDeviceTest {
     }
     @Composable private fun Theme(dark: Boolean, content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalWorkbenchDark provides dark) {
-            MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
+            WorkbenchMiuixTheme(dark) {
                 Surface(Modifier.fillMaxSize().systemBarsPadding().imePadding(), content = content)
             }
         }
@@ -215,7 +214,7 @@ class EditorUpdatePolishDeviceTest {
                     assertFalse(has(context.getString(R.string.editor_reload)))
                     capture("editor-menu-${if (dark) "night" else "day"}")
                     click(context.getString(R.string.editor_select_line))
-                    assertEquals("Beta", view.text.toString().substring(view.cursor.left, view.cursor.right))
+                    await("menu dismissal completes line selection") { view.text.toString().substring(view.cursor.left, view.cursor.right) == "Beta" }
                     click(context.getString(R.string.editor_file_actions)); click(context.getString(R.string.editor_uppercase_line))
                     await("line uppercased") { view.text.getLineString(1) == "BETA" }
                     click(context.getString(R.string.editor_file_actions)); click(context.getString(R.string.editor_lowercase_line))
@@ -245,6 +244,7 @@ class EditorUpdatePolishDeviceTest {
                     val x = bounds.center.x; val y = bounds.center.y
                     fun touch(action: Int, dy: Float, elapsed: Long) {
                         val event = android.view.MotionEvent.obtain(downTime, downTime + elapsed, action, x, y + dy, 0)
+                        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
                         try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
                     }
                     touch(android.view.MotionEvent.ACTION_DOWN, 0f, 0)
@@ -302,9 +302,11 @@ class EditorUpdatePolishDeviceTest {
                     val viewport = nodes { all -> all.single { it.config.getOrNull(SemanticsProperties.TestTag) == "ai-message-viewport" }.boundsInWindow }
                     val downTime = android.os.SystemClock.uptimeMillis()
                     for (step in 0..12) {
-                        val event = android.view.MotionEvent.obtain(downTime, downTime + step * 20L,
+                        if (step > 0) android.os.SystemClock.sleep(20)
+                        val event = android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(),
                             if (step == 0) android.view.MotionEvent.ACTION_DOWN else if (step == 12) android.view.MotionEvent.ACTION_UP else android.view.MotionEvent.ACTION_MOVE,
                             viewport.center.x, viewport.top + viewport.height * (.25f + step / 12f * .45f), 0)
+                        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
                         try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
                     }
                     await("latest appears while reviewing history") { nodes { all -> all.any { it.config.getOrNull(SemanticsProperties.TestTag) == "ai-latest-overlay" } } }
@@ -345,21 +347,15 @@ class EditorUpdatePolishDeviceTest {
             assertTrue(nodes { all -> all.any { text(it).contains("git status") } })
             capture("updates-${if (dark) "night" else "day"}")
             val before = opened.size
-            nodes { all ->
-                val value = all.first { text(it) == "查看说明" }.config[SemanticsProperties.Text].single()
-                val annotation = value.getLinkAnnotations(0, value.length).single().item as LinkAnnotation.Clickable
-                requireNotNull(annotation.linkInteractionListener).onClick(annotation)
-            }
+            // Selectable Markdown exposes link actions on dedicated accessibility nodes;
+            // its selectable text intentionally contains no native LinkAnnotation ranges.
+            click("查看说明")
             await("external link requires confirmation") { has(context.getString(R.string.ai_open_link)) }
             assertEquals(before, opened.size)
             click(context.getString(R.string.cancel))
             assertEquals(before, opened.size)
             await("link confirmation dismissed") { !has(context.getString(R.string.ai_open_link)) }
-            nodes { all ->
-                val value = all.first { text(it) == "查看说明" }.config[SemanticsProperties.Text].single()
-                val annotation = value.getLinkAnnotations(0, value.length).single().item as LinkAnnotation.Clickable
-                requireNotNull(annotation.linkInteractionListener).onClick(annotation)
-            }
+            click("查看说明")
             click(context.getString(R.string.ai_open_browser))
             await("browser opens after the confirmation exit") { opened.size == before + 1 }
             assertEquals(before + 1, opened.size)

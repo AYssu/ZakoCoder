@@ -58,24 +58,24 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
     val networkReady = ready && remote.isNotBlank() && !state.merging
     AiFullScreen(stringResource(R.string.git_title), close) {
         if (state.busy) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(gitOperationMessage(state.operation), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = actions.stop) { Text(stringResource(R.string.git_workflow_cancel)) }
+                WorkbenchTextButton(onClick = actions.stop) { Text(stringResource(R.string.git_workflow_cancel)) }
             }
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.git_workflow_branch), style = MaterialTheme.typography.titleSmall)
-                    TextButton(onClick = actions.refresh, enabled = !state.busy) { Text(stringResource(R.string.refresh)) }
+                    WorkbenchTextButton(onClick = actions.refresh, enabled = !state.busy) { Text(stringResource(R.string.refresh)) }
                 }
                 if (state.repository) GitPanel {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         WorkbenchIcon(Glyph.Swap, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(8.dp))
                         Text(if (state.detached) stringResource(R.string.git_workflow_detached) else state.branch.ifBlank { stringResource(R.string.git_workflow_unborn) }, Modifier.weight(1f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleSmall)
-                        IconButton(onClick = { dialog = "branches" }, enabled = ready && !state.merging) {
+                        WorkbenchIconButton(onClick = { dialog = "branches" }, enabled = ready && !state.merging) {
                             WorkbenchIcon(Glyph.ChevronDown, description = stringResource(R.string.git_workflow_branches))
                         }
                     }
@@ -109,7 +109,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                         GitAction(stringResource(R.string.git_workflow_pull), networkReady && !state.detached, Modifier.weight(1f)) { dialog = "pull" }
                         GitAction(stringResource(R.string.git_workflow_push), networkReady && !state.detached, Modifier.weight(1f)) { dialog = "push" }
                     }
-                    if (selectedRemote?.url?.startsWith("https://") == true) actions.credentials?.let { credentials -> TextButton(onClick = { credentials(selectedRemote.url) }, enabled = !state.busy) { Text(stringResource(R.string.git_workflow_credentials)) } }
+                    if (selectedRemote?.url?.startsWith("https://") == true) actions.credentials?.let { credentials -> WorkbenchTextButton(onClick = { credentials(selectedRemote.url) }, enabled = !state.busy) { Text(stringResource(R.string.git_workflow_credentials)) } }
                     else if (selectedRemote != null) Text(stringResource(R.string.git_workflow_ssh_credentials), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (selectedRemote != null && !state.detached) Text(stringResource(R.string.git_workflow_destination, remote, remoteBranch), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -128,7 +128,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                     GitPanel {
                         Text(stringResource(if (state.conflicts.isEmpty()) R.string.git_workflow_merging else R.string.git_workflow_conflicts, state.conflicts.size), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
                         Text(stringResource(if (state.conflicts.isEmpty()) R.string.git_workflow_merging_ready else R.string.git_workflow_conflict_help), style = MaterialTheme.typography.bodySmall)
-                        if (state.merging) TextButton(onClick = { dialog = "abort" }, enabled = !state.busy) { Text(stringResource(R.string.git_workflow_abort), color = MaterialTheme.colorScheme.error) }
+                        if (state.merging) WorkbenchTextButton(onClick = { dialog = "abort" }, enabled = !state.busy) { Text(stringResource(R.string.git_workflow_abort), color = MaterialTheme.colorScheme.error) }
                     }
                 }
                 items(state.conflicts, key = { "conflict:$it" }) { path ->
@@ -173,7 +173,7 @@ internal fun GitWorkflowContent(state: GitState, close: () -> Unit, actions: Git
                     GitAction(stringResource(R.string.git_stage), ready && selected.isNotEmpty(), Modifier.weight(1f)) { actions.stage(selected); selected = emptySet() }
                     WorkbenchPrimaryButton(onClick = { dialog = "commit" }, enabled = ready && state.conflicts.isEmpty() && state.entries.any { it.index != ' ' && it.index != '?' }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) { Text(stringResource(R.string.git_commit)) }
                 }
-                if (selected.any { path -> state.entries.any { it.path == path && it.index != ' ' && it.index != '?' } }) TextButton(onClick = { actions.unstage(selected); selected = emptySet() }, enabled = ready) { Text(stringResource(R.string.git_workflow_unstage)) }
+                if (selected.any { path -> state.entries.any { it.path == path && it.index != ' ' && it.index != '?' } }) WorkbenchTextButton(onClick = { actions.unstage(selected); selected = emptySet() }, enabled = ready) { Text(stringResource(R.string.git_workflow_unstage)) }
             }
         }
     }

@@ -1,13 +1,10 @@
 package dev.zakocoder.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
@@ -18,7 +15,8 @@ import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.device.DeviceMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.RadioButton
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonLocation
 
 /** The same global mode selection is used by settings, onboarding and capability prerequisites. */
 @Composable
@@ -108,14 +106,9 @@ internal fun DeviceModePanel(rootMode: Boolean, rootGranted: Boolean, busy: Bool
 @Composable
 private fun DeviceModeRow(title: String, description: String, selected: Boolean,
     enabled: Boolean, glyph: Glyph, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
-        .padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        RadioButton(selected = selected, onClick = null, enabled = enabled)
-    }
+    RadioButtonPreference(title = title, summary = description, selected = selected,
+        enabled = enabled, onClick = onClick, radioButtonLocation = RadioButtonLocation.End,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        startAction = { WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) })
 }

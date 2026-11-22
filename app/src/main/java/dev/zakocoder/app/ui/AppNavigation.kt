@@ -98,7 +98,7 @@ internal fun AppNavigation(
                                 style = MaterialTheme.typography.labelSmall, fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = rememberWorkbenchClickFeedback(onSearch)) {
+                        WorkbenchIconButton(onClick = rememberWorkbenchClickFeedback(onSearch)) {
                             WorkbenchIcon(Glyph.Search, description = stringResource(R.string.conversation_search_title))
                         }
                     }

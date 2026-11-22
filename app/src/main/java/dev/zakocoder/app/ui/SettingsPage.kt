@@ -1,20 +1,19 @@
 package dev.zakocoder.app.ui
 
-import top.yukonga.miuix.kmp.basic.RadioButton
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,17 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import dev.zakocoder.app.settings.TerminalShell
 import dev.zakocoder.app.runtime.ToolStatus
 import dev.zakocoder.app.runtime.ToolBundles
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.zakocoder.app.settings.DevelopmentNotifications
@@ -43,7 +37,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ui.theme.LocalWorkbenchPalette
-import dev.zakocoder.app.ui.theme.Radius
 import dev.zakocoder.app.ui.theme.Space
 import dev.zakocoder.app.ui.theme.Type
 import dev.zakocoder.app.Workbench
@@ -70,13 +63,14 @@ internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> U
 @Composable
 internal fun DetailRow(title: String, value: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: (() -> Unit)? = null) {
     val click = rememberWorkbenchClickFeedback { onClick?.invoke() }
-    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = click).heightIn(min = 48.dp) else Modifier)
-        .padding(horizontal = Space.lg, vertical = Space.md), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(title, Modifier.weight(1f), style = Type.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (value.isNotEmpty()) Text(value, Modifier.widthIn(max = 160.dp), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(17.dp), tint = TertiaryText)
+    if (onClick != null) {
+        ArrowPreference(title = title, summary = value.takeIf { it.isNotEmpty() },
+            modifier = modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = enabled,
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp), onClick = click)
+    } else {
+        BasicComponent(title = title, summary = value.takeIf { it.isNotEmpty() },
+            modifier = modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = enabled,
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
     }
 }
 
@@ -97,29 +91,26 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, mono: Boolean = false, onClick: (() -> Unit)? = null) {
+private fun SettingsRow(title: String, value: String, glyph: Glyph = Glyph.Settings, enabled: Boolean = true, onClick: (() -> Unit)? = null) {
     val tone = if (enabled) 1f else .45f
     val click = rememberWorkbenchClickFeedback { onClick?.invoke() }
-    BasicComponent(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-        insideMargin = PaddingValues(horizontal = Space.lg, vertical = Space.md),
-        enabled = enabled, onClick = click.takeIf { onClick != null }, role = if (onClick != null) Role.Button else null,
-        startAction = {
-            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                    WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
-                }
+    val icon: @Composable () -> Unit = {
+        Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                WorkbenchIcon(glyph, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
             }
-        },
-        endActions = {
-            if (onClick != null) WorkbenchIcon(Glyph.Next, Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone))
-        },
-    ) {
-        Text(title, style = Type.body, color = MaterialTheme.colorScheme.onSurface.copy(alpha = tone))
-        if (value.isNotEmpty()) Text(value, modifier = Modifier.padding(top = 4.dp), style = Type.meta,
-            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = tone), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    if (onClick != null) {
+        ArrowPreference(title = title, summary = value.takeIf { it.isNotEmpty() },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), enabled = enabled,
+            startAction = icon, onClick = click,
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
+    } else {
+        BasicComponent(title = title, summary = value.takeIf { it.isNotEmpty() },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp), enabled = enabled,
+            startAction = icon,
+            insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
     }
 }
 
@@ -196,35 +187,14 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
             SettingsRow(stringResource(R.string.browser_title), stringResource(R.string.browser_tool_description), glyph = Glyph.Globe, onClick = onBrowser)
             SettingsDivider()
             SettingsRow(stringResource(R.string.ai_extensions), stringResource(R.string.ai_extensions_types), glyph = Glyph.Extensions, onClick = onExtensions)
-            SettingsDivider()
-            SettingsRow(stringResource(R.string.ai_permissions), state.project?.name ?: stringResource(R.string.select_project_first),
-                glyph = Glyph.Shield, enabled = state.selectedId != null && !ai.active && !ai.restoring && !ai.permissionsLoading && !ai.permissionsSaving,
-                onClick = { workbench.ai.select(state.selectedId); if (workbench.ai.state.value.projectId == state.selectedId) aiPermissions = true })
         } }
         item { SettingsGroup(stringResource(R.string.screen_test_development_group)) {
             SettingsRow(stringResource(R.string.capability_packages_title), stringResource(R.string.capability_packages_settings_hint),
                 glyph = Glyph.Extensions, onClick = { capabilityPackagesOpen = true })
         } }
         item { SettingsGroup(stringResource(R.string.nav_terminal)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) { WorkbenchIcon(Glyph.Keyboard, Modifier.size(20.dp)) }
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.terminal_font), style = Type.body)
-                    Text(stringResource(R.string.terminal_output_font), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp - 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp > 9) {
-                            WorkbenchIcon(Glyph.Minus, modifier = Modifier.size(16.dp), description = stringResource(R.string.decrease_font))
-                        }
-                        Text(stringResource(R.string.font_size_compact, settings.terminalFontSp), Modifier.widthIn(min = 32.dp), fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, softWrap = false, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        IconButton(onClick = { workbench.saveSettings(settings.copy(terminalFontSp = settings.terminalFontSp + 1)) }, modifier = Modifier.size(48.dp), enabled = !state.busy && settings.terminalFontSp < 28) {
-                            WorkbenchIcon(Glyph.Add, modifier = Modifier.size(16.dp), description = stringResource(R.string.increase_font))
-                        }
-                    }
-                }
+            TerminalFontPreference(settings.terminalFontSp, enabled = !state.busy) { selectedSize ->
+                workbench.saveSettings(settings.copy(terminalFontSp = selectedSize))
             }
             SettingsDivider()
             SettingsRow(stringResource(R.string.extra_path), settings.additionalPath.ifEmpty { notConfigured }, glyph = Glyph.File, enabled = !state.busy, onClick = { editing = "path" })
@@ -234,7 +204,7 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         item { SettingsGroup(stringResource(R.string.network_settings)) {
             SettingsRow(stringResource(R.string.apt_source), stringResource(if (settings.aptSource == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua), glyph = Glyph.Projects, enabled = !state.busy, onClick = { editing = "source" })
             SettingsDivider()
-            SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, mono = true, glyph = Glyph.Globe, enabled = !state.busy, onClick = { editing = "dns" })
+            SettingsRow(stringResource(R.string.dns_short), settings.dns.split(',').joinToString(", ") { it.trim() }, glyph = Glyph.Globe, enabled = !state.busy, onClick = { editing = "dns" })
             SettingsDivider()
             SettingsRow(stringResource(R.string.proxy_short), state.proxyDisplay.ifEmpty { notConfigured }, glyph = Glyph.Swap, enabled = !state.busy, onClick = onProxy)
         } }
@@ -249,13 +219,10 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val cacheScope = stringResource(R.string.cache_scope)
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 48.dp) {
-                        TextButton(onClick = workbench::clearCache, enabled = !state.busy, shape = RoundedCornerShape(9.dp),
-                            colors = ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
-                            modifier = Modifier.semantics { stateDescription = cacheScope }.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.cache_compact_action), style = Type.metaStrong)
-                        }
+                    WorkbenchIconButton(onClick = workbench::clearCache, enabled = !state.busy,
+                        modifier = Modifier.size(48.dp).semantics { stateDescription = cacheScope }) {
+                        WorkbenchIcon(Glyph.Trash, Modifier.size(20.dp),
+                            description = stringResource(R.string.cache_compact_action))
                     }
                     Spacer(Modifier.weight(1f))
                     Text(stringResource(R.string.cache_compact_size, state.downloadCacheBytes?.let(StorageUsage::format) ?: unavailable),
@@ -293,26 +260,27 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                 val dismissSheet = LocalWorkbenchSheetDismiss.current
                 when (field) {
                     "shell" -> {
-                        TerminalShell.entries.forEach { option ->
-                            val ready = option == TerminalShell.Bash || state.bundleTools.any { it.id == "zsh" && it.status == ToolStatus.Ready }
-                            Row(Modifier.fillMaxWidth().clickable(enabled = ready) { shell = option }, verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = shell == option, onClick = { shell = option }, enabled = ready)
-                                Text(stringResource(if (option == TerminalShell.Bash) R.string.shell_bash else R.string.shell_zsh), Modifier.weight(1f))
-                                if (!ready) Text(stringResource(R.string.bundle_missing), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
-                            }
-                        }
+                        WindowDropdownPreference(title = stringResource(R.string.terminal_shell),
+                            entry = DropdownEntry(TerminalShell.entries.map { option ->
+                                val ready = option == TerminalShell.Bash || state.bundleTools.any { it.id == "zsh" && it.status == ToolStatus.Ready }
+                                DropdownItem(text = stringResource(if (option == TerminalShell.Bash) R.string.shell_bash else R.string.shell_zsh),
+                                    summary = if (!ready) stringResource(R.string.bundle_missing) else null,
+                                    enabled = ready, selected = shell == option, onClick = { shell = option })
+                            }), enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
                         if (state.bundleTools.none { it.id == "zsh" && it.status == ToolStatus.Ready }) {
                             WorkbenchSecondaryButton(onClick = { confirmZsh = true }, enabled = state.installed && !state.busy && !state.checkingTools, modifier = Modifier.fillMaxWidth()) {
                                 Text(stringResource(R.string.install_zsh))
                             }
                         }
                     }
-                    "source" -> AptSource.entries.forEach { option ->
-                        Row(Modifier.fillMaxWidth().clickable { source = option }, verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = source == option, onClick = { source = option })
-                            Text(stringResource(if (option == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua))
-                        }
-                    }
+                    "source" -> WindowDropdownPreference(
+                        title = stringResource(R.string.apt_source),
+                        items = AptSource.entries.map { stringResource(if (it == AptSource.Ubuntu) R.string.apt_official else R.string.apt_tsinghua) },
+                        selectedIndex = AptSource.entries.indexOf(source),
+                        onSelectedIndexChange = { source = AptSource.entries[it] }, enabled = !state.busy,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
                     "about" -> AboutAppContent(installedVersion) { sshLicenseOpen = true }
                     "notifications" -> {
                         Text(stringResource(notificationStatus.label()), color = if (notificationStatus == RunningNotificationStatus.Available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error)

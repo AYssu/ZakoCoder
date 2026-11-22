@@ -8,6 +8,35 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DoctorReportTest {
+    @Test fun taskSnapshotExportsWhitelistedStopReasonAndAllTypedUsageCounters() {
+        val secret = "private-stop-details-not-for-export"
+        val state = AiState(taskDiagnostic = "task_budget:repeated_tool_failure\n$secret",
+            failureKind = AiFailure.LocalResourceLimit,
+            taskUsage = AiTaskUsage(requests = 91, tools = 312, tokens = 5_000_000, estimatedRequests = 2,
+                elapsedMs = 3_600_000))
+        val report = DoctorReport.ai(state, 0)
+        assertEquals("RepeatedToolFailure", report.getString("stopCode"))
+        assertFalse(report.toString().contains(secret))
+        assertFalse(report.toString().contains("task_budget:"))
+        val usage = report.getJSONObject("taskUsage")
+        assertEquals(5, usage.length())
+        assertEquals(91, usage.getInt("requests"))
+        assertEquals(312, usage.getInt("tools"))
+        assertEquals(5_000_000L, usage.getLong("tokens"))
+        assertEquals(2, usage.getInt("estimatedRequests"))
+        assertEquals(3_600_000L, usage.getLong("elapsedMs"))
+    }
+
+    @Test fun unknownTaskDiagnosticCannotEnterExportAsStopCodeOrFreeText() {
+        val secret = "private-arbitrary-task-reason"
+        for (diagnostic in listOf(secret, "task_budget:$secret", "task_budget:tokens $secret")) {
+            val report = DoctorReport.ai(AiState(taskDiagnostic = diagnostic), 0)
+            assertFalse(report.has("stopCode"))
+            assertFalse(report.toString().contains(secret))
+            assertFalse(report.has("taskDiagnostic"))
+        }
+    }
+
     @Test fun exportProjectsOnlyTypedMetadataEvenWhenEveryTextFieldContainsSensitiveMaterial() {
         val secret = "private-fixture-content-never-export"
         val request = AiRequestLog(id = "local-request", model = secret, origin = "https://$secret.invalid",

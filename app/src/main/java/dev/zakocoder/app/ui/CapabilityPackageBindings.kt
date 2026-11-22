@@ -69,10 +69,12 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
     // Preserve the full capability list, including its viewport, under its child window.
     // Replacing the list would expose the unrelated page below the capability destination.
     if (fullPage) WorkbenchRetainedPage(covered = details != null || permissionsOpen, content = packagesContent)
-    else if (details == null && !permissionsOpen) packagesContent()
+    // Child dialogs must retain the actual capability sheet, not reveal Settings
+    // or place an embedded destination into the caller's local layout slot.
+    else packagesContent()
     when (details) {
         CapabilityPackage.Browser -> AgentBrowserPage(workbench.browser) { details = null }
-        CapabilityPackage.Screen -> VirtualScreenPage(workbench) { details = null }
+        CapabilityPackage.Screen -> VirtualScreenPage(workbench, embedded = fullPage) { details = null }
         CapabilityPackage.DeviceShell -> Unit
         CapabilityPackage.Ssh -> {
             val profile = ssh.profiles.singleOrNull { it.id == projectId }
@@ -121,6 +123,11 @@ internal fun CapabilityPackageBindings(workbench: Workbench, projectId: String?,
         }
         null -> Unit
     }
-    if (permissionsOpen) DevicePermissionsPage(workbench, onBack = { permissionsOpen = false }, embedded = true)
+    if (permissionsOpen) {
+        val app by workbench.state.collectAsStateWithLifecycle()
+        DevicePermissionsPage(workbench, onBack = { permissionsOpen = false }, embedded = fullPage,
+            backgroundServiceRunning = app.backgroundServiceRunning,
+            backgroundServiceError = app.backgroundServiceError)
+    }
     }
 }

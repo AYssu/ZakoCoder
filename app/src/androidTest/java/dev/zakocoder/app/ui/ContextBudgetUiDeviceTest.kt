@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
@@ -22,6 +21,7 @@ import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zakocoder.app.MainActivity
 import dev.zakocoder.app.R
+import dev.zakocoder.app.ai.AiModelContextWindows
 import dev.zakocoder.app.ai.AiParameters
 import dev.zakocoder.app.ai.AiRequestLog
 import dev.zakocoder.app.ai.AiState
@@ -40,8 +40,8 @@ class ContextBudgetUiDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     @Before fun foreground() = warmDeviceActivity()
-    @Test fun day360Font130() = render(false)
-    @Test fun night360Font130() = render(true)
+    @Test fun dayDefaultFont() = render(false)
+    @Test fun nightDefaultFont() = render(true)
 
     private fun <T> nodes(block: (List<SemanticsNode>) -> T): T {
         val result = AtomicReference<T>()
@@ -67,10 +67,27 @@ class ContextBudgetUiDeviceTest {
         }
     }
     private fun has(label: String) = nodes { list -> list.any { text(it) == label } }
-    private fun actionNode(all: List<SemanticsNode>, label: String, editable: Boolean = false): SemanticsNode {
+    private fun editableNode(all: List<SemanticsNode>, label: String): SemanticsNode? = all.lastOrNull { node ->
+        node.config.getOrNull(SemanticsActions.SetText) != null &&
+            generateSequence(node) { it.parent }.any { parent ->
+                label in parent.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+            }
+    }
+    private fun actionNode(all: List<SemanticsNode>, label: String): SemanticsNode {
         var node = all.last { text(it) == label } as SemanticsNode?
-        while (node != null && if (editable) node.config.getOrNull(SemanticsActions.SetText) == null else node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
+        while (node != null && node.config.getOrNull(SemanticsActions.OnClick) == null) node = node.parent
         return requireNotNull(node)
+    }
+    private fun toggleNode(all: List<SemanticsNode>, label: String): SemanticsNode? {
+        fun toggles(node: SemanticsNode): List<SemanticsNode> = buildList {
+            if (node.config.getOrNull(SemanticsProperties.ToggleableState) != null) add(node)
+            node.children.forEach { addAll(toggles(it)) }
+        }
+        return all.asSequence().filter { text(it) == label ||
+            label in it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        }.firstNotNullOfOrNull { title ->
+            generateSequence(title) { it.parent }.firstNotNullOfOrNull { toggles(it).singleOrNull() }
+        }
     }
     private fun click(label: String) {
         await(label) { has(label) }
@@ -79,7 +96,7 @@ class ContextBudgetUiDeviceTest {
 
     private fun reveal(label: String) {
         await("composed: $label") { has(label) }
-        repeat(40) {
+        repeat(80) {
             val visible = nodes { all ->
                 // The whole clickable row must fit: its label alone can be visible while
                 // the model ID, exact capacity or protocol hint is below the viewport.
@@ -128,13 +145,13 @@ class ContextBudgetUiDeviceTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity -> activity.setContent {
                 val current = LocalConfiguration.current
-                val widthPx = LocalWindowInfo.current.containerSize.width
+                val deviceDensity = LocalDensity.current.density
                 val configuration = remember(current, dark) { Configuration(current).apply {
                     uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                         if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                 } }
                 CompositionLocalProvider(LocalConfiguration provides configuration, LocalWorkbenchDark provides dark,
-                    LocalDensity provides Density(widthPx.coerceAtLeast(1) / 360f, 1.3f)) {
+                    LocalDensity provides Density(deviceDensity, 1f)) {
                     MaterialTheme(colorScheme = if (dark) WorkbenchDarkColors else WorkbenchColors, typography = WorkbenchTypography) {
                         Surface(Modifier.fillMaxSize()) {
                             if (diagnostics.value) AiRequestsPanel(AiState(conversationId = "budget-review", requests = listOf(request)), Modifier.fillMaxSize())
@@ -149,34 +166,67 @@ class ContextBudgetUiDeviceTest {
                 val showingDiagnostics = diagnostics.value
                 SideEffect { renderedTokens.set(tokens); renderedAutomatic.set(automatic); committed.set(true); diagnosticsCommitted.set(showingDiagnostics) }
             } }
-            await("initial composition committed") { committed.get() && renderedTokens.get() == "128000" }
-            assertEquals(128000, draft.context().contextWindowTokens)
+            await("initial composition committed") { committed.get() && renderedTokens.get() == "1000000" }
+            assertEquals(1_000_000, draft.context().contextWindowTokens)
             assertEquals(90, draft.context().compressionThresholdPercent)
             capture(dark, "window-panel")
-            click(context.getString(R.string.ai_context_choose_model_window))
-            assertEquals(8, contextWindowPresets.size)
-            for (preset in contextWindowPresets) await("preset ${preset.modelId}") { has(context.getString(preset.label)) && has(preset.modelId) }
-            capture(dark, "model-presets")
-            reveal(context.getString(R.string.ai_context_preset_sol))
-            capture(dark, "model-presets-openai-top")
-            reveal(context.getString(R.string.ai_context_preset_luna))
-            capture(dark, "model-presets-openai-bottom")
-            reveal(context.getString(R.string.ai_context_preset_grok))
-            capture(dark, "model-presets-end")
-            reveal(context.getString(R.string.ai_context_preset_sol))
-            click(context.getString(R.string.ai_context_preset_sol))
-            await("Sol window committed and sheet dismissed") {
-                renderedTokens.get() == "1050000" && !has(context.getString(R.string.ai_context_preset_sol))
+            val references = AiModelContextWindows.referenceWindows()
+            assertEquals("every reference model has a selectable row", references,
+                contextWindowPresets.associate { it.modelId to it.tokens })
+            assertEquals("no duplicate model rows", references.size, contextWindowPresets.size)
+            assertEquals("all provider groups are available", 9, contextWindowPresets.map { it.provider }.distinct().size)
+            // Do not merely count the backing list: every ID must be present in the real
+            // composition, then recent models across all nine providers are scrolled into
+            // view, captured and selected through the actual row click action.
+            val modelsToSelect = listOf(
+                "gpt-6.2-sol", "deepseek-v4-pro", "gemini-4-carbon",
+                "claude-fable-5-2", "claude-sonnet-4-5-20250929",
+                "grok-4.7", "glm-5.3", "qwen4-max",
+                "minimax-m3.1-flash", "kimi-k3.1-pro", "kimi-k2.7-code-highspeed",
+            )
+            for (modelId in modelsToSelect) {
+                click(context.getString(R.string.ai_context_choose_model_window))
+                await("picker shows the current catalogue size") {
+                    has(context.getString(R.string.ai_context_reference_count, references.size, 9))
+                }
+                await("all reference models composed") {
+                    nodes { all -> references.keys.all { id -> all.any { text(it) == id } } }
+                }
+                nodes { all ->
+                    assertEquals("real picker contains every reference ID once", references.keys,
+                        all.map(::text).filter { it in references }.toSet())
+                    references.keys.forEach { id ->
+                        assertEquals("one visible composition row for $id", 1, all.count { text(it) == id })
+                    }
+                    contextWindowPresets.map { it.provider }.distinct().forEach { provider ->
+                        assertTrue("provider heading ${context.getString(provider)}", all.any { text(it) == context.getString(provider) })
+                    }
+                }
+                reveal(modelId)
+                capture(dark, "model-presets-$modelId")
+                click(modelId)
+                val expectedTokens = requireNotNull(references[modelId])
+                await("$modelId capacity committed and picker dismissed") {
+                    renderedTokens.get() == expectedTokens.toString() && !has(modelId)
+                }
+                assertEquals("selected capacity for $modelId", expectedTokens, draft.context().contextWindowTokens)
+                assertEquals("preset selection preserves unrelated parameters", before, draft.parameters(AiParameters()))
             }
-            assertEquals(1050000, draft.context().contextWindowTokens)
-            assertEquals(before, draft.parameters(AiParameters()))
             val inputLabel = context.getString(R.string.ai_options_context_tokens)
-            nodes { assertTrue(actionNode(it, inputLabel, editable = true).config[SemanticsActions.SetText].action?.invoke(AnnotatedString("1000000")) == true) }
+            // The Miuix-backed field intentionally hides its visual label from Text
+            // semantics; find its real SetText action by the accessible description.
+            await("main panel editable budget restored") { nodes { editableNode(it, inputLabel) != null } }
+            nodes { assertTrue(requireNotNull(editableNode(it, inputLabel)).config[SemanticsActions.SetText].action?.invoke(AnnotatedString("1000000")) == true) }
             await("custom window composition committed") { renderedTokens.get() == "1000000" }
             assertEquals(1000000, draft.context().contextWindowTokens)
             val beforeToggle = changed.get()
+            val automaticLabel = context.getString(R.string.ai_options_auto)
+            await("automatic compression switch restored") { nodes { toggleNode(it, automaticLabel) != null } }
             fun toggle() = nodes { list ->
-                val control = list.last { it.config.getOrNull(SemanticsProperties.ToggleableState) != null }
+                val toggle = requireNotNull(toggleNode(list, automaticLabel))
+                val control = requireNotNull(generateSequence(toggle) { it.parent }.firstOrNull {
+                    it.config.getOrNull(SemanticsActions.OnClick) != null
+                })
                 assertTrue(control.config[SemanticsActions.OnClick].action?.invoke() == true)
             }
             toggle()

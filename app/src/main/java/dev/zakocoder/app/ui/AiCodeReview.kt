@@ -55,7 +55,7 @@ internal fun AiCodeReview(review: AiReview, languages: EditorLanguages,
         if ((tab == 0 && review.before == null) || (tab == 1 && review.after == null)) Text(stringResource(
             if (!review.directory) R.string.ai_review_missing else if (tab == 0) R.string.ai_review_directory_missing_before else R.string.ai_review_directory_missing_after
         ), Modifier.padding(16.dp))
-        if (!ready || text == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (!ready || text == null) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         else key(review, tab, dark, text) {
             AndroidView(factory = { context ->
                 ThemeRegistry.getInstance().setTheme(if (dark) "zako-dark" else "zako-light")

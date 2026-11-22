@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.DropdownItem
+
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.core.view.WindowCompat
@@ -27,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.termux.view.TerminalView
+import kotlinx.coroutines.withTimeoutOrNull
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
@@ -44,10 +47,26 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
     val current = state.sessions.singleOrNull { it.id == selectedId } ?: state.sessions.lastOrNull { it.projectId == requestedProjectId }
     var view by remember { mutableStateOf<TerminalView?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var menuKeyboardVisible by remember { mutableStateOf(false) }
+    var restoreMenuInput by remember { mutableStateOf(false) }
     var previewing by remember(current?.id) { mutableStateOf(false) }
     var switching by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf<TerminalItem?>(null) }
     val modifiers by workbench.terminal.modifiers.collectAsStateWithLifecycle()
+    LaunchedEffect(restoreMenuInput, view, current?.id) {
+        if (restoreMenuInput) {
+            val terminal = view
+            if (terminal != null) withTimeoutOrNull(1500) {
+                // The popup exit can finish before Android returns focus to the host window.
+                while (terminal.isAttachedToWindow && !terminal.hasWindowFocus()) withFrameNanos { }
+                if (terminal.isAttachedToWindow && view === terminal) {
+                    terminal.requestFocus()
+                    if (menuKeyboardVisible) workbench.terminal.keyboard(terminal)
+                }
+            }
+            restoreMenuInput = false
+        }
+    }
     val leaveTerminal = { view?.let(workbench.terminal::hideKeyboard); onBack() }
     if (previewing && current != null) TerminalPreviewSheet(current, { workbench.terminal.previewAddresses(current.id) }, { previewing = false; view?.requestFocus() })
     val back = rememberWorkbenchBackMotion(enabled = !menu && !previewing && !switching && closing == null, onBack = leaveTerminal)
@@ -66,7 +85,7 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
                     style = MaterialTheme.typography.bodyMedium, color = TerminalMuted)
                 Spacer(Modifier.height(24.dp))
                 WorkbenchPrimaryButton(shape = RoundedCornerShape(12.dp), onClick = { workbench.startTerminal(requestedProjectId) }, enabled = state.installed && state.projects.any { it.id == requestedProjectId } && !state.busy && state.sessions.size < 4) { Text(stringResource(R.string.new_terminal)) }
-                if (!state.installed) TextButton(onClick = onEnvironment) { Text(stringResource(R.string.nav_environment), color = TerminalText) }
+                if (!state.installed) WorkbenchTextButton(onClick = onEnvironment) { Text(stringResource(R.string.nav_environment), color = TerminalText) }
             }
         } else {
                 AndroidView(factory = { workbench.terminal.view(it, current, state.settings.terminalFontSp).also { created -> view = created } },
@@ -79,7 +98,12 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
                 onKey = { key, control -> view?.let { workbench.terminal.key(it, key, control = control) } },
                 onControl = workbench.terminal::toggleControl, onAlt = workbench.terminal::toggleAlt,
                 onKeyboard = { view?.let(workbench.terminal::toggleKeyboard) }, onSwitch = { switching = true },
-                menu = menu, onMenu = { menu = it },
+                menu = menu, onMenu = { opening ->
+                    if (opening) menuKeyboardVisible = view?.let {
+                        androidx.core.view.ViewCompat.getRootWindowInsets(it)?.isVisible(WindowInsetsCompat.Type.ime())
+                    } == true
+                    menu = opening
+                }, onMenuCancelled = { restoreMenuInput = true },
                 canCreate = state.installed && !state.busy && state.sessions.size < 4,
                 onPreview = { menu = false; view?.let(workbench.terminal::hideKeyboard); previewing = true },
                 onCreate = { menu = false; workbench.startTerminal(current.projectId) },
@@ -128,7 +152,8 @@ internal fun TerminalPage(workbench: Workbench, state: WorkbenchState, selectedI
 internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boolean) -> Unit,
     onControl: () -> Unit, onAlt: () -> Unit, onKeyboard: () -> Unit, onSwitch: () -> Unit,
     menu: Boolean, onMenu: (Boolean) -> Unit, canCreate: Boolean,
-    onPreview: () -> Unit, onCreate: () -> Unit, onClose: () -> Unit) {
+    onPreview: () -> Unit, onCreate: () -> Unit, onClose: () -> Unit,
+    onMenuCancelled: () -> Unit = {}) {
     Surface(color = TerminalChrome, contentColor = TerminalText) {
         val shortcutsLabel = stringResource(R.string.terminal_shortcuts)
         Column(Modifier.fillMaxWidth().semantics { contentDescription = shortcutsLabel }.padding(horizontal = 4.dp)) {
@@ -142,12 +167,15 @@ internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boole
                 TerminalIconKey(Glyph.Keyboard, stringResource(R.string.keyboard), Modifier.weight(1f), onClick = onKeyboard)
                 Box(Modifier.weight(1f)) {
                     TerminalIconKey(Glyph.More, stringResource(R.string.terminal_actions), Modifier.fillMaxWidth()) { onMenu(true) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { onMenu(false) },
-                        properties = androidx.compose.ui.window.PopupProperties(focusable = false),
-                        containerColor = Color(0xFF1C1C1C)) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.terminal_preview), color = TerminalText) }, onClick = onPreview)
-                        DropdownMenuItem(text = { Text(stringResource(R.string.new_terminal), color = if (canCreate) TerminalText else TerminalMuted) }, enabled = canCreate, onClick = onCreate)
-                        DropdownMenuItem(text = { Text(stringResource(R.string.close_terminal), color = Color(0xFFF2A5A5)) }, onClick = onClose)
+                    WorkbenchMiuixTheme(dark = true) {
+                        WorkbenchActionMenu(expanded = menu, onDismissRequest = { onMenu(false) }, items = listOf(
+                            DropdownItem(text = stringResource(R.string.terminal_preview),
+                                icon = { WorkbenchIcon(Glyph.Globe) }, onClick = onPreview),
+                            DropdownItem(text = stringResource(R.string.new_terminal), enabled = canCreate,
+                                icon = { WorkbenchIcon(Glyph.Add) }, onClick = onCreate),
+                            DropdownItem(text = stringResource(R.string.close_terminal),
+                                icon = { WorkbenchIcon(Glyph.Close, tint = Color(0xFFF2A5A5)) }, onClick = onClose),
+                        ), onCancelled = onMenuCancelled, keyboardIndependent = true)
                     }
                 }
             }

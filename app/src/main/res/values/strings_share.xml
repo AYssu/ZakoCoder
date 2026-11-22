@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_choose_workspace">请先选择或创建工作区，分享文件将添加到其当前对话。</string>
+    <string name="share_waiting">分享已接收，将在当前任务结束后添加到对话草稿。</string>
+    <string name="share_unavailable">无法读取分享文件，请从文件管理器重新分享并允许读取。</string>
+    <string name="share_conversation_changed">对话已切换，本次分享未添加。请在目标对话中重新分享。</string>
+    <string name="share_attached">已添加到当前对话，确认后可发送。</string>
+    <string name="share_queue_full">待处理分享过多，请稍后重新分享。</string>
+    <string name="share_file_too_large">文件超过 32 MiB，未添加。请选择较小的文件。</string>
+    <string name="share_archive_full">附件存储已达到 512 MiB 或 256 个文件上限。请移除不再需要的附件或对话后重试。</string>
+    <string name="share_file_unavailable">附件无法读取或保存，请检查来源授权和设备可用空间后重试。</string>
+    <string name="share_text_unsupported">附件已完整保存，但当前只支持按需读取和搜索 UTF-8 文本；PDF、压缩包等格式暂不解析。</string>
+    <string name="share_conversation_full">当前对话已达到 64 个附件上限，请新建对话继续添加。</string>
+    <string name="share_import_files">正在导入附件 %1$d/%2$d</string>
+    <string name="share_import_file">正在导入 %1$d/%2$d · %3$s</string>
+    <string name="share_import_bytes_total">%1$s / %2$s</string>
+    <string name="share_attachment_range">附件读取请使用 offset 和 limit 分页；搜索使用最多 256 字符的单行关键词，不支持文件名或目录筛选。</string>
+</resources>

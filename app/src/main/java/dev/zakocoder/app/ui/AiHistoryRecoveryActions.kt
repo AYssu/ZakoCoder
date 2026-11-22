@@ -16,10 +16,10 @@ internal fun AiHistoryRecoveryActions(problem: AiHistoryProblem?, enabled: Boole
     onRemove: (AiHistoryProblem) -> Unit) {
     var confirming by remember(problem) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextButton(onClick = onRetry, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+        WorkbenchTextButton(onClick = onRetry, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.ai_history_read_retry), fontSize = 12.sp)
         }
-        if (problem?.conversationId != null) TextButton(onClick = { confirming = true }, enabled = enabled,
+        if (problem?.conversationId != null) WorkbenchTextButton(onClick = { confirming = true }, enabled = enabled,
             modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.ai_history_remove_unreadable), fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
         }

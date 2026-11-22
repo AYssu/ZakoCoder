@@ -117,6 +117,43 @@ class AiTurnUsageFooterDeviceTest {
         }
     }
 
+    @Test(timeout = 150000) fun persistedTaskFootersKeepUsageAndOwnCapacityWithoutRequestDetails() {
+        dev.zakocoder.app.AiDeviceTest.Fixture(context).use { fixture ->
+            val first = knownState().requests.single()
+            val second = first.copy(id = "second-task", turn = 2, inputTokens = 4_000, outputTokens = 200,
+                estimatedContextTokens = 10_000, contextWindowTokens = 1_000_000)
+            val state = knownState().copy(turn = 2, requests = emptyList())
+                .withRequestLog(first).withRequestLog(second).copy(requests = emptyList())
+            fixture.history.save("usage-footer", state)
+            val restored = AiHistoryStore(File(fixture.root, "history")).load("usage-footer").state!!
+                .copy(contextWindowTokens = 2_000_000, estimatedContextTokens = 999_999)
+            assertTrue(restored.requests.isEmpty())
+            var dark by mutableStateOf(false)
+            var selected by mutableIntStateOf(1)
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity -> activity.setContent {
+                    FixtureTheme(dark, 360) { AiTurnFooter(restored, selected) }
+                } }
+                listOf(false, true).forEach { night ->
+                    instrumentation.runOnMainSync { dark = night; selected = 1 }
+                    await("Persisted first task remains visible") {
+                        textOfTag("ai-turn-usage-input").contains("83.12K") &&
+                            textOfTag("ai-turn-usage-output").contains("5.22K") &&
+                            "128000" in contextDescription() && "69%" in contextDescription()
+                    }
+                    capture("${if (night) "night" else "day"}-persisted-first-task")
+                    instrumentation.runOnMainSync { selected = 2 }
+                    await("Each task retains independent usage and capacity") {
+                        textOfTag("ai-turn-usage-input").contains("4K") &&
+                            textOfTag("ai-turn-usage-output").contains("200") &&
+                            "1000000" in contextDescription() && "1%" in contextDescription()
+                    }
+                    capture("${if (night) "night" else "day"}-persisted-second-task")
+                }
+            }
+        }
+    }
+
     private fun knownState() = AiState(turn = 1, phase = AiPhase.Completed,
         requests = listOf(AiRequestLog(turn = 1, round = 1, inputTokens = 83_120, outputTokens = 5_220,
             cachedTokens = 41_200, estimatedContextTokens = 88_300, contextWindowTokens = 128_000,

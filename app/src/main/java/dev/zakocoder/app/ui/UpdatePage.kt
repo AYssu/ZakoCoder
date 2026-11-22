@@ -1,14 +1,12 @@
 package dev.zakocoder.app.ui
 
-import top.yukonga.miuix.kmp.basic.RadioButton
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalUriHandler
@@ -53,37 +51,32 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(stringResource(R.string.update_current, state.currentVersion), style = MaterialTheme.typography.titleMedium)
         DetailGroup(stringResource(R.string.update_title)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.update_automatic), style = MaterialTheme.typography.bodyLarge)
-                    Text(stringResource(R.string.update_automatic_hint), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                WorkbenchSwitch(checked = state.automatic, enabled = state.initialized && !busy, onCheckedChange = { configure(it, state.channel) })
-            }
+            SwitchPreference(title = stringResource(R.string.update_automatic),
+                summary = stringResource(R.string.update_automatic_hint), checked = state.automatic,
+                enabled = state.initialized && !busy, onCheckedChange = { configure(it, state.channel) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                insideMargin = PaddingValues(horizontal = 16.dp, vertical = 12.dp))
             GroupDivider()
             Text(stringResource(R.string.update_channel), Modifier.padding(start = 16.dp, top = 12.dp), style = MaterialTheme.typography.labelLarge)
             UpdateChannel.entries.forEach { channel ->
-                Row(Modifier.fillMaxWidth().clickable(enabled = state.initialized && !busy, role = Role.RadioButton) {
-                    configure(state.automatic, channel)
-                }.heightIn(min = 48.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(state.channel == channel, onClick = null, enabled = state.initialized && !busy)
-                    Text(stringResource(if (channel == UpdateChannel.Stable) R.string.update_stable else R.string.update_beta))
-                }
+                RadioButtonPreference(
+                    title = stringResource(if (channel == UpdateChannel.Stable) R.string.update_stable else R.string.update_beta),
+                    selected = state.channel == channel, enabled = state.initialized && !busy,
+                    onClick = { configure(state.automatic, channel) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
             }
         }
         if (state.phase != UpdatePhase.Downloading && state.phase != UpdatePhase.Ready) WorkbenchSecondaryButton(onClick = check,
             enabled = state.initialized && !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(if (state.phase == UpdatePhase.Checking) R.string.update_checking else R.string.update_check))
         }
-        if (state.phase == UpdatePhase.Checking) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (state.phase == UpdatePhase.Checking) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.phase == UpdatePhase.Current) Text(stringResource(R.string.update_latest), style = MaterialTheme.typography.bodyMedium)
         state.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         state.release?.let { release ->
             Text(stringResource(R.string.update_available, release.tag), style = MaterialTheme.typography.titleMedium)
             if (state.phase == UpdatePhase.Downloading) {
-                LinearProgressIndicator(progress = { if (state.total > 0) (state.received.toFloat() / state.total).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth())
+                WorkbenchLinearProgressIndicator(progress = { if (state.total > 0) (state.received.toFloat() / state.total).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth())
                 Text(stringResource(R.string.update_downloading, StorageUsage.format(state.received), StorageUsage.format(state.total)), style = MaterialTheme.typography.bodySmall)
                 WorkbenchSecondaryButton(onClick = cancel, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.cancel)) }
             } else if (state.phase == UpdatePhase.Ready) {

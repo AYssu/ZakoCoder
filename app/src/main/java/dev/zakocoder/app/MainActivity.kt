@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val workbench = (application as ZakoApplication).workbench
         openTaskNotification(intent)
+        if (savedInstanceState == null) openSharedFiles(intent)
         setContent { ZakoCoderApp(workbench) }
     }
 
@@ -48,6 +49,14 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         openTaskNotification(intent)
+        openSharedFiles(intent)
+    }
+
+    private fun openSharedFiles(intent: Intent?) {
+        if (intent == null || !(application as ZakoApplication).workbench.incomingShares.receive(intent)) return
+        intent.action = null
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.clipData = null
     }
 
     private fun openTaskNotification(intent: Intent?) {

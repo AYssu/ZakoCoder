@@ -5,7 +5,7 @@ package dev.zakocoder.app.ai
  * Encoded context turns and compressed memory have no reliable turn mapping, so neither is reused.
  * Controller-owned temporary grants must also be cleared before publishing the result.
  */
-internal fun AiState.forkBeforeTurn(turn: Int): AiState {
+internal fun AiState.forkBeforeTurn(turn: Int, includeRetryInput: Boolean = false): AiState {
     require(!active && !restoring) { "An active task cannot be forked" }
     require(turn in 1..this.turn) { "Invalid fork boundary" }
     val keptEvents = events.filter { it.turn in 1 until turn }.map { event ->
@@ -13,6 +13,10 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
     }
     val eventIds = keptEvents.mapTo(hashSetOf()) { it.id }
     val keptTimeline = timeline.filter { it.turn in 1 until turn && (it.toolId == null || it.toolId in eventIds) }
+    val inheritedAttachmentIds = keptTimeline.flatMap { entry -> entry.inputReferences.mapNotNull { it.attachment?.id } }.toMutableSet()
+    if (includeRetryInput) timeline.filter { it.turn == turn && it.role == AiRole.User }.forEach { entry ->
+        inheritedAttachmentIds += entry.inputReferences.mapNotNull { it.attachment?.id }
+    }
     // Bounded literal transcript, not a model-generated assertion or executable tool history.
     val summary = if (keptTimeline.isEmpty()) "" else buildString {
         append("Forked conversation reference: only turns before ").append(turn)
@@ -32,6 +36,9 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
     }.take(12000)
     return AiState(
         projectId = projectId,
+        // Share only explicitly inherited input copies; unsent drafts and future turns remain
+        // owned by the source conversation. Retry may add the selected input, never all files.
+        fileAttachments = fileAttachments.filter { it.id in inheritedAttachmentIds },
         planningMode = planningMode,
         conversationId = java.util.UUID.randomUUID().toString(),
         turn = turn - 1,
@@ -40,6 +47,7 @@ internal fun AiState.forkBeforeTurn(turn: Int): AiState {
         events = keptEvents,
         requests = requests.filter { it.turn in 1 until turn },
         turnTimings = turnTimings.filter { it.turn in 1 until turn },
+        turnStatistics = retainedTurnStatistics(seal = true).filter { it.turn in 1 until turn },
         contextSummary = summary,
         contextChars = summary.length,
         estimatedContextTokens = estimateAiTokens(summary), contextWindowTokens = contextWindowTokens, contextOutputReserveTokens = contextOutputReserveTokens,

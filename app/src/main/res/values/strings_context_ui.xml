@@ -4,21 +4,19 @@
     <string name="ai_context_window_range">支持 8,192～2,097,152 Token；K = 1,000，M = 1,000,000。</string>
     <string name="ai_context_gateway_hint">请按实际模型或网关的上限设置，调整此处不会扩展服务容量。</string>
     <string name="ai_context_summary_hint">关闭自动压缩后，超出输入预算会结束本次任务。摘要长度以字符计。</string>
+    <string name="ai_context_reference_count">%1$d 个型号及别名 · %2$d 家厂商</string>
     <string name="ai_context_presets_scope">选择后仅调整上下文容量，不更换当前模型。实际容量以服务商限制为准。</string>
     <string name="ai_context_preset_exact">%1$s Token</string>
     <string name="ai_context_provider_deepseek">DeepSeek</string>
     <string name="ai_context_provider_openai">OpenAI</string>
     <string name="ai_context_provider_google">Google</string>
     <string name="ai_context_provider_xai">xAI</string>
-    <string name="ai_context_preset_deepseek_flash">DeepSeek V4.1 Flash</string>
-    <string name="ai_context_preset_deepseek_pro">DeepSeek V4 Pro</string>
-    <string name="ai_context_preset_sol">GPT-6.1 Sol</string>
-    <string name="ai_context_preset_terra">GPT-6.1 Terra</string>
-    <string name="ai_context_preset_astra">GPT-6 Astra</string>
-    <string name="ai_context_preset_luna">GPT-6 Luna</string>
+    <string name="ai_context_provider_anthropic">Anthropic</string>
+    <string name="ai_context_provider_zai">Z.AI · GLM</string>
+    <string name="ai_context_provider_qwen">Qwen</string>
+    <string name="ai_context_provider_minimax">MiniMax</string>
+    <string name="ai_context_provider_kimi">Kimi</string>
     <string name="ai_context_responses_required">官方工具调用需 Responses API，请在模型配置中选择对应协议。</string>
-    <string name="ai_context_preset_gemini">Gemini 4 Argon</string>
-    <string name="ai_context_preset_grok">Grok 4.7</string>
     <string name="ai_context_reserve_status">输出预留 %1$s Token · 上下文为本地估算，计费用量见请求详情</string>
     <string name="ai_context_estimated_request">本次输入估算 ≈ %1$s / %2$s Token · 输出预留 %3$s Token</string>
 </resources>

@@ -5,6 +5,8 @@ import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.inspector.WindowInspector
@@ -15,10 +17,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
@@ -82,12 +87,78 @@ class DeviceRootUiDeviceTest {
 
     private fun selected(resource: Int): Boolean? = nodes { all ->
         val label = context.getString(resource)
-        all.firstNotNullOfOrNull { node ->
-            if (node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } != true) return@firstNotNullOfOrNull null
-            var parent: SemanticsNode? = node
-            while (parent != null && parent.config.getOrNull(SemanticsProperties.Selected) == null) parent = parent.parent
-            parent?.config?.getOrNull(SemanticsProperties.Selected)
+        fun radios(node: SemanticsNode): List<SemanticsNode> = buildList {
+            if (node.boundsInWindow.height <= 0) return@buildList
+            if (node.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton &&
+                node.config.contains(SemanticsProperties.Selected)) add(node)
+            if (!node.config.isClearingSemantics) node.children.forEach { addAll(radios(it)) }
         }
+        all.firstNotNullOfOrNull { node ->
+            if (node.boundsInWindow.height <= 0 ||
+                node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } != true) return@firstNotNullOfOrNull null
+            // Miuix puts Selected on the row's trailing RadioButton, a sibling of its
+            // title column. Find that single native control, not a Selected ancestor.
+            generateSequence(node) { it.parent }.firstNotNullOfOrNull { ancestor ->
+                radios(ancestor).singleOrNull()?.config?.getOrNull(SemanticsProperties.Selected)
+            }
+        }
+    }
+
+    private fun switchControl(all: List<SemanticsNode>, label: String): SemanticsNode? {
+        fun switches(node: SemanticsNode): List<SemanticsNode> = buildList {
+            if (node.config.contains(SemanticsProperties.ToggleableState)) add(node)
+            if (!node.config.isClearingSemantics) node.children.forEach { addAll(switches(it)) }
+        }
+        return all.firstNotNullOfOrNull { title ->
+            if (title.config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } != true) return@firstNotNullOfOrNull null
+            generateSequence(title) { it.parent }.firstNotNullOfOrNull { ancestor -> switches(ancestor).singleOrNull() }
+        }
+    }
+
+    private fun switchState(resource: Int): ToggleableState? = nodes { all ->
+        switchControl(all, context.getString(resource))?.config?.getOrNull(SemanticsProperties.ToggleableState)
+    }
+
+    /** Miuix keeps its native switch beside the title; touch that control after scrolling settles. */
+    private fun tapSwitch(resource: Int) {
+        val label = context.getString(resource)
+        ui.reveal(label)
+        var previous: Rect? = null
+        var settled = SystemClock.uptimeMillis()
+        var target: Rect? = null
+        ui.await("Visible, stable native switch: $label") {
+            val bounds = nodes { all ->
+                val control = switchControl(all, label) ?: return@nodes null
+                if (control.config.contains(SemanticsProperties.Disabled)) return@nodes null
+                val visible = control.boundsInWindow
+                if (visible.width >= control.size.width * .95f && visible.height >= control.size.height * .95f &&
+                    visible.width > 0 && visible.height > 0) visible
+                else {
+                    val scroll = generateSequence(control.parent) { it.parent }.firstOrNull {
+                        it.config.contains(SemanticsActions.ScrollBy) && it.config.contains(SemanticsProperties.VerticalScrollAxisRange)
+                    } ?: error("No scroll ancestor for native switch: $label")
+                    val centerY = control.layoutInfo.coordinates.localToWindow(Offset.Zero).y + control.size.height / 2f
+                    assertTrue("Reveal native switch: $label", scroll.config[SemanticsActions.ScrollBy].action
+                        ?.invoke(0f, centerY - scroll.boundsInWindow.center.y) == true)
+                    null
+                }
+            }
+            if (bounds == null || bounds != previous) settled = SystemClock.uptimeMillis()
+            previous = bounds
+            target = bounds
+            bounds != null && SystemClock.uptimeMillis() - settled >= 350
+        }
+        val center = requireNotNull(target).center
+        val started = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(started, started, MotionEvent.ACTION_DOWN, center.x, center.y, 0)
+            .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+        try {
+            assertTrue("Touch native switch: $label", instrumentation.uiAutomation.injectInputEvent(down, true))
+            SystemClock.sleep(80)
+            val up = MotionEvent.obtain(started, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, center.x, center.y, 0)
+                .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(up, true)) } finally { up.recycle() }
+        } finally { down.recycle() }
     }
 
     private fun capture(theme: String, name: String) {
@@ -159,25 +230,37 @@ class DeviceRootUiDeviceTest {
                         }
                     }
                 }
-                ui.await("Basic mode card") { selected(R.string.device_mode_basic) == true }
+                ui.await("Basic mode card") {
+                    selected(R.string.device_mode_basic) == true && selected(R.string.device_mode_root) == false
+                }
                 capture(theme, "mode-basic")
                 ui.click(R.string.device_mode_root)
-                ui.await("Root presentation selected") { selected(R.string.device_mode_root) == true }
+                ui.await("Root presentation selected") {
+                    selected(R.string.device_mode_root) == true && selected(R.string.device_mode_basic) == false
+                }
                 capture(theme, "mode-root-presentation")
                 assertEquals("Presentation never enables actual Root", DeviceMode.Basic, workbench.deviceAccess.state.value.mode)
                 ui.click(R.string.device_mode_basic)
-                ui.await("Basic presentation restored") { selected(R.string.device_mode_basic) == true }
+                ui.await("Basic presentation restored") {
+                    selected(R.string.device_mode_basic) == true && selected(R.string.device_mode_root) == false
+                }
 
                 main { page = "capabilities" }
                 ui.await("Device category") { has(R.string.capability_category_device) }
                 capture(theme, "capabilities-basic")
-                ui.tap(context.getString(R.string.capability_device_shell_title))
-                ui.await("Basic application-UID shell enabled") { workbench.capabilityPackages.state.value.deviceShellEnabled && !workbench.capabilityPackages.state.value.busy }
+                assertEquals(ToggleableState.Off, switchState(R.string.capability_device_shell_title))
+                tapSwitch(R.string.capability_device_shell_title)
+                ui.await("Basic application-UID shell enabled") {
+                    workbench.capabilityPackages.state.value.deviceShellEnabled && !workbench.capabilityPackages.state.value.busy &&
+                        switchState(R.string.capability_device_shell_title) == ToggleableState.On
+                }
                 assertEquals(DeviceMode.Basic, workbench.deviceAccess.state.value.mode)
                 assertTrue(workbench.capabilityPackages.enabled(null, CapabilityPackage.DeviceShell))
                 capture(theme, "capabilities-basic-shell-enabled")
 
-                ui.tap(context.getString(R.string.virtual_screen_title))
+                ui.reveal(context.getString(R.string.virtual_screen_title))
+                assertEquals(ToggleableState.Off, switchState(R.string.virtual_screen_title))
+                tapSwitch(R.string.virtual_screen_title)
                 ui.await("Virtual screen gate opens global permissions") { has(R.string.device_mode_basic) }
                 assertFalse("Basic cannot silently enable virtual screen", workbench.capabilityPackages.state.value.screenEnabled)
                 assertFalse(workbench.virtualScreen.state.value.active)
@@ -186,6 +269,8 @@ class DeviceRootUiDeviceTest {
                 ui.await("Return to retained capability list") { !has(R.string.device_mode_basic) && has(R.string.virtual_screen_title) }
                 ui.scrollTop()
                 assertTrue("Parent selection retained", workbench.capabilityPackages.state.value.deviceShellEnabled)
+                assertEquals("Rendered parent selection retained", ToggleableState.On,
+                    switchState(R.string.capability_device_shell_title))
                 capture(theme, "capability-permissions-return")
                 ui.reveal(context.getString(R.string.capability_category_web))
                 capture(theme, "capabilities-web")

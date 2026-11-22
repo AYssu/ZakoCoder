@@ -49,6 +49,77 @@ class AiMessageStreamingDeviceTest {
     private fun text(value: String) = nodes { all -> all.any {
         it.config.getOrNull(SemanticsProperties.Text)?.any { item -> item.text == value } == true
     } }
+    private fun copies() = nodes { all -> all.count {
+        it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(context.getString(R.string.ai_copy_response)) == true
+    } }
+    private fun capture(night: Boolean, phase: String) {
+        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            val file = File(context.cacheDir, "ui-review/task-actions/${if (night) "night" else "day"}-$phase.png")
+            file.parentFile?.mkdirs()
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } finally { bitmap.recycle() }
+    }
+
+    @Test fun toolRoundsKeepOneTaskWithoutIntermediateReplyActionRows() {
+        val state = mutableStateOf(AiState())
+        val dark = mutableStateOf(false)
+        val progress = AiEntry("progress", "我先读取项目配置，再检查入口。", role = AiRole.Assistant, turn = 1)
+        val second = progress.copy(id = "progress-two", text = "入口已找到，继续检查运行命令。")
+        val answer = progress.copy(id = "answer", text = "检查完成，运行命令已确认。")
+        val read = AiToolEvent("read", "read", AiTool.ReadFile, AiTool.ReadFile.wire,
+            "{}", "", "package.json", AiToolStatus.Succeeded, turn = 1)
+        val search = read.copy(id = "search", callId = "search", tool = AiTool.SearchFiles,
+            name = AiTool.SearchFiles.wire, target = "src/main.ts", status = AiToolStatus.Running)
+        fun update(entries: List<AiEntry>, events: List<AiToolEvent>, active: Boolean) {
+            instrumentation.runOnMainSync { state.value = AiState(turn = 1, active = active, timeline = entries, events = events) }
+        }
+        warmDeviceActivity()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { it.setContent {
+                CompositionLocalProvider(LocalWorkbenchDark provides dark.value) {
+                    WorkbenchMiuixTheme(dark.value) {
+                        Surface(Modifier.fillMaxSize()) {
+                            Column(Modifier.safeDrawingPadding().padding(16.dp)) {
+                                val current = state.value
+                                val display = aiDisplayActivity(current, emptySet())
+                                val actionIds = display.answerActionIds(current)
+                                display.entries.forEach { entry -> key(entry.id) {
+                                    val group = display.tools[entry.id]
+                                    if (group != null) AiReadActivity(group, active = current.active)
+                                    else AiMessage(entry, null, {}, {}, showActions = entry.id in actionIds,
+                                        onRequests = {}, actions = { Text("变更摘要") })
+                                } }
+                            }
+                        }
+                    }
+                }
+            } }
+            for (night in listOf(false, true)) {
+                instrumentation.runOnMainSync { dark.value = night }
+                val entries = listOf(progress, AiEntry("read", toolId = "read", turn = 1),
+                    second, AiEntry("search", toolId = "search", turn = 1))
+                update(entries, listOf(read, search), true)
+                await("Both progress messages remain visible") { text(progress.text) && text(second.text) }
+                Thread.sleep(500)
+                assertEquals("A finished request in an active task has no reply footer", 0, copies())
+                assertFalse(text("变更摘要"))
+                capture(night, "tool-rounds")
+                update(entries + answer, listOf(read, search.copy(status = AiToolStatus.Succeeded)), true)
+                await("Final response is visible before task completion") { text(answer.text) }
+                assertEquals("No actions before task completion", 0, copies())
+                update(entries + answer, listOf(read, search.copy(status = AiToolStatus.Succeeded)), false)
+                await("Only the final answer gains a copy action") { copies() == 1 && text("变更摘要") }
+                Thread.sleep(400) // Capture after the tool disclosure's exit transition settles.
+                capture(night, "completed")
+                update(entries, listOf(read, search.copy(status = AiToolStatus.Failed)), false)
+                await("No stale actions after restoring a tool-only stopped task") { copies() == 0 }
+                assertTrue(text(progress.text))
+                assertTrue(text(second.text))
+            }
+        }
+    }
+
     @Test fun actionRowWaitsForStreamAndPresentationToFinish() {
         val source = mutableStateOf("开始输出")
         val streaming = mutableStateOf(true)

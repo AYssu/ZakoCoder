@@ -78,12 +78,12 @@ internal fun AiCustomSkillActions(state: AiState, controller: AiController) {
         WorkbenchPrimaryButton(onClick = { imported = false; importedZip = false; archive = null; opened = true; error = 0; saved = false }, enabled = editable, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.ai_skill_add_custom))
         }
-        TextButton(onClick = {
+        WorkbenchTextButton(onClick = {
             importOwner = owner
             launcher.launch(arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream", "application/zip", "application/x-zip-compressed"))
         }, enabled = editable) { Text(stringResource(R.string.ai_skill_import_custom)) }
-        TextButton(onClick = { onlineImport = true }, enabled = editable) { Text(stringResource(R.string.online_skills_entry)) }
-        if (busy && !opened) LinearProgressIndicator(Modifier.fillMaxWidth())
+        WorkbenchTextButton(onClick = { onlineImport = true }, enabled = editable) { Text(stringResource(R.string.online_skills_entry)) }
+        if (busy && !opened) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (error != 0 && !opened) Text(stringResource(error), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (saved) Text(stringResource(R.string.ai_skill_custom_saved), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
     }

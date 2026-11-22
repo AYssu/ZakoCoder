@@ -333,6 +333,7 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             "/usr/bin/env", "-i", "HOME=/root", "TERM=xterm-256color", "LANG=C.UTF-8",
             "PATH=$path", "TMPDIR=/tmp", "DEBIAN_FRONTEND=noninteractive",
         )
+        args.addAll(args.indexOf("/usr/bin/env"), AndroidSharedStorage.current(context).arguments)
         if (flutterReady) args += FlutterToolchain.environment
         if (projectId != null) {
             val source = projectDirectory?.invoke(projectId) ?: File(workspaces, projectId).also {
@@ -369,6 +370,10 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             "PROOT_TMP_DIR" to temporary.absolutePath,
             "TMPDIR" to temporary.absolutePath, "PATH" to "/system/bin", "HOME" to context.filesDir.absolutePath,
         ))
+    }
+
+    suspend fun sharedStorageContext(): String = withContext(Dispatchers.IO) {
+        AndroidSharedStorage.current(context).modelContext()
     }
 
     suspend fun execute(

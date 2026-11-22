@@ -62,23 +62,23 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
     }
     WorkbenchSheet(stringResource(R.string.ai_checkpoints), close) {
         Text(stringResource(R.string.ai_checkpoint_file_only), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { expandedScope = !expandedScope }) { Text(stringResource(if (expandedScope) R.string.ai_checkpoint_scope_less else R.string.ai_checkpoint_scope_more)) }
+        WorkbenchTextButton(onClick = { expandedScope = !expandedScope }) { Text(stringResource(if (expandedScope) R.string.ai_checkpoint_scope_less else R.string.ai_checkpoint_scope_more)) }
         if (expandedScope) Text(stringResource(R.string.ai_checkpoint_scope), style = MaterialTheme.typography.bodySmall)
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (loading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (restoreFailed) {
             Text(stringResource(R.string.ai_checkpoint_conflict), color = MaterialTheme.colorScheme.error)
             records.firstOrNull { it.id == selected?.id }?.takeIf { it.restoredCount > 0 }?.let { Text(stringResource(R.string.ai_checkpoint_partial, it.restoredCount)) }
-            TextButton(onClick = { restoreFailed = false; revision++ }) { Text(stringResource(R.string.ai_checkpoint_review_again)) }
+            WorkbenchTextButton(onClick = { restoreFailed = false; revision++ }) { Text(stringResource(R.string.ai_checkpoint_review_again)) }
         }
         if (failed) {
             Text(stringResource(R.string.ai_checkpoint_load_error), color = MaterialTheme.colorScheme.error)
-            TextButton(onClick = { revision++ }) { Text(stringResource(R.string.editor_retry)) }
+            WorkbenchTextButton(onClick = { revision++ }) { Text(stringResource(R.string.editor_retry)) }
         }
         if (selected?.sealed == false && selected?.restored != true) Text(stringResource(R.string.ai_checkpoint_interrupted_review), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (recovery?.limited == true) Text(stringResource(R.string.ai_checkpoint_limited), color = MaterialTheme.colorScheme.error)
         recovery?.takeIf { it.restoredCount > 0 }?.let { Text(stringResource(R.string.ai_checkpoint_partial, it.restoredCount)) }
         if (selected != null) {
-            TextButton(onClick = { selected = null }) { Text(stringResource(R.string.editor_back)) }
+            WorkbenchTextButton(onClick = { selected = null }) { Text(stringResource(R.string.editor_back)) }
             val checkpoint = selected!!
             Text(ai.conversations.firstOrNull { it.id == checkpoint.conversation }?.title
                 ?: stringResource(R.string.ai_checkpoint_conversation, checkpoint.conversation.take(8)),
@@ -112,11 +112,11 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
                 }
             } else {
                 if (changes.isEmpty() && !loading && !failed) item { Text(stringResource(R.string.ai_no_changes)) }
-                items(changes, key = { it.path }) { change -> TextButton(enabled = !loading && !failed, onClick = { review = AiReview(change.path, change.before, change.after, change.directory, change.beforeMode, change.afterMode) }) { WorkbenchIcon(if (change.directory) Glyph.Projects else Glyph.File); Spacer(Modifier.width(8.dp)); Text(if (change.directory) stringResource(R.string.ai_checkpoint_directory_path, change.path) else change.path) } }
+                items(changes, key = { it.path }) { change -> WorkbenchTextButton(enabled = !loading && !failed, onClick = { review = AiReview(change.path, change.before, change.after, change.directory, change.beforeMode, change.afterMode) }) { WorkbenchIcon(if (change.directory) Glyph.Projects else Glyph.File); Spacer(Modifier.width(8.dp)); Text(if (change.directory) stringResource(R.string.ai_checkpoint_directory_path, change.path) else change.path) } }
             }
         }
         if (forkFailed) Text(stringResource(R.string.ai_checkpoint_fork_failed), color = MaterialTheme.colorScheme.error)
-        if (selected != null && onFork != null) TextButton(onClick = { forkTarget = selected },
+        if (selected != null && onFork != null) WorkbenchTextButton(onClick = { forkTarget = selected },
             enabled = !loading && !failed && !forking && !ai.active && !ai.restoring) {
             Text(stringResource(R.string.ai_checkpoint_fork))
         }
@@ -128,7 +128,7 @@ private fun AiCheckpointContent(workbench: Workbench, close: () -> Unit,
             title = { Text(stringResource(R.string.ai_checkpoint_fork)) },
             text = { Text(stringResource(R.string.ai_checkpoint_fork_detail, target.turn)) },
             confirmButton = { val finish = LocalWorkbenchDialogAction.current
-                TextButton(enabled = !forking && !ai.active && !ai.restoring, onClick = {
+                WorkbenchTextButton(enabled = !forking && !ai.active && !ai.restoring, onClick = {
                 if (onFork != null) {
                     forking = true
                     forkFailed = false

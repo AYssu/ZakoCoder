@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
@@ -55,7 +54,7 @@ internal fun AiToolApprovalHost(workbench: Workbench, state: AiState) {
                 Text(stringResource(R.string.ai_tool_authority, stringResource(event.permissionSource), stringResource(event.permission.label)),
                     style = MaterialTheme.typography.labelSmall)
             }
-            if (approval.review != null) TextButton(onClick = { if (current()) inspecting = approval.review }) {
+            if (approval.review != null) WorkbenchTextButton(onClick = { if (current()) inspecting = approval.review }) {
                 Text(stringResource(R.string.ai_review_content))
             }
             SelectionContainer { Text(details, fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
@@ -64,7 +63,7 @@ internal fun AiToolApprovalHost(workbench: Workbench, state: AiState) {
                 WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
                 WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
                 Text(stringResource(R.string.ai_approve_tool_task_scope), style = MaterialTheme.typography.labelSmall)
-                TextButton(onClick = { if (current()) permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
+                WorkbenchTextButton(onClick = { if (current()) permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
             }
             WorkbenchDialogButton(onClick = { if (current()) workbench.ai.stop() }) { Text(stringResource(R.string.ai_stop)) }
         }

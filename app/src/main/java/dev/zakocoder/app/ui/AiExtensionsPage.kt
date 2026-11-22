@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.TabRow as MiuixTabRow
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -24,14 +26,13 @@ internal fun AiExtensionsPage(workbench: Workbench, workbenchState: WorkbenchSta
     Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
         .padding(contentPadding).consumeWindowInsets(contentPadding).imePadding().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            IconButton(onClick = back.close, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
+            WorkbenchIconButton(onClick = back.close, modifier = Modifier.size(48.dp)) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.ai_extensions_back)) }
             Text(stringResource(if (standalone) { if (initialTab == 0) R.string.ai_skills else R.string.mcp_title } else R.string.ai_extensions), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         }
-        if (!standalone) SecondaryTabRow(selectedTabIndex = tab) {
-            listOf(stringResource(R.string.ai_skills), stringResource(R.string.mcp_title)).forEachIndexed { index, label ->
-                Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label) })
-            }
-        }
+        if (!standalone) MiuixTabRow(
+            tabs = listOf(stringResource(R.string.ai_skills), stringResource(R.string.mcp_title)),
+            selectedTabIndex = tab, onTabSelected = { tab = it }, height = 48.dp,
+        )
         Text(stringResource(R.string.extensions_global_scope), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!editable) Text(stringResource(R.string.extensions_readonly), style = MaterialTheme.typography.bodySmall,

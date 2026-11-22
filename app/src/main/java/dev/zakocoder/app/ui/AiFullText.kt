@@ -38,16 +38,16 @@ internal fun AiFullText(text: String, close: () -> Unit) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { selected = 0 }, enabled = page > 0) { Text(stringResource(R.string.ai_full_text_first)) }
-            IconButton(onClick = { selected = page - 1 }, enabled = page > 0) {
+            WorkbenchTextButton(onClick = { selected = 0 }, enabled = page > 0) { Text(stringResource(R.string.ai_full_text_first)) }
+            WorkbenchIconButton(onClick = { selected = page - 1 }, enabled = page > 0) {
                 WorkbenchIcon(Glyph.Left, description = stringResource(R.string.ai_full_text_previous))
             }
             Text(stringResource(R.string.ai_full_text_page, page + 1, pages.size.coerceAtLeast(1)), Modifier.weight(1f),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium)
-            IconButton(onClick = { selected = page + 1 }, enabled = page < pages.lastIndex) {
+            WorkbenchIconButton(onClick = { selected = page + 1 }, enabled = page < pages.lastIndex) {
                 WorkbenchIcon(Glyph.Right, description = stringResource(R.string.ai_full_text_next))
             }
-            TextButton(onClick = { selected = pages.lastIndex.coerceAtLeast(0) }, enabled = page < pages.lastIndex) {
+            WorkbenchTextButton(onClick = { selected = pages.lastIndex.coerceAtLeast(0) }, enabled = page < pages.lastIndex) {
                 Text(stringResource(R.string.ai_full_text_last))
             }
         }

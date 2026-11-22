@@ -166,7 +166,7 @@ internal fun AiToolCard(event: AiToolEvent, terminalNumber: Int? = null, onTermi
                 style = MaterialTheme.typography.bodySmall, maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
-        if (terminalNumber != null) TextButton(onClick = onTerminal, modifier = Modifier.heightIn(min = 48.dp),
+        if (terminalNumber != null) WorkbenchTextButton(onClick = onTerminal, modifier = Modifier.heightIn(min = 48.dp),
             contentPadding = PaddingValues(horizontal = 0.dp)) {
             Text(stringResource(R.string.ai_open_terminal, terminalNumber), style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)

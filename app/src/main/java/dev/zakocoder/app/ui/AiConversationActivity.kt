@@ -26,6 +26,17 @@ internal data class AiDisplayActivity(
     val preparation: Map<String, List<AiEntry>>,
 )
 
+/** A model reply followed by tools is progress, even when that reply contains body text. */
+internal fun AiDisplayActivity.finalAnswers(): Map<Int, AiEntry> = entries
+    .filter { it.toolId != null || tools.containsKey(it.id) || it.role == AiRole.Assistant &&
+        (it.text.isNotEmpty() || it.reasoning.isNotEmpty() || it.reasoningTruncated) }
+    .associateBy { it.turn }
+    .filterValues { it.role == AiRole.Assistant && it.toolId == null && !tools.containsKey(it.id) }
+
+internal fun AiDisplayActivity.answerActionIds(state: AiState): Set<String> = finalAnswers()
+    .filterKeys { it != state.turn || (!state.active && state.questionContinuation == null) }
+    .values.mapTo(mutableSetOf()) { it.id }
+
 /** Resolve retained timeline identities through the groups actually displayed by the conversation. */
 internal fun AiDisplayActivity.focusRow(state: AiState, entryId: String): String? {
     val tool = state.timeline.firstOrNull { it.id == entryId }?.toolId

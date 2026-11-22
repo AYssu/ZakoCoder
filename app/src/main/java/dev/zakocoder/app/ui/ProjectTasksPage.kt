@@ -48,11 +48,11 @@ import kotlinx.coroutines.CancellationException
 @Composable private fun SourceEvidenceControls(state: ProjectTaskState, active: Boolean, refresh: () -> Unit) {
     var details by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        TextButton(onClick = refresh, enabled = !active && !state.busy && !state.loading && !state.sourceChecking) { Text(stringResource(R.string.project_source_refresh)) }
+        WorkbenchTextButton(onClick = refresh, enabled = !active && !state.busy && !state.loading && !state.sourceChecking) { Text(stringResource(R.string.project_source_refresh)) }
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = { details = true }) { WorkbenchIcon(Glyph.Info, description = stringResource(R.string.project_source_details)) }
+        WorkbenchIconButton(onClick = { details = true }) { WorkbenchIcon(Glyph.Info, description = stringResource(R.string.project_source_details)) }
     }
-    if (state.sourceChecking) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (state.sourceChecking) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
     state.currentSource?.let { Text(stringResource(R.string.project_source_counts, it.files, it.directories), style = MaterialTheme.typography.labelSmall) }
     if (state.sourceCheckedAt > 0) Text(stringResource(R.string.project_source_checked_at,
         java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM).format(java.util.Date(state.sourceCheckedAt))), style = MaterialTheme.typography.labelSmall)
@@ -102,7 +102,7 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
         return
     }
     AiFullScreen(stringResource(R.string.project_commands), close) {
-        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (state.loading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.error.isNotBlank()) Text(state.error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.busy) item(key = "running-command") {
@@ -145,8 +145,8 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                         style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
                     if (command != null && preview != command.script) Text(stringResource(R.string.project_command_preview_help),
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row { TextButton(onClick = { val original = command ?: ProjectCommand(kind, if (kind == "build" && dev.zakocoder.app.projects.ProjectKind.Android in host.project?.kinds.orEmpty()) "gradle --no-daemon :app:assembleDebug" else ""); script = original.script; cwd = original.cwd; timeout = original.timeoutSeconds.toString(); editing = kind }, enabled = canChange) { Text(stringResource(R.string.project_command_configure)) }
-                        TextButton(onClick = { executing = command }, enabled = command != null && canChange) { Text(stringResource(R.string.project_command_execute)) } }
+                    Row { WorkbenchTextButton(onClick = { val original = command ?: ProjectCommand(kind, if (kind == "build" && dev.zakocoder.app.projects.ProjectKind.Android in host.project?.kinds.orEmpty()) "gradle --no-daemon :app:assembleDebug" else ""); script = original.script; cwd = original.cwd; timeout = original.timeoutSeconds.toString(); editing = kind }, enabled = canChange) { Text(stringResource(R.string.project_command_configure)) }
+                        WorkbenchTextButton(onClick = { executing = command }, enabled = command != null && canChange) { Text(stringResource(R.string.project_command_execute)) } }
                 } }
             }
             item { Text(stringResource(R.string.project_runs), style = MaterialTheme.typography.titleSmall)
@@ -173,8 +173,8 @@ internal fun ProjectTasksPage(workbench: Workbench, projectId: String, onAi: (St
                             WorkbenchTextField(timeout, { timeout = it }, label = stringResource(R.string.project_command_timeout), modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { editing = null }) { Text(stringResource(R.string.cancel)) }
-                            TextButton(onClick = { workbench.projectTasks.save(ProjectCommand(kind, script, cwd, timeout.toInt())) { saved -> if (saved) editing = null } }, enabled = canChange && script.isNotBlank() && timeout.toIntOrNull() in 1..86400) { Text(stringResource(R.string.editor_save)) }
+                            WorkbenchTextButton(onClick = { editing = null }) { Text(stringResource(R.string.cancel)) }
+                            WorkbenchTextButton(onClick = { workbench.projectTasks.save(ProjectCommand(kind, script, cwd, timeout.toInt())) { saved -> if (saved) editing = null } }, enabled = canChange && script.isNotBlank() && timeout.toIntOrNull() in 1..86400) { Text(stringResource(R.string.editor_save)) }
                         }
                     }
                 }
@@ -245,7 +245,7 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
             CopyHelp(stringResource(R.string.project_validation_help_title), stringResource(R.string.project_validation_help_details))
             UnsavedValidationNotice(unsavedFiles)
             if (turns.size > 1) Box {
-                TextButton(onClick = { turnMenu = true }) { Text(stringResource(R.string.project_validation_turn, selectedTurn)) }
+                WorkbenchTextButton(onClick = { turnMenu = true }) { Text(stringResource(R.string.project_validation_turn, selectedTurn)) }
                 DropdownMenu(turnMenu, { turnMenu = false }) { turns.forEach { turn ->
                     DropdownMenuItem(text = { Text(stringResource(R.string.project_validation_turn, turn)) }, onClick = { selectedTurn = turn; turnMenu = false })
                 } }
@@ -261,7 +261,7 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
             } }, trailingContent = { Column {
                 Text(run?.exit?.let { stringResource(R.string.project_exit_value, it) } ?: "—", style = MaterialTheme.typography.labelSmall)
                 tasks.commands.firstOrNull { it.kind == kind }?.let { command ->
-                    TextButton(onClick = { rerun = command }, enabled = !ai.active && !ai.restoring && !tasks.busy && !tasks.loading && !tasks.saving && !host.busy && tasks.projectId == ai.projectId) {
+                    WorkbenchTextButton(onClick = { rerun = command }, enabled = !ai.active && !ai.restoring && !tasks.busy && !tasks.loading && !tasks.saving && !host.busy && tasks.projectId == ai.projectId) {
                         Text(stringResource(R.string.project_validation_rerun, commandKind(kind)))
                     }
                 }
@@ -295,7 +295,7 @@ internal fun AiValidationPanel(workbench: Workbench, modifier: Modifier = Modifi
                 color = if (message == R.string.project_validation_changes_unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
         } }
         items(changes, key = { it.path }) { change ->
-            TextButton(onClick = { review = dev.zakocoder.app.ai.AiReview(change.path, change.before, change.after, change.directory, change.beforeMode, change.afterMode) }, modifier = Modifier.fillMaxWidth()) {
+            WorkbenchTextButton(onClick = { review = dev.zakocoder.app.ai.AiReview(change.path, change.before, change.after, change.directory, change.beforeMode, change.afterMode) }, modifier = Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { WorkbenchIcon(if (change.directory) Glyph.Projects else Glyph.File); Text(if (change.directory) stringResource(R.string.ai_checkpoint_directory_path, change.path) else change.path, Modifier.weight(1f)); WorkbenchIcon(Glyph.Next) }
             }
         }

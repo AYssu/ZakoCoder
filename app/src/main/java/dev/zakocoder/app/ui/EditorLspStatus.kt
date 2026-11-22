@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +49,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
     val localDiagnostics = remember(current.stderr) { AiLogRedactor("").clean(current.stderr).takeLast(4000) }
     val label = if (enabled) lspStatusLabel(current) else stringResource(R.string.editor_lsp_disabled)
     val description = stringResource(R.string.editor_lsp_status_description, label)
-    TextButton(onClick = { expanded = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
+    WorkbenchTextButton(onClick = { expanded = true }, modifier = Modifier.heightIn(min = 48.dp).semantics { contentDescription = description },
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp), shape = RoundedCornerShape(12.dp)) {
         Text(label, style = MaterialTheme.typography.labelSmall,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -56,10 +58,9 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
     if (expanded) WorkbenchSheet(stringResource(R.string.editor_lsp_title), { expanded = false }) {
         if (onEnabledChanged != null) {
             val toggleLabel = stringResource(R.string.editor_lsp_enabled_label)
-            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text(toggleLabel, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                WorkbenchSwitch(checked = enabled, onCheckedChange = onEnabledChanged, modifier = Modifier.semantics { contentDescription = toggleLabel })
-            }
+            SwitchPreference(checked = enabled, onCheckedChange = onEnabledChanged, title = toggleLabel,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
         }
         if (!enabled) Text(stringResource(R.string.editor_lsp_disabled_help), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -75,14 +76,14 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
             }
         }
         if (enabled) Text(stringResource(lspPhaseHelp(current.phase)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (enabled && (current.phase == LspPhase.Checking || current.phase == LspPhase.Starting)) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (enabled && (current.phase == LspPhase.Checking || current.phase == LspPhase.Starting)) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         if (enabled && current.phase == LspPhase.Ready) {
             Text(stringResource(R.string.editor_lsp_diagnostic_count, current.diagnosticCount), style = MaterialTheme.typography.bodyMedium)
             Text(stringResource(R.string.editor_lsp_diagnostic_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (current.code.isNotBlank()) Text(stringResource(R.string.editor_lsp_failure_code, current.code.take(80)), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (current.phase == LspPhase.Failed && localDiagnostics.isNotBlank()) {
-            TextButton(onClick = { diagnosticsExpanded = !diagnosticsExpanded }) {
+            WorkbenchTextButton(onClick = { diagnosticsExpanded = !diagnosticsExpanded }) {
                 Text(stringResource(if (diagnosticsExpanded) R.string.editor_lsp_hide_diagnostics else R.string.editor_lsp_show_diagnostics))
             }
             if (diagnosticsExpanded) {
@@ -93,7 +94,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
                             style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                     }
                 }
-                TextButton(onClick = { clipboard.setText(AnnotatedString(localDiagnostics)) }) { Text(stringResource(R.string.editor_lsp_copy_diagnostics)) }
+                WorkbenchTextButton(onClick = { clipboard.setText(AnnotatedString(localDiagnostics)) }) { Text(stringResource(R.string.editor_lsp_copy_diagnostics)) }
             }
         }
         if (current.phase == LspPhase.MissingServer && server != null) {
@@ -111,7 +112,7 @@ internal fun EditorLspStatusContent(state: EditorLspState, projectId: String, pa
                 Text(stringResource(R.string.editor_lsp_install_network), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(lspServerDependencies(server)), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.editor_lsp_install_location, server.executable), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
-                TextButton(onClick = { scriptExpanded = !scriptExpanded }) { Text(stringResource(if (scriptExpanded) R.string.editor_lsp_hide_script else R.string.editor_lsp_show_script)) }
+                WorkbenchTextButton(onClick = { scriptExpanded = !scriptExpanded }) { Text(stringResource(if (scriptExpanded) R.string.editor_lsp_hide_script else R.string.editor_lsp_show_script)) }
                 if (scriptExpanded) SelectionContainer { Text(server.installScript, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
             }
         }, confirmButton = { WorkbenchDialogButton(onClick = { installing = false; expanded = false; onInstall(server) }) { Text(stringResource(R.string.editor_lsp_confirm_install)) } },

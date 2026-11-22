@@ -1,10 +1,12 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,7 +26,7 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
     var presence by mutableStateOf(profile?.parameters?.presencePenalty?.toString().orEmpty())
     var seed by mutableStateOf(profile?.parameters?.seed?.toString().orEmpty())
     private val legacyContextChars = profile?.context?.maxContextChars ?: 96000
-    var windowTokens by mutableStateOf((profile?.context?.contextWindowTokens ?: 128000).toString())
+    var windowTokens by mutableStateOf((profile?.context?.contextWindowTokens ?: AiModelContextWindows.DEFAULT_TOKENS).toString())
     var automatic by mutableStateOf(profile?.context?.autoCompress ?: true)
     var threshold by mutableStateOf((profile?.context?.compressionThresholdPercent ?: 90).toString())
     var summaryChars by mutableStateOf((profile?.context?.summaryMaxChars ?: 6000).toString())
@@ -67,29 +69,34 @@ internal class ModelOptionsDraft(profile: AiProfile?) {
 @Composable
 internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editable: Boolean, protocol: AiApiProtocol = profile?.protocol ?: AiApiProtocol.ChatCompletions, changed: () -> Unit) {
     var open by remember { mutableStateOf(false) }
-    TextButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
+    WorkbenchTextButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.ai_options_title), Modifier.weight(1f)); WorkbenchIcon(if (open) Glyph.Down else Glyph.Next)
     }
     if (!open) return
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(stringResource(R.string.ai_options_thinking), style = MaterialTheme.typography.titleSmall)
-        Text(stringResource(R.string.ai_options_thinking_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiThinking.entries.forEach { mode -> FilterChip(selected = draft.thinking == mode, enabled = editable,
-                onClick = { draft.thinking = mode; changed() }, label = { Text(stringResource(when(mode) {
-                    AiThinking.Default -> R.string.ai_options_provider_default
-                    AiThinking.Enabled -> R.string.ai_options_enabled
-                    AiThinking.Disabled -> R.string.ai_options_disabled
-                })) }) }
-        }
+        WindowDropdownPreference(
+            title = stringResource(R.string.ai_options_thinking),
+            summary = stringResource(R.string.ai_options_thinking_hint),
+            items = AiThinking.entries.map { mode -> stringResource(when (mode) {
+                AiThinking.Default -> R.string.ai_options_provider_default
+                AiThinking.Enabled -> R.string.ai_options_enabled
+                AiThinking.Disabled -> R.string.ai_options_disabled
+            }) },
+            selectedIndex = AiThinking.entries.indexOf(draft.thinking),
+            onSelectedIndexChange = { draft.thinking = AiThinking.entries[it]; changed() },
+            enabled = editable, insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        )
         CopyHelp(stringResource(R.string.copy_ai_thinking_help_title), stringResource(R.string.copy_ai_thinking_help))
-        Text(stringResource(R.string.ai_options_effort), style = MaterialTheme.typography.labelLarge)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (listOf<AiReasoningEffort?>(null) + AiReasoningEffort.entries).forEach { effort ->
-                FilterChip(selected = draft.effort == effort, enabled = editable, onClick = { draft.effort = effort; changed() },
-                    label = { Text(if (effort == null) stringResource(R.string.ai_options_provider_default) else stringResource(effort.labelResource())) })
-            }
-        }
+        val efforts = listOf<AiReasoningEffort?>(null) + AiReasoningEffort.entries
+        WindowDropdownPreference(
+            title = stringResource(R.string.ai_options_effort),
+            items = efforts.map { if (it == null) stringResource(R.string.ai_options_provider_default) else stringResource(it.labelResource()) },
+            selectedIndex = efforts.indexOf(draft.effort),
+            onSelectedIndexChange = { draft.effort = efforts[it]; changed() },
+            enabled = editable, insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        )
         OptionField(draft.frequency, { draft.frequency = it; changed() }, R.string.ai_options_frequency, editable,
             !ModelInputValidation.penalty(draft.frequency), R.string.ai_reading_number_penalty)
         OptionField(draft.presence, { draft.presence = it; changed() }, R.string.ai_options_presence, editable,
@@ -103,9 +110,11 @@ internal fun ModelOptions(draft: ModelOptionsDraft, profile: AiProfile?, editabl
         Text(stringResource(R.string.ai_options_headers_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         CopyHelp(stringResource(R.string.copy_ai_headers_help_title), stringResource(R.string.copy_ai_headers_help))
         if (profile?.headerNames?.isNotEmpty() == true) Text(stringResource(R.string.ai_options_headers_saved, profile.headerNames.joinToString(", ")), style = MaterialTheme.typography.bodySmall)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ai_options_headers_replace), Modifier.weight(1f)); WorkbenchSwitch(draft.replaceHeaders, { draft.replaceHeaders = it; changed() }, enabled = editable)
-        }
+        SwitchPreference(checked = draft.replaceHeaders,
+            onCheckedChange = { draft.replaceHeaders = it; changed() },
+            title = stringResource(R.string.ai_options_headers_replace), enabled = editable,
+            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
         val headersInvalid = draft.replaceHeaders && runCatching { draft.headers() }.isFailure
         if (draft.replaceHeaders) WorkbenchTextField(draft.headersText, { draft.headersText = it.take(26000); changed() }, Modifier.fillMaxWidth(),
             label = stringResource(R.string.ai_options_headers_lines), minLines = 3, maxLines = 7, enabled = editable,

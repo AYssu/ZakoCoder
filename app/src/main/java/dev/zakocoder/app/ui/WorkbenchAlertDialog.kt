@@ -6,7 +6,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,7 +31,7 @@ internal val LocalWorkbenchDialogAction = staticCompositionLocalOf<(() -> Unit) 
 internal fun WorkbenchDialogButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit) {
     val finish = LocalWorkbenchDialogAction.current
-    TextButton(onClick = { finish(onClick) }, modifier = modifier, enabled = enabled, content = content)
+    WorkbenchTextButton(onClick = { finish(onClick) }, modifier = modifier, enabled = enabled, content = content)
 }
 
 /** Back/outside dismissal is separate from an explicit approval or rejection. */

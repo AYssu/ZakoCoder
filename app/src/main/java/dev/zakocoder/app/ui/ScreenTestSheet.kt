@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
@@ -7,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -38,7 +39,7 @@ internal fun VirtualScreenTaskPanel(
                 WorkbenchIcon(Glyph.File, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(stringResource(R.string.screen_test_run), style = MaterialTheme.typography.bodyMedium)
             }
-            if (model.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (model.busy) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
             SelectionContainer {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(model.actionTitle.ifBlank { model.summary }.ifBlank { stringResource(R.string.screen_test_idle) },
@@ -51,19 +52,15 @@ internal fun VirtualScreenTaskPanel(
             }
             if (model.active) {
                 val label = stringResource(R.string.virtual_screen_share)
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                    WorkbenchSwitch(checked = model.shareScreenshots, onCheckedChange = onShare,
-                        modifier = Modifier.semantics { contentDescription = label })
-                }
-                Text(stringResource(R.string.virtual_screen_share_hint), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                SwitchPreference(checked = model.shareScreenshots, onCheckedChange = onShare,
+                    title = label, summary = stringResource(R.string.virtual_screen_share_hint),
+                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp))
+                WorkbenchTextButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.screen_test_stop))
                 }
             }
-            if (model.hasReport) TextButton(onClick = onReport,
+            if (model.hasReport) WorkbenchTextButton(onClick = onReport,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(stringResource(R.string.screen_test_report))
             }
@@ -73,7 +70,7 @@ internal fun VirtualScreenTaskPanel(
 
 @Composable
 internal fun ScreenTestReport(report: String?) {
-    if (report == null) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.screen_test_report_loading)) }
+    if (report == null) { WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.screen_test_report_loading)) }
     else SelectionContainer {
         Text(report.ifBlank { stringResource(R.string.screen_test_report_empty) }, Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)

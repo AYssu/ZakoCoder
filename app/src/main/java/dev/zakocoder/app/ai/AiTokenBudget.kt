@@ -47,6 +47,7 @@ internal fun tokenBudget(config: AiConfig, messages: JSONArray, tools: JSONArray
 internal fun decodeContextOptions(json: JSONObject): AiContextOptions {
     val legacy = json.optInt("maxContextChars", 96000)
     val window = if (json.has("contextWindowTokens")) json.getInt("contextWindowTokens")
+        else if (!json.has("maxContextChars")) AiModelContextWindows.DEFAULT_TOKENS
         else if (legacy == 96000) 128000 else (legacy / 3).coerceIn(8192, 2097152)
     return AiContextOptions(maxContextChars = legacy, autoCompress = json.optBoolean("autoCompress", true),
         compressionThresholdPercent = json.optInt("compressionThresholdPercent", 90),

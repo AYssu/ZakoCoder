@@ -140,7 +140,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         { mutable.update { it.copy(fileRevision = it.fileRevision + 1) }; refreshDependencies() }, aiTransport, aiConfig,
         permissionStore = aiPermissions, streamingCommand = ::executeAiCommand, history = aiHistory,
         projectCommandContext = { id -> projectTasks.modelContext(id, ai.state.value.policy.permission(dev.zakocoder.app.ai.AiTool.ReadFile) == dev.zakocoder.app.ai.AiPermission.Allow,
-            editor.state.value.tabs.count { it.projectId == id && it.dirty }) },
+            editor.state.value.tabs.count { it.projectId == id && it.dirty }) + "\n" + runtime.sharedStorageContext() },
         longCommand = ::executeRecordedAiCommand, terminalTool = ::executeAiTerminal, commandLog = projectTasks::logPage, restoreAvailable = { !mutable.value.busy && !projectTasksActive() },
         prepareMcpTask = mcp::prepareTask,
         mcpTaskCatalog = mcp::taskCatalog,
@@ -297,6 +297,9 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private val backgroundDiagnostics = BackgroundTaskDiagnostics(context)
     private fun backgroundEvent(event: BackgroundTaskEvent, task: AiBackgroundTask? = null) {
         scope.launch { backgroundDiagnostics.record(event, task) }
+    }
+    val incomingShares = dev.zakocoder.app.sharing.IncomingFileShares(scope, state, ai) { message, error ->
+        mutable.update { it.copy(message = context.getString(message), messageIsError = error) }
     }
     val terminal: TerminalManager = TerminalManager(context) {
         // Callbacks originate on Android's main looper.

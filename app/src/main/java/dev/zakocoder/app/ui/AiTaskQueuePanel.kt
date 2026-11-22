@@ -28,10 +28,10 @@ internal fun AiTaskQueuePanel(messages: List<AiQueuedMessage>, running: Boolean,
                         fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(message.text, fontSize = 12.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                if (!running) TextButton(onClick = { onStart(message.id) }, enabled = enabled) {
+                if (!running) WorkbenchTextButton(onClick = { onStart(message.id) }, enabled = enabled) {
                     Text(stringResource(R.string.ai_queue_continue), fontSize = 12.sp)
                 }
-                IconButton(onClick = { onCancel(message.id) }, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                WorkbenchIconButton(onClick = { onCancel(message.id) }, enabled = enabled, modifier = Modifier.size(48.dp)) {
                     WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.ai_queue_cancel))
                 }
             }
@@ -42,10 +42,10 @@ internal fun AiTaskQueuePanel(messages: List<AiQueuedMessage>, running: Boolean,
 @Composable
 internal fun AiRunningInputActions(enabled: Boolean, onSteer: () -> Unit, onFollowUp: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(onClick = onFollowUp, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+        WorkbenchTextButton(onClick = onFollowUp, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.ai_queue_followup), fontSize = 12.sp)
         }
-        TextButton(onClick = onSteer, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
+        WorkbenchTextButton(onClick = onSteer, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.ai_queue_steer), fontSize = 12.sp)
         }
     }

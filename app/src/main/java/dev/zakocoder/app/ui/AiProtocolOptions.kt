@@ -1,20 +1,17 @@
 package dev.zakocoder.app.ui
 
-import top.yukonga.miuix.kmp.basic.RadioButton
-import androidx.compose.foundation.BorderStroke
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonLocation
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -80,15 +77,12 @@ internal fun AiProtocolOptions(protocol: AiApiProtocol, editable: Boolean, updat
                         Column(Modifier.selectableGroup()) {
                             entries.forEachIndexed { index, option ->
                                 if (index > 0) HorizontalDivider(Modifier.padding(start = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                                Row(Modifier.fillMaxWidth().selectable(option == protocol, role = Role.RadioButton,
-                                    onClick = { choosing = false; update(option) }).heightIn(min = 56.dp).padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(stringResource(protocolLabel(option)), style = MaterialTheme.typography.labelLarge)
-                                        Text(option.requestPath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    RadioButton(option == protocol, onClick = null)
-                                }
+                                RadioButtonPreference(title = stringResource(protocolLabel(option)),
+                                    summary = option.requestPath, selected = option == protocol,
+                                    onClick = { choosing = false; update(option) }, enabled = editable,
+                                    radioButtonLocation = RadioButtonLocation.End,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
                             }
                         }
                     }

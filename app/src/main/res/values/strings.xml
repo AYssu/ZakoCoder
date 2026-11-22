@@ -221,8 +221,6 @@
     <string name="empty_files_help">从底部导入已有文件，或创建一个空文件。</string>
     <string name="font_size_compact">%1$d sp</string>
     <string name="terminal_output_font">终端输出字号</string>
-    <string name="decrease_font">减小终端字号</string>
-    <string name="increase_font">增大终端字号</string>
     <string name="terminal_local_lifecycle">会话在本机运行，返回列表会保留；关闭会话或系统终止应用时结束。</string>
     <string name="library_environment_summary">Ubuntu 24.04 · 工具 %1$d/%2$d</string>
     <string name="library_environment_short">前往配置</string>
@@ -764,9 +762,10 @@
     <string name="ai_agent_settings">任务与自动分工</string>
     <string name="ai_auto_delegate">自动分工</string>
     <string name="ai_auto_delegate_hint">复杂任务可按需调用查找、审查助手，默认使用当前模型。简单任务直接处理；分工会增加模型用量，未必更快。助手只能使用权限为“允许”的文件读取、目录和搜索工具。</string>
-    <string name="ai_task_limits_hint">每次任务额度：80 次模型请求（含重试、摘要和助手）、240 次工具、45 分钟、约 200 万累计 Token。连续三次相同工具失败会暂停；已开始的工具完成并保存结果后再停。暂停后可继续。</string>
-    <string name="ai_budget_paused">任务已达到执行额度或遇到重复失败，进度已保存。可检查诊断后继续。</string>
-    <string name="ai_budget_continue">继续任务（补充额度）</string>
+    <string name="ai_task_limits_hint">任务不设固定请求次数、工具次数、总时长或累计 Token 上限。接近上下文阈值时自动压缩并继续（需开启自动压缩）。连续三次相同工具失败或被拒绝会暂停，避免原地重试；可随时停止任务。</string>
+    <string name="ai_budget_paused">任务已暂停，进度已保存。可查看诊断中的具体原因，确认后继续。</string>
+    <string name="ai_repeated_tool_paused">同一工具以相同参数连续失败或被拒绝，任务已暂停。进度已保存，请检查失败原因或调整要求后继续。</string>
+    <string name="ai_budget_continue">继续任务</string>
     <string name="ai_budget_continue_prompt">继续上一项未完成任务。先检查当前文件和已保存的工具结果，不要重复已经完成的修改或外部操作；根据失败原因调整方法，再执行剩余工作并验证。</string>
     <string name="ai_child_read_failed">助手未获得读取证据，详情请检查路径、权限或取消状态。</string>
     <string name="ai_task_usage">本次任务：%1$d 次模型请求 · %2$d 次工具 · 累计 Token：%3$d · %4$d 毫秒</string>

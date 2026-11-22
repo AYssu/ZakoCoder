@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.DropdownItem
+
 import androidx.compose.foundation.background
 
 import androidx.compose.foundation.layout.*
@@ -28,8 +30,6 @@ import dev.zakocoder.app.ai.AiSlashCommands
 import dev.zakocoder.app.ai.AiSlashParseResult
 import dev.zakocoder.app.ai.AiRole
 import kotlinx.coroutines.launch
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -45,7 +45,7 @@ import dev.zakocoder.app.WorkbenchState
 import dev.zakocoder.app.ai.AiDecision
 
 @Composable
-internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}, onSkills: () -> Unit = onExtensions, onMcp: () -> Unit = onExtensions, onOpenTerminals: () -> Unit = {}) {
+internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onModels: () -> Unit, onProjects: () -> Unit, onTerminal: (String) -> Unit, onExtensions: () -> Unit = {}, onAddModel: () -> Unit = onModels, onOpenNavigation: () -> Unit = {}, onProjectPath: (String, String) -> Unit = { _, _ -> }, historyRequest: Int = 0, onHistoryRequestConsumed: () -> Unit = {}, onConversations: (() -> Unit)? = null, onMemory: () -> Unit = {}, onBrowser: () -> Unit = {}, onSkills: () -> Unit = onExtensions, onMcp: () -> Unit = onExtensions, onOpenTerminals: () -> Unit = {}, onSwipeWorkspace: (() -> Unit)? = null, workspaceMotion: ConversationWorkspaceMotion? = null) {
     val state by workbench.ai.state.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = androidx.compose.ui.platform.LocalResources.current
@@ -123,6 +123,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     var choose by remember { mutableStateOf(false) }
     var planDetails by remember(state.projectId, state.conversationId) { mutableStateOf(false) }
     var detailPanel by rememberSaveable(state.projectId, state.conversationId) { mutableStateOf<String?>(null) }
+    val composerFocusDismiss = rememberComposerFocusDismissState()
     val composerState = rememberSaveableStateHolder()
     val detailState = rememberSaveableStateHolder()
     val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
@@ -154,15 +155,18 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
     LaunchedEffect(highlightedEntry, revealedRequest?.requestId) {
         if (highlightedEntry != null) { kotlinx.coroutines.delay(3500); highlightedEntry = null }
     }
-    val lastAnswers = remember(displayActivity.entries) { displayActivity.entries.filter { it.role == AiRole.Assistant && it.text.isNotEmpty() && it.toolId == null }.associateBy { it.turn } }
+    val lastAnswers = remember(displayActivity.entries, displayActivity.tools) { displayActivity.finalAnswers().filterValues { it.text.isNotEmpty() } }
+    val answerActionIds = remember(displayActivity.entries, displayActivity.tools, state.active, state.turn, state.questionContinuation) {
+        displayActivity.answerActionIds(state)
+    }
 
     if (capabilityPackagesOpen) CapabilityPackageBindings(workbench, state.projectId, project?.name.orEmpty()) { capabilityPackagesOpen = false }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxSize().dismissComposerFocusOnOutsidePress(composerFocusDismiss).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onOpenNavigation) {
+            WorkbenchIconButton(onClick = onOpenNavigation) {
                 WorkbenchIcon(Glyph.Menu, Modifier.size(22.dp), description = stringResource(R.string.app_navigation_open))
             }
-            TextButton(onClick = { onConversations?.invoke() ?: run { choose = true } }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
+            WorkbenchTextButton(onClick = { onConversations?.invoke() ?: run { choose = true } }, enabled = !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
                 modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)) {
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(state.conversations.firstOrNull { it.id == state.conversationId }?.title?.trim()?.takeIf { it.isNotBlank() } ?: stringResource(R.string.ai_conversation),
@@ -178,31 +182,31 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     }
                 }
             }
-            IconButton(onClick = { workbench.ai.conversation(); readingPaused = false; follow = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
+            WorkbenchIconButton(onClick = { workbench.ai.conversation(); readingPaused = false; follow = true }, enabled = project != null && !state.active && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving && !state.historyError) { WorkbenchIcon(Glyph.Add, description = stringResource(R.string.ai_new_conversation)) }
             Box {
-                IconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
-                DropdownMenu(expanded = more && pageInteractive, onDismissRequest = { more = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.nav_terminal)) }, leadingIcon = { WorkbenchIcon(Glyph.Terminal) },
-                        onClick = { more = false; onOpenTerminals() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.agent_memory_title)) }, onClick = { more = false; onMemory() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.browser_title)) }, onClick = { more = false; onBrowser() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_history)) }, leadingIcon = { WorkbenchIcon(Glyph.History) },
+                WorkbenchIconButton(onClick = { more = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_more)) }
+                WorkbenchActionMenu(expanded = more && pageInteractive, onDismissRequest = { more = false }, items = listOf(
+                    DropdownItem(text = stringResource(R.string.nav_terminal), icon = { WorkbenchIcon(Glyph.Terminal) },
+                        onClick = { more = false; onOpenTerminals() }),
+                    DropdownItem(text = stringResource(R.string.agent_memory_title), icon = { WorkbenchIcon(Glyph.Storage, it) }, onClick = { more = false; onMemory() }),
+                    DropdownItem(text = stringResource(R.string.browser_title), icon = { WorkbenchIcon(Glyph.Globe, it) }, onClick = { more = false; onBrowser() }),
+                    DropdownItem(text = stringResource(R.string.ai_history), icon = { WorkbenchIcon(Glyph.History) },
                         enabled = project != null && !state.active && !state.restoring,
-                        onClick = { more = false; history = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_file_changes_title)) },
-                        onClick = { more = false; detailPanel = "changes" })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_agent_settings)) },
-                        onClick = { more = false; detailPanel = "agents" })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_current_plan)) }, enabled = state.plan.isNotEmpty(),
-                        onClick = { more = false; planDetails = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_requests)) }, leadingIcon = { WorkbenchIcon(Glyph.Info) },
-                        onClick = { more = false; detailPanel = "requests" })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.workspace_open)) }, leadingIcon = { WorkbenchIcon(Glyph.Projects) },
-                        enabled = project != null, onClick = { more = false; onConversations?.invoke() ?: onProjects() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_checkpoints)) }, leadingIcon = { WorkbenchIcon(Glyph.Undo) }, enabled = project != null && !state.active && !state.restoring,
-                        onClick = { more = false; checkpoints = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.ai_data_details)) }, leadingIcon = { WorkbenchIcon(Glyph.Info) }, onClick = { more = false; disclosure = true })
-                }
+                        onClick = { more = false; history = true }),
+                    DropdownItem(text = stringResource(R.string.ai_file_changes_title), icon = { WorkbenchIcon(Glyph.File, it) },
+                        onClick = { more = false; detailPanel = "changes" }),
+                    DropdownItem(text = stringResource(R.string.ai_agent_settings), icon = { WorkbenchIcon(Glyph.Settings, it) },
+                        onClick = { more = false; detailPanel = "agents" }),
+                    DropdownItem(text = stringResource(R.string.ai_current_plan), icon = { WorkbenchIcon(Glyph.Check, it) }, enabled = state.plan.isNotEmpty(),
+                        onClick = { more = false; planDetails = true }),
+                    DropdownItem(text = stringResource(R.string.ai_requests), icon = { WorkbenchIcon(Glyph.Info) },
+                        onClick = { more = false; detailPanel = "requests" }),
+                    DropdownItem(text = stringResource(R.string.workspace_open), icon = { WorkbenchIcon(Glyph.Projects) },
+                        enabled = project != null, onClick = { more = false; onConversations?.invoke() ?: onProjects() }),
+                    DropdownItem(text = stringResource(R.string.ai_checkpoints), icon = { WorkbenchIcon(Glyph.Undo) }, enabled = project != null && !state.active && !state.restoring,
+                        onClick = { more = false; checkpoints = true }),
+                    DropdownItem(text = stringResource(R.string.ai_data_details), icon = { WorkbenchIcon(Glyph.Info) }, onClick = { more = false; disclosure = true })
+                ))
             }
         }
         if (state.planningMode) Text(stringResource(R.string.ai_planning_mode_hint), fontSize = 11.sp,
@@ -210,23 +214,26 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         if (messageActionError) Text(stringResource(R.string.ai_message_retry_unavailable), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.interrupted) Text(stringResource(R.string.ai_interrupted), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         if (state.error.isNotEmpty()) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        if (!state.active && state.taskDiagnostic.startsWith("task_budget:")) TextButton(onClick = { workbench.ai.continueBudget() }, enabled = !state.historyError) {
+        if (!state.active && state.taskDiagnostic.startsWith("task_budget:")) WorkbenchTextButton(onClick = { workbench.ai.continueBudget() }, enabled = !state.historyError) {
             Text(stringResource(R.string.ai_budget_continue))
         }
         if (state.active) AiRetryStatus(state.retryNotice)
-        if (state.historyError && workbench.ai.canRetryHistorySave) TextButton(onClick = { workbench.ai.retryHistorySave() }) {
+        if (state.historyError && workbench.ai.canRetryHistorySave) WorkbenchTextButton(onClick = { workbench.ai.retryHistorySave() }) {
             Text(stringResource(R.string.ai_history_retry_save))
         }
         if (state.historyError && !workbench.ai.canRetryHistorySave) AiHistoryRecoveryActions(state.historyProblem,
             enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving,
             onRetry = workbench.ai::retryHistoryLoad,
             onRemove = { if (!workbench.ai.recoverUnreadableConversation(it)) messageActionError = true })
-        if (state.active || state.permissionsLoading) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        if (state.active || state.permissionsLoading) WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
         if (state.permissionsLoading) Text(stringResource(R.string.ai_loading_conversation), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.recoveryNotes.isNotEmpty() && !state.active) Text(stringResource(R.string.ai_recovery_available), style = MaterialTheme.typography.labelSmall)
         if (state.historyTrimmed) Text(stringResource(R.string.ai_history_trimmed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth().testTag("ai-message-viewport")) { LazyColumn(Modifier.fillMaxSize().nestedScroll(readingScroll), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+        key(state.projectId, state.conversationId) { Box(Modifier.weight(1f).fillMaxWidth().testTag("ai-message-viewport")
+            .conversationSwipeNavigation(enabled = pageInteractive && !more && !modelPicker && !permissions && !attaching &&
+                !choose && !history && !capabilityPackagesOpen && detailPanel == null && !checkpoints && !commands,
+                motion = workspaceMotion, onStart = onSwipeWorkspace)) { LazyColumn(Modifier.fillMaxSize().nestedScroll(readingScroll), state = listState, verticalArrangement = Arrangement.spacedBy(0.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
             if (state.timeline.isEmpty()) item { Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 WorkbenchIcon(Glyph.Ai, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.ai_ready_title), fontSize = 18.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
@@ -256,7 +263,8 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                             quotedTurn = entry.turn; quotedUser = entry.role == AiRole.User
                         }) else null,
                         onRequests = if (state.requests.any { it.turn == entry.turn }) ({ detailPanel = "requests" }) else null,
-                        actions = if (entry.turn > 0 && lastAnswers[entry.turn]?.id == entry.id && !(state.active && entry.turn == state.turn)) ({
+                        showActions = entry.id in answerActionIds,
+                        actions = if (entry.turn > 0 && lastAnswers[entry.turn]?.id == entry.id && entry.id in answerActionIds) ({
                             AiConversationChangeCard(state, entry.turn, workbench.editor.languages, workbench.ai::undo,
                                 changeReads::checkpoints, changeReads::changes, compact = true)
                         }) else null)
@@ -300,7 +308,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             item(key = "conversation-bottom") { Spacer(Modifier.height(with(androidx.compose.ui.platform.LocalDensity.current) { 36.sp.toDp() })) }
         }
         if (!follow && !atBottom) Row(Modifier.align(Alignment.BottomEnd), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = {
+            WorkbenchTextButton(onClick = {
                 readingPaused = false
                 follow = true
                 uiScope.launch {
@@ -314,10 +322,11 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
         }
         }
         AiImageAttachments(state.pendingImages, workbench.ai::imageThumbnail, enabled = !state.active && !state.imagesLoading, onRemove = workbench.ai::removeImage)
-        if (state.imagesLoading) Text(stringResource(R.string.ai_images_loading), style = MaterialTheme.typography.labelSmall)
+        state.shareImport?.let { AiSharedFileImportProgress(it) }
+            ?: run { if (state.imagesLoading) Text(stringResource(R.string.ai_images_loading), style = MaterialTheme.typography.labelSmall) }
         if (state.references.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active,
-                label = { Text(if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference) else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "", modifier = Modifier.widthIn(max = 180.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
+            state.references.forEachIndexed { index, reference -> InputChip(selected = true, onClick = { workbench.ai.removeReference(index) }, enabled = !state.active && !state.imagesLoading,
+                label = { AiReferenceLabel(reference) }, trailingIcon = { WorkbenchIcon(Glyph.Close, Modifier.size(14.dp)) }) }
         }
         AiTaskQueuePanel(state.queuedMessages, state.active, enabled = !state.restoring && !state.historyError && !state.permissionsLoading && !state.permissionsSaving && state.questionContinuation == null,
             onCancel = workbench.ai::cancelQueued, onStart = { if (!workbench.ai.startQueued(it)) messageActionError = true })
@@ -422,13 +431,13 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                 Text(stringResource(R.string.ai_quote_preview, quotedMessage), Modifier.weight(1f), maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick = { quotedMessage = "" }) { WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.ai_quote_clear)) }
+                WorkbenchIconButton(onClick = { quotedMessage = "" }) { WorkbenchIcon(Glyph.Close, Modifier.size(16.dp), description = stringResource(R.string.ai_quote_clear)) }
             }
         }
         val outgoing = if (quotedMessage.isBlank()) input else stringResource(R.string.ai_quote_context, quotedTurn,
             stringResource(if (quotedUser) R.string.ai_quote_user else R.string.ai_quote_assistant), quotedMessage, input)
         AiComposerDock(input, { if (it.length <= 16000 - (outgoing.length - input.length)) { input = it; slashError = null } },
-            modifier = Modifier.padding(bottom = 4.dp),
+            focusDismissState = composerFocusDismiss, modifier = Modifier.padding(bottom = 4.dp),
             inputEnabled = state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
             awaitingAnswer = state.questionContinuation != null,
             attachEnabled = project != null && !state.active && state.questionContinuation == null && !state.restoring && !state.imagesLoading && !state.permissionsLoading && !state.permissionsSaving,
@@ -504,13 +513,13 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             items(state.conversations, key = { it.id }) { item ->
                 WorkbenchCard(color = if (item.id == state.conversationId) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { workbench.ai.conversation(item.id); history = false }, modifier = Modifier.weight(1f), enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) {
+                        WorkbenchTextButton(onClick = { workbench.ai.conversation(item.id); history = false }, modifier = Modifier.weight(1f), enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) {
                             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(item.title.ifBlank { stringResource(R.string.ai_empty_conversation) }, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
                                 Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(item.updated)) + " · " + stringResource(R.string.ai_turn, item.turns), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        IconButton(onClick = { deleting = item.id }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) { WorkbenchIcon(Glyph.Trash, description = stringResource(R.string.ai_history_delete)) }
+                        WorkbenchIconButton(onClick = { deleting = item.id }, enabled = !state.active && !state.restoring && !state.permissionsLoading && !state.permissionsSaving) { WorkbenchIcon(Glyph.Trash, description = stringResource(R.string.ai_history_delete)) }
                     }
                 }
             }
@@ -541,7 +550,7 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
             Text(stringResource(R.string.ai_no_projects), style = MaterialTheme.typography.bodyMedium)
             WorkbenchPrimaryButton(onClick = { finish { onProjects() } }) { Text(stringResource(R.string.ai_select_project_first)) }
         }
-        workbenchState.projects.forEach { item -> TextButton(onClick = { if (workbench.openWorkspace(item.id)) finish {} else messageActionError = true }) { Text(item.name) } }
+        workbenchState.projects.forEach { item -> WorkbenchTextButton(onClick = { if (workbench.openWorkspace(item.id)) finish {} else messageActionError = true }) { Text(item.name) } }
     }
     state.approval?.let { approval ->
         fun currentApproval() = workbench.ai.state.value.let {
@@ -556,14 +565,14 @@ internal fun AiPage(workbench: Workbench, workbenchState: WorkbenchState, onMode
                     Text(event.reason.ifBlank { stringResource(R.string.ai_reason_missing) }, style = MaterialTheme.typography.bodySmall)
                     Text(stringResource(R.string.ai_tool_authority, stringResource(event.permissionSource), stringResource(event.permission.label)), style = MaterialTheme.typography.labelSmall)
                 }
-                if (approval.review != null) TextButton(onClick = { inspecting = approval.review }) { Text(stringResource(R.string.ai_review_content)) }
+                if (approval.review != null) WorkbenchTextButton(onClick = { inspecting = approval.review }) { Text(stringResource(R.string.ai_review_content)) }
                 androidx.compose.foundation.text.selection.SelectionContainer { Text(diffText(approval.detail), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
                 if (event != null) {
                     Text(stringResource(R.string.ai_approval_scope), style = MaterialTheme.typography.labelSmall)
                     WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTarget) }) { Text(stringResource(R.string.ai_approve_target)) }
                     WorkbenchDialogButton(onClick = { decide(AiDecision.TaskTool) }) { Text(stringResource(R.string.ai_approve_tool_task)) }
                     Text(stringResource(R.string.ai_approve_tool_task_scope), style = MaterialTheme.typography.labelSmall)
-                    TextButton(onClick = { permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
+                    WorkbenchTextButton(onClick = { permissions = true }) { Text(stringResource(R.string.ai_permissions)) }
                 }
                 WorkbenchDialogButton(onClick = { if (currentApproval()) workbench.ai.stop() }) { Text(stringResource(R.string.ai_stop)) }
             }
@@ -586,14 +595,53 @@ private fun diffText(text: String): androidx.compose.ui.text.AnnotatedString {
     }
 }
 
+@Composable
+private fun AiReferenceLabel(reference: dev.zakocoder.app.ai.AiReference) {
+    val attachment = reference.attachment
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(attachment?.displayName ?: if (reference.kind == "error") reference.displayName ?: stringResource(R.string.ai_log_reference)
+            else reference.path.substringAfterLast('/') + if (reference.unsaved) " *" else "",
+            modifier = Modifier.widthIn(max = if (attachment == null) 180.dp else 144.dp), maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (attachment != null) Text(android.text.format.Formatter.formatShortFileSize(androidx.compose.ui.platform.LocalContext.current, attachment.bytes),
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+internal fun AiSharedFileImportProgress(progress: dev.zakocoder.app.ai.AiFileImportProgress) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val copied = android.text.format.Formatter.formatShortFileSize(context, progress.copied.coerceAtLeast(0))
+    val total = progress.total?.takeIf { it > 0 }
+    val amount = if (total != null) stringResource(R.string.share_import_bytes_total, copied,
+        android.text.format.Formatter.formatShortFileSize(context, total)) else copied
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("shared-file-import-progress"),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(if (progress.name.isBlank()) stringResource(R.string.share_import_files, progress.index, progress.count)
+                else stringResource(R.string.share_import_file, progress.index, progress.count, progress.name),
+                Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(amount, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp),
+            progress = total?.let { size -> { (progress.copied.toDouble() / size).toFloat().coerceIn(0f, 1f) } })
+    }
+}
+
 @Suppress("DEPRECATION")
 @Composable
 internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, onProjectPath: (String) -> Unit, onLink: (String) -> Unit, imageLoader: (suspend (dev.zakocoder.app.ai.AiImageAttachment) -> android.graphics.Bitmap)? = null, reasoningStreaming: Boolean = false, responseStreaming: Boolean = false, animateOnMount: Boolean = false, onReadingInteraction: () -> Unit = {}, onRetry: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null, onRequests: (() -> Unit)? = null, onQuote: (() -> Unit)? = null, revealRequest: String? = null, actions: (@Composable RowScope.() -> Unit)? = null,
-    onReadingResume: () -> Unit = {}) {
-    val clipboard = LocalClipboardManager.current
+    onReadingResume: () -> Unit = {}, showActions: Boolean = true) {
+    val copyMessage = rememberMessageCopyAction()
     val visibleResponse = entry.text
     val visibleReasoning = entry.reasoning
+    val visibleUserText = if (entry.inputLength != null && entry.inputReferences.any { it.attachment != null }) {
+        entry.originalInput + entry.inputReferences.filter { it.attachment == null }.takeIf { it.isNotEmpty() }
+            ?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty()
+    } else entry.text
     var wasLive by remember(entry.id) { mutableStateOf(responseStreaming) }
     var settled by remember(entry.id) { mutableStateOf(!responseStreaming) }
     LaunchedEffect(entry.text, responseStreaming) {
@@ -608,35 +656,43 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
         AiRole.User -> Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (imageLoader != null) AiImageAttachments(entry.images, imageLoader)
             else entry.images.forEach { Text(it.displayName, style = MaterialTheme.typography.labelSmall) }
+            val sharedFiles = entry.inputReferences.filter { it.attachment != null }
+            if (sharedFiles.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                sharedFiles.forEach { reference -> Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        WorkbenchIcon(Glyph.File, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AiReferenceLabel(reference)
+                    }
+                } }
+            }
             // Sent image metadata remains attached to this user turn after restart.
             var actions by remember(entry.id) { mutableStateOf(false) }
             BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopEnd) {
-                if (entry.text.isEmpty()) IconButton(onClick = { actions = true }) {
+                if (visibleUserText.isEmpty()) WorkbenchIconButton(onClick = { actions = true }) {
                     WorkbenchIcon(Glyph.More, description = stringResource(R.string.ai_message_actions))
                 } else Surface(onClick = { actions = true }, shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
                     color = if (LocalWorkbenchDark.current) androidx.compose.ui.graphics.Color(0xFF1C2636) else androidx.compose.ui.graphics.Color(0xFFE9ECF2), modifier = Modifier.widthIn(max = minOf(maxWidth * .84f, 420.dp))) {
                     androidx.compose.foundation.text.selection.SelectionContainer {
-                        if (entry.text.isNotEmpty()) Text(entry.text, Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 12.sp, lineHeight = 18.sp)
+                        if (visibleUserText.isNotEmpty()) Text(visibleUserText, Modifier.padding(horizontal = 14.dp, vertical = 11.dp), fontSize = 12.sp, lineHeight = 18.sp)
                     }
                 }
-                if (actions) MessageCopyPopup(onDismiss = { actions = false },
-                    onCopy = { clipboard.setText(AnnotatedString(entry.text)); actions = false },
-                    onQuote = onQuote?.let { action -> { actions = false; action() } },
-                    onEdit = onEdit?.let { action -> { actions = false; action() } },
-                    onRetry = onRetry?.let { action -> { actions = false; action() } },
-                    onRequests = onRequests?.let { action -> { actions = false; action() } })
+                MessageCopyPopup(expanded = actions, onDismiss = { actions = false },
+                    onCopy = { copyMessage(entry.text) }, onQuote = onQuote, onEdit = onEdit,
+                    onRetry = onRetry, onRequests = onRequests)
             }
         }
         AiRole.Assistant -> if (entry.text.isNotEmpty() || entry.reasoning.isNotEmpty() || entry.reasoningTruncated) Column(Modifier.padding(top = if (entry.text.isNotEmpty()) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             AiReasoningContent(entry, streaming = reasoningStreaming, displayedReasoning = visibleReasoning, onReadingInteraction = onReadingInteraction, revealRequest = revealRequest,
                 onReadingResume = onReadingResume,
-                trailingActions = if (!reasoningStreaming && entry.text.isEmpty() && (onRetry != null || onRequests != null || onQuote != null)) {
+                trailingActions = if (showActions && !reasoningStreaming && entry.text.isEmpty() && (onRetry != null || onRequests != null || onQuote != null)) {
                     { AiMessageMore(entry, onRetry, onRequests, onQuote) }
                 } else null)
-            if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink)
-            if (entry.text.isNotEmpty() && !responseStreaming && settled) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (entry.text.isNotEmpty()) AiMarkdown(visibleResponse, projectId = projectId, onOpenProjectPath = onProjectPath, streaming = responseStreaming, onReadingInteraction = onReadingInteraction, onLink = onLink, revealRequest = revealRequest)
+            if (showActions && entry.text.isNotEmpty() && !responseStreaming && settled) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { Row { actions?.invoke(this) } }
-                IconButton(onClick = { clipboard.setText(AnnotatedString(entry.text)) }) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                WorkbenchIconButton(onClick = { copyMessage(entry.text) }) { WorkbenchIcon(Glyph.Copy, Modifier.size(15.dp), description = stringResource(R.string.ai_copy_response), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (onRetry != null || onRequests != null || onQuote != null) AiMessageMore(entry, onRetry, onRequests, onQuote)
             }
         }
@@ -648,13 +704,12 @@ internal fun AiMessage(entry: dev.zakocoder.app.ai.AiEntry, projectId: String?, 
 @Suppress("DEPRECATION")
 @Composable
 private fun AiMessageMore(entry: dev.zakocoder.app.ai.AiEntry, onRetry: (() -> Unit)?, onRequests: (() -> Unit)?, onQuote: (() -> Unit)? = null) {
-    val clipboard = LocalClipboardManager.current
+    val copyMessage = rememberMessageCopyAction()
     Box {
         var actions by remember(entry.id) { mutableStateOf(false) }
-        IconButton(onClick = { actions = true }) { WorkbenchIcon(Glyph.More, Modifier.size(16.dp), description = stringResource(R.string.ai_message_actions)) }
-        if (actions) MessageCopyPopup({ actions = false }, {
-            clipboard.setText(AnnotatedString(entry.text.ifEmpty { entry.reasoning })); actions = false
-        }, onQuote = onQuote?.let { action -> { actions = false; action() } }, onRetry = onRetry?.let { action -> { actions = false; action() } },
-            onRequests = onRequests?.let { action -> { actions = false; action() } })
+        WorkbenchIconButton(onClick = { actions = true }) { WorkbenchIcon(Glyph.More, Modifier.size(16.dp), description = stringResource(R.string.ai_message_actions)) }
+        MessageCopyPopup(expanded = actions, onDismiss = { actions = false },
+            onCopy = { copyMessage(entry.text.ifEmpty { entry.reasoning }) },
+            onQuote = onQuote, onRetry = onRetry, onRequests = onRequests)
     }
 }

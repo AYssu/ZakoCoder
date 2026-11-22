@@ -1,5 +1,7 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.basic.DropdownItem
+
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
 
@@ -41,7 +43,9 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, openedId: String?, onOpened: (String?) -> Unit,
                                onEnvironment: () -> Unit, onTerminal: (String) -> Unit, onAi: (String) -> Unit, referencedPath: String? = null,
-                               workspaceId: String? = null, onWorkspace: (String?) -> Unit = {}, backEnabled: Boolean = true) {
+                               workspaceId: String? = null, onWorkspace: (String?) -> Unit = {}, backEnabled: Boolean = true,
+                               libraryHeader: @Composable () -> Unit = {}, directReturnToConversation: Boolean = false,
+                               onCloseWorkspace: (() -> Unit)? = null) {
     val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::import) }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { it?.let(workbench::export) }
@@ -58,8 +62,9 @@ internal fun ProjectLibraryPage(workbench: Workbench, state: WorkbenchState, ope
     val opened = state.projects.singleOrNull { it.id == (openedId ?: workspaceId) }
     val interactive = LocalWorkbenchPageInteractive.current
     Box(Modifier.fillMaxSize()) {
-    WorkbenchRetainedPage(covered = opened != null) {
-    Column(Modifier.fillMaxSize()) {
+    if (!directReturnToConversation || opened == null) WorkbenchRetainedPage(covered = opened != null) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        libraryHeader()
         Box(Modifier.padding(horizontal = 20.dp)) {
 PageHeading(stringResource(R.string.projects_title)) {
             if (state.projects.isNotEmpty()) FilledTonalButton(shape = RoundedCornerShape(12.dp), onClick = { adding = true }, enabled = !state.busy, colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.primary)) {
@@ -106,7 +111,7 @@ PageHeading(stringResource(R.string.projects_title)) {
                     WorkbenchTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.workspace_flow_search)) },
                         accessibilityLabel = stringResource(R.string.workspace_flow_search),
                         leadingIcon = { WorkbenchIcon(Glyph.Search) }, singleLine = true, shape = RoundedCornerShape(12.dp),
-                        trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.clear_search)) } })
+                        trailingIcon = { if (query.isNotEmpty()) WorkbenchIconButton(onClick = { query = "" }) { WorkbenchIcon(Glyph.Close, description = stringResource(R.string.clear_search)) } })
                 }
             }
             val results = state.projects.filter { it.name.contains(query, ignoreCase = true) }.sortedByDescending { it.id == state.selectedId }
@@ -128,9 +133,9 @@ PageHeading(stringResource(R.string.projects_title)) {
     }
     }
     }
-    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { onOpened(null); onWorkspace(null) },
+    if (opened != null) ProjectFilesPage(workbench, state, opened, onBack = { if (directReturnToConversation && onCloseWorkspace != null) onCloseWorkspace() else { onOpened(null); onWorkspace(null) } },
         onExport = { exporter.launch(null) }, onRemove = { removing = opened }, onAi = onAi,
-        referencedPath = referencedPath, backEnabled = backEnabled && interactive)
+        referencedPath = referencedPath, backEnabled = backEnabled && interactive, directReturnToConversation = directReturnToConversation)
     }
     if (adding) AddProjectSheet(enabled = !state.busy, onDismiss = { adding = false },
         onImport = { adding = false; importer.launch(null) },
@@ -161,7 +166,7 @@ PageHeading(stringResource(R.string.projects_title)) {
             finish { onOpened(null); workbench.create(projectName, selectedTemplate); name = ""; templateName = ProjectTemplate.Other.name }
         }, enabled = name.isNotBlank() && !state.busy,
             modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.create)) }
-        TextButton(onClick = dismissSheet, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
+        WorkbenchTextButton(onClick = dismissSheet, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.cancel)) }
     }
     if (cloning) GitCloneSheet(enabled = !state.busy && state.installed,
         close = { cloning = false }, onClone = { projectName, url, username, token ->
@@ -174,7 +179,7 @@ PageHeading(stringResource(R.string.projects_title)) {
         WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = { finish { if (workbench.openWorkspace(project.id)) { clearNavigationFocus(); onOpened(project.id) } } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.browse_project, project.name))
         }
-        TextButton(onClick = { finish { removing = project } },
+        WorkbenchTextButton(onClick = { finish { removing = project } },
             enabled = !state.busy && state.sessions.none { it.projectId == project.id && it.session.isRunning }) {
             Text(stringResource(R.string.remove_project), color = MaterialTheme.colorScheme.error)
         }
@@ -224,7 +229,7 @@ internal fun HomeProjectCard(project: Project, boundPath: String?, selected: Boo
                     Text(project.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ProjectKindsText(project)
                 }
-                IconButton(onClick = onActions, enabled = enabled) {
+                WorkbenchIconButton(onClick = onActions, enabled = enabled) {
                     WorkbenchIcon(Glyph.More, description = stringResource(R.string.home_project_actions, project.name))
                 }
             }
@@ -252,7 +257,7 @@ internal fun ProjectKindsText(project: Project) {
 }
 
 @Composable
-private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit, referencedPath: String? = null, backEnabled: Boolean = true) {
+private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, project: Project, onBack: () -> Unit, onExport: () -> Unit, onRemove: () -> Unit, onAi: (String) -> Unit, referencedPath: String? = null, backEnabled: Boolean = true, directReturnToConversation: Boolean = false) {
     var showReferencedDirectory by remember(project.id, referencedPath) { mutableStateOf(referencedPath != null) }
     var tasks by rememberSaveable(project.id) { mutableStateOf(false) }
     var git by rememberSaveable(project.id) { mutableStateOf(false) }
@@ -328,7 +333,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     val childOpen = tasks || git || editorOpen
     val back = rememberWorkbenchBackMotion(enabled = backEnabled && LocalWorkbenchPageInteractive.current && !childOpen,
         resetKey = directory) {
-        if (directory.isNotEmpty()) directory = directory.substringBeforeLast('/', "") else onBack()
+        if (directReturnToConversation || directory.isEmpty()) onBack() else directory = directory.substringBeforeLast('/', "")
     }
     val renderDirectory: @Composable (String, DirectoryListing<ProjectFile>, androidx.compose.foundation.lazy.LazyListState) -> Unit = { displayedDirectory, displayedListing, viewport ->
         val rowInteractive = displayedDirectory == directory && !childOpen
@@ -337,7 +342,7 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
         val failure = displayedListing.failure?.message.orEmpty()
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_library)) }
+            WorkbenchIconButton(onClick = onBack) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.back_to_library)) }
             Column(Modifier.weight(1f)) {
                 Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(workbench.projects.bindingPath(project.id) ?: stringResource(R.string.working_copy),
@@ -345,31 +350,31 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Box {
-                IconButton(onClick = { menu = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
-                DropdownMenu(expanded = menu && rowInteractive, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.git_title)) }, onClick = { clearNavigationFocus(); menu = false; git = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.project_commands)) }, onClick = { clearNavigationFocus(); menu = false; tasks = true })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.detect_project)) }, enabled = !state.busy && state.selectedId == project.id,
-                        onClick = { menu = false; workbench.redetect() })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.export_project)) }, enabled = !state.busy && state.selectedId == project.id,
-                        onClick = { menu = false; onExport() }, leadingIcon = { WorkbenchIcon(Glyph.Export) })
-                    DropdownMenuItem(text = { Text(stringResource(R.string.remove_project), color = MaterialTheme.colorScheme.error) },
+                WorkbenchIconButton(onClick = { menu = true }) { WorkbenchIcon(Glyph.More, description = stringResource(R.string.project_actions)) }
+                WorkbenchActionMenu(expanded = menu && rowInteractive, onDismissRequest = { menu = false }, items = listOf(
+                    DropdownItem(text = stringResource(R.string.git_title), onClick = { clearNavigationFocus(); menu = false; git = true }),
+                    DropdownItem(text = stringResource(R.string.project_commands), onClick = { clearNavigationFocus(); menu = false; tasks = true }),
+                    DropdownItem(text = stringResource(R.string.detect_project), enabled = !state.busy && state.selectedId == project.id,
+                        onClick = { menu = false; workbench.redetect() }),
+                    DropdownItem(text = stringResource(R.string.export_project), enabled = !state.busy && state.selectedId == project.id,
+                        onClick = { menu = false; onExport() }, icon = { WorkbenchIcon(Glyph.Export) }),
+                    DropdownItem(text = stringResource(R.string.remove_project), icon = { WorkbenchIcon(Glyph.Trash, tint = MaterialTheme.colorScheme.error) },
                         enabled = !state.busy && state.sessions.none { it.projectId == project.id && it.session.isRunning },
                         onClick = { menu = false; onRemove() })
-                }
+                ))
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (displayedDirectory.isNotEmpty()) IconButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { WorkbenchIcon(Glyph.Up, description = stringResource(R.string.parent_directory)) }
+            if (displayedDirectory.isNotEmpty()) WorkbenchIconButton(onClick = { directory = directory.substringBeforeLast('/', "") }) { WorkbenchIcon(Glyph.Up, description = stringResource(R.string.parent_directory)) }
             Text(displayedDirectory.ifEmpty { stringResource(R.string.project_root) }, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
-            IconButton(onClick = { revision++ }) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.refresh)) }
+            WorkbenchIconButton(onClick = { revision++ }) { WorkbenchIcon(Glyph.Refresh, description = stringResource(R.string.refresh)) }
         }
         if (editor.tabs.any { it.projectId == project.id }) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            TextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { clearNavigationFocus(); showReferencedDirectory = false; workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
+            WorkbenchTextButton(onClick = { editor.tabs.firstOrNull { it.projectId == project.id }?.let { clearNavigationFocus(); showReferencedDirectory = false; workbench.editor.open(it.projectId, it.path) } }) { Text(stringResource(R.string.editor_drafts)) }
         }
         LazyColumn(Modifier.weight(1f), state = viewport, contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)) {
-            if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            if (loading) item { WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (failure.isNotEmpty()) item { Text(failure, color = MaterialTheme.colorScheme.error) }
             if (!loading && failure.isEmpty() && referencedPath != null && displayedDirectory == referencedPath.substringBeforeLast('/', "") && files.none { it.relative == referencedPath }) item {
                 Text(stringResource(R.string.ai_linked_file_missing, referencedPath), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -416,7 +421,9 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     }
     }
     Box(Modifier.fillMaxSize()) {
-    if (directory.isNotEmpty()) WorkbenchRetainedPage(covered = true) {
+    // A workspace opened over the conversation reveals that actual conversation on Back.
+    if (!directReturnToConversation || !editorOpen) {
+    if (!directReturnToConversation && directory.isNotEmpty()) WorkbenchRetainedPage(covered = true) {
         renderDirectory(parentDirectory, parentListing, parentListState)
     }
     WorkbenchRetainedPage(covered = childOpen) {
@@ -424,12 +431,13 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             renderDirectory(directory, listing, linkedListState)
         }
     }
+    }
     if (tasks) ProjectTasksPage(workbench, project.id, onAi = onAi) { tasks = false }
     else if (git) ProjectGitPage(workbench, project.id, close = { git = false })
-    else if (editorOpen) CodeEditorPage(workbench.editor, fullScreen = true, lspEnabled = state.settings.editorLspEnabled,
+    else if (editorOpen) CodeEditorPage(workbench.editor, fullScreen = !directReturnToConversation, lspEnabled = state.settings.editorLspEnabled,
         onLspEnabledChanged = workbench::setEditorLspEnabled, onInstallLsp = { server ->
             workbench.installToolBundles(setOf(server.bundleId))
-        }, onConversation = { onAi(project.id) }) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
+        }, onConversation = { onAi(project.id) }, onNavigateBack = if (directReturnToConversation) onBack else null) { reference -> if (workbench.referenceAi(project.id, reference)) onAi(project.id) }
     }
     installingApk?.let { file ->
         val needsPermission = apkInstaller.needsSourcePermission()
@@ -438,11 +446,11 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
             title = { Text(stringResource(if (needsPermission) R.string.apk_source_permission else R.string.apk_install)) },
             text = { Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(if (needsPermission) R.string.apk_source_permission_hint else R.string.apk_install_confirmation, file.relative))
-                if (apkBusy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.apk_preparing)) }
+                if (apkBusy) { WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.apk_preparing)) }
                 apkFailure?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             } },
             confirmButton = { val finish = LocalWorkbenchDialogAction.current
-                TextButton(enabled = !apkBusy, onClick = {
+                WorkbenchTextButton(enabled = !apkBusy, onClick = {
                 apkFailure = null
                 if (needsPermission) {
                     try { apkLauncher.launch(apkInstaller.sourcePermissionIntent()); finish { installingApk = null } }
@@ -469,11 +477,11 @@ private fun ProjectFilesPage(workbench: Workbench, state: WorkbenchState, projec
     }
     fileActions?.let { file -> WorkbenchSheet(file.name, { fileActions = null }) {
         val finish = LocalWorkbenchSheetAction.current
-        TextButton(onClick = { finish { openFile(file) } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
-        TextButton(onClick = { finish { actionName = file.name; fileOperation = file to "rename" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_rename)) }
-        if (!file.directory) TextButton(onClick = { finish { actionName = file.name; fileOperation = file to "copy" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy)) }
-        TextButton(onClick = { finish { fileScope.launch { clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", file.relative))) } } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy_path)) }
-        TextButton(onClick = { finish { fileOperation = file to "delete" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_delete), color = MaterialTheme.colorScheme.error) }
+        WorkbenchTextButton(onClick = { finish { openFile(file) } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_open)) }
+        WorkbenchTextButton(onClick = { finish { actionName = file.name; fileOperation = file to "rename" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_rename)) }
+        if (!file.directory) WorkbenchTextButton(onClick = { finish { actionName = file.name; fileOperation = file to "copy" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy)) }
+        WorkbenchTextButton(onClick = { finish { fileScope.launch { clipboard.setClipEntry(androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", file.relative))) } } }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_copy_path)) }
+        WorkbenchTextButton(onClick = { finish { fileOperation = file to "delete" } }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.file_delete), color = MaterialTheme.colorScheme.error) }
     } }
     fileOperation?.let { (file, action) ->
         WorkbenchAlertDialog(onDismissRequest = { fileOperation = null }, title = { Text(stringResource(when (action) { "rename" -> R.string.file_rename; "copy" -> R.string.file_copy; else -> R.string.file_delete })) },
@@ -507,7 +515,7 @@ internal fun AddProjectSheet(enabled: Boolean, onDismiss: () -> Unit, onImport: 
             if (onBind != null) ProjectEntryOption(stringResource(R.string.workspace_flow_local), stringResource(R.string.workspace_flow_local_hint),
                 Glyph.Projects, enabled, onClick = { finish { onBind() } })
         } else {
-            TextButton(onClick = { work = false }) { Text(stringResource(R.string.workspace_flow_change_mode)) }
+            WorkbenchTextButton(onClick = { work = false }) { Text(stringResource(R.string.workspace_flow_change_mode)) }
             Text(stringResource(R.string.workspace_flow_work_hint), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             ProjectEntryOption(stringResource(R.string.mobile_import_source), stringResource(R.string.mobile_import_source_hint),

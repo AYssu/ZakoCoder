@@ -1,12 +1,13 @@
 package dev.zakocoder.app.ui
 
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
@@ -27,7 +28,7 @@ internal fun AiServiceOptionsSection(protocol: AiApiProtocol, value: AiServiceOp
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (protocol == AiApiProtocol.ChatCompletions && effective.chatThinking == AiChatThinkingFormat.EffortOnly)
         ServiceHint(R.string.ai_service_effort_only_hint)
-    TextButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
+    WorkbenchTextButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
         Text(stringResource(R.string.ai_service_title), Modifier.weight(1f))
         WorkbenchIcon(if (open) Glyph.Down else Glyph.Next)
     }
@@ -109,36 +110,20 @@ private fun ServiceHint(resource: Int) {
 @Composable
 private fun ServiceToggle(label: Int, checked: Boolean, enabled: Boolean, update: (Boolean) -> Unit) {
     val description = stringResource(label)
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(description, Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.bodySmall)
-        WorkbenchSwitch(checked, update, enabled = enabled, modifier = Modifier.semantics { contentDescription = description })
-    }
+    SwitchPreference(checked = checked, onCheckedChange = update, title = description,
+        enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
 }
 
 @Composable
 private fun <T> ServiceChoice(label: Int, selected: T, choices: List<T>, enabled: Boolean,
     resource: (T) -> Int, explanation: (T) -> Int? = { null }, update: (T) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
-        Text(stringResource(label), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box {
-            TextButton(onClick = { open = true }, enabled = enabled, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                Text(stringResource(resource(selected)), style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.width(8.dp))
-                WorkbenchIcon(Glyph.Down, Modifier.size(16.dp))
-            }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                choices.forEach { choice -> DropdownMenuItem(
-                    text = { Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(resource(choice)), style = MaterialTheme.typography.bodySmall)
-                        explanation(choice)?.let { ServiceHint(it) }
-                    } },
-                    onClick = { open = false; update(choice) }, enabled = enabled,
-                    trailingIcon = if (choice == selected) {{ WorkbenchIcon(Glyph.Check, Modifier.size(16.dp)) }} else null,
-                ) }
-            }
-        }
-        explanation(selected)?.let { ServiceHint(it) }
-    }
+    WindowDropdownPreference(
+        title = stringResource(label), items = choices.map { stringResource(resource(it)) },
+        selectedIndex = choices.indexOf(selected).coerceAtLeast(0),
+        summary = explanation(selected)?.let { stringResource(it) },
+        onSelectedIndexChange = { update(choices[it]) }, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    )
 }

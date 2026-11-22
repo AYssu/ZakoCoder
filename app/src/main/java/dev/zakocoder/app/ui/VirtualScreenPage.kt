@@ -17,8 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
@@ -36,7 +42,35 @@ import kotlinx.coroutines.withContext
 
 /** Only the controller can create or operate a display. The UI never targets the physical display. */
 @Composable
-internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
+internal fun VirtualScreenPage(workbench: Workbench, embedded: Boolean = true, onBack: () -> Unit) {
+    if (embedded) VirtualScreenContent(workbench, onBack = onBack)
+    else {
+        var requestDismiss by remember { mutableStateOf(onBack) }
+        Dialog(onDismissRequest = { requestDismiss() }, properties = DialogProperties(
+            usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+            val view = LocalView.current
+            val dark = LocalWorkbenchDark.current
+            DisposableEffect(view, dark) {
+                (view.parent as? DialogWindowProvider)?.window?.let { window ->
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                    window.setDimAmount(0f)
+                    window.setBackgroundDrawable(android.graphics.Color.TRANSPARENT.toDrawable())
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !dark
+                        isAppearanceLightNavigationBars = !dark
+                    }
+                }
+                onDispose { }
+            }
+            VirtualScreenContent(workbench, dialogWindow = true, onBack = onBack,
+                onCloseReady = { requestDismiss = it })
+        }
+    }
+}
+
+@Composable
+private fun VirtualScreenContent(workbench: Workbench, dialogWindow: Boolean = false,
+    onBack: () -> Unit, onCloseReady: ((() -> Unit) -> Unit)? = null) {
     val state by workbench.virtualScreen.state.collectAsStateWithLifecycle()
     val access by workbench.deviceAccess.state.collectAsStateWithLifecycle()
     val screen by workbench.screenTests.state.collectAsStateWithLifecycle()
@@ -88,11 +122,12 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
     }
     LaunchedEffect(state.displayId, state.active) { preview = null }
     val content: @Composable () -> Unit = {
-        val back = rememberWorkbenchBackMotion(onBack = onBack)
+        val back = rememberWorkbenchBackMotion(dialogWindow = dialogWindow, onBack = onBack)
+        SideEffect { onCloseReady?.invoke(back.close) }
         Column(Modifier.fillMaxSize().then(back.modifier).background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.systemBars).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
+                WorkbenchIconButton(onClick = back.close) { WorkbenchIcon(Glyph.Back, description = stringResource(R.string.close)) }
                 Text(stringResource(R.string.virtual_screen_title), style = MaterialTheme.typography.titleMedium)
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
@@ -119,9 +154,9 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
                                 WorkbenchSecondaryButton(onClick = { choosingApp = true }, enabled = !busy,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.virtual_screen_apps)) }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TextButton(onClick = { operation { refreshPreview() } }, enabled = !busy,
+                                    WorkbenchTextButton(onClick = { operation { refreshPreview() } }, enabled = !busy,
                                         modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.virtual_screen_refresh)) }
-                                    TextButton(onClick = ::stopDisplay,
+                                    WorkbenchTextButton(onClick = ::stopDisplay,
                                         modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text(stringResource(R.string.virtual_screen_stop)) }
                                 }
                             } else WorkbenchPrimaryButton(onClick = { operation {
@@ -130,8 +165,8 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
                                 Text(stringResource(R.string.virtual_screen_start))
                             }
                             if (busy) {
-                                LinearProgressIndicator(Modifier.fillMaxWidth())
-                                if (!state.active) TextButton(onClick = ::stopDisplay,
+                                WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
+                                if (!state.active) WorkbenchTextButton(onClick = ::stopDisplay,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.virtual_screen_stop)) }
                             }
                         }
@@ -187,7 +222,12 @@ internal fun VirtualScreenPage(workbench: Workbench, onBack: () -> Unit) {
     }
     Box(Modifier.fillMaxSize()) {
         WorkbenchRetainedPage(covered = permissionsOpen, content = content)
-        if (permissionsOpen) DevicePermissionsPage(workbench, onBack = { permissionsOpen = false }, embedded = true)
+        if (permissionsOpen) {
+            val app by workbench.state.collectAsStateWithLifecycle()
+            DevicePermissionsPage(workbench, onBack = { permissionsOpen = false }, embedded = !dialogWindow,
+                backgroundServiceRunning = app.backgroundServiceRunning,
+                backgroundServiceError = app.backgroundServiceError)
+        }
     }
     if (choosingApp) VirtualScreenAppPicker(onDismiss = { choosingApp = false }) { packageName ->
         choosingApp = false
@@ -220,7 +260,7 @@ private fun VirtualScreenAppPicker(onDismiss: () -> Unit, onSelect: (String) -> 
     WorkbenchSheet(stringResource(R.string.virtual_screen_apps), onDismiss) {
         when {
             failed -> CapabilityNotice(stringResource(R.string.virtual_screen_apps_failed), error = true)
-            apps == null -> { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.virtual_screen_apps_loading)) }
+            apps == null -> { WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth()); Text(stringResource(R.string.virtual_screen_apps_loading)) }
             apps.orEmpty().isEmpty() -> Text(stringResource(R.string.virtual_screen_apps_empty))
             else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                 items(apps.orEmpty(), key = { it.packageName }) { app ->

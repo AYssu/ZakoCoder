@@ -1,6 +1,7 @@
 package dev.zakocoder.app.ui
 
-import top.yukonga.miuix.kmp.basic.RadioButton
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.basic.TabRow as MiuixTabRow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -65,20 +66,19 @@ internal fun AiUsageDashboard(
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("day" to R.string.ai_usage_day, "month" to R.string.ai_usage_month).forEach { (value, label) ->
-                        FilterChip(selected = period == value, onClick = { period = value },
-                            label = { Text(stringResource(label)) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp))
-                    }
-                }
+                MiuixTabRow(
+                    tabs = listOf(stringResource(R.string.ai_usage_day), stringResource(R.string.ai_usage_month)),
+                    selectedTabIndex = if (period == "day") 0 else 1,
+                    onTabSelected = { period = if (it == 0) "day" else "month" }, height = 48.dp,
+                )
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { day = (if (period == "day") date.minusDays(1) else first.minusMonths(1)).toEpochDay() }) {
+                    WorkbenchIconButton(onClick = { day = (if (period == "day") date.minusDays(1) else first.minusMonths(1)).toEpochDay() }) {
                         WorkbenchIcon(Glyph.Back, Modifier.size(20.dp), description = stringResource(R.string.ai_usage_previous_period))
                     }
                     Text(first.format(DateTimeFormatter.ofPattern(if (period == "day") "yyyy-MM-dd" else "yyyy-MM", Locale.ROOT)),
                         Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         fontSize = 18.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold)
-                    IconButton(onClick = { day = until.toEpochDay() }, enabled = until <= today) {
+                    WorkbenchIconButton(onClick = { day = until.toEpochDay() }, enabled = until <= today) {
                         WorkbenchIcon(Glyph.Next, Modifier.size(20.dp), description = stringResource(R.string.ai_usage_next_period))
                     }
                 }
@@ -89,7 +89,7 @@ internal fun AiUsageDashboard(
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(if (state.truncated || state.incomplete) R.string.ai_usage_partial_title else R.string.ai_usage_scope_title), Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleSmall)
-                TextButton(onClick = onRefresh, enabled = !state.loading) { Text(stringResource(R.string.ai_usage_refresh)) }
+                WorkbenchTextButton(onClick = onRefresh, enabled = !state.loading) { Text(stringResource(R.string.ai_usage_refresh)) }
             }
             UsageLoadState(state, onRefresh)
         }
@@ -154,10 +154,9 @@ private fun UsageChoiceSheet(title: String, all: String, entries: List<Pair<Stri
 
 @Composable
 private fun UsageChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(role = Role.RadioButton, onClick = onClick).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = null)
-        Text(label, Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 8.dp), style = MaterialTheme.typography.bodyMedium)
-    }
+    RadioButtonPreference(title = label, selected = selected, onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp))
 }
 
 @Composable
@@ -185,13 +184,13 @@ private fun UsageLoadState(state: AiUsageState, onRefresh: () -> Unit) {
     if (state.loading) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.ai_usage_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            LinearProgressIndicator(Modifier.fillMaxWidth())
+            WorkbenchLinearProgressIndicator(Modifier.fillMaxWidth())
         }
     } else if (state.failed) {
         WorkbenchCard(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.errorContainer) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.ai_usage_load_failed), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                TextButton(onClick = onRefresh) { Text(stringResource(R.string.ai_usage_retry)) }
+                WorkbenchTextButton(onClick = onRefresh) { Text(stringResource(R.string.ai_usage_retry)) }
             }
         }
     }

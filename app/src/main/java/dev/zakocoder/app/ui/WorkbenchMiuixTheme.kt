@@ -47,6 +47,8 @@ internal fun WorkbenchMiuixTheme(dark: Boolean, content: @Composable () -> Unit)
             MiuixTheme(colors = colors, textStyles = defaultTextStyles(
                 main = Type.body, paragraph = Type.body, body1 = Type.body, body2 = Type.meta,
                 button = Type.bodyStrong, footnote1 = Type.meta, footnote2 = Type.label,
+                // Native preferences read headline1 directly rather than the main text style.
+                headline1 = Type.item, headline2 = Type.bodyStrong, subtitle = Type.meta,
                 title1 = Type.title, title2 = Type.section, title3 = Type.item, title4 = Type.body,
             ), content = content)
         }

@@ -391,12 +391,48 @@ class TerminalLayoutDeviceTest {
                         nodes { all -> all.last { matches(it, R.string.switch_terminals) }.boundsInWindow.bottom <= top + 1 }
                     }
                     capture("terminal-keyboard-${if (dark) "night" else "day"}")
-                    click(R.string.keyboard)
-                    await("keyboard hidden before menu interaction") { main { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) != true } }
                     click(R.string.terminal_actions)
                     await("bottom menu available") { nodes { it.any { node -> matches(node, R.string.terminal_preview) } } }
+                    val menuWindow = modalWindow(R.string.terminal_preview)
+                    // Dialog semantics can arrive before WindowManager transfers input focus.
+                    // Back must target the menu, rather than the terminal's still-focused IME.
+                    await("terminal menu owns input focus before Back") {
+                        main { menuWindow.isAttachedToWindow && menuWindow.hasWindowFocus() && !view.hasWindowFocus() }
+                    }
+                    capture("terminal-actions-${if (dark) "night" else "day"}")
                     instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-                    await("back dismisses menu without leaving terminal") { terminal(scenario) != null && nodes { it.none { node -> matches(node, R.string.terminal_preview) } } }
+                    try {
+                        await("back fully dismisses menu without leaving terminal") {
+                            terminal(scenario) === view &&
+                                nodes { it.none { node -> matches(node, R.string.terminal_preview) } } &&
+                                main { !menuWindow.isAttachedToWindow }
+                        }
+                    } catch (failure: IllegalStateException) {
+                        capture("terminal-menu-back-failure-${if (dark) "night" else "day"}")
+                        val details = main {
+                            "menuAttached=${menuWindow.isAttachedToWindow}, menuFocused=${menuWindow.hasWindowFocus()}, " +
+                                "terminalFocused=${view.hasWindowFocus()}, imeVisible=" +
+                                ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime())
+                        }
+                        throw AssertionError("${failure.message}; terminalRetained=${terminal(scenario) === view}, " +
+                            "menuVisible=${nodes { all -> all.any { matches(it, R.string.terminal_preview) } }}; $details", failure)
+                    }
+                    await("menu cancellation restores terminal focus and the open keyboard") {
+                        main { view.hasFocus() && view.hasWindowFocus() &&
+                            ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) == true }
+                    }
+                    // Activity dispatch must reach the PTY without touching or refocusing the terminal.
+                    val menuInputMarker = "MENU_FOCUS_${if (dark) "NIGHT" else "DAY"}_${SystemClock.uptimeMillis()}"
+                    instrumentation.sendStringSync("printf '$menuInputMarker\\n'")
+                    instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_ENTER)
+                    await("input after menu cancellation reaches the real PTY") {
+                        main { first.session.emulator.screen.transcriptText.lineSequence().any { it.trim() == menuInputMarker } }
+                    }
+                    capture("terminal-menu-input-${if (dark) "night" else "day"}")
+                    click(R.string.keyboard)
+                    await("keyboard hidden after menu input verification") {
+                        main { ViewCompat.getRootWindowInsets(view)?.isVisible(WindowInsetsCompat.Type.ime()) != true }
+                    }
                     click(R.string.switch_terminals)
                     await("session sheet visible") { nodes { it.any { node -> matches(node, R.string.terminal_close_hint) } } }
                     suspend fun selectSession(number: Int) {
@@ -447,6 +483,7 @@ class TerminalLayoutDeviceTest {
                     val downAt = SystemClock.uptimeMillis()
                     fun touch(action: Int, x: Float) {
                         val event = android.view.MotionEvent.obtain(downAt, SystemClock.uptimeMillis(), action, x, rect.center.y, 0)
+                        event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
                         try { instrumentation.uiAutomation.injectInputEvent(event, true) } finally { event.recycle() }
                     }
                     touch(android.view.MotionEvent.ACTION_DOWN, rect.left + rect.width / 12)
