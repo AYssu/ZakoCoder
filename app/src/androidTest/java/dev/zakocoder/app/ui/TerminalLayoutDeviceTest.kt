@@ -399,6 +399,7 @@ class TerminalLayoutDeviceTest {
                     await("terminal menu owns input focus before Back") {
                         main { menuWindow.isAttachedToWindow && menuWindow.hasWindowFocus() && !view.hasWindowFocus() }
                     }
+                    capture("terminal-actions-${if (dark) "night" else "day"}")
                     instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                     try {
                         await("back fully dismisses menu without leaving terminal") {

@@ -175,7 +175,7 @@ internal fun TerminalControls(control: Boolean, alt: Boolean, onKey: (Int, Boole
                                 icon = { WorkbenchIcon(Glyph.Add) }, onClick = onCreate),
                             DropdownItem(text = stringResource(R.string.close_terminal),
                                 icon = { WorkbenchIcon(Glyph.Close, tint = Color(0xFFF2A5A5)) }, onClick = onClose),
-                        ), onCancelled = onMenuCancelled)
+                        ), onCancelled = onMenuCancelled, keyboardIndependent = true)
                     }
                 }
             }
