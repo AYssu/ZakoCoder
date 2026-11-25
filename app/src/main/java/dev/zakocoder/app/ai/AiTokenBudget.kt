@@ -5,6 +5,7 @@ import org.json.JSONObject
 
 /** Independent mobile memory guard, not a provider context window. */
 internal const val AI_REQUEST_MAX_BYTES = 32 * 1024 * 1024
+internal const val AI_MIN_INPUT_CAPACITY_TOKENS = 1024
 
 /** Tokenizers differ per provider. ASCII/code ~3 chars/token, non-ASCII ~2 tokens/code point,
  * plus protocol overhead. This deliberately cautious estimate is never API billing usage. */
@@ -36,11 +37,14 @@ internal fun tokenBudget(config: AiConfig, messages: JSONArray, tools: JSONArray
     val serialized = JSONObject().put("messages", budgetMessages).put("tools", tools).toString()
     if (serialized.toByteArray(Charsets.UTF_8).size > AI_REQUEST_MAX_BYTES)
         throw AiTransportException(kind = AiFailure.LocalResourceLimit, diagnostic = "local_request_32mib_limit")
-    // Explicit output limits are honored, even when they make a small window invalid.
+    // An unusable reservation must fail before compression: no reduction can make it fit.
     val reserve = aiOutputReserve(config)
+    val window = config.context.contextWindowTokens
+    if (reserve <= 0 || reserve >= window || window - reserve < AI_MIN_INPUT_CAPACITY_TOKENS)
+        throw AiTransportException(kind = AiFailure.ContextConfiguration, diagnostic = "unusable_context_budget")
     val images = (0 until messages.length()).sumOf { messages.getJSONObject(it).optJSONArray("zako_images")?.length() ?: 0 }
     return AiTokenBudget(estimateAiTokens(serialized) + messages.length() * 8L + tools.length() * 16L + images * 4096L,
-        config.context.contextWindowTokens, reserve, config.context.compressionThresholdPercent)
+        window, reserve, config.context.compressionThresholdPercent)
 }
 
 /** Old character preferences were local caps, not advertised model token limits. */

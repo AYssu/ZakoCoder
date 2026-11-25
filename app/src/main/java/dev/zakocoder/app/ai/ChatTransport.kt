@@ -23,6 +23,22 @@ import kotlin.coroutines.resumeWithException
 // A single response must leave room for the user request and other entries in 512k history.
 internal const val AI_RESPONSE_TEXT_LIMIT = 256000
 
+/** Mutable only within one attempt; request() uses it to forbid billed-output retries. */
+private data class AttemptProgress(var receivedData: Boolean = false)
+
+private val CHAT_REASONING_DIAGNOSTIC_KEYS = setOf("reasoning_content", "reasoning", "reasoning_details", CHAT_REASONING_DETAILS_KEY)
+
+private fun scrubChatDiagnosticReasoning(value: Any?): Any? = when (value) {
+    is JSONObject -> JSONObject().apply {
+        value.keys().forEach { name ->
+            put(name, if (name in CHAT_REASONING_DIAGNOSTIC_KEYS) "[reasoning content omitted]"
+            else scrubChatDiagnosticReasoning(value.get(name)))
+        }
+    }
+    is JSONArray -> JSONArray().apply { repeat(value.length()) { put(scrubChatDiagnosticReasoning(value.get(it))) } }
+    else -> value
+}
+
 /** Map only fixed local failure labels; never persist an exception/provider message. */
 private fun diagnosticCode(value: String): DiagnosticCode? = when (value) {
     "dns_resolution_failed" -> DiagnosticCode.NameResolutionFailed
@@ -30,7 +46,7 @@ private fun diagnosticCode(value: String): DiagnosticCode? = when (value) {
     "connect_failed" -> DiagnosticCode.ConnectFailed
     "network_read_or_connect_timeout", "request_timeout" -> DiagnosticCode.Timeout
     "stream_eof", "missing_done", "missing_completion" -> DiagnosticCode.StreamIncomplete
-    "malformed_json", "invalid_response_structure", "missing_body" -> DiagnosticCode.MalformedResponse
+    "malformed_json", "malformed_model_catalog", "invalid_response_structure", "missing_body" -> DiagnosticCode.MalformedResponse
     "invalid_request_configuration", "invalid_proxy" -> DiagnosticCode.InvalidConfiguration
     "network_io_failed" -> DiagnosticCode.Io
     else -> null
@@ -162,16 +178,18 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             }
             beforeAttempt()
             val trace = RequestDiagnosticTrace(diagnostics, diagnosticGroup, frozenConfig.protocol, attempt)
+            val progress = AttemptProgress()
             try {
                 val reply = requestAttempt(frozenConfig, JSONArray(frozenMessages), JSONArray(frozenTools), forceTool, proxy,
                     imageData, { drafts ->
-                        if (drafts.any { it.name.isNotEmpty() || it.arguments.isNotEmpty() }) beginReplacement()
+                        if (drafts.any { it.name.isNotEmpty() || it.arguments.isNotEmpty() }) { beginReplacement(); progress.receivedData = true }
                         if (attempt == 1 || replacementStarted) toolDelta(drafts)
                     },
                     { record -> trace.update(record); observe(record) },
-                    { fragment -> if (fragment.isNotEmpty()) beginReplacement(); reasoningDelta(fragment) },
+                    { fragment -> if (fragment.isNotEmpty()) { beginReplacement(); progress.receivedData = true }; reasoningDelta(fragment) },
                     group, attempt, precedingDelay, precedingReason, cacheKey,
-                    { fragment -> if (fragment.isNotEmpty()) beginReplacement(); delta(fragment) })
+                    progress,
+                    { fragment -> if (fragment.isNotEmpty()) { beginReplacement(); progress.receivedData = true }; delta(fragment) })
                 // A successful empty replacement must not leave an earlier failed answer visible.
                 beginReplacement()
                 trace.finish(DiagnosticOutcome.Succeeded)
@@ -180,7 +198,9 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             catch (error: AiTransportException) {
                 trace.finish(DiagnosticOutcome.Failed, error.kind, diagnosticCode(error.diagnostic))
                 currentCoroutineContext().ensureActive()
-                val wait = if (attempt >= maxAttempts) null else AiRetryPolicy.delayMillis(attempt, error, kotlin.random.Random.nextLong(251))
+                // A replacement request would bill already-emitted output again.
+                val wait = if (attempt >= maxAttempts || progress.receivedData) null
+                    else AiRetryPolicy.delayMillis(attempt, error, kotlin.random.Random.nextLong(251))
                 if (wait == null) throw error
                 diagnostics?.record(DiagnosticEvent(DiagnosticStage.Request, DiagnosticOutcome.Retry, diagnosticGroup,
                     protocol = frozenConfig.protocol, failure = error.kind, attempt = attempt + 1, httpStatus = error.status, delayMillis = wait))
@@ -199,7 +219,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
 
     private suspend fun requestAttempt(originalConfig: AiConfig, messages: JSONArray, tools: JSONArray, forceTool: String?, proxy: String,
         imageData: (suspend (AiImageAttachment) -> String)?, toolDelta: (List<AiCallDraft>) -> Unit, observe: (AiRequestLog) -> Unit, reasoningDelta: (String) -> Unit,
-        retryGroup: String, attempt: Int, retryDelayMs: Long, retryReason: String, cacheKey: String?, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
+        retryGroup: String, attempt: Int, retryDelayMs: Long, retryReason: String, cacheKey: String?,
+        progress: AttemptProgress, delta: (String) -> Unit): AiReply = withContext(Dispatchers.IO) {
         val config = AiServiceRequestPolicy.effectiveConfig(originalConfig, forceTool)
         AiRequestHeaders.validate(config.requestHeaders)
         val redactor = AiLogRedactor(config.key, config.requestHeaders.values)
@@ -268,7 +289,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
             AiApiProtocol.Responses -> AiResponsesWire.diagnostic(AiResponsesWire.request(config, diagnosticMessages, tools, forceTool).also { AiServiceRequestPolicy.apply(config, it, cacheKey) })
             AiApiProtocol.Anthropic -> AiAnthropicWire.diagnostic(body)
             AiApiProtocol.Gemini -> AiGeminiWire.diagnostic(body)
-            AiApiProtocol.ChatCompletions -> JSONObject(body.toString()).put("messages", diagnosticMessages)
+            AiApiProtocol.ChatCompletions -> JSONObject(body.toString()).put("messages",
+                scrubChatDiagnosticReasoning(diagnosticMessages))
         }).toString()
         update { it.copy(request = clean(diagnosticPayload).take(240000), requestBytes = payload.toByteArray().size,
             truncated = diagnosticPayload.length > 240000 || imageMessages.omitted > 0) }
@@ -300,9 +322,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             if (!it.isSuccessful) throw AiTransportException.http(it.code, AiRetryPolicy.retryAfterMillis(it.header("Retry-After")))
                             val source = it.body?.source() ?: throw AiTransportException(diagnostic = "missing_body")
                             if (config.parameters.service.streaming) {
-                                readProvider(source, call, config, ::elapsed, ::clean, ::update, delta, reasoningDelta, toolDelta)
+                                readProvider(source, call, config, ::elapsed, ::clean, ::update,
+                                    delta, reasoningDelta, toolDelta)
                             } else {
-                                readComplete(source, call, config, ::elapsed, ::clean, ::update, delta, reasoningDelta, toolDelta)
+                                readComplete(source, call, config, ::elapsed, ::clean, ::update,
+                                    { progress.receivedData = true }, delta, reasoningDelta, toolDelta)
                             }
                         }
                         update { if (it.complete) it else it.copy(complete = true) }
@@ -319,7 +343,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
     /** Typed provider events share request ownership, logging, cancellation and retry boundaries. */
     private fun readProvider(source: okio.BufferedSource, call: Call, config: AiConfig, elapsed: () -> Long,
         clean: (String) -> String, update: ((AiRequestLog) -> AiRequestLog) -> Unit,
-        delta: (String) -> Unit, reasoningDelta: (String) -> Unit, toolDelta: (List<AiCallDraft>) -> Unit): AiReply {
+        delta: (String) -> Unit, reasoningDelta: (String) -> Unit,
+        toolDelta: (List<AiCallDraft>) -> Unit): AiReply {
         var firstEvent: Long? = null; var firstText: Long? = null
         var events = 0; var bytes = 0L; var lastPublished = -100L
         var drafts = emptyList<AiCallDraft>()
@@ -383,9 +408,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
 
     private fun readComplete(source: okio.BufferedSource, call: Call, config: AiConfig, elapsed: () -> Long,
         clean: (String) -> String, update: ((AiRequestLog) -> AiRequestLog) -> Unit,
-        delta: (String) -> Unit, reasoningDelta: (String) -> Unit, toolDelta: (List<AiCallDraft>) -> Unit): AiReply {
+        receivedData: () -> Unit, delta: (String) -> Unit, reasoningDelta: (String) -> Unit,
+        toolDelta: (List<AiCallDraft>) -> Unit): AiReply {
         // Bound the complete document before allocating a JSON tree; cancellation closes the socket.
         source.request(AI_REQUEST_MAX_BYTES.toLong() + 1)
+        if (source.buffer.size > 0) receivedData()
         if (source.buffer.size > AI_REQUEST_MAX_BYTES)
             throw AiTransportException(kind = AiFailure.OutputLimit, diagnostic = "response_document_limit")
         val bytes = source.buffer.size
@@ -421,8 +448,11 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         val found = linkedSetOf<String>()
         val seenPages = mutableSetOf<String>()
         var page: String? = null
-        repeat(10) {
+        val catalogStarted = System.nanoTime()
+        repeat(MODEL_CATALOG_MAX_PAGES) {
             currentCoroutineContext().ensureActive()
+            if (System.nanoTime() - catalogStarted >= MODEL_CATALOG_MAX_DURATION_NANOS)
+                throw AiTransportException(kind = AiFailure.Protocol, diagnostic = "model_catalog_page_limit")
             val url = AiProviderRouting.modelsUrl(config).newBuilder().apply {
                 page?.let { token -> addQueryParameter(if (config.protocol == AiApiProtocol.Gemini) "pageToken" else "after_id", token) }
             }.build()
@@ -439,7 +469,10 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
                             val source = it.body?.source() ?: throw AiTransportException()
                             source.request(1024 * 1024 + 1L)
                             if (source.buffer.size > 1024 * 1024) throw AiTransportException()
-                            JSONObject(source.readUtf8())
+                            try { JSONObject(source.readUtf8()) }
+                            catch (_: org.json.JSONException) {
+                                throw AiTransportException(kind = AiFailure.Protocol, diagnostic = "malformed_model_catalog")
+                            }
                         }
                         if (continuation.isActive) continuation.resume(result)
                     } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(if (error is AiTransportException) error else AiTransportException()) }
@@ -454,4 +487,8 @@ class ChatTransport(private val client: OkHttpClient = OkHttpClient.Builder().fo
         throw AiTransportException(diagnostic = "model_catalog_page_limit")
     }
 
+    private companion object {
+        const val MODEL_CATALOG_MAX_PAGES = 10
+        const val MODEL_CATALOG_MAX_DURATION_NANOS = 120_000_000_000L
+    }
 }

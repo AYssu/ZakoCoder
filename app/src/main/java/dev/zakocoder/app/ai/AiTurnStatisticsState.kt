@@ -17,9 +17,17 @@ internal fun AiState.retainedTurnStatistics(seal: Boolean = false): List<AiTurnS
 internal fun AiState.withRequestLog(record: AiRequestLog): AiState {
     val statistics = retainedTurnStatistics()
     val previous = statistics.firstOrNull { it.turn == record.turn } ?: AiTurnStatistics(record.turn)
+    val existing = requests.firstOrNull { it.id == record.id }
+    // Terminal observations are monotonic: late callbacks may only fill missing usage.
+    val merged = if (existing?.complete == true) existing.copy(
+        inputTokens = existing.inputTokens ?: record.inputTokens,
+        outputTokens = existing.outputTokens ?: record.outputTokens,
+        cachedTokens = existing.cachedTokens ?: record.cachedTokens
+    ) else record
     return copy(
         turnStatistics = (statistics.filterNot { it.turn == record.turn } + previous.observe(record))
             .sortedBy { it.turn }.takeLast(512),
-        requests = boundedRequests(requests.filterNot { it.id == record.id } + record)
+        requests = boundedRequests((requests.filterNot { it.id == record.id } + merged)
+            .sortedWith(compareBy<AiRequestLog> { it.started }.thenBy { it.round }))
     )
 }
