@@ -41,6 +41,7 @@ internal enum class DiagnosticCode {
     Available, Unavailable, Denied, Disconnected, Timeout, Io, InvalidConfiguration, InvalidResponse, Interrupted, Recovered,
     AuthenticationFailed, HostKeyChanged, HostKeyUntrusted, HandshakeFailed, NameResolutionFailed, Storage, Limit,
     TlsFailed, ConnectFailed, StreamIncomplete, MalformedResponse,
+    ProtocolIdentity, ProtocolSnapshot, ProtocolUnsupported, ProtocolPayload,
     RepeatedToolFailure, TaskRequestLimit, TaskToolLimit, TaskTimeLimit, TaskTokenLimit
 }
 
