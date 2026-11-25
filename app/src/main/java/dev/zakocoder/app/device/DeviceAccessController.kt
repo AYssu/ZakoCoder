@@ -36,6 +36,7 @@ data class DeviceAccessState(
     val busy: Boolean = false,
     val mode: DeviceMode = DeviceMode.Basic,
     val rootGranted: Boolean = false,
+    val revokingRoot: Boolean = false,
     /** Stable error code; presentation owns localization. */
     val error: String? = null,
     val grants: DevicePermissionGrants = DevicePermissionGrants(),
@@ -104,13 +105,44 @@ class DeviceAccessController(context: Context) {
 
     /** Revokes this application's leases immediately; does not change any Root manager policy. */
     fun useBasic() {
-        synchronized(selectionLock) {
+        val lease = synchronized(selectionLock) {
             epoch.incrementAndGet()
-            mutableState.update { it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = false, error = null) }
-            // apply changes memory synchronously; serialized with Root selection to preserve latest intent.
-            preferences.edit { putString("mode", "basic") }
+            // Publish Basic before disk work so every execution path fails closed. The state stays
+            // revoking until commit() confirms a reboot-safe selection.
+            mutableState.update { it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = true,
+                revokingRoot = true, error = null) }
+            generation
         }
+        // DeviceShell.stop cancels owned sessions immediately but has no completion API.
         shell.stop()
+        scope.launch {
+            try {
+                mutex.withLock {
+                    if (lease != generation) return@withLock
+                    val saved = withContext(Dispatchers.IO) {
+                        preferences.edit().putString("mode", "basic").commit()
+                    }
+                    synchronized(selectionLock) {
+                        if (lease != generation) return@synchronized
+                        mutableState.update {
+                            if (saved) it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = false,
+                                revokingRoot = false, error = null)
+                            else it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = false,
+                                revokingRoot = true, error = "device_basic_revoke_failed")
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                synchronized(selectionLock) {
+                    if (lease == generation) mutableState.update {
+                        it.copy(mode = DeviceMode.Basic, rootGranted = false, busy = false,
+                            revokingRoot = true, error = "device_basic_revoke_failed")
+                    }
+                }
+            }
+        }
     }
 
     /** Validates an already selected Root mode; never requests Root while Basic is selected. */

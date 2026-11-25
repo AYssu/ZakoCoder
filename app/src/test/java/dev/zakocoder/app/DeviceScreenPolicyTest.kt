@@ -7,8 +7,15 @@ import org.junit.Test
 
 class DeviceScreenPolicyTest {
     @Test fun ordinaryForegroundAppsNeedNoDebugOrProjectIdentity() {
-        listOf("dev.fixture.release", "dev.fixture.other", "com.android.settings").forEach {
+        listOf("dev.fixture.release", "dev.fixture.other", "dev.fixture.settings").forEach {
             assertFalse(protectedDeviceScreenPackage(it, "dev.zakocoder.app", "dev.oem.permissions"))
+        }
+    }
+
+    @Test fun settingsAndDeviceAdministrationSurfacesCannotBeDelegated() {
+        listOf("com.android.settings", "com.android.settings.intelligence", "com.google.android.settings",
+            "com.samsung.android.settings", "com.miui.securitycenter", "com.oplus.safecenter").forEach {
+            assertTrue(it, protectedDeviceScreenPackage(it, "dev.zakocoder.app", "dev.oem.permissions"))
         }
     }
 

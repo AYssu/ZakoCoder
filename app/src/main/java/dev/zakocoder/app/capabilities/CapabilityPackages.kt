@@ -21,6 +21,7 @@ data class CapabilityPackagesState(
 class CapabilityPackages(context: Context, private val changed: (String, CapabilityPackage) -> Unit = { _, _ -> }) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val file = AtomicFile(File(context.filesDir, "capability-packages.json"))
+    private val revocationMarker = AtomicFile(File(context.filesDir, "capability-packages-revocation"))
     private val failure = context.getString(R.string.capability_packages_storage_error)
     private val mutable = MutableStateFlow(CapabilityPackagesState())
     val state = mutable.asStateFlow()
@@ -36,8 +37,15 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
     }
     init { scope.launch {
         try {
-            val stored = withContext(Dispatchers.IO) {
-                if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) Stored(emptyMap(), false, false, false) else {
+            val (stored, revocationPending) = withContext(Dispatchers.IO) {
+                // The marker is created before revoking config writes and removed only after a
+                // successful write, so its existence always outranks the old grants on startup.
+                val markerExists = revocationMarker.baseFile.exists() ||
+                    File(revocationMarker.baseFile.path + ".bak").exists()
+                if (markerExists) Stored(emptyMap(), false, false, false) to true
+                else if (!file.baseFile.exists() && !File(file.baseFile.path + ".bak").exists()) {
+                    Stored(emptyMap(), false, false, false) to false
+                } else {
                     val json = JSONObject(file.openRead().bufferedReader().use { it.readText() })
                     val version = json.getInt("version")
                     require(version in 1..2)
@@ -49,7 +57,7 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                             CapabilityPackage.entries.singleOrNull { it == CapabilityPackage.Ssh && it.wire == names.getString(index) }
                         }.toSet()
                     }
-                    Stored(configured, version == 2 && json.optBoolean("screen_enabled", false), version == 2 && json.optBoolean("browser_enabled", false), version == 2 && json.optBoolean("device_shell_enabled", false))
+                    Stored(configured, version == 2 && json.optBoolean("screen_enabled", false), version == 2 && json.optBoolean("browser_enabled", false), version == 2 && json.optBoolean("device_shell_enabled", false)) to false
                 }
             }
             val (loaded, screenEnabled, browserEnabled, deviceShellEnabled) = stored
@@ -57,7 +65,9 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
             if (screenEnabled) leases = leases + ((deviceScope to CapabilityPackage.Screen) to UUID.randomUUID().toString())
             if (browserEnabled) leases = leases + ((browserScope to CapabilityPackage.Browser) to UUID.randomUUID().toString())
             if (deviceShellEnabled) leases = leases + ((shellScope to CapabilityPackage.DeviceShell) to UUID.randomUUID().toString())
-            mutable.value = CapabilityPackagesState(loaded = true, enabled = loaded, screenEnabled = screenEnabled, browserEnabled = browserEnabled, deviceShellEnabled = deviceShellEnabled)
+            mutable.value = CapabilityPackagesState(loaded = true, enabled = loaded, screenEnabled = screenEnabled,
+                browserEnabled = browserEnabled, deviceShellEnabled = deviceShellEnabled,
+                error = if (revocationPending) failure else null)
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { mutable.value = CapabilityPackagesState(loaded = true, error = failure) }
     } }
@@ -93,6 +103,9 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
         scope.launch {
             try {
                 withContext(Dispatchers.IO) {
+                    // The marker is synced before the config write. If the process dies or the
+                    // config write fails, startup ignores the old grants until an explicit save.
+                    if (!value) writeRevocationMarker()
                     val projects = JSONObject()
                     enabled.forEach { (project, packages) -> projects.put(project, JSONArray(packages.map { it.wire })) }
                     val output = file.startWrite()
@@ -100,6 +113,7 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                         output.write(JSONObject().put("version", 2).put("screen_enabled", screenEnabled).put("browser_enabled", browserEnabled).put("device_shell_enabled", deviceShellEnabled).put("projects", projects).toString().toByteArray())
                         file.finishWrite(output)
                     } catch (error: Exception) { file.failWrite(output); throw error }
+                    revocationMarker.delete()
                 }
                 mutable.update { it.copy(busy = false) }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -111,6 +125,18 @@ class CapabilityPackages(context: Context, private val changed: (String, Capabil
                 enabled.forEach { (project, packages) -> packages.forEach { changed(project, it) } }
                 mutable.update { it.copy(busy = false, enabled = emptyMap(), screenEnabled = false, browserEnabled = false, deviceShellEnabled = false, error = failure) }
             }
+        }
+    }
+
+    private fun writeRevocationMarker() {
+        val output = revocationMarker.startWrite()
+        try {
+            output.write(byteArrayOf(1))
+            output.fd.sync()
+            revocationMarker.finishWrite(output)
+        } catch (error: Exception) {
+            revocationMarker.failWrite(output)
+            throw error
         }
     }
 }
