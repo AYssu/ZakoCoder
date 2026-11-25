@@ -4,7 +4,7 @@
 
 ## 工具链与依赖
 
-使用 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，Gradle Wrapper 固定 9.8.2；依赖版本集中在 `gradle/libs.versions.toml`。首次构建需要下载 Maven 依赖；普通应用打包在 JVM 中校验并使用仓库内固定的 PRoot／loader 产物，不需要 Python、GNU Make、patch 或 readelf。只有重新编译原生运行时才需要 Python 3.12+、Linux x86_64 及这些工具。
+使用 JDK 17、Android SDK Platform 37、Build Tools 36.0.0、NDK 28.2.13676358，Gradle Wrapper 固定 9.9.1；依赖版本集中在 `gradle/libs.versions.toml`。首次构建需要下载 Maven 依赖；普通应用打包在 JVM 中校验并使用仓库内固定的 PRoot／loader 产物，不需要 Python、GNU Make、patch 或 readelf。只有重新编译原生运行时才需要 Python 3.12+、Linux x86_64 及这些工具。
 
 AGP 9.5.0、Gradle 9.8.2 与 OkHttp 5.5.1 作为一组升级：AGP 使用内置 Kotlin，Compose 编译插件固定 Kotlin 2.4.21；SDK 安装包名为 `platforms;android-37.0`。主应用与两个终端库的编译 SDK 统一为 37，最低版本 26、目标版本 36、NDK 与运行时摘要保持原值。本次不迁移用户数据；如需回退，应整组撤销构建配置与依赖升级，避免单独回退造成版本不兼容。Lifecycle 从 2.8.7 更新到 2.10.0，以保持新 Lint 下的生命周期检查可用；不关闭这些正确性检查。Release 资源压缩策略保持原值，新 Lint 的体积优化建议仅记录为提示。CI 同时编译测试 APK，防止只构建产品时漏掉测试 API 变化。
 
