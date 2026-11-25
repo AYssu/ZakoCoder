@@ -16,6 +16,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -87,6 +88,7 @@ internal class DiagnosticEvents private constructor(private val directory: File)
     private sealed interface Operation {
         data class Append(val event: DiagnosticEvent, val time: Long) : Operation
         data class Snapshot(val result: CompletableDeferred<DiagnosticSnapshot>) : Operation
+        data class Flush(val result: CompletableDeferred<Unit>) : Operation
     }
     private val queue = Channel<Operation>(256)
     private val dropped = AtomicLong()
@@ -106,6 +108,7 @@ internal class DiagnosticEvents private constructor(private val directory: File)
                     catch (cancelled: CancellationException) { operation.result.cancel(cancelled); throw cancelled }
                     catch (_: IOException) { failures.incrementAndGet(); operation.result.complete(DiagnosticSnapshot("", dropped.get(), failures.get())) }
                     catch (_: SecurityException) { failures.incrementAndGet(); operation.result.complete(DiagnosticSnapshot("", dropped.get(), failures.get())) }
+                    is Operation.Flush -> operation.result.complete(Unit)
                 }
             }
         }
@@ -113,6 +116,25 @@ internal class DiagnosticEvents private constructor(private val directory: File)
 
     fun record(event: DiagnosticEvent) {
         if (!queue.trySend(Operation.Append(event, System.currentTimeMillis())).isSuccess) dropped.incrementAndGet()
+    }
+
+    /**
+     * Wait until every append accepted before this call has been processed by the writer.
+    * The timeout only bounds waiting; a timed-out barrier remains harmless in the queue.
+     */
+    suspend fun flush(timeoutMillis: Long = 1000): Boolean {
+        return try {
+            val result = CompletableDeferred<Unit>()
+            withTimeoutOrNull(timeoutMillis.coerceAtLeast(0)) {
+                queue.send(Operation.Flush(result))
+                result.await()
+                true
+            } ?: false
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     /** Export never waits indefinitely behind storage IO. No request body or historic raw log is read. */
