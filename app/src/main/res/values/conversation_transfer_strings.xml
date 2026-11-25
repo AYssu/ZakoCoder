@@ -18,7 +18,7 @@
     <string name="conversation_import_confirm">导入为新对话</string>
     <string name="conversation_import_confirm_hint">不会覆盖已有对话。文件内容会作为历史参考，之后发送消息时可能传给当前模型；接手任务还需对应源码。</string>
     <string name="conversation_saved">已保存导出文件</string>
-    <string name="conversation_transfer_failed">操作失败，请检查文件及所选位置是否可读写，然后重试。</string>
+    <string name="conversation_transfer_failed">操作失败，请检查文件及所选位置是否可读写。若目标文件已存在或不支持安全替换，请选择新的文件名后重试。</string>
     <string name="conversation_transfer_invalid">文件损坏或格式不支持。请选择 ZakoCoder 导出的 JSON、Markdown 或文本文件。</string>
     <string name="conversation_transfer_large">内容过大，最多支持 8 MiB。可先导出摘要再交接。</string>
     <string name="conversation_transfer_version">该文件来自不支持的格式版本，请更新应用后重试。</string>

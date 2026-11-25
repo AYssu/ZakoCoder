@@ -45,6 +45,7 @@
     <string name="runtime_abi_unsupported">当前应用进程架构不受支持；Linux 环境需要 ARM64 或 x86_64 原生运行库。</string>
     <string name="android_toolchain_abi_unsupported">当前 Android SDK / NDK 工具包仅提供 ARM64 可执行文件，尚不支持此设备架构；基础 Ubuntu 和通用开发工具仍可使用。</string>
     <string name="runtime_already_present">环境目录已存在；请先检查现有安装，不能直接覆盖。</string>
+    <string name="runtime_repair_move_failed">无法移走不完整的运行环境目录，安装未继续；原目录未删除，请检查应用存储空间后重试。</string>
     <string name="storage_insufficient">至少需要 600 MiB 可用空间，请清理存储后重试。</string>
     <string name="checksum_failed">资源大小或 SHA-256 校验失败，请重试。</string>
     <string name="runtime_downloading">正在下载基础系统：%1$d%%</string>
@@ -85,6 +86,7 @@
     <string name="path_label">附加 Linux PATH（冒号分隔）</string>
     <string name="save_settings">保存设置</string>
     <string name="settings_saved">设置已保存。Shell 和 PATH 对新建会话生效。</string>
+    <string name="settings_save_failed">设置保存失败，请根据提示检查后重试；当前草稿已保留。</string>
     <string name="clear_cache">清理环境下载缓存</string>
     <string name="service_channel">开发任务与终端</string>
     <string name="service_running">开发任务或终端会话正在运行，点击返回工作台。</string>
@@ -317,6 +319,7 @@
     <string name="ai_prompt">描述当前工作区的任务</string>
     <string name="ai_stop">停止任务</string>
     <string name="ai_send">发送任务</string>
+    <string name="ai_send_failed">消息未能提交，请检查模型、输入和当前任务状态后重试；当前输入已保留。</string>
     <string name="ai_reject">拒绝</string>
     <string name="ai_tool_rejected">用户已拒绝。不得重复尝试此操作。</string>
     <string name="ai_directory_created">目录已创建</string>

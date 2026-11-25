@@ -7,4 +7,5 @@
     <string name="ai_queue_continue">继续</string>
     <string name="ai_queue_cancel">移除待处理消息</string>
     <string name="ai_queue_tool_deferred">用户补充了任务要求，此操作尚未执行。请先根据新要求重新规划。</string>
+    <string name="ai_queue_add_failed">消息未能加入队列，请稍后重试；当前输入和引用已保留。</string>
 </resources>
