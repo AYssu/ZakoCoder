@@ -2,6 +2,7 @@ package dev.zakocoder.app.workflow
 
 import android.content.Context
 import android.util.AtomicFile
+import android.util.Log
 import dev.zakocoder.app.R
 import dev.zakocoder.app.ai.AiLogRedactor
 import dev.zakocoder.app.ai.AiProjectFiles
@@ -47,8 +48,23 @@ class ProjectTasks(private val context: Context, private val root: (String) -> F
         mutable.update { if (generation == evidenceGeneration.get()) it.copy(currentSource = null, sourceCheckedAt = 0, sourceChecking = false) else it }
         return generation
     }
-    private fun dir(id: String) = File(base, MessageDigest.getInstance("SHA-256").digest(id.toByteArray()).joinToString("") { "%02x".format(it) }).apply { mkdirs() }
-    fun deleteProject(id: String) { dir(id).deleteRecursively() }
+    private fun projectDir(id: String) = File(base, MessageDigest.getInstance("SHA-256").digest(id.toByteArray()).joinToString("") { "%02x".format(it) })
+    private fun dir(id: String) = projectDir(id).apply { mkdirs() }
+    /** Returns false when private task evidence remains, so a later cleanup attempt can retry it. */
+    fun deleteProject(id: String): Boolean {
+        val directory = projectDir(id)
+        if (!directory.exists()) return true
+        return try {
+            val deleted = directory.deleteRecursively()
+            if (!deleted || directory.exists()) {
+                Log.w("ProjectTasks", "Unable to remove project task evidence ${directory.name}")
+                false
+            } else true
+        } catch (error: Exception) {
+            Log.w("ProjectTasks", "Unable to remove project task evidence ${directory.name}", error)
+            false
+        }
+    }
     private fun read(file: File): JSONObject? = if (!file.exists()) null else AtomicFile(file).openRead().use { require(it.available() <= 1024 * 1024); JSONObject(it.bufferedReader().readText()) }
     private fun write(file: File, json: JSONObject) {
         val atomic = AtomicFile(file); val out = atomic.startWrite()
@@ -160,6 +176,8 @@ class ProjectTasks(private val context: Context, private val root: (String) -> F
         try {
             saveRecord()
             if (mutable.value.projectId == id) mutable.update { it.copy(runs = (listOf(run) + it.runs).take(20), log = "") }
+            var outcome: CommandResult? = null
+            var primaryFailure: Throwable? = null
             try {
                 val result = coroutineScope {
                     // A burst may be followed by silence: flushing cannot depend on another chunk arriving.
@@ -190,26 +208,52 @@ class ProjectTasks(private val context: Context, private val root: (String) -> F
                     }
                 }
                 run = run.copy(status = if (result.exitCode == 0) "passed" else "failed", exit = result.exitCode)
-                return result.copy(runId = run.id)
-            } catch (timeoutError: TimeoutCancellationException) { run = run.copy(status = "timeout"); currentCoroutineContext().ensureActive(); throw ProjectCommandFailure(run.id, true, timeoutError) }
-            catch (cancelled: CancellationException) { run = run.copy(status = "cancelled"); throw cancelled }
-            catch (error: Exception) { run = run.copy(status = "failed"); throw ProjectCommandFailure(run.id, false, error) }
-            finally {
-                withContext(NonCancellable + Dispatchers.IO) {
-                    val elapsed = System.currentTimeMillis() - run.started
-                    val generation = invalidateEvidence()
-                    val after = try { if (inspectSource()) captureSource(id) else null }
-                    catch (cancelled: CancellationException) { throw cancelled }
-                    catch (_: Exception) { null }
-                    run = run.copy(elapsed = elapsed, truncated = truncated, outputChars = outputChars, sourceAfter = after)
-                    val finalLog = synchronized(lock) { retainedLog() }
-                    PrivateFiles.writeConfined(dir(id), run.id + ".log", AiLogRedactor("").clean(finalLog))
-                    record(id, run)
-                    mutable.update { state -> if (state.projectId != id) state else state.copy(runs = (listOf(run) + state.runs.filterNot { r -> r.id == run.id }).take(20),
-                        currentSource = if (generation == evidenceGeneration.get()) after else state.currentSource,
-                        sourceCheckedAt = if (generation == evidenceGeneration.get()) System.currentTimeMillis() else state.sourceCheckedAt) }
-                }
+                outcome = result.copy(runId = run.id)
+            } catch (timeoutError: TimeoutCancellationException) {
+                run = run.copy(status = "timeout")
+                primaryFailure = ProjectCommandFailure(run.id, true, timeoutError)
+            } catch (cancelled: CancellationException) {
+                run = run.copy(status = "cancelled")
+                primaryFailure = cancelled
+            } catch (error: Exception) {
+                run = run.copy(status = "failed")
+                primaryFailure = ProjectCommandFailure(run.id, false, error)
             }
+            val cleanupFailures = withContext(NonCancellable + Dispatchers.IO) {
+                val failures = mutableListOf<Exception>()
+                val elapsed = System.currentTimeMillis() - run.started
+                val generation = evidenceGeneration.incrementAndGet()
+                run = run.copy(elapsed = elapsed, truncated = truncated, outputChars = outputChars)
+                // Publish the terminal memory state before any evidence persistence can fail.
+                mutable.update { state -> if (state.projectId != id) state else state.copy(
+                    runs = (listOf(run) + state.runs.filterNot { r -> r.id == run.id }).take(20),
+                    currentSource = null, sourceCheckedAt = 0, sourceChecking = false) }
+                val after = try { if (inspectSource()) captureSource(id) else null }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+                run = run.copy(sourceAfter = after)
+                mutable.update { state -> if (state.projectId != id) state else state.copy(
+                    runs = (listOf(run) + state.runs.filterNot { r -> r.id == run.id }).take(20),
+                    currentSource = if (generation == evidenceGeneration.get()) after else state.currentSource,
+                    sourceCheckedAt = if (generation == evidenceGeneration.get()) System.currentTimeMillis() else state.sourceCheckedAt) }
+                val finalLog = synchronized(lock) { retainedLog() }
+                try { PrivateFiles.writeConfined(dir(id), run.id + ".log", AiLogRedactor("").clean(finalLog)) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { failures += error }
+                try { record(id, run) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { failures += error }
+                failures
+            }
+            primaryFailure?.let { failure ->
+                cleanupFailures.forEach { failure.addSuppressed(it) }
+                throw failure
+            }
+            cleanupFailures.firstOrNull()?.let { failure ->
+                cleanupFailures.drop(1).forEach { failure.addSuppressed(it) }
+                throw failure
+            }
+            return requireNotNull(outcome)
         } finally {
             // Including an initial/final storage failure: disk state alone cannot prove a live owner.
             if (activeRunId == run.id) activeRunId = null

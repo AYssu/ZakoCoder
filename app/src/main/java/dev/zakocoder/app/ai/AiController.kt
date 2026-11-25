@@ -41,6 +41,21 @@ data class AiState(val fileAttachments: List<AiFileAttachment> = emptyList(), va
     val plan: List<AiPlanStep> = emptyList(), val phase: AiPhase = AiPhase.Idle, val round: Int = 0, val toolCount: Int = 0,
     val approval: AiApproval? = null, val changes: List<AiChange> = emptyList(), val endpoint: String = "", val model: String = "", val hasKey: Boolean = false, val configured: Boolean = false, val configurationRevision: Int = 0, val interrupted: Boolean = false, val error: String = "")
 
+/** Pure task-start transition so read-only preservation stays testable without an Android Context. */
+internal fun AiState.beginTaskState(keepReadOnly: Boolean): AiState = copy(
+    active = true,
+    planningMode = if (keepReadOnly) planningMode else false,
+    interrupted = false,
+    error = "",
+    retryNotice = "",
+    failureKind = null,
+    taskDiagnostic = "",
+    phase = AiPhase.Requesting
+)
+
+/** The compression threshold only triggers compaction; a compacted request is valid while it fits the hard window. */
+internal fun compactionResultFits(budget: AiTokenBudget): Boolean = budget.fits
+
 class AiController(private val context: Context, root: (String) -> File, private val editorOpen: (String, String) -> Boolean,
     private val command: suspend (String, String) -> CommandResult, private val activityChanged: () -> Unit, private val filesChanged: () -> Unit,
     transport: ChatTransport = ChatTransport(), private val config: AiConfigStore = AiConfigStore(context),
@@ -1304,7 +1319,7 @@ class AiController(private val context: Context, root: (String) -> File, private
     }
     fun continueBudget(): Boolean {
         if (mutable.value.active || !mutable.value.taskDiagnostic.startsWith("task_budget:")) return false
-        return send(context.getString(R.string.ai_budget_continue_prompt))
+        return beginTask(context.getString(R.string.ai_budget_continue_prompt), preserveQueue = false, keepReadOnly = true)
     }
     fun send(text: String): Boolean = beginTask(text, preserveQueue = false)
     fun sendWithSkill(text: String, skillPath: String): Boolean {
@@ -1406,7 +1421,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         return true
     }
-    private fun beginTask(text: String, preserveQueue: Boolean, explicitSkill: String? = null): Boolean {
+    private fun beginTask(text: String, preserveQueue: Boolean, keepReadOnly: Boolean = false, explicitSkill: String? = null): Boolean {
         val id = mutable.value.projectId ?: return false
         if (globalSkillMutable.value.active || mutable.value.active || mutable.value.restoring || mutable.value.historyError || !mutable.value.configured || mutable.value.permissionsLoading || mutable.value.permissionsSaving || mutable.value.imagesLoading || mutable.value.questionContinuation != null || imageMaintenance || models.state.value.loading || models.state.value.saving || (text.isBlank() && mutable.value.pendingImages.isEmpty()) || text.length > 16000) return false
         if (!canStartTask()) {
@@ -1422,7 +1437,7 @@ class AiController(private val context: Context, root: (String) -> File, private
         }
         if (!preserveQueue) liveQueue.clear()
         sessionGeneration++
-        mutable.update { it.copy(active = true, planningMode = false, interrupted = false, error = "", retryNotice = "", failureKind = null, taskDiagnostic = "", taskPrompt = text, checkpointId = null, taskUsage = AiTaskUsage(), phase = AiPhase.Requesting, plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnStatistics = it.retainedTurnStatistics(seal = true), turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images, inputLength = text.length, inputReferences = mutable.value.references.toList())
+        mutable.update { it.beginTaskState(keepReadOnly).copy(taskPrompt = text, checkpointId = null, taskUsage = AiTaskUsage(), plan = emptyList(), round = 0, toolCount = 0, turn = it.turn + 1, turnStatistics = it.retainedTurnStatistics(seal = true), turnTimings = (it.turnTimings + AiTurnTiming(it.turn + 1, System.currentTimeMillis())).takeLast(512)) }; append(text + mutable.value.references.takeIf { it.isNotEmpty() }?.joinToString("\n\n", prefix = "\n\n") { it.render() }.orEmpty(), role = AiRole.User, images = images, inputLength = text.length, inputReferences = mutable.value.references.toList())
         draftImages.remove(id to mutable.value.conversationId)
         draftReferences.remove(id to mutable.value.conversationId)
         val references = mutable.value.references.toList()
@@ -1522,6 +1537,16 @@ class AiController(private val context: Context, root: (String) -> File, private
                     }, diagnosticTask, phase = ended.phase, failure = ended.failureKind, active = false,
                         code = taskStopDiagnosticCode(ended.taskDiagnostic),
                         turn = ended.turn, round = ended.round, events = ended.toolCount))
+                    // Terminal events are queued; drain them briefly on IO without changing task outcome or cancellation.
+                    withContext(Dispatchers.IO) {
+                        try {
+                            withTimeoutOrNull(1_000) { diagnostics.flush() }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            // Diagnostics are best effort and must never replace the task result.
+                        }
+                    }
                 }
             }
             if (!paused && mutable.value.phase == AiPhase.Completed && !mutable.value.historyError) {
@@ -2232,7 +2257,7 @@ class AiController(private val context: Context, root: (String) -> File, private
             withoutPinnedSkillBodies(tail, currentState).filterNot { it.optBoolean("zako_memory_snapshot") }.forEach(result::put)
             currentState?.let(result::put)
             val budget = tokenBudget(settings, result, tools)
-            if (!budget.fits || budget.shouldCompress) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
+            if (!compactionResultFits(budget)) throw AiTransportException(kind = AiFailure.Compaction, diagnostic = "summary_still_exceeds_context_threshold")
             val chars = result.toString().length
             currentCoroutineContext().ensureActive()
             Triple(result, budget, chars)

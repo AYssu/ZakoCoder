@@ -70,7 +70,10 @@ data class AiCatalog(val activeId: String? = null, val profiles: List<AiProfile>
 data class AiModelDraft(val id: String?, val name: String, val endpoint: String, val model: String,
     val replacementKey: String?, val parameters: AiParameters = AiParameters(), val context: AiContextOptions = AiContextOptions(),
     val replacementHeaders: Map<String, String>? = null, val protocol: AiApiProtocol = AiApiProtocol.ChatCompletions,
-    val systemPrompt: String = "", val modelChoices: List<String> = emptyList()) {
+    val systemPrompt: String = "", val modelChoices: List<String> = emptyList(),
+    /** Origin captured when replacementKey was entered; null preserves legacy caller behavior. */
+    val replacementKeyOrigin: String? = null) {
     override fun toString() = "AiModelDraft(id=$id, key=<redacted>, headers=<redacted>)"
 }
-class AiOriginChanged : IllegalArgumentException("Credential origin changed")
+open class AiOriginChanged(message: String = "Credential origin changed", cause: Throwable? = null) :
+    IllegalArgumentException(message, cause)

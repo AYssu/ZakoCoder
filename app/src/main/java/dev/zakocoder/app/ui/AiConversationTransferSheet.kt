@@ -40,7 +40,6 @@ internal fun AiConversationTransferSheet(ai: AiController, state: AiState, actio
 
     fun finishExport(uri: android.net.Uri?) {
         val token = exportToken
-        exportToken = null
         if (token == null) {
             busy = false
             if (uri != null) feedback = R.string.conversation_transfer_failed
@@ -48,10 +47,23 @@ internal fun AiConversationTransferSheet(ai: AiController, state: AiState, actio
         }
         scope.launch {
             try {
-                if (uri == null) ai.discardConversationExport(token)
-                else { ai.writePreparedConversationDocument(uri, token); feedback = R.string.conversation_saved }
+                if (uri == null) {
+                    ai.discardConversationExport(token)
+                    exportToken = null
+                } else {
+                    ai.writePreparedConversationDocument(uri, token)
+                    exportToken = null
+                    feedback = R.string.conversation_saved
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) { feedback = transferFailure(error) }
+            catch (error: Exception) {
+                // This sheet has no retry action that owns the token, so discard the retained snapshot now.
+                try { ai.discardConversationExport(token) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { /* The bounded cache expires even if provider cleanup fails. */ }
+                exportToken = null
+                feedback = transferFailure(error)
+            }
             finally { busy = false }
         }
     }

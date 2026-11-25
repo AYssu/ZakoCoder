@@ -17,6 +17,7 @@ class DevelopmentService : Service() {
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var taskActive = false
     private var assistant: AiBackgroundTask? = null
+    private var startGeneration = 0L
     private var promoted = false
     private var refreshPending = false
     private val refreshNotification = Runnable { refreshPending = false; if (promoted) promote() }
@@ -83,8 +84,9 @@ class DevelopmentService : Service() {
         promoted = true
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getLongExtra(EXTRA_SERVICE_GENERATION, -1L)?.takeIf { it >= 0 }?.let { startGeneration = it }
         promote()
-        (application as ZakoApplication).workbench.serviceReady(this)
+        (application as ZakoApplication).workbench.serviceReady(this, startGeneration)
         if (intent?.action == ACTION_STOP) (application as ZakoApplication).workbench.stopAll()
         return START_NOT_STICKY
     }
@@ -93,10 +95,14 @@ class DevelopmentService : Service() {
         handler.removeCallbacks(refreshNotification)
         refreshPending = false
         setTaskActive(false)
-        (application as ZakoApplication).workbench.serviceDestroyed(this)
+        (application as ZakoApplication).workbench.serviceDestroyed(this, startGeneration)
         super.onDestroy()
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
-    companion object { const val ACTION_STOP = "STOP"; const val NOTIFICATION_ID = 7 }
+    companion object {
+        const val ACTION_STOP = "STOP"
+        const val NOTIFICATION_ID = 7
+        const val EXTRA_SERVICE_GENERATION = "dev.zakocoder.app.extra.SERVICE_GENERATION"
+    }
 }

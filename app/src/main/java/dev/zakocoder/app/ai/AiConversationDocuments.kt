@@ -2,8 +2,10 @@ package dev.zakocoder.app.ai
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.AtomicFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -16,6 +18,7 @@ import java.io.IOException
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.security.MessageDigest
 import java.util.UUID
 
 /** SAF-only transfer boundary: provider URIs are never interpreted as filesystem paths. */
@@ -148,16 +151,122 @@ class AiConversationDocuments(private val context: Context) {
     private suspend fun writeBytes(uri: Uri, bytes: ByteArray) {
         require(uri.scheme == "content")
         currentCoroutineContext().ensureActive()
-        (context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("conversation_document_unwritable")).use { output ->
-            var offset = 0
-            while (offset < bytes.size) {
-                currentCoroutineContext().ensureActive()
-                val count = minOf(8192, bytes.size - offset)
-                output.write(bytes, offset, count)
-                offset += count
+        val temporary = temporaryDocument(uri)
+        var committed = false
+        try {
+            currentCoroutineContext().ensureActive()
+            (context.contentResolver.openOutputStream(temporary.uri, "wt")
+                ?: throw IOException("conversation_document_unwritable")).use { output ->
+                var offset = 0
+                while (offset < bytes.size) {
+                    currentCoroutineContext().ensureActive()
+                    val count = minOf(8192, bytes.size - offset)
+                    output.write(bytes, offset, count)
+                    offset += count
+                }
+                output.flush()
             }
-            output.flush()
+            verifyDocument(temporary.uri, bytes, temporary.displayName)
+            currentCoroutineContext().ensureActive()
+            val committedUri = DocumentsContract.renameDocument(
+                context.contentResolver, temporary.uri, temporary.originalName,
+            ) ?: throw IOException("conversation_document_commit_unsupported")
+            verifyDocument(committedUri, bytes, temporary.originalName)
+            committed = true
+        } catch (cancelled: CancellationException) {
+            if (!committed) withContext(NonCancellable) { deleteDocument(temporary.uri) }
+            throw cancelled
+        } catch (error: Exception) {
+            if (!committed) withContext(NonCancellable) { deleteDocument(temporary.uri) }
+            throw IOException("conversation_document_unwritable", error)
         }
+    }
+
+    private data class TemporaryDocument(
+        val uri: Uri,
+        val displayName: String,
+        val originalName: String,
+    )
+
+    private suspend fun temporaryDocument(uri: Uri): TemporaryDocument {
+        val resolver = context.contentResolver
+        val document = resolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_FLAGS),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
+            if (nameIndex < 0 || flagsIndex < 0 || cursor.isNull(nameIndex)) return@use null
+            cursor.getString(nameIndex).takeIf { it.isNotBlank() }?.let { it to cursor.getInt(flagsIndex) }
+        } ?: throw IOException("conversation_document_unwritable")
+        val (originalName, flags) = document
+        if (flags and DocumentsContract.Document.FLAG_SUPPORTS_RENAME == 0)
+            throw IOException("conversation_document_replace_unsupported")
+
+        if (!documentIsEmpty(uri)) throw IOException("conversation_document_exists")
+
+        // CreateDocument grants only the selected document, not a generic parent URI. Treat its
+        // content-empty result as the staging document and probe rename before any truncating write.
+        val extension = originalName.substringAfterLast('.', "")
+            .takeIf { it.length in 1..16 && it.all(Char::isLetterOrDigit) }
+            ?.let { ".$it" }.orEmpty()
+        val temporaryName = "zakocoder-${UUID.randomUUID()}-partial$extension"
+        currentCoroutineContext().ensureActive()
+        val renamed = DocumentsContract.renameDocument(resolver, uri, temporaryName)
+            ?: throw IOException("conversation_document_replace_unsupported")
+        val actualName = documentName(renamed)
+        if (actualName != temporaryName) {
+            runCatching { DocumentsContract.renameDocument(resolver, renamed, originalName) }
+            throw IOException("conversation_document_replace_unsupported")
+        }
+        return TemporaryDocument(renamed, temporaryName, originalName)
+    }
+
+    private fun documentIsEmpty(uri: Uri): Boolean {
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: throw IOException("conversation_document_unreadable")
+        val size = descriptor.use { it.statSize }
+        if (size >= 0) return size == 0L
+        return (context.contentResolver.openInputStream(uri)
+            ?: throw IOException("conversation_document_unreadable")).use { it.read() < 0 }
+    }
+
+    private fun documentName(uri: Uri): String? = context.contentResolver.query(
+        uri,
+        arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst() && !cursor.isNull(index)) cursor.getString(index) else null
+    }
+
+    private suspend fun verifyDocument(uri: Uri, expected: ByteArray, expectedName: String) {
+        if (documentName(uri) != expectedName) throw IOException("conversation_document_commit_unsupported")
+        val digest = MessageDigest.getInstance("SHA-256")
+        var total = 0
+        (context.contentResolver.openInputStream(uri) ?: throw IOException("conversation_document_unreadable")).use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > expected.size) throw IOException("conversation_document_unwritable")
+                digest.update(buffer, 0, count)
+            }
+        }
+        if (total != expected.size || !digest.digest().contentEquals(MessageDigest.getInstance("SHA-256").digest(expected)))
+            throw IOException("conversation_document_unwritable")
+    }
+
+    private fun deleteDocument(uri: Uri) {
+        try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (_: Exception) { }
     }
 
     private companion object {

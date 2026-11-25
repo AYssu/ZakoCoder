@@ -33,21 +33,42 @@ internal object AiProviderRouting {
         }
     }
     private fun headerValueMissing(config: AiConfig, name: String) = config.requestHeaders.keys.none { it.equals(name, true) }
-    fun modelIds(json: JSONObject, protocol: AiApiProtocol): List<String> {
+    private fun malformedCatalog(): Nothing =
+        throw AiTransportException(kind = AiFailure.Protocol, diagnostic = "malformed_model_catalog")
+    private inline fun <T> catalogParse(block: () -> T): T = try { block() }
+        catch (error: AiTransportException) { throw error }
+        catch (_: org.json.JSONException) { malformedCatalog() }
+        catch (_: IllegalArgumentException) { malformedCatalog() }
+    private fun optionalString(json: JSONObject, name: String): String? {
+        if (!json.has(name) || json.isNull(name)) return null
+        return json.get(name) as? String ?: malformedCatalog()
+    }
+    fun modelIds(json: JSONObject, protocol: AiApiProtocol): List<String> = catalogParse {
         val data = if (protocol == AiApiProtocol.Gemini) json.getJSONArray("models") else json.getJSONArray("data")
-        require(data.length() <= 5000)
-        return (0 until data.length()).mapNotNull { index ->
+        if (data.length() > 5000) malformedCatalog()
+        (0 until data.length()).mapNotNull { index ->
             val item = data.getJSONObject(index)
             if (protocol == AiApiProtocol.Gemini) {
-                val methods = item.optJSONArray("supportedGenerationMethods")
+                val methods = if (item.has("supportedGenerationMethods") && !item.isNull("supportedGenerationMethods"))
+                    item.getJSONArray("supportedGenerationMethods") else null
                 if (methods != null && (0 until methods.length()).none { methods.getString(it) == "generateContent" }) null
                 else item.getString("name").removePrefix("models/")
             } else item.getString("id")
         }.filter { id -> id.isNotBlank() && id.length <= 200 && !id.any(Char::isISOControl) }.distinct()
     }
-    fun nextPage(json: JSONObject, protocol: AiApiProtocol): String? = when (protocol) {
-        AiApiProtocol.Gemini -> json.optString("nextPageToken").takeIf { it.isNotEmpty() }
-        AiApiProtocol.Anthropic -> if (json.optBoolean("has_more")) json.getString("last_id") else null
-        else -> null
-    }?.also { require(it.length <= 2048 && !it.any(Char::isISOControl)) }
+    fun nextPage(json: JSONObject, protocol: AiApiProtocol): String? = catalogParse {
+        when (protocol) {
+            AiApiProtocol.Gemini -> optionalString(json, "nextPageToken")?.takeIf { it.isNotEmpty() }
+            AiApiProtocol.Anthropic -> {
+                val hasMore = when {
+                    !json.has("has_more") -> false
+                    else -> json.get("has_more") as? Boolean ?: malformedCatalog()
+                }
+                if (hasMore) optionalString(json, "last_id") ?: malformedCatalog() else null
+            }
+            else -> null
+        }?.also {
+            if (it.length > 2048 || it.any(Char::isISOControl)) malformedCatalog()
+        }
+    }
 }

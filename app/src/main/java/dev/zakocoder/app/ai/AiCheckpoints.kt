@@ -126,7 +126,28 @@ class AiCheckpoints(private val base: File, private val root: (String) -> File) 
     private fun blob(dir: File, item: Item): String {
         val name = item.hash
         val file = File(dir, name)
-        if (!file.exists()) java.io.FileOutputStream(file).use { it.write(item.bytes); it.fd.sync() }
+        val path = file.toPath()
+        if (Files.isRegularFile(path, NOFOLLOW_LINKS)) {
+            val valid = try {
+                Files.newInputStream(path, NOFOLLOW_LINKS).use { it.readBytes().contentEquals(item.bytes) }
+            } catch (_: java.io.IOException) {
+                false
+            }
+            if (valid) return name
+        }
+
+        val temporary = Files.createTempFile(dir.toPath(), ".blob-", ".tmp")
+        try {
+            java.io.FileOutputStream(temporary.toFile()).use {
+                it.write(item.bytes)
+                it.fd.sync()
+            }
+            check(hash(Files.newInputStream(temporary, NOFOLLOW_LINKS).use { it.readBytes() }) == name)
+            // Same-directory atomic move prevents a partial blob from appearing under its content hash.
+            Files.move(temporary, path, ATOMIC_MOVE, REPLACE_EXISTING)
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
         return name
     }
     private fun metadata(dir: File, item: Item?): Any = item?.let { JSONObject().put("hash", if (it.directory) "directory" else blob(dir, it)).put("mode", it.mode) } ?: JSONObject.NULL

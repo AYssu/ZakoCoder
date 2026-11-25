@@ -11,7 +11,7 @@
     <string name="doctor_choose_destination">请选择保存位置</string>
     <string name="doctor_saving">正在保存诊断包…</string>
     <string name="doctor_saved">诊断包已保存，可随问题描述发送给维护者。</string>
-    <string name="doctor_failed">未能导出诊断包，请重试或更换保存位置。</string>
+    <string name="doctor_failed">未能导出诊断包。请重试；若目标文件已存在或当前位置不支持安全替换，请选择新的文件名。</string>
     <string name="doctor_cancelled">已取消保存，任务不受影响。</string>
     <plurals name="doctor_warning_count">
         <item quantity="other">%d 项排查提示，详见诊断包。</item>

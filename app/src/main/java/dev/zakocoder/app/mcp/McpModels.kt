@@ -77,8 +77,13 @@ object McpConfigParser {
         require(server.name.isNotBlank() && server.name.length <= 100 && server.name.none(Char::isISOControl))
         require(server.headers.size <= 64)
         val reserved = setOf("host", "content-length", "content-type", "accept", "connection", "mcp-session-id", "mcp-protocol-version", "origin")
+        val normalizedHeaders = server.headers.keys.map(String::lowercase)
         checkConfig(server.headers.all { (key, value) -> key.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) && key.lowercase() !in reserved && value.length <= 8192 && value.none { it == '\r' || it == '\n' || it == '\u0000' } }, McpFailureReason.Headers)
-        checkConfig(server.headers.keys.map(String::lowercase).distinct().size == server.headers.size, McpFailureReason.Headers)
+        checkConfig(normalizedHeaders.distinct().size == server.headers.size, McpFailureReason.Headers)
+        // Proxy credentials belong to the application proxy, never to the MCP origin request.
+        checkConfig("proxy-authorization" !in normalizedHeaders, McpFailureReason.Headers)
+        // Plaintext HTTP stays supported for self-hosted LAN/loopback bridges; see the MCP docs.
+        // Credentials are still confined to the configured origin by the session's sameOrigin check.
         endpoint(server.url)
     }
 

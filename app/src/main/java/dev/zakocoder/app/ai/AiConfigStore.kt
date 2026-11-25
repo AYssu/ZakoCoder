@@ -6,7 +6,9 @@ import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import android.util.Base64
 import java.io.File
+import java.io.IOException
 import java.net.URI
+import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -20,6 +22,11 @@ data class AiConfig(val endpoint: String = "", val model: String = "", val key: 
     val context: AiContextOptions = AiContextOptions(), val requestHeaders: Map<String, String> = emptyMap(),
     val protocol: AiApiProtocol = AiApiProtocol.ChatCompletions, val systemPrompt: String = "") {
     override fun toString() = "AiConfig(model=$model, key=<redacted>, headers=<redacted>)"
+}
+
+/** A recoverable credential-store failure; the existing models UI treats this as "enter a replacement key". */
+open class AiConfigException(message: String, cause: Throwable? = null) : AiOriginChanged(message, cause) {
+    class KeyUnavailable(cause: Throwable? = null) : AiConfigException("AI credential key unavailable", cause)
 }
 
 /** Blocking IO. v1 is retained for rollback; v2 never stores plaintext credentials. */
@@ -39,6 +46,12 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
             val port = if (uri.port != -1) uri.port else if (uri.scheme == "https") 443 else 80
             return "${uri.scheme}://${uri.host.lowercase(java.util.Locale.ROOT)}:$port"
         }
+        /** Null key origins preserve compatibility for callers that have not captured credential provenance. */
+        internal fun requireReplacementKeyOrigin(replacementKey: String?, replacementKeyOrigin: String?, normalizedEndpoint: String) {
+            if (replacementKey.isNullOrEmpty() || replacementKeyOrigin == null) return
+            val sameOrigin = runCatching { origin(replacementKeyOrigin) == origin(normalizedEndpoint) }.getOrDefault(false)
+            if (!sameOrigin) throw AiOriginChanged()
+        }
     }
     private fun exists(file: AtomicFile) = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
     private fun read(file: AtomicFile): JSONObject {
@@ -55,25 +68,39 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         }
         return JSONObject(bytes.toString(Charsets.UTF_8))
     }
-    private fun secret(): SecretKey {
+    /** Missing keys may only be created for new or fully replaced ciphertext. */
+    private fun secret(allowCreation: Boolean = false): SecretKey = try {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        return (store.getKey(alias, null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
-            init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
-        }.generateKey()
+        (store.getKey(alias, null) as? SecretKey) ?: if (allowCreation) {
+            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+                init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
+            }.generateKey()
+        } else throw AiConfigException.KeyUnavailable()
+    } catch (error: AiConfigException.KeyUnavailable) {
+        throw error
+    } catch (error: GeneralSecurityException) {
+        throw AiConfigException.KeyUnavailable(error)
+    } catch (error: IOException) {
+        throw AiConfigException.KeyUnavailable(error)
     }
-    private fun decrypt(json: JSONObject, id: String? = null): String {
+    private fun decrypt(json: JSONObject, id: String? = null): String = try {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, secret(), GCMParameterSpec(128, Base64.decode(json.getString("iv"), Base64.NO_WRAP)))
         if (id != null) cipher.updateAAD(id.toByteArray())
-        return cipher.doFinal(Base64.decode(json.getString("key"), Base64.NO_WRAP)).toString(Charsets.UTF_8)
+        cipher.doFinal(Base64.decode(json.getString("key"), Base64.NO_WRAP)).toString(Charsets.UTF_8)
+    } catch (error: GeneralSecurityException) {
+        throw AiConfigException.KeyUnavailable(error)
     }
-    private fun encrypt(json: JSONObject, key: String, id: String? = null, headerPayload: Boolean = false): JSONObject {
+    private fun encrypt(json: JSONObject, key: String, id: String? = null, headerPayload: Boolean = false,
+                        allowKeyCreation: Boolean = false): JSONObject = try {
         require(key.length <= if (headerPayload) 50000 else 8192)
         require(!key.any(Char::isISOControl))
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secret()) }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secret(allowKeyCreation)) }
         if (id != null) cipher.updateAAD(id.toByteArray())
-        return json.put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).put("key", Base64.encodeToString(cipher.doFinal(key.toByteArray()), Base64.NO_WRAP))
+        json.put("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP)).put("key", Base64.encodeToString(cipher.doFinal(key.toByteArray()), Base64.NO_WRAP))
+    } catch (error: GeneralSecurityException) {
+        throw AiConfigException.KeyUnavailable(error)
     }
     private fun parameters(json: JSONObject): AiParameters = AiParameters(
         if (json.has("maxTokens")) json.getInt("maxTokens") else null,
@@ -155,7 +182,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val profile = (0 until profiles.length()).map { profiles.getJSONObject(it) }.singleOrNull { it.getString("id") == id } ?: return AiConfig()
         return AiConfig(profile.getString("endpoint"), profile.getString("model"), decrypt(profile, id), parameters(profile), contextOptions(profile), headers(profile), protocol(profile), systemPrompt(profile))
     }
-    @Synchronized fun resolve(draft: AiModelDraft, requireModel: Boolean = true): AiConfig {
+    @Synchronized fun resolve(draft: AiModelDraft, requireModel: Boolean = true, replacementKeyOrigin: String? = null): AiConfig {
         val normalized = endpoint(draft.endpoint)
         require(!requireModel || draft.model.isNotBlank())
         require(draft.model.length <= 200 && !draft.model.any(Char::isISOControl))
@@ -165,6 +192,7 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         draft.context.validate()
         val normalizedPrompt = AiSystemPrompt.normalize(draft.systemPrompt)
         draft.replacementHeaders?.let(AiRequestHeaders::validate)
+        requireReplacementKeyOrigin(draft.replacementKey, draft.replacementKeyOrigin ?: replacementKeyOrigin, normalized)
         val profiles = rawCatalog().getJSONArray("profiles")
         val old = (0 until profiles.length()).map { profiles.getJSONObject(it) }.singleOrNull { it.getString("id") == draft.id }
         require(draft.id == null || old != null)
@@ -186,10 +214,15 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val resolved = resolve(draft)
         val choices = checkedModelChoices(draft.modelChoices)
         val json = rawCatalog(); val profiles = json.getJSONArray("profiles")
+        // Existing profiles always contain encrypted credential/header fields. A missing alias
+        // must fail instead of generating a key that cannot decrypt them.
+        val allowKeyCreation = profiles.length() == 0 && !exists(file)
+        if (!allowKeyCreation) secret()
         require(draft.id != null || profiles.length() < 32)
         val id = draft.id ?: UUID.randomUUID().toString()
         val item = encrypt(JSONObject().put("id", id).put("name", draft.name.trim()).put("endpoint", resolved.endpoint)
-            .put("model", resolved.model).put("hasKey", resolved.key.isNotEmpty()).put("protocol", resolved.protocol.name).put("systemPrompt", resolved.systemPrompt), resolved.key, id)
+            .put("model", resolved.model).put("hasKey", resolved.key.isNotEmpty()).put("protocol", resolved.protocol.name).put("systemPrompt", resolved.systemPrompt),
+            resolved.key, id, allowKeyCreation = allowKeyCreation)
         resolved.parameters.maxTokens?.let { item.put("maxTokens", it) }; resolved.parameters.temperature?.let { item.put("temperature", it) }; resolved.parameters.topP?.let { item.put("topP", it) }
         item.put("service", AiServiceOptionsJson.encode(resolved.parameters.service))
         item.put("thinking", resolved.parameters.thinking.name)
@@ -201,7 +234,8 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
             .put("compressionThresholdPercent", resolved.context.compressionThresholdPercent).put("summaryMaxChars", resolved.context.summaryMaxChars))
         item.put("modelChoices", JSONArray(choices))
         item.put("headerNames", JSONArray(resolved.requestHeaders.keys.toList()))
-        item.put("requestHeaders", encrypt(JSONObject(), JSONObject(resolved.requestHeaders).toString(), id + ":headers", headerPayload = true))
+        item.put("requestHeaders", encrypt(JSONObject(), JSONObject(resolved.requestHeaders).toString(), id + ":headers",
+            headerPayload = true, allowKeyCreation = allowKeyCreation))
         val index = (0 until profiles.length()).singleOrNull { profiles.getJSONObject(it).getString("id") == id }
         if (index == null) profiles.put(item) else profiles.put(index, item)
         if (json.isNull("activeId")) json.put("activeId", id)
@@ -269,7 +303,10 @@ class AiConfigStore(context: Context, name: String = "ai-config-v1", private val
         val previous = if (exists(file)) read(file) else null
         val savedProtocol = previous?.let(::protocol) ?: AiApiProtocol.ChatCompletions
         val savedPrompt = previous?.let(::systemPrompt).orEmpty()
+        // A v1 replacement overwrites the only encrypted payload, so creating a new key here
+        // cannot orphan another profile and allows recovery after Keystore loss.
+        val allowKeyCreation = replacement != null || !exists(file)
         write(file, encrypt(JSONObject().put("endpoint", normalized).put("model", model.trim()).put("protocol", savedProtocol.name)
-            .put("systemPrompt", savedPrompt), replacement ?: old.key))
+            .put("systemPrompt", savedPrompt), replacement ?: old.key, allowKeyCreation = allowKeyCreation))
     }
 }

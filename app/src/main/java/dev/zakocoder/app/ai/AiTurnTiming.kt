@@ -10,7 +10,20 @@ data class AiTurnUsage(val input: Long?, val output: Long?, val partial: Boolean
 
 fun turnUsage(requests: List<AiRequestLog>, turn: Int): AiTurnUsage {
     val records = requests.filter { it.turn == turn }
-    fun sumKnown(select: (AiRequestLog) -> Long?): Long? = records.mapNotNull(select).takeIf { it.isNotEmpty() }?.sum()
+    fun sumKnown(select: (AiRequestLog) -> Long?): Long? {
+        val values = records.mapNotNull(select).filter { it >= 0 }
+        if (values.isEmpty()) return null
+        return values.fold(0L as Long?) { sum, value ->
+            sum?.takeIf { value <= Long.MAX_VALUE - it }?.plus(value)
+        }
+    }
+    val invalidUsage = records.any { record ->
+        listOf(record.inputTokens, record.outputTokens, record.cachedTokens).any { it != null && it < 0 }
+    }
+    val input = sumKnown { it.inputTokens }
+    val output = sumKnown { it.outputTokens }
+    val inputOverflow = input == null && records.any { (it.inputTokens ?: -1) >= 0 }
+    val outputOverflow = output == null && records.any { (it.outputTokens ?: -1) >= 0 }
     val seconds = records.filter { it.outputTokens != null }.sumOf {
         (it.elapsed - (it.firstEvent ?: 0)).coerceAtLeast(1)
     } / 1000.0
@@ -25,9 +38,14 @@ fun turnUsage(requests: List<AiRequestLog>, turn: Int): AiTurnUsage {
     } }?.map { requireNotNull(it.inputTokens) }?.let { counts ->
         counts.fold(0L as Long?) { sum, count -> sum?.takeIf { count <= Long.MAX_VALUE - it }?.plus(count) }
     }
+    val cacheOverflow = cached == null && records.isNotEmpty() &&
+        records.all { it.cachedTokens != null && it.cachedTokens >= 0 }
+    val cacheInputOverflow = cacheInput == null && records.isNotEmpty() &&
+        records.all { it.inputTokens != null && it.inputTokens >= 0 && it.cachedTokens != null && it.cachedTokens in 0..it.inputTokens }
     val percent = if (cached != null && cacheInput != null && cacheInput > 0) cached.toDouble() / cacheInput * 100 else null
-    return AiTurnUsage(sumKnown { it.inputTokens }, sumKnown { it.outputTokens },
-        records.isEmpty() || records.any { it.inputTokens == null || it.outputTokens == null } ||
+    return AiTurnUsage(input, output,
+        invalidUsage || inputOverflow || outputOverflow || cacheOverflow || cacheInputOverflow ||
+            records.isEmpty() || records.any { it.inputTokens == null || it.outputTokens == null } ||
             records.map { it.round }.filter { it > 0 }.distinct().sorted().let { rounds ->
                 rounds.isNotEmpty() && (rounds.first() != 1 || rounds.zipWithNext().any { (a, b) -> b != a + 1 })
             }, seconds, cached, percent)

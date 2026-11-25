@@ -122,6 +122,8 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     var modelChoices by remember(original?.id) { mutableStateOf(original?.modelChoices.orEmpty()) }
     var protocol by remember(original?.id) { mutableStateOf(original?.protocol ?: AiApiProtocol.ChatCompletions) }
     var key by remember { mutableStateOf("") }
+    var keyOrigin by remember(original?.id) { mutableStateOf<String?>(null) }
+    var originCleared by remember(original?.id) { mutableStateOf(false) }
     var clearKey by remember { mutableStateOf(false) }
     var maxEnabled by remember { mutableStateOf(original?.parameters?.maxTokens != null) }
     var maxTokens by remember { mutableStateOf(original?.parameters?.maxTokens?.toString() ?: "4096") }
@@ -146,6 +148,25 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     val dirty = modelChoices != original?.modelChoices.orEmpty() || name != original?.name.orEmpty() || endpoint != original?.endpoint.orEmpty() || model != original?.model.orEmpty() || key.isNotEmpty() || clearKey || parameters != (original?.parameters ?: AiParameters(service = AiServiceOptions(usePreset = true))) || !parametersValid || options.dirty(original) || protocol != (original?.protocol ?: AiApiProtocol.ChatCompletions)
     val editable = !task.active && !state.saving
     fun changed() { ai.models.cancelProbe(); ai.models.clearError() }
+    fun endpointOrigin(value: String): String? = runCatching { AiConfigStore.origin(value) }.getOrNull()
+    fun updateEndpoint(value: String) {
+        val nextOrigin = endpointOrigin(value)
+        if (key.isNotEmpty() && nextOrigin != null && keyOrigin != nextOrigin) {
+            key = ""
+            keyOrigin = null
+            originCleared = true
+        }
+        endpoint = value
+        modelChoices = emptyList()
+        changed()
+    }
+    fun updateKey(value: String) {
+        key = value
+        keyOrigin = value.takeIf { it.isNotEmpty() }?.let { endpointOrigin(endpoint) }
+        if (value.isNotEmpty()) originCleared = false
+        clearKey = false
+        changed()
+    }
     fun selectProtocol(value: AiApiProtocol) {
         val next = options.applyProtocol(parameters, value)
         maxEnabled = next.maxTokens != null; next.maxTokens?.let { maxTokens = it.toString() }
@@ -154,7 +175,8 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
         protocol = value; modelChoices = emptyList(); changed()
     }
     fun selectModel(value: String) { options.modelChanged(value); model = value; changed() }
-    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() }, parameters, options.context(), options.headers(), protocol, options.systemPrompt, modelChoices)
+    fun draft() = AiModelDraft(original?.id, name, endpoint, model, if (clearKey) "" else key.takeIf { it.isNotEmpty() },
+        parameters, options.context(), options.headers(), protocol, options.systemPrompt, modelChoices, keyOrigin)
     val clearNavigationFocus = rememberWorkbenchClearNavigationFocus()
     fun leave() { if (state.saving) return; clearNavigationFocus(); if (dirty) discard = true else close() }
     DisposableEffect(Unit) { onDispose { ai.models.cancelProbe() } }
@@ -187,18 +209,26 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
                     Text(stringResource(protocolParametersHint(protocol)), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                ModelField(endpoint, { endpoint = it; modelChoices = emptyList(); changed() }, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
+                ModelField(endpoint, ::updateEndpoint, R.string.ai_endpoint, enabled = editable, error = endpoint.isNotEmpty() && normalized == null, keyboard = KeyboardType.Uri)
                 AiServiceOptionsSection(protocol, options.service, editable, normalized ?: endpoint) { options.service = it; changed() }
                 if (normalized != null) AiProtocolRequestAddress(normalized, protocol, model,
                     AiServicePresets.resolve(options.service, normalized, protocol).streaming)
                 if (original != null && normalized != null && runCatching { !sameModelOrigin(original.endpoint, normalized) }.getOrDefault(false) &&
                     (original.hasKey || original.headerNames.isNotEmpty())) Text(stringResource(R.string.ai_provider_origin_hint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                WorkbenchTextField(key, { key = it; clearKey = false; changed() }, label = stringResource(if (original?.hasKey == true) R.string.ai_key_replace else R.string.ai_key),
+                WorkbenchTextField(key, ::updateKey, label = stringResource(if (original?.hasKey == true) R.string.ai_key_replace else R.string.ai_key),
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                     singleLine = true, enabled = editable, textStyle = LocalTextStyle.current.copy(fontSize = 13.sp), modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text(stringResource(if (clearKey) R.string.ai_models_key_cleared else if (original?.hasKey == true && key.isEmpty()) R.string.ai_models_key_retained else R.string.ai_models_key_private), fontSize = 11.sp) })
-                if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) { WorkbenchCheckbox(clearKey, { clearKey = it; key = ""; changed() }, enabled = editable); Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp) }
+                    supportingText = { Text(stringResource(when {
+                        originCleared -> R.string.ai_models_origin_changed
+                        clearKey -> R.string.ai_models_key_cleared
+                        original?.hasKey == true && key.isEmpty() -> R.string.ai_models_key_retained
+                        else -> R.string.ai_models_key_private
+                    }), fontSize = 11.sp) })
+                if (original?.hasKey == true) Row(verticalAlignment = Alignment.CenterVertically) {
+                    WorkbenchCheckbox(clearKey, { clearKey = it; key = ""; keyOrigin = null; originCleared = false; changed() }, enabled = editable)
+                    Text(stringResource(R.string.ai_clear_key), fontSize = 12.sp)
+                }
             }
             ModelSection(stringResource(R.string.ai_models_model_section)) {
                 ModelField(model, ::selectModel, R.string.ai_model, enabled = editable, error = model.isNotEmpty() && !modelValid)
@@ -254,7 +284,7 @@ internal fun AiModelEditor(ai: AiController, original: AiProfile?, contentPaddin
     if (templates) WorkbenchSheet(stringResource(R.string.ai_provider_choose), { templates = false }) {
         val finish = LocalWorkbenchSheetAction.current
         AiProviderPresetList(editable) { preset ->
-            finish { endpoint = preset.endpoint; selectProtocol(preset.protocol) }
+            finish { updateEndpoint(preset.endpoint); selectProtocol(preset.protocol) }
         }
     }
     if (discard) WorkbenchAlertDialog(onDismissRequest = { discard = false }, title = { Text(stringResource(R.string.ai_models_discard_title)) }, text = { Text(stringResource(R.string.ai_models_discard_hint)) },

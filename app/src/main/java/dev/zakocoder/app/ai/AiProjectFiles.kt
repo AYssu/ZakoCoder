@@ -5,6 +5,7 @@ import dev.zakocoder.app.editor.FileBaseline
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 
 /** Blocking IO; the controller supplies Dispatchers.IO. */
 class AiProjectFiles(private val root: (String) -> File) {
@@ -52,6 +53,7 @@ class AiProjectFiles(private val root: (String) -> File) {
         validateContent(content)
         val file = resolve(id, path)
         return if (before != null) store.save(before, content) else {
+            val canonicalRoot = root(id).canonicalFile.toPath()
             if (Files.exists(file.toPath(), NOFOLLOW_LINKS)) throw AiFileFailure(AiFileFailure.Reason.TARGET_EXISTS)
             if (!file.parentFile.isDirectory) throw AiFileFailure(AiFileFailure.Reason.PARENT_MISSING)
             val temporary = File.createTempFile(".zakocoder-ai-", ".tmp", file.parentFile)
@@ -61,7 +63,12 @@ class AiProjectFiles(private val root: (String) -> File) {
                 val bytes = ByteArray(encoded.remaining()); encoded.get(bytes)
                 java.io.FileOutputStream(temporary).use { it.write(bytes); it.fd.sync() }
                 resolve(id, path)
-                Files.move(temporary.toPath(), file.toPath())
+                // Re-resolve immediately before publishing. This narrows the parent-symlink race but
+                // cannot eliminate it because path-based move resolves the destination again.
+                if (!file.parentFile.canonicalFile.toPath().startsWith(canonicalRoot)) {
+                    throw AiFileFailure(AiFileFailure.Reason.INVALID_PATH)
+                }
+                Files.move(temporary.toPath(), file.toPath(), ATOMIC_MOVE)
                 store.open(id, path)
             } finally { temporary.delete() }
         }

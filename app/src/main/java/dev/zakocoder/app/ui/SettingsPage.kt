@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.selection.SelectionContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,8 @@ import dev.zakocoder.app.settings.AptSource
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.CardDefaults as MiuixCardDefaults
 import top.yukonga.miuix.kmp.basic.BasicComponent
+
+private data class SettingsSaveAttempt(val accepted: Boolean, val messageBefore: String)
 
 @Composable
 internal fun DetailGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
@@ -173,6 +176,8 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
     val settings = state.settings
     val unavailable = stringResource(R.string.storage_unavailable)
     val notificationSettingsUnavailable = stringResource(R.string.notification_settings_unavailable)
+    val settingsSaveFailed = stringResource(R.string.settings_save_failed)
+    val settingsSaved = stringResource(R.string.settings_saved)
     Column(Modifier.fillMaxSize()) {
         Text(stringResource(R.string.settings_device_hint), Modifier.padding(bottom = 16.dp), fontSize = 12.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(top = 0.dp, bottom = 24.dp)) {
@@ -254,10 +259,23 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
         var source by remember(field, settings) { mutableStateOf(settings.aptSource) }
         var shell by remember(field, settings) { mutableStateOf(settings.terminalShell) }
         var error by remember(field) { mutableStateOf<String?>(null) }
+        var pendingSave by remember(field) { mutableStateOf<SettingsSaveAttempt?>(null) }
         val title = stringResource(when (field) { "shell" -> R.string.terminal_shell; "path" -> R.string.extra_path; "dns" -> R.string.dns_short; "proxy" -> R.string.proxy_short; "source" -> R.string.apt_source; "notifications" -> R.string.running_notifications; else -> R.string.about_title })
         val informational = field == "about" || field == "notifications"
         WorkbenchSheet(title, { editing = null }) {
                 val dismissSheet = LocalWorkbenchSheetDismiss.current
+                LaunchedEffect(field, pendingSave) {
+                    val pending = pendingSave ?: return@LaunchedEffect
+                    val current = if (pending.accepted && workbench.state.value.busy) workbench.state.first { !it.busy } else workbench.state.value
+                    when {
+                        !pending.accepted -> error = settingsSaveFailed
+                        !current.messageIsError && current.message == settingsSaved -> dismissSheet()
+                        current.messageIsError || current.message != pending.messageBefore ->
+                            error = current.message.ifBlank { settingsSaveFailed }
+                        else -> error = settingsSaveFailed
+                    }
+                    pendingSave = null
+                }
                 when (field) {
                     "shell" -> {
                         WindowDropdownPreference(title = stringResource(R.string.terminal_shell),
@@ -306,10 +324,16 @@ internal fun SettingsPage(workbench: Workbench, state: WorkbenchState, onModels:
                     dismissSheet()
                 } else {
                     val candidate = when (field) { "shell" -> settings.copy(terminalShell = shell); "source" -> settings.copy(aptSource = source); "path" -> settings.copy(additionalPath = draft); "dns" -> settings.copy(dns = draft); else -> settings.copy(proxy = draft) }
-                    try { workbench.validateSettings(candidate); workbench.saveSettings(candidate); dismissSheet() }
-                    catch (invalid: IllegalArgumentException) { error = invalid.message }
+                    pendingSave = null
+                    error = null
+                    try {
+                        workbench.validateSettings(candidate)
+                        val messageBefore = workbench.state.value.message
+                        workbench.saveSettings(candidate)
+                        pendingSave = SettingsSaveAttempt(workbench.state.value.busy, messageBefore)
+                    } catch (invalid: IllegalArgumentException) { error = invalid.message }
                 }
-            }, enabled = informational || !state.busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (informational) R.string.close else R.string.save_settings)) }
+            }, enabled = informational || (!state.busy && pendingSave == null), modifier = Modifier.fillMaxWidth()) { Text(stringResource(if (informational) R.string.close else R.string.save_settings)) }
             if (!informational) WorkbenchSecondaryButton(shape = RoundedCornerShape(12.dp), onClick = dismissSheet, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(if (informational) R.string.close else R.string.cancel))
             }

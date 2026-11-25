@@ -143,7 +143,9 @@ internal object AiAnthropicWire {
     fun diagnostic(body: JSONObject): JSONObject {
         fun scrub(value: Any?): Any? = when (value) {
             is JSONObject -> JSONObject().apply { value.keys().forEach { name ->
-                val opaque = name == "signature" || (name == "data" && value.optString("type") in setOf("redacted_thinking", "base64"))
+                val opaque = name == "signature" ||
+                    name == "thinking" ||
+                    (name == "data" && value.optString("type") in setOf("redacted_thinking", "base64"))
                 put(name, if (opaque) "[opaque content omitted]" else scrub(value.get(name)))
             } }
             is JSONArray -> JSONArray().apply { repeat(value.length()) { put(scrub(value.get(it))) } }

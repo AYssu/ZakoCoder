@@ -20,11 +20,44 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 data class DoctorState(val busy: Boolean = false, val ready: Boolean = false,
     val error: Boolean = false, val warningCount: Int = 0)
 
 internal data class DoctorInput(val ai: AiState, val workbench: WorkbenchState, val mcp: McpState, val ssh: SshState)
+
+private val fatalMarkerFields = setOf("time", "exceptionClass", "thread", "stage")
+
+/** Revalidates persisted crash markers because the file is outside the in-memory trust boundary. */
+internal fun fatalMarkersReport(lines: List<String>): JSONArray {
+    val markers = lines.mapNotNull(::validatedFatalMarker).takeLast(5)
+    return JSONArray().apply { markers.forEach { put(it) } }
+}
+
+private fun validatedFatalMarker(line: String): JSONObject? = try {
+    val marker = JSONObject(line)
+    val keys = marker.keys().asSequence().toSet()
+    val required = setOf("time", "exceptionClass", "thread")
+    val time = marker.opt("time")
+    val exceptionClass = marker.opt("exceptionClass")
+    val thread = marker.opt("thread")
+    val stage = marker.opt("stage")
+    val valid = (keys == required || keys == fatalMarkerFields) &&
+        time is Long && time >= 0 &&
+        validFatalLabel(exceptionClass, 256) &&
+        validFatalLabel(thread, 128, allowSpaces = true) &&
+        (stage == null || validFatalLabel(stage, 64))
+    marker.takeIf { valid }
+} catch (_: Exception) {
+    null
+}
+
+private fun validFatalLabel(value: Any?, maxLength: Int, allowSpaces: Boolean = false): Boolean =
+    value is String && value.length <= maxLength && value.all { character ->
+        character in 'a'..'z' || character in 'A'..'Z' || character in '0'..'9' ||
+            character in "._-\$[]#()" || allowSpaces && character == ' '
+    }
 
 /** Local, user-initiated diagnostics. Does not probe services, load credentials or interrupt an active task. */
 class DoctorController internal constructor(private val context: Context, private val snapshot: suspend () -> DoctorInput) {
@@ -107,6 +140,14 @@ class DoctorController internal constructor(private val context: Context, privat
             .put("notificationsEnabled", notifications.areNotificationsEnabled())
             .put("batteryOptimizationExempt", power.isIgnoringBatteryOptimizations(context.packageName))
             .put("powerSaveMode", power.isPowerSaveMode).put("deviceIdleMode", power.isDeviceIdleMode)
+            // prepare() invokes this method on Dispatchers.IO; FatalMarker reads only bounded files.
+            .put("fatalMarkers", try {
+                fatalMarkersReport(FatalMarker(File(context.filesDir, "diagnostics")).snapshot())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                JSONArray()
+            })
         if (!notifications.areNotificationsEnabled()) warnings += "NOTIFICATIONS_DISABLED"
         if (!power.isIgnoringBatteryOptimizations(context.packageName)) warnings += "BATTERY_OPTIMIZED"
         try {

@@ -48,6 +48,16 @@ class EditorFileStore(private val projectRoot: (String) -> File) {
         }
     }
     private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun saveConflictCopy(target: File, bytes: ByteArray) {
+        val conflict = Files.createTempFile(requireNotNull(target.parentFile).toPath(),
+            target.name.take(100) + ".zakocoder-conflict-", ".txt")
+        try {
+            java.io.FileOutputStream(conflict.toFile()).use { it.write(bytes); it.fd.sync() }
+        } catch (error: Exception) {
+            runCatching { Files.deleteIfExists(conflict) }
+            throw error
+        }
+    }
     private fun checkText(text: String) {
         if ('\u0000' in text) fail(EditorFileException.Reason.UNSUPPORTED)
         var lines = 1
@@ -75,6 +85,7 @@ class EditorFileStore(private val projectRoot: (String) -> File) {
         catch (_: java.nio.charset.CharacterCodingException) { fail(EditorFileException.Reason.UNSUPPORTED) }
         val bytes = (if (baseline.bom) byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) else byteArrayOf()) + ByteArray(encoded.remaining()).also { encoded.get(it) }
         if (bytes.size > MAX_BYTES) fail(EditorFileException.Reason.LIMIT)
+        val expectedDigest = digest(bytes)
         val target = resolve(baseline.projectId, baseline.path)
         if (digest(read(target)) != baseline.digest) fail(EditorFileException.Reason.CONFLICT)
         val permissions = Files.getPosixFilePermissions(target.toPath(), NOFOLLOW_LINKS)
@@ -85,7 +96,16 @@ class EditorFileStore(private val projectRoot: (String) -> File) {
             // Recheck just before committing: external terminal writes do not share our lock.
             if (resolve(baseline.projectId, baseline.path) != target || digest(read(target)) != baseline.digest) fail(EditorFileException.Reason.CONFLICT)
             Files.move(temporary, target.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+            // A post-move check catches writes after our move, but cannot detect an external write
+            // between the last precheck and the move. Preserve our bytes and report on a mismatch.
+            val committedDigest = try { digest(read(target)) } catch (_: Exception) { null }
+            if (committedDigest != expectedDigest) {
+                val conflict = EditorFileException(EditorFileException.Reason.CONFLICT)
+                try { saveConflictCopy(target, bytes) }
+                catch (error: Exception) { conflict.addSuppressed(error) }
+                throw conflict
+            }
         } finally { Files.deleteIfExists(temporary) }
-        return baseline.copy(text = text, digest = digest(bytes))
+        return baseline.copy(text = text, digest = expectedDigest)
     }
 }

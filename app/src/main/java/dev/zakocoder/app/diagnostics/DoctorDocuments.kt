@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.util.AtomicFile
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -14,6 +15,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -99,7 +101,92 @@ internal class DoctorDocuments(private val context: Context) {
         // Retain the snapshot until UI acknowledges success, including across recreation/cancellation.
     }
 
-    private suspend fun writeProvider(uri: Uri, bytes: ByteArray): Unit = coroutineScope {
+    private data class TemporaryDocument(
+        val uri: Uri,
+        val displayName: String,
+        val originalName: String,
+    )
+
+    private suspend fun writeProvider(uri: Uri, bytes: ByteArray) {
+        val temporary = temporaryDocument(uri)
+        var committed = false
+        try {
+            currentCoroutineContext().ensureActive()
+            writeDescriptor(temporary.uri, bytes)
+            verifyDocument(temporary.uri, bytes, temporary.displayName)
+            currentCoroutineContext().ensureActive()
+            val committedUri = DocumentsContract.renameDocument(
+                context.contentResolver, temporary.uri, temporary.originalName,
+            ) ?: throw IOException("doctor_output_commit_unsupported")
+            verifyDocument(committedUri, bytes, temporary.originalName)
+            committed = true
+        } catch (cancelled: CancellationException) {
+            if (!committed) withContext(NonCancellable) { deleteDocument(temporary.uri) }
+            throw cancelled
+        } catch (error: Exception) {
+            if (!committed) withContext(NonCancellable) { deleteDocument(temporary.uri) }
+            throw IOException("doctor_output_unwritable", error)
+        }
+    }
+
+    private suspend fun temporaryDocument(uri: Uri): TemporaryDocument {
+        val resolver = context.contentResolver
+        val document = resolver.query(
+            uri,
+            arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_FLAGS),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val flagsIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_FLAGS)
+            if (nameIndex < 0 || flagsIndex < 0 || cursor.isNull(nameIndex)) return@use null
+            cursor.getString(nameIndex).takeIf { it.isNotBlank() }?.let { it to cursor.getInt(flagsIndex) }
+        } ?: throw IOException("doctor_output_unavailable")
+        val (originalName, flags) = document
+        if (flags and DocumentsContract.Document.FLAG_SUPPORTS_RENAME == 0)
+            throw IOException("doctor_output_replace_unsupported")
+
+        if (!documentIsEmpty(uri)) throw IOException("doctor_output_exists")
+
+        // CreateDocument grants only the selected document, not a generic parent URI. Treat its
+        // content-empty result as the staging document and probe rename before any truncating write.
+        val extension = originalName.substringAfterLast('.', "")
+            .takeIf { it.length in 1..16 && it.all(Char::isLetterOrDigit) }
+            ?.let { ".$it" }.orEmpty()
+        val temporaryName = "zakocoder-${UUID.randomUUID()}-partial$extension"
+        currentCoroutineContext().ensureActive()
+        val renamed = DocumentsContract.renameDocument(resolver, uri, temporaryName)
+            ?: throw IOException("doctor_output_replace_unsupported")
+        if (documentName(renamed) != temporaryName) {
+            runCatching { DocumentsContract.renameDocument(resolver, renamed, originalName) }
+            throw IOException("doctor_output_replace_unsupported")
+        }
+        return TemporaryDocument(renamed, temporaryName, originalName)
+    }
+
+    private fun documentIsEmpty(uri: Uri): Boolean {
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: throw IOException("doctor_output_unavailable")
+        val size = descriptor.use { it.statSize }
+        if (size >= 0) return size == 0L
+        return (context.contentResolver.openInputStream(uri)
+            ?: throw IOException("doctor_output_unavailable")).use { it.read() < 0 }
+    }
+
+    private fun documentName(uri: Uri): String? = context.contentResolver.query(
+        uri,
+        arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+        if (index >= 0 && cursor.moveToFirst() && !cursor.isNull(index)) cursor.getString(index) else null
+    }
+
+    private suspend fun writeDescriptor(uri: Uri, bytes: ByteArray): Unit = coroutineScope {
         val signal = CancellationSignal()
         val descriptor = AtomicReference<ParcelFileDescriptor?>()
         val finished = AtomicBoolean(false)
@@ -129,12 +216,36 @@ internal class DoctorDocuments(private val context: Context) {
                     offset += count
                 }
                 output.flush()
+                output.fd.sync()
             }
         } finally {
             finished.set(true)
             try { descriptor.getAndSet(null)?.close() }
             finally { closer.cancel() }
         }
+    }
+
+    private suspend fun verifyDocument(uri: Uri, expected: ByteArray, expectedName: String) {
+        if (documentName(uri) != expectedName) throw IOException("doctor_output_commit_unsupported")
+        val digest = MessageDigest.getInstance("SHA-256")
+        var total = 0
+        (context.contentResolver.openInputStream(uri) ?: throw IOException("doctor_output_unavailable")).use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > expected.size) throw IOException("doctor_output_unwritable")
+                digest.update(buffer, 0, count)
+            }
+        }
+        if (total != expected.size || !digest.digest().contentEquals(MessageDigest.getInstance("SHA-256").digest(expected)))
+            throw IOException("doctor_output_unwritable")
+    }
+
+    private fun deleteDocument(uri: Uri) {
+        try { DocumentsContract.deleteDocument(context.contentResolver, uri) } catch (_: Exception) { }
     }
 
     suspend fun discard(token: String): Unit = withContext(Dispatchers.IO) {
@@ -158,6 +269,7 @@ internal class DoctorDocuments(private val context: Context) {
         private const val NOTICE = """ZakoCoder diagnostic bundle (schema 1)
 
 report.json: app/device metadata, current conversation task/request/tool counters, environment and permission status.
+system.fatalMarkers lists at most five validated crash metadata records: time, exception class, thread and optional stage; throwable text and stack traces are never read.
 events.jsonl: recent device-wide operational events with local correlation IDs and fixed error categories.
 
 No message bodies, reasoning text, source files, commands, URLs, server names, headers, credentials, screenshots or raw logcat are included.

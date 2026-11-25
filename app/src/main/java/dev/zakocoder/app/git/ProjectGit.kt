@@ -8,6 +8,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
 
 internal const val GIT_PREFIX = "env GIT_SSL_NO_VERIFY=0 GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt GIT_SSL_CAPATH=/etc/ssl/certs GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TRACE=0 GIT_TRACE_PACKET=0 GIT_TRACE_CURL=0 GIT_CURL_VERBOSE=0 GIT_SSH_COMMAND='ssh -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o PermitLocalCommand=no -o ClearAllForwardings=yes' GIT_ALLOW_PROTOCOL=https:ssh git -c credential.helper= -c core.askPass=/bin/false -c credential.useHttpPath=true -c http.followRedirects=false -c core.hooksPath=/dev/null -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always -c core.fsmonitor=false -c diff.external= -c merge.autoEdit=no"
 /** Command-line URL-specific TLS and header settings override repository-local HTTP options. */
@@ -27,6 +28,49 @@ data class GitState(
     val detached: Boolean = false, val remotes: List<GitRemote> = emptyList(), val branches: List<String> = emptyList(),
     val conflicts: List<String> = emptyList(), val merging: Boolean = false, val failure: GitFailure? = null, val operation: String = "", val statusKnown: Boolean = false,
 )
+
+/**
+ * Serializes Git admission without holding a lock while a Git command runs. The factory must
+ * return a lazy Job that waits for an external admission signal before doing work; this gate
+ * records and starts it as one atomic transition.
+ */
+internal class GitOperationGate {
+    private val admission = Mutex()
+    private val jobLock = Any()
+    private var job: Job? = null
+
+    fun start(create: () -> Job?): Boolean = synchronized(jobLock) {
+        if (!admission.tryLock()) {
+            false
+        } else {
+            try {
+                if (job != null) {
+                    false
+                } else {
+                    val next = create()
+                    if (next == null) {
+                        false
+                    } else {
+                        job = next
+                        next.start()
+                        true
+                    }
+                }
+            } finally {
+                admission.unlock()
+            }
+        }
+    }
+
+    fun cancel() {
+        synchronized(jobLock) { job }?.cancel()
+    }
+
+    fun finished(current: Job) {
+        synchronized(jobLock) { if (job === current) job = null }
+    }
+}
+
 class ProjectGit(
     private val context: Context,
     private val execute: suspend (String, String) -> CommandResult,
@@ -34,8 +78,8 @@ class ProjectGit(
     private val networkExecute: suspend (String, String, String) -> CommandResult = { id, script, _ -> execute(id, script) },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var job: Job? = null
-    fun stop() { job?.cancel() }
+    private val operations = GitOperationGate()
+    fun stop() = operations.cancel()
     /** Caller must redact credential material before supplying streamed process output. */
     fun reportOutput(text: String) {
         if (mutable.value.busy) mutable.update { it.copy(output = safeGitOutput(text)) }
@@ -43,28 +87,41 @@ class ProjectGit(
     private val mutable = MutableStateFlow(GitState()); val state = mutable.asStateFlow()
     fun select(id: String) { if (!mutable.value.busy) { mutable.value = GitState(projectId = id); refresh() } }
     private fun operation(name: String = "refresh", action: suspend (String) -> Unit) {
-        val id = mutable.value.projectId ?: return
-        if (mutable.value.busy) return
-        if (!available()) { fail(GitFailure.Unavailable); return }
-        if (name !in setOf("refresh", "init") && !mutable.value.statusKnown) { fail(GitFailure.StatusUnavailable); return }
-        mutable.update { it.copy(busy = true, error = "", failure = null, output = "", operation = name) }
-        job = scope.launch {
-            try { action(id) }
-            catch (cancelled: CancellationException) {
-                val reason = if (cancelled is TimeoutCancellationException) GitFailure.TimedOut else GitFailure.Cancelled
-                withContext(NonCancellable) {
-                    try { withTimeout(5000) { status(id) } }
-                    catch (_: TimeoutCancellationException) { invalidateStatus(GitFailure.StatusUnavailable) }
-                    catch (recheckCancelled: CancellationException) { throw recheckCancelled }
-                    catch (_: Exception) { invalidateStatus(GitFailure.StatusUnavailable) }
-                    fail(reason)
+        var admit: CompletableDeferred<Unit>? = null
+        val accepted = operations.start {
+            val id = mutable.value.projectId ?: return@start null
+            if (mutable.value.busy) return@start null
+            if (!available()) { fail(GitFailure.Unavailable); return@start null }
+            if (name !in setOf("refresh", "init") && !mutable.value.statusKnown) { fail(GitFailure.StatusUnavailable); return@start null }
+            mutable.update { it.copy(busy = true, error = "", failure = null, output = "", operation = name) }
+            // The Job is recorded under the admission lock but waits here, so Git work never runs in that lock.
+            val startSignal = CompletableDeferred<Unit>()
+            admit = startSignal
+            scope.launch(start = CoroutineStart.LAZY) {
+                val currentJob = coroutineContext[Job]
+                try {
+                    startSignal.await()
+                    try { action(id) }
+                    catch (cancelled: CancellationException) {
+                        val reason = if (cancelled is TimeoutCancellationException) GitFailure.TimedOut else GitFailure.Cancelled
+                        withContext(NonCancellable) {
+                            try { withTimeout(5000) { status(id) } }
+                            catch (_: TimeoutCancellationException) { invalidateStatus(GitFailure.StatusUnavailable) }
+                            catch (recheckCancelled: CancellationException) { throw recheckCancelled }
+                            catch (_: Exception) { invalidateStatus(GitFailure.StatusUnavailable) }
+                            fail(reason)
+                        }
+                        throw cancelled
+                    }
+                    catch (_: IllegalArgumentException) { fail(GitFailure.InvalidInput) }
+                    catch (_: Exception) { if (mutable.value.failure == null) fail(GitFailure.Unknown) }
+                } finally {
+                    currentJob?.let(operations::finished)
+                    mutable.update { it.copy(busy = false, operation = "") }
                 }
-                throw cancelled
             }
-            catch (_: IllegalArgumentException) { fail(GitFailure.InvalidInput) }
-            catch (_: Exception) { if (mutable.value.failure == null) fail(GitFailure.Unknown) }
-            finally { mutable.update { it.copy(busy = false, operation = "") } }
         }
+        if (accepted) admit?.complete(Unit)
     }
     private fun fail(failure: GitFailure) { mutable.update { it.copy(failure = failure, error = context.getString(if (failure == GitFailure.NotRepository) R.string.git_not_repository else R.string.git_operation_error)) } }
     private suspend fun command(id: String, script: String, remote: String? = null): Boolean {

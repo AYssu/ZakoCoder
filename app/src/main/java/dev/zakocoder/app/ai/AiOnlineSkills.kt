@@ -3,6 +3,7 @@ package dev.zakocoder.app.ai
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URI
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
@@ -316,7 +317,7 @@ internal class AiOnlineSkillController(private val service: AiOnlineSkills, priv
         operation = scope.launch {
             try {
                 val prepared = service.prepare(catalog, current.selected) { done, total -> update(generation) { it.copy(completed = done, total = total) } }
-                operationId = UUID.randomUUID().toString()
+                operationId = withContext(Dispatchers.IO) { operationIdForArchive(prepared.bytes) }
                 update(generation) { it.copy(prepared = prepared) }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: OnlineSkillException) { update(generation) { it.copy(problem = failure.problem) } }
@@ -341,6 +342,17 @@ internal class AiOnlineSkillController(private val service: AiOnlineSkills, priv
     fun cancel() { ++revision; operation?.cancel(); mutable.update { it.copy(loading = false, preparing = false, installing = false) } }
     fun reset() { cancel(); mutable.value = OnlineSkillState() }
     private fun update(generation: Int, transform: (OnlineSkillState) -> OnlineSkillState) { mutable.update { if (revision == generation) transform(it) else it } }
+}
+
+/** The archive is the install input, so its digest also survives an interrupted state publication. */
+private fun operationIdForArchive(bytes: ByteArray): String {
+    val uuidBytes = MessageDigest.getInstance("SHA-256").digest(bytes).copyOf(16)
+    uuidBytes[6] = ((uuidBytes[6].toInt() and 0x0f) or 0x80).toByte()
+    uuidBytes[8] = ((uuidBytes[8].toInt() and 0x3f) or 0x80).toByte()
+    val buffer = ByteBuffer.wrap(uuidBytes)
+    val mostSignificant = buffer.long
+    val leastSignificant = buffer.long
+    return UUID(mostSignificant, leastSignificant).toString()
 }
 
 private fun belongs(path: String, directory: String) = directory.isEmpty() || path.startsWith("$directory/")
