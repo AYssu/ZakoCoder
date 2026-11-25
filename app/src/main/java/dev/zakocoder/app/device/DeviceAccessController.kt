@@ -104,6 +104,7 @@ class DeviceAccessController(context: Context) {
     }
 
     /** Revokes this application's leases immediately; does not change any Root manager policy. */
+    @Suppress("UseKtx") // edit() returns Unit, but the commit() result decides whether revocation is durable.
     fun useBasic() {
         val lease = synchronized(selectionLock) {
             epoch.incrementAndGet()
@@ -120,6 +121,7 @@ class DeviceAccessController(context: Context) {
                 mutex.withLock {
                     if (lease != generation) return@withLock
                     val saved = withContext(Dispatchers.IO) {
+                        // commit=true keeps the revocation reboot-safe instead of the async apply().
                         preferences.edit().putString("mode", "basic").commit()
                     }
                     synchronized(selectionLock) {
