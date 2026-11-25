@@ -100,14 +100,21 @@ internal fun UpdateContent(state: UpdateState, configure: (Boolean, UpdateChanne
 @Composable
 internal fun UpdateReleaseNotes(notes: String) {
     var link by remember { mutableStateOf<String?>(null) }
+    var openFailed by remember { mutableStateOf(false) }
     val handler = LocalUriHandler.current
     if (notes.isBlank()) Text(stringResource(R.string.update_notes_empty), style = MaterialTheme.typography.bodyMedium)
-    else AiMarkdown(notes, bodyFontSize = 14.sp, onLink = { link = it })
+    else AiMarkdown(notes, bodyFontSize = 14.sp, onLink = { openFailed = false; link = it })
+    if (openFailed) Text(stringResource(R.string.terminal_preview_browser_failed),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     link?.let { destination ->
         WorkbenchAlertDialog(onDismissRequest = { link = null }, title = { Text(stringResource(R.string.ai_open_link)) },
             text = { Text(stringResource(R.string.ai_open_link_detail, destination)) },
             confirmButton = { WorkbenchDialogButton(onClick = {
-                try { handler.openUri(destination) } catch (_: android.content.ActivityNotFoundException) { }
+                try {
+                    if (AiMarkdownDocument.externalLink(destination)) handler.openUri(destination) else openFailed = true
+                } catch (_: android.content.ActivityNotFoundException) { openFailed = true }
+                catch (_: SecurityException) { openFailed = true }
+                catch (_: IllegalArgumentException) { openFailed = true }
                 finally { link = null }
             }) { Text(stringResource(R.string.ai_open_browser)) } },
             dismissButton = { WorkbenchDialogButton(onClick = { link = null }) { Text(stringResource(R.string.cancel)) } })

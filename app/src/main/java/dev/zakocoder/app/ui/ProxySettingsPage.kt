@@ -15,12 +15,36 @@ import androidx.compose.ui.unit.dp
 import dev.zakocoder.app.R
 import dev.zakocoder.app.Workbench
 import dev.zakocoder.app.WorkbenchState
+import kotlinx.coroutines.flow.first
+
+internal sealed interface ProxySaveOutcome {
+    data object Saved : ProxySaveOutcome
+    data class Failed(val message: String) : ProxySaveOutcome
+}
+
+private data class ProxySaveAttempt(val accepted: Boolean, val messageBefore: String)
 
 /** External HTTP/SOCKS5 endpoints only. Saving and credential storage remain in the settings layer. */
 @Composable
 internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBack: () -> Unit) {
     val git by workbench.git.state.collectAsState()
     val tasks by workbench.projectTasks.state.collectAsState()
+    var pendingSave by remember { mutableStateOf<ProxySaveAttempt?>(null) }
+    var saveOutcome by remember { mutableStateOf<ProxySaveOutcome?>(null) }
+    val saveFailed = stringResource(R.string.settings_save_failed)
+    val settingsSaved = stringResource(R.string.settings_saved)
+    LaunchedEffect(pendingSave) {
+        val pending = pendingSave ?: return@LaunchedEffect
+        val current = if (pending.accepted && workbench.state.value.busy) workbench.state.first { !it.busy } else workbench.state.value
+        saveOutcome = when {
+            !pending.accepted -> ProxySaveOutcome.Failed(saveFailed)
+            !current.messageIsError && current.message == settingsSaved -> ProxySaveOutcome.Saved
+            current.messageIsError || current.message != pending.messageBefore ->
+                ProxySaveOutcome.Failed(current.message.ifBlank { saveFailed })
+            else -> ProxySaveOutcome.Failed(saveFailed)
+        }
+        pendingSave = null
+    }
     ProxySettingsContent(
         endpoint = state.settings.proxy,
         display = state.proxyDisplay,
@@ -28,9 +52,15 @@ internal fun ProxySettingsPage(workbench: Workbench, state: WorkbenchState, onBa
         onBack = onBack,
         onSave = { value ->
             val settings = state.settings.copy(proxy = value)
+            pendingSave = null
+            saveOutcome = null
             workbench.validateSettings(settings)
+            val messageBefore = workbench.state.value.message
             workbench.saveSettings(settings)
+            pendingSave = ProxySaveAttempt(workbench.state.value.busy, messageBefore)
         },
+        saveOutcome = saveOutcome,
+        onSaveOutcomeConsumed = { saveOutcome = null },
     )
 }
 
@@ -41,19 +71,38 @@ internal fun ProxySettingsContent(
     busy: Boolean,
     onBack: () -> Unit,
     onSave: (String) -> Unit,
+    saveOutcome: ProxySaveOutcome? = null,
+    onSaveOutcomeConsumed: () -> Unit = {},
 ) {
     // URLs may contain credentials: never persist the editing draft in saved instance state.
     var draft by remember(endpoint) { mutableStateOf(endpoint) }
     var invalid by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(saveOutcome) {
+        when (val outcome = saveOutcome) {
+            ProxySaveOutcome.Saved -> {
+                // Clear credentials after confirmed persistence; the status exposes a masked URL.
+                draft = ""
+                invalid = false
+                submitted = true
+                saveError = null
+            }
+            is ProxySaveOutcome.Failed -> {
+                invalid = false
+                submitted = false
+                saveError = outcome.message
+            }
+            null -> Unit
+        }
+        if (saveOutcome != null) onSaveOutcomeConsumed()
+    }
     fun save(value: String) {
         invalid = false
         submitted = false
+        saveError = null
         try {
             onSave(value)
-            // Clear newly entered credentials after submission; the status exposes a masked URL.
-            draft = ""
-            submitted = true
         } catch (_: IllegalArgumentException) {
             invalid = true
         }
@@ -87,7 +136,7 @@ internal fun ProxySettingsContent(
                 Text(stringResource(R.string.proxy_section_manual), style = MaterialTheme.typography.titleSmall)
                 WorkbenchTextField(
                     value = draft,
-                    onValueChange = { draft = it; invalid = false; submitted = false },
+                    onValueChange = { draft = it; invalid = false; submitted = false; saveError = null },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !busy,
                     label = stringResource(R.string.proxy_manual_label),
@@ -102,6 +151,7 @@ internal fun ProxySettingsContent(
                 Text(stringResource(R.string.proxy_mode_manual_hint), style = MaterialTheme.typography.bodySmall, color = TertiaryText)
                 if (submitted) Text(stringResource(R.string.proxy_feedback_saved),
                     style = MaterialTheme.typography.bodySmall, color = TertiaryText)
+                saveError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                 WorkbenchPrimaryButton(onClick = { save(draft) }, enabled = !busy,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(stringResource(if (busy) R.string.proxy_manual_saving else R.string.proxy_manual_save))

@@ -169,7 +169,8 @@ internal fun EnvironmentPage(workbench: Workbench, state: WorkbenchState, onTerm
         text = { Text(stringResource(R.string.dependency_confirmation, "/workspace/$id", plan.command)) },
         confirmButton = { WorkbenchDialogButton(onClick = { dependency = null; workbench.installDependencies(id, plan) }) { Text(stringResource(R.string.run)) } },
         dismissButton = { WorkbenchDialogButton(onClick = { dependency = null }) { Text(stringResource(R.string.cancel)) } }) }
-    selectedRun?.let { run -> project?.let { current ->
+    selectedRun?.let { selected -> project?.let { current ->
+        val run = dependencyRuns.entries.firstOrNull { it.id == selected.id } ?: selected
         ProjectRunLog(workbench, current.id, run, onAi) { selectedRun = null }
     } }
 }
