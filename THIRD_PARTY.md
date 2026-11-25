@@ -143,7 +143,7 @@ Full 增加了实际随 APK 分发的包集合，不能沿用“仅在用户设�
 - Kotlin、Coroutines、AndroidX、Compose：Apache-2.0 等各自上游声明，通过 Maven 仓库解析。
 - Apache Commons Compress（Apache-2.0）：XZ/TAR 安全解包；XZ for Java：上游公开领域声明及附属许可，保留依赖内声明。
 - JUnit 4（EPL-1.0）和 AndroidX Test：仅测试依赖，不作为用户项目预置数据。
-- Gradle Wrapper：标准启动脚本和 jar，原始版权声明保留；仓库构建固定 Gradle 9.8.2，官方分发 `https://services.gradle.org/distributions/gradle-9.8.2-bin.zip`，SHA-256 `21bd5da2de49b642904077f38c0efdc7778e92b3ed0889392dca61b97e389607`。上文手机开发工具包的 Gradle 8.13 是独立安装版本，未随宿主构建升级。
+- Gradle Wrapper：标准启动脚本和 jar，原始版权声明保留；仓库构建固定 Gradle 9.9.1，官方分发 `https://services.gradle.org/distributions/gradle-9.9.1-bin.zip`，SHA-256 `d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228`。上文手机开发工具包的 Gradle 8.13 是独立安装版本，未随宿主构建升级。
 
 新增或更新第三方材料需记录组件、精确版本/提交、官方来源、许可、修改、摘要和分发方式；不得删除声明。对二进制对应源码不明确的组件，不能将“未提交 Git”当作无需许可审查的理由。
 
