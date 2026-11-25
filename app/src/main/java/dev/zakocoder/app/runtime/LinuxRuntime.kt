@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Process
 import android.os.StatFs
 import android.system.Os
+import android.util.Log
 import dev.zakocoder.app.BuildConfig
 import dev.zakocoder.app.R
 import dev.zakocoder.app.settings.AppSettings
@@ -23,6 +24,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -31,6 +33,16 @@ import kotlin.coroutines.resumeWithException
 
 data class CommandResult(val exitCode: Int, val output: String, val runId: String? = null)
 data class RuntimeCommand(val executable: String, val arguments: List<String>, val environment: Map<String, String>)
+
+internal enum class InstallAdmission { Ready, Blocked, Repair }
+
+/** Installed runtime wins over a present directory; an uninstalled directory is repairable staging debris. */
+internal fun installAdmission(installed: Boolean, directoryPresent: Boolean): InstallAdmission =
+    when {
+        installed -> InstallAdmission.Blocked
+        directoryPresent -> InstallAdmission.Repair
+        else -> InstallAdmission.Ready
+    }
 
 class LinuxRuntime(private val context: Context, private val proxyCredentials: () -> NetworkProxy.Credentials? = { null }) {
     /** Installed by Workbench; invoked on IO before every project process. */
@@ -71,6 +83,37 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
         it.isFile && it.readText() == image.getString("sha256") && File(root, "usr/bin/bash").isFile
     }
 
+    /** Preserve the stale root until a replacement installs; a failed move must never delete it. */
+    private fun moveIncompleteEnvironmentAside() {
+        val destination = File(root.parentFile, "${root.name}.incomplete-${System.currentTimeMillis()}")
+        try {
+            Files.move(root.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        } catch (error: java.io.IOException) {
+            throw java.io.IOException(context.getString(R.string.runtime_repair_move_failed), error)
+        } catch (error: SecurityException) {
+            throw java.io.IOException(context.getString(R.string.runtime_repair_move_failed), error)
+        }
+    }
+
+    /** Best-effort cleanup after success; recovery copies must not turn success into a failure. */
+    private fun cleanIncompleteEnvironments() {
+        try {
+            root.parentFile?.listFiles()?.asSequence()
+                ?.filter { it.name.startsWith("${root.name}.incomplete-") }
+                ?.forEach { incomplete ->
+                    try {
+                        PrivateFiles.deleteTree(incomplete)
+                    } catch (error: java.io.IOException) {
+                        Log.w("LinuxRuntime", "Unable to remove incomplete runtime ${incomplete.name}", error)
+                    } catch (error: SecurityException) {
+                        Log.w("LinuxRuntime", "Unable to remove incomplete runtime ${incomplete.name}", error)
+                    }
+                }
+        } catch (error: SecurityException) {
+            Log.w("LinuxRuntime", "Unable to list incomplete runtimes", error)
+        }
+    }
+
     fun freeBytes(): Long = StatFs(context.filesDir.absolutePath).availableBytes
 
     /**
@@ -101,7 +144,11 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
 
     suspend fun install(settings: AppSettings, offline: Uri? = null, status: (String) -> Unit) = withContext(Dispatchers.IO) { installation.withLock {
         require(architecture != null) { context.getString(R.string.runtime_abi_unsupported) }
-        check(!hasEnvironmentDirectory()) { context.getString(R.string.runtime_already_present) }
+        when (installAdmission(isInstalled(), hasEnvironmentDirectory())) {
+            InstallAdmission.Blocked -> error(context.getString(R.string.runtime_already_present))
+            InstallAdmission.Repair -> moveIncompleteEnvironmentAside()
+            InstallAdmission.Ready -> Unit
+        }
         require(freeBytes() > 600L * 1024 * 1024) { context.getString(R.string.storage_insufficient) }
         val nativeArtifacts = selectedArtifacts().getJSONArray("nativeArtifacts")
         for (index in 0 until nativeArtifacts.length()) {
@@ -206,6 +253,7 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             coroutine.ensureActive()
             check(!hasEnvironmentDirectory()) { context.getString(R.string.runtime_already_present) }
             check(staging.renameTo(root))
+            cleanIncompleteEnvironments()
         } finally {
             PrivateFiles.deleteTree(staging)
         }
@@ -397,12 +445,52 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
             builder.environment().putAll(command.environment)
             val process = builder.start()
             val reader = process.inputStream.bufferedReader()
-            val pid = reader.readLine()?.toIntOrNull() ?: run { process.destroyForcibly(); error("Could not obtain owned process PID") }
+            val pid = reader.readLine()?.toIntOrNull() ?: run {
+                process.destroyForcibly()
+                runCatching { reader.close() }
+                runCatching { process.waitFor(3, TimeUnit.SECONDS) }
+                error("Could not obtain owned process PID")
+            }
+            val owned = OwnedProcesses.capture(pid) ?: run {
+                process.destroyForcibly()
+                runCatching { reader.close() }
+                runCatching { process.waitFor(3, TimeUnit.SECONDS) }
+                error("Could not obtain owned process identity")
+            }
+            val cleanupLock = Any()
+            var cleaned = false
+            fun cleanProcess() {
+                synchronized(cleanupLock) {
+                    if (cleaned) return@synchronized
+                    cleaned = true
+                    val matched = try { OwnedProcesses.matches(owned) }
+                    catch (error: Exception) { Log.w("LinuxRuntime", "Unable to verify owned process identity", error); false }
+                    if (matched) {
+                        try { OwnedProcesses.terminate(owned) }
+                        catch (error: Exception) { Log.w("LinuxRuntime", "Unable to terminate owned process tree", error) }
+                    }
+                    var exited = try { process.waitFor(3, TimeUnit.SECONDS) }
+                    catch (_: InterruptedException) { Thread.currentThread().interrupt(); false }
+                    catch (error: Exception) { Log.w("LinuxRuntime", "Unable to await owned process cleanup", error); false }
+                    val stillMatches = if (!exited && matched) {
+                        try { OwnedProcesses.matches(owned) }
+                        catch (error: Exception) { Log.w("LinuxRuntime", "Unable to recheck owned process identity", error); false }
+                    } else false
+                    if (stillMatches) {
+                        try { process.destroyForcibly() }
+                        catch (error: Exception) { Log.w("LinuxRuntime", "Unable to force-stop owned process", error) }
+                        try { process.waitFor(3, TimeUnit.SECONDS) }
+                        catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                        catch (error: Exception) { Log.w("LinuxRuntime", "Unable to await forced process cleanup", error) }
+                    }
+                    runCatching { process.outputStream.close() }
+                    runCatching { process.errorStream.close() }
+                    runCatching { reader.close() }
+                }
+            }
             suspendCancellableCoroutine { continuation ->
                 continuation.invokeOnCancellation {
-                    OwnedProcesses.terminate(pid)
-                    process.destroyForcibly()
-                    process.waitFor(3, TimeUnit.SECONDS)
+                    cleanProcess()
                 }
                 thread(name = "ZakoCommand-$pid") {
                     try {
@@ -419,11 +507,13 @@ class LinuxRuntime(private val context: Context, private val proxyCredentials: (
                             }
                         }
                         val result = CommandResult(process.waitFor(), transcript.toString())
+                        cleanProcess()
                         if (continuation.isActive) continuation.resume(result)
                     } catch (error: Exception) {
+                        cleanProcess()
                         if (continuation.isActive) continuation.resumeWithException(error)
                     } finally {
-                        process.destroy()
+                        cleanProcess()
                     }
                 }
             }
