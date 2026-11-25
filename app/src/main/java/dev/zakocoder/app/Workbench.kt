@@ -18,6 +18,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
  data class WorkbenchState(
     val loading: Boolean = true,
@@ -37,9 +41,39 @@ data class BackgroundConversationNavigation(val projectId: String, val conversat
 
 private data class WorkbenchInitial(val projects: List<Project>, val settings: AppSettings, val installed: Boolean, val proxyDisplay: String, val environmentPresent: Boolean, val onboarding: OnboardingProgress, val removedKernelProxy: Boolean)
 
+private const val SERVICE_START_TIMEOUT_MILLIS = 10_000L
+
+/**
+ * The busy reservation and service ownership share one guarded region so service startup
+ * rejection cannot leave command execution locked out.
+ */
+internal suspend fun <T> withBusyCommand(
+    setBusy: (Boolean) -> Unit,
+    startService: () -> Unit,
+    releaseService: () -> Unit,
+    command: suspend () -> T
+): T {
+    setBusy(true)
+    return try {
+        startService()
+        command()
+    } finally {
+        runCatching { setBusy(false) }
+        runCatching { releaseService() }
+    }
+}
+
+/** The tombstone must share a parent directory with the source for an atomic same-volume rename. */
+internal fun projectDeletionTombstone(directory: File, epochMillis: Long): File =
+    File(requireNotNull(directory.parentFile), "${directory.name}.deleting-$epochMillis")
+
 /** Application owns work and sessions; composition only observes state and dispatches explicit actions. */
 class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.ChatTransport = dev.zakocoder.app.ai.ChatTransport(), aiConfig: dev.zakocoder.app.ai.AiConfigStore = dev.zakocoder.app.ai.AiConfigStore(context), aiPermissions: dev.zakocoder.app.ai.AiPermissionStore = dev.zakocoder.app.ai.AiPermissionStore(context), aiHistory: dev.zakocoder.app.ai.AiHistoryStore = dev.zakocoder.app.ai.AiHistoryStore(context)) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val fatalMarker = dev.zakocoder.app.diagnostics.FatalMarker(java.io.File(context.filesDir, "diagnostics"))
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error ->
+        // This tiny synchronous write is the exception-safe crash path; handler failures stay contained.
+        runCatching { fatalMarker.write(error) }
+    })
     val updates = dev.zakocoder.app.updates.AppUpdates(context, scope)
     val runtime = LinuxRuntime(context) { settingsRepository.loadProxyCredentials() }
     val projects = ProjectRepository(context, runtime.workspaces)
@@ -108,9 +142,12 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private fun projectTasksActive() = projectTasks.state.value.busy
     private suspend fun executeProjectCommand(id: String, script: String, timeout: Long, output: (String) -> Unit): CommandResult {
         check(!mutable.value.busy && mutable.value.installed)
-        mutable.update { it.copy(busy = true, showProgress = false) }; service()
-        return try { runtime.execute(script, id, mutable.value.settings, timeoutMillis = timeout, output = output) }
-        finally { mutable.update { it.copy(busy = false) }; releaseService() }
+        return withBusyCommand(
+            setBusy = { busy -> mutable.update { it.copy(busy = busy, showProgress = false) } },
+            startService = ::service,
+            releaseService = ::releaseService,
+            command = { runtime.execute(script, id, mutable.value.settings, timeoutMillis = timeout, output = output) }
+        )
     }
     val mcp = dev.zakocoder.app.mcp.McpController(context, scope,
         canModify = { !aiActive() && !aiRestoring() && !mutable.value.busy && !projectTasksActive() })
@@ -466,6 +503,10 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         }
     }
     private var foregroundService: DevelopmentService? = null
+    private var foregroundServiceGeneration: Long? = null
+    private var serviceGeneration = 0L
+    private var requestedServiceGeneration: Long? = null
+    private var serviceStartTimeout: Job? = null
     private var serviceRequested = false
     private var serviceRecoveryDeferred = false
     private fun syncAiService() {
@@ -477,21 +518,56 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
     private fun service() {
         foregroundService?.let { it.setTaskActive(taskNeedsCpu()); return }
         if (serviceRequested || serviceRecoveryDeferred) return
+        val generation = ++serviceGeneration
         serviceRequested = true
+        requestedServiceGeneration = generation
         backgroundEvent(BackgroundTaskEvent.ServiceRequested)
-        try { ContextCompat.startForegroundService(context, Intent(context, DevelopmentService::class.java)) }
+        try { ContextCompat.startForegroundService(context,
+            Intent(context, DevelopmentService::class.java).putExtra(DevelopmentService.EXTRA_SERVICE_GENERATION, generation)) }
         catch (error: Exception) {
-            serviceRequested = false
+            clearServiceRequest(generation)
             serviceRecoveryDeferred = true
             backgroundEvent(BackgroundTaskEvent.ServiceStartRejected)
             mutable.update { it.copy(backgroundServiceError = true,
                 message = context.getString(R.string.background_service_unavailable), messageIsError = true) }
             throw error
         }
+        serviceStartTimeout = scope.launch {
+            delay(SERVICE_START_TIMEOUT_MILLIS)
+            if (!serviceRequested || requestedServiceGeneration != generation || foregroundServiceGeneration == generation) return@launch
+            clearServiceRequest(generation)
+            android.util.Log.w("Workbench", "Foreground service start timed out")
+            dev.zakocoder.app.diagnostics.DiagnosticEvents.get(context).record(
+                dev.zakocoder.app.diagnostics.DiagnosticEvent(
+                    dev.zakocoder.app.diagnostics.DiagnosticStage.Service,
+                    dev.zakocoder.app.diagnostics.DiagnosticOutcome.Failed,
+                    dev.zakocoder.app.diagnostics.DiagnosticId.create(),
+                    code = dev.zakocoder.app.diagnostics.DiagnosticCode.Timeout,
+                    elapsedMillis = SERVICE_START_TIMEOUT_MILLIS
+                )
+            )
+            mutable.update { it.copy(backgroundServiceRunning = false, backgroundServiceError = true,
+                message = context.getString(R.string.background_service_unavailable), messageIsError = true) }
+        }
+    }
+    private fun clearServiceRequest(generation: Long? = null) {
+        if (generation != null && requestedServiceGeneration != generation) return
+        serviceRequested = false
+        requestedServiceGeneration = null
+        serviceStartTimeout?.cancel()
+        serviceStartTimeout = null
     }
     fun serviceReady(service: DevelopmentService) {
-        serviceRequested = false
+        serviceReady(service, foregroundServiceGeneration ?: requestedServiceGeneration ?: serviceGeneration)
+    }
+    internal fun serviceReady(service: DevelopmentService, generation: Long) {
+        if (generation < serviceGeneration || serviceRequested && requestedServiceGeneration != generation) {
+            service.stopSelf()
+            return
+        }
+        clearServiceRequest(generation)
         foregroundService = service
+        foregroundServiceGeneration = generation
         serviceRecoveryDeferred = false
         backgroundEvent(BackgroundTaskEvent.ServiceReady)
         mutable.update { it.copy(backgroundServiceRunning = true, backgroundServiceError = false) }
@@ -500,18 +576,26 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         releaseService()
     }
     fun serviceDestroyed(service: DevelopmentService) {
+        serviceDestroyed(service, foregroundServiceGeneration ?: requestedServiceGeneration ?: serviceGeneration)
+    }
+    internal fun serviceDestroyed(service: DevelopmentService, generation: Long) {
+        // onCreate/onDestroy can race before onStartCommand supplies the intent generation.
+        val resolvedGeneration = if (generation <= 0 && foregroundService == null) requestedServiceGeneration ?: generation else generation
+        val pending = requestedServiceGeneration == resolvedGeneration
+        if (foregroundService !== service && !pending) return
+        if (pending) clearServiceRequest(resolvedGeneration)
         if (foregroundService === service) {
             foregroundService = null
-            serviceRequested = false
-            val interrupted = serviceNeeded()
-            serviceRecoveryDeferred = interrupted
-            backgroundEvent(BackgroundTaskEvent.ServiceDestroyedUnexpectedly, AiBackgroundTask.from(ai.state.value))
-            // A service callback is not a user cancellation. Never replay tools or stop unrelated work.
-            // The surviving Application retains ownership; a visible Activity can explicitly re-promote it.
-            mutable.update { it.copy(backgroundServiceRunning = false, backgroundServiceError = interrupted,
-                message = if (interrupted) context.getString(R.string.background_service_interrupted) else it.message,
-                messageIsError = if (interrupted) true else it.messageIsError) }
+            foregroundServiceGeneration = null
         }
+        val interrupted = serviceNeeded()
+        serviceRecoveryDeferred = interrupted
+        backgroundEvent(BackgroundTaskEvent.ServiceDestroyedUnexpectedly, AiBackgroundTask.from(ai.state.value))
+        // A service callback is not a user cancellation. Never replay tools or stop unrelated work.
+        // The surviving Application retains ownership; a visible Activity can explicitly re-promote it.
+        mutable.update { it.copy(backgroundServiceRunning = false, backgroundServiceError = interrupted,
+            message = if (interrupted) context.getString(R.string.background_service_interrupted) else it.message,
+            messageIsError = if (interrupted) true else it.messageIsError) }
     }
     private fun screenTestActive() = screenTests.state.value.let { it.active || it.busy }
     private fun taskNeedsCpu() = mutable.value.busy || git.state.value.busy || projectTasksActive() || AiBackgroundTask.from(ai.state.value).needsCpu || screenTests.state.value.busy
@@ -523,6 +607,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             // A service may be stopped only after it has acknowledged startForeground().
             val ready = foregroundService ?: return
             foregroundService = null
+            foregroundServiceGeneration = null
             mutable.update { it.copy(backgroundServiceRunning = false) }
             ready.setTaskActive(false)
             backgroundEvent(BackgroundTaskEvent.ServiceReleased)
@@ -553,8 +638,8 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
             }
         }
     }
-    private suspend fun persist(list: List<Project>, selected: String?, afterSave: () -> Unit = {}) {
-        withContext(Dispatchers.IO) { projects.save(list); afterSave(); projects.select(selected) }
+    private suspend fun persist(list: List<Project>, selected: String?, afterCommit: () -> Unit = {}, afterSave: () -> Unit = {}) {
+        withContext(Dispatchers.IO) { projects.save(list); afterSave(); projects.select(selected); afterCommit() }
         mutable.update { it.copy(projects = list, selectedId = selected, tools = it.bundleTools.filter { check ->
             DevelopmentTools.required(list.singleOrNull { project -> project.id == selected }?.kinds.orEmpty()).any { tool -> tool.id == check.id }
         }) }
@@ -653,6 +738,7 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
         terminal.sessions.filter { it.projectId == id }.toList().forEach { terminal.close(it.id) }
         val bound = projects.isBound(project.id)
         val previous = mutable.value.projects
+        val previousSelected = mutable.value.selectedId
         val remaining = previous.filterNot { it.id == id }
         if (bound) {
             withContext(NonCancellable) {
@@ -666,11 +752,45 @@ class Workbench(private val context: Context, aiTransport: dev.zakocoder.app.ai.
                     }
                 }
             }
-        } else withContext(Dispatchers.IO) { PrivateFiles.deleteTree(projects.directory(project.id)) }
+        } else {
+            val directory = withContext(Dispatchers.IO) { projects.directory(project.id) }
+            val staged = projectDeletionTombstone(directory, System.currentTimeMillis())
+            // The atomic rename is reversible until the metadata commit point is reached.
+            withContext(NonCancellable + Dispatchers.IO) {
+                try { Files.move(directory.toPath(), staged.toPath(), StandardCopyOption.ATOMIC_MOVE) }
+                catch (error: Exception) {
+                    throw IOException(context.getString(R.string.directory_unreadable), error)
+                }
+            }
+            var metadataCommitted = false
+            try {
+                persist(remaining, remaining.firstOrNull()?.id, afterCommit = { metadataCommitted = true })
+            } catch (failure: Throwable) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    if (!metadataCommitted) {
+                        try { projects.save(previous); projects.select(previousSelected) }
+                        catch (rollback: Exception) { failure.addSuppressed(rollback) }
+                        try { Files.move(staged.toPath(), directory.toPath(), StandardCopyOption.ATOMIC_MOVE) }
+                        catch (rollback: Exception) { failure.addSuppressed(rollback) }
+                    } else {
+                        try { PrivateFiles.deleteTree(staged) }
+                        catch (error: Exception) {
+                            android.util.Log.w("Workbench", "Unable to remove staged project directory", error)
+                        }
+                    }
+                }
+                throw failure
+            }
+            withContext(NonCancellable + Dispatchers.IO) {
+                try { PrivateFiles.deleteTree(staged) }
+                catch (error: Exception) {
+                    android.util.Log.w("Workbench", "Unable to remove staged project directory", error)
+                }
+            }
+        }
         ai.deleteProjectHistory(id)
         withContext(Dispatchers.IO) { projectTasks.deleteProject(id) }
         if (ai.state.value.projectId == id) ai.select(null)
-        if (!bound) persist(remaining, remaining.firstOrNull()?.id)
         withContext(NonCancellable + Dispatchers.IO) { gitCredentials.removeProject(id) }
     }
     fun redetect() = run(R.string.detect_project, recheckTools = true) {
