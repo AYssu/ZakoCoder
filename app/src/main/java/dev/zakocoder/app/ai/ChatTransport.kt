@@ -33,7 +33,17 @@ private fun diagnosticCode(value: String): DiagnosticCode? = when (value) {
     "malformed_json", "invalid_response_structure", "missing_body" -> DiagnosticCode.MalformedResponse
     "invalid_request_configuration", "invalid_proxy" -> DiagnosticCode.InvalidConfiguration
     "network_io_failed" -> DiagnosticCode.Io
-    else -> null
+    // Wire-level rejections stay bucketed: the code is a fixed label, never provider text.
+    else -> when {
+        value.contains("identity") || value.startsWith("duplicate_tool_id") ||
+            value.startsWith("incomplete_tool_identity") || value.startsWith("invalid_tool_identity") -> DiagnosticCode.ProtocolIdentity
+        value.contains("snapshot") || value.contains("incomplete_output_item") -> DiagnosticCode.ProtocolSnapshot
+        value.contains("unsupported") || value.contains("unknown_output_item") || value.contains("type_mismatch") -> DiagnosticCode.ProtocolUnsupported
+        value.startsWith("responses_") || value.startsWith("chat_") || value.startsWith("anthropic_") ||
+            value.startsWith("gemini_") || value.startsWith("provider_") || value.startsWith("unexpected_") ||
+            value.startsWith("invalid_") || value.startsWith("tool_") -> DiagnosticCode.ProtocolPayload
+        else -> null
+    }
 }
 
 data class AiCall(val id: String, val name: String, val arguments: String)

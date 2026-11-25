@@ -227,7 +227,9 @@ internal class AiResponsesStream(private val delta: (String) -> Unit = {},
     private fun bindId(index: Int, item: Item, id: String) {
         if (id.isEmpty() || id.length > 200) invalid("invalid_tool_identity")
         if (items.any { it.key != index && it.value.id == id }) invalid("responses_duplicate_item_id")
-        if (item.explicitId && item.id != id) invalid("responses_item_identity_mismatch")
+        // Intermediary gateways may regenerate an item id when they synthesise the terminal
+        // snapshot. Identity is anchored on output_index and, for tool calls, on call_id
+        // (validated in add()), so a changed id is a refresh rather than a protocol violation.
         item.id = id; item.explicitId = true
     }
     private fun add(index: Int, value: JSONObject): Item {
