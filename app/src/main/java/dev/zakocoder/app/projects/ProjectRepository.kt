@@ -14,6 +14,13 @@ import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
+internal const val PROJECT_EXPORT_FILE_LIMIT_BYTES = 512L * 1024 * 1024
+internal const val PROJECT_EXPORT_TOTAL_LIMIT_BYTES = 2L * 1024 * 1024 * 1024
+
+/** Pure overflow-safe check for the export budget; callers add copied bytes after every read. */
+internal fun exportWithinLimit(currentBytes: Long, additionalBytes: Long): Boolean =
+    currentBytes >= 0 && additionalBytes >= 0 && currentBytes <= PROJECT_EXPORT_TOTAL_LIMIT_BYTES - additionalBytes
+
  data class Project(val id: String, val name: String, val kinds: Set<ProjectKind>)
  data class ProjectFile(val name: String, val relative: String, val directory: Boolean, val sizeBytes: Long = 0, val modifiedAt: Long = 0)
 
@@ -291,6 +298,8 @@ class ProjectRepository(private val context: Context, val base: File) {
         val created = DocumentsContract.createDocument(resolver, target, DocumentsContract.Document.MIME_TYPE_DIR, outputName)!!
         val coroutine = currentCoroutineContext()
         var entries = 0
+        // Check metadata before creating a document, then count actual chunks in case the source grows.
+        var totalBytes = 0L
         fun copy(source: File, output: Uri, depth: Int) {
             coroutine.ensureActive()
             require(depth <= 40 && ++entries <= 20000)
@@ -301,13 +310,17 @@ class ProjectRepository(private val context: Context, val base: File) {
                     val child = DocumentsContract.createDocument(resolver, output, DocumentsContract.Document.MIME_TYPE_DIR, file.name)!!
                     copy(file, child, depth + 1)
                 } else {
-                    require(file.length() <= 512L * 1024 * 1024)
+                    require(file.length() <= PROJECT_EXPORT_FILE_LIMIT_BYTES && exportWithinLimit(totalBytes, file.length())) {
+                        context.getString(R.string.project_import_limit)
+                    }
                     val child = DocumentsContract.createDocument(resolver, output, "application/octet-stream", file.name)!!
                     file.inputStream().use { input -> resolver.openOutputStream(child, "w")!!.use { stream ->
                         val buffer = ByteArray(65536)
                         while (true) {
                             coroutine.ensureActive(); val count = input.read(buffer)
                             if (count < 0) break
+                            require(exportWithinLimit(totalBytes, count.toLong())) { context.getString(R.string.project_import_limit) }
+                            totalBytes += count
                             stream.write(buffer, 0, count)
                         }
                     } }

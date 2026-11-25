@@ -21,6 +21,39 @@ data class AppSettings(
 )
 
 /**
+ * Reads persisted settings without repairing them. Unknown or out-of-contract values fall back
+ * in-memory only so a later save can still decide when the original preference is replaced.
+ */
+internal fun settingsFromStorage(stored: Map<String, *>): AppSettings {
+    val defaults = AppSettings()
+    val additionalPath = stored["path"] as? String
+    val dns = stored["dns"] as? String
+    val proxy = stored["proxy"] as? String
+    return AppSettings(
+        aptSource = (stored["apt"] as? String)?.let { value ->
+            AptSource.entries.firstOrNull { it.name == value }
+        } ?: defaults.aptSource,
+        terminalFontSp = (stored["font"] as? Int)?.takeIf { it in 9..28 } ?: defaults.terminalFontSp,
+        terminalShell = (stored["shell"] as? String)?.let { value ->
+            TerminalShell.entries.firstOrNull { it.name == value }
+        } ?: defaults.terminalShell,
+        additionalPath = additionalPath?.takeIf(::validAdditionalPath) ?: defaults.additionalPath,
+        dns = dns?.takeIf(::validDns) ?: defaults.dns,
+        proxy = proxy?.takeIf { it.isEmpty() || runCatching { NetworkProxy.parse(it) }.isSuccess } ?: defaults.proxy,
+        editorLspEnabled = stored["editor-lsp-enabled"] as? Boolean ?: defaults.editorLspEnabled,
+    )
+}
+
+private fun validAdditionalPath(value: String): Boolean = value.isEmpty() || value.split(':').all {
+    it.startsWith('/') && it.none { character -> character == '\u0000' || character == '\n' || character == '\r' }
+}
+
+private fun validDns(value: String): Boolean = value.split(',').all { address ->
+    val parts = address.trim().split('.')
+    parts.size == 4 && parts.all { it.matches(Regex("[0-9]{1,3}")) && it.toInt() in 0..255 }
+}
+
+/**
  * Persists user settings. The saved `proxy` value is always the credential-free endpoint;
  * SOCKS5 credentials live only in [ProxyCredentialsStore] (Android Keystore AES/GCM). Saving a
  * new endpoint without credentials clears the old pair so it can never be sent to a new server.
@@ -28,15 +61,7 @@ data class AppSettings(
 class SettingsRepository(private val context: Context) {
     private val preferences = context.getSharedPreferences("development-settings", Context.MODE_PRIVATE)
     private val credentials = ProxyCredentialsStore(context)
-    fun load() = AppSettings(
-        aptSource = AptSource.valueOf(preferences.getString("apt", AppSettings().aptSource.name)!!),
-        terminalFontSp = preferences.getInt("font", AppSettings().terminalFontSp),
-        terminalShell = TerminalShell.entries.firstOrNull { it.name == preferences.getString("shell", "Bash") } ?: TerminalShell.Bash,
-        additionalPath = preferences.getString("path", "")!!,
-        dns = preferences.getString("dns", AppSettings().dns)!!,
-        proxy = preferences.getString("proxy", "")!!,
-        editorLspEnabled = preferences.getBoolean("editor-lsp-enabled", false),
-    )
+    fun load() = settingsFromStorage(preferences.all)
 
     /** Upgrade cleanup: only the endpoint explicitly marked as our retired local bridge is removed.
      * Called on IO before startup publishes settings; manual loopback proxies are preserved.
@@ -58,13 +83,8 @@ class SettingsRepository(private val context: Context) {
 
     fun validate(settings: AppSettings) {
         require(settings.terminalFontSp in 9..28) { context.getString(dev.zakocoder.app.R.string.invalid_font) }
-        require(settings.additionalPath.isEmpty() || settings.additionalPath.split(':').all {
-            it.startsWith('/') && it.none { character -> character == '\u0000' || character == '\n' || character == '\r' }
-        }) { context.getString(dev.zakocoder.app.R.string.invalid_path) }
-        require(settings.dns.split(',').all { address ->
-            val parts = address.trim().split('.')
-            parts.size == 4 && parts.all { it.matches(Regex("[0-9]{1,3}")) && it.toInt() in 0..255 }
-        }) { context.getString(dev.zakocoder.app.R.string.invalid_dns) }
+        require(validAdditionalPath(settings.additionalPath)) { context.getString(dev.zakocoder.app.R.string.invalid_path) }
+        require(validDns(settings.dns)) { context.getString(dev.zakocoder.app.R.string.invalid_dns) }
         if (settings.proxy.isNotBlank()) {
             // Blank means disabled; any other non-blank value must be an exact endpoint, with an
             // optional SOCKS5 username:password pair and no HTTP credentials.

@@ -14,6 +14,7 @@ import com.jcraft.jsch.HostKeyRepository
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import com.jcraft.jsch.SftpException
+import com.jcraft.jsch.SftpATTRS
 import com.jcraft.jsch.SocketFactory
 import com.jcraft.jsch.UserInfo
 import java.io.ByteArrayOutputStream
@@ -477,8 +478,18 @@ class SshController(context: Context) {
             val temp = absolute.substringBeforeLast('/') + "/.zako-write-" + UUID.randomUUID().toString()
             val tempLiteral = SshSafety.literalSftpPath(temp)
             try {
-                channel.put(bytes.inputStream(), tempLiteral)
-                channel.chmod(before?.permissions?.and(0x1ff) ?: 0x180, tempLiteral)
+                validateWriteParent(channel, absolute, token)
+                // JSch always sends an empty SFTP OPEN attrs block. Create a zero-byte placeholder,
+                // tighten its mode, then write content to that same file. This keeps content from
+                // existing under server-default permissions. Create and chmod are not atomic; the
+                // checks cannot exclude a concurrent mode/path change or a server-side POSIX ACL.
+                val mode = before?.permissions?.and(0x1ff) ?: 0x180
+                channel.put(ByteArray(0).inputStream(), tempLiteral)
+                channel.chmod(mode, tempLiteral)
+                val placeholder = channel.lstat(tempLiteral)
+                SshSafety.check(placeholder.isReg && !placeholder.isLink && placeholder.size == 0L &&
+                    (placeholder.permissions and 0x1ff) == mode, "unsafe_path")
+                channel.put(bytes.inputStream(), tempLiteral, ChannelSftp.OVERWRITE)
                 validateParents(channel, root, relative, token)
                 val current = attrsOrNull(channel, literal)
                 SshSafety.check((before == null && current == null) || (previous != null && current != null && current.isReg && !current.isLink &&
@@ -493,6 +504,17 @@ class SshController(context: Context) {
                 try { channel.rm(tempLiteral) } catch (_: SftpException) { /* Renamed or connection closed. */ }
             }
         } finally { channel.disconnect() }
+    }
+
+    private fun validateWriteParent(channel: ChannelSftp, absolute: String, token: Long) {
+        ensureCurrent(token)
+        val parent = absolute.substringBeforeLast('/', missingDelimiterValue = "/").ifEmpty { "/" }
+        val attrs = channel.lstat(SshSafety.literalSftpPath(parent))
+        val permissionsKnown = (attrs.flags and SftpATTRS.SSH_FILEXFER_ATTR_PERMISSIONS) != 0
+        SshSafety.check(attrs.isDir && !attrs.isLink && permissionsKnown, "unsafe_path")
+        val mode = attrs.permissions and 0x1ff
+        // A shared writable directory can replace the placeholder after chmod unless sticky.
+        SshSafety.check((mode and 0x012) == 0 || (mode and 0x200) != 0, "unsafe_path")
     }
 
     private fun validateParents(channel: ChannelSftp, root: String, relative: String, token: Long) {
