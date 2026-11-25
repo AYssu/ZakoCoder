@@ -1,5 +1,6 @@
 package dev.zakocoder.app.mcp
 
+import dev.zakocoder.app.settings.NetworkProxy
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
@@ -24,6 +25,7 @@ internal class McpSession(
     private val server: McpServer, private val scope: CoroutineScope,
     private val client: OkHttpClient = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
         .connectTimeout(15, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).callTimeout(65, TimeUnit.SECONDS).build(),
+    private val proxy: () -> String? = { null },
 ) {
     companion object { const val MAX_MESSAGE = 2L * 1024 * 1024; const val REQUEST_TIMEOUT = 70_000L }
     private val mutex = Mutex()
@@ -33,6 +35,9 @@ internal class McpSession(
     private val calls = ConcurrentHashMap.newKeySet<Call>()
     private val responses = ConcurrentHashMap.newKeySet<Response>()
     private val readers = java.util.concurrent.CopyOnWriteArrayList<Job>()
+    private val proxyLock = Any()
+    private var proxyRaw: String? = null
+    private var proxyClient: OkHttpClient? = null
     private val endpoint = CompletableDeferred<String>()
     private var sessionId: String? = null
     private var initialized = false
@@ -161,7 +166,9 @@ internal class McpSession(
         if (!McpConfigParser.sameOrigin(server.url, target)) throw McpException(McpProblem.Protocol)
         return Request.Builder().url(target).header("Accept", "application/json, text/event-stream")
             .apply {
-                server.headers.forEach { (name, value) -> header(name, value) }
+                server.headers.forEach { (name, value) ->
+                    if (!name.equals("Proxy-Authorization", true)) header(name, value)
+                }
                 if (negotiated) header("MCP-Protocol-Version", version)
                 sessionId?.let { header("Mcp-Session-Id", it) }
             }
@@ -187,21 +194,44 @@ internal class McpSession(
             scope.launch(NonCancellable + Dispatchers.IO) { close() }
         }
     }
-    private suspend fun executeAsync(request: Request): Response = suspendCancellableCoroutine { continuation ->
-        checkOpen()
-        val call = client.newCall(request); calls += call
-        continuation.invokeOnCancellation { call.cancel() }
-        call.enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: Call, error: java.io.IOException) {
-                calls -= call
-                if (continuation.isActive) continuation.resumeWithException(McpDiagnostics.network(error))
+    private suspend fun executeAsync(request: Request): Response {
+        val call = withContext(Dispatchers.IO) {
+            checkOpen()
+            clientForProxy().newCall(request)
+        }
+        calls += call
+        if (closed.get()) {
+            calls -= call
+            call.cancel()
+            throw McpException(McpProblem.Closed)
+        }
+        return suspendCancellableCoroutine { continuation ->
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: Call, error: java.io.IOException) {
+                    calls -= call
+                    if (continuation.isActive) continuation.resumeWithException(McpDiagnostics.network(error))
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    calls -= call; responses += response
+                    if (!continuation.isActive || closed.get()) releaseFromCallback(response)
+                    else continuation.resume(response) { _, value, _ -> releaseFromCallback(value) }
+                }
+            })
+        }
+    }
+    private fun clientForProxy(): OkHttpClient {
+        val raw = proxy()?.takeIf(String::isNotBlank) ?: return client
+        synchronized(proxyLock) {
+            // OkHttp delegates the SOCKS5 handshake's RFC 1929 credentials to this JDK binding.
+            NetworkProxy.configureSocksAuthentication(raw)
+            if (proxyRaw == raw) return requireNotNull(proxyClient)
+            val handle = NetworkProxy.javaProxy(raw) ?: throw IllegalArgumentException("invalid proxy")
+            return client.newBuilder().proxy(handle).build().also {
+                proxyRaw = raw
+                proxyClient = it
             }
-            override fun onResponse(call: Call, response: Response) {
-                calls -= call; responses += response
-                if (!continuation.isActive || closed.get()) releaseFromCallback(response)
-                else continuation.resume(response) { _, value, _ -> releaseFromCallback(value) }
-            }
-        })
+        }
     }
     private suspend fun readEvents(response: Response, legacy: Boolean) {
         try {

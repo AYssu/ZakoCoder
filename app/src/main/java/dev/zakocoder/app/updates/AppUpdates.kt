@@ -7,6 +7,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import dev.zakocoder.app.R
+import dev.zakocoder.app.settings.SettingsRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +17,9 @@ import java.io.File
 /** Owns update IO, while Compose only renders state and dispatches explicit actions. */
 class AppUpdates internal constructor(private val context: Context, private val scope: CoroutineScope,
     private val client: ReleaseClient, preferencesName: String) {
-    constructor(context: Context, scope: CoroutineScope) : this(context, scope, ReleaseClient(abi = {
+    constructor(context: Context, scope: CoroutineScope) : this(context, scope, ReleaseClient(proxy = {
+        SettingsRepository(context.applicationContext).proxyForRuntime().ifBlank { null }
+    }, abi = {
         // Invoked by releases() on IO, and identifies the installed package rather than just the device.
         val values = context.assets.open("distribution.json").bufferedReader().use {
             org.json.JSONObject(it.readText()).getJSONArray("abis")

@@ -2,9 +2,12 @@ package dev.zakocoder.app.updates
 
 import android.os.Build
 import dev.zakocoder.app.BuildConfig
+import dev.zakocoder.app.settings.NetworkProxy
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -18,8 +21,12 @@ import kotlin.coroutines.resumeWithException
 internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS).callTimeout(10, TimeUnit.MINUTES).build(),
     private val edition: String = BuildConfig.DISTRIBUTION_EDITION,
-    private val abi: () -> String = { Build.SUPPORTED_ABIS.firstOrNull { it in setOf("arm64-v8a", "x86_64") }.orEmpty() }) {
+    private val abi: () -> String = { Build.SUPPORTED_ABIS.firstOrNull { it in setOf("arm64-v8a", "x86_64") }.orEmpty() },
+    private val proxy: () -> String? = { null }) {
     @Volatile private var activeCall: Call? = null
+    private val proxyLock = Any()
+    private var proxyRaw: String? = null
+    private var proxyClient: OkHttpClient? = null
     fun cancel() { activeCall?.cancel() }
     suspend fun releases(): List<AppRelease> {
         val all = mutableListOf<AppRelease>()
@@ -88,20 +95,37 @@ internal class ReleaseClient(private val client: OkHttpClient = OkHttpClient.Bui
             output.toString("UTF-8")
         }
     }
-    private suspend fun response(url: String): Response = suspendCancellableCoroutine { cont ->
-        val call = client.newCall(Request.Builder().url(url).header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28").header("User-Agent", "ZakoCoder-Android-Updates").build())
+    private suspend fun response(url: String): Response {
+        val call = withContext(Dispatchers.IO) {
+            clientForProxy().newCall(Request.Builder().url(url).header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28").header("User-Agent", "ZakoCoder-Android-Updates").build())
+        }
         activeCall = call
-        cont.invokeOnCancellation { call.cancel() }
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { if (cont.isActive) cont.resumeWithException(e) }
-            override fun onResponse(call: Call, response: Response) {
-                if (!cont.isActive) { response.close(); return }
-                if (!response.request.url.isHttps) { response.close(); cont.resumeWithException(IOException("insecure redirect")); return }
-                if (!response.isSuccessful) { response.close(); cont.resumeWithException(IOException("HTTP ${response.code}")) }
-                else cont.resume(response) { _, value, _ -> value.close() }
+        return suspendCancellableCoroutine { cont ->
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { if (cont.isActive) cont.resumeWithException(e) }
+                override fun onResponse(call: Call, response: Response) {
+                    if (!cont.isActive) { response.close(); return }
+                    if (!response.request.url.isHttps) { response.close(); cont.resumeWithException(IOException("insecure redirect")); return }
+                    if (!response.isSuccessful) { response.close(); cont.resumeWithException(IOException("HTTP ${response.code}")) }
+                    else cont.resume(response) { _, value, _ -> value.close() }
+                }
+            })
+        }
+    }
+    private fun clientForProxy(): OkHttpClient {
+        val raw = proxy()?.takeIf(String::isNotBlank) ?: return client
+        synchronized(proxyLock) {
+            // OkHttp delegates the SOCKS5 handshake's RFC 1929 credentials to this JDK binding.
+            NetworkProxy.configureSocksAuthentication(raw)
+            if (proxyRaw == raw) return requireNotNull(proxyClient)
+            val handle = NetworkProxy.javaProxy(raw) ?: throw IllegalArgumentException("invalid proxy")
+            return client.newBuilder().proxy(handle).build().also {
+                proxyRaw = raw
+                proxyClient = it
             }
-        })
+        }
     }
     companion object {
         private const val MAX_APK = 1_000_000_000L

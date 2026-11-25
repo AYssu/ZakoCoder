@@ -7,6 +7,7 @@ import dev.zakocoder.app.diagnostics.DiagnosticEvents
 import dev.zakocoder.app.diagnostics.DiagnosticId
 import dev.zakocoder.app.diagnostics.DiagnosticOutcome
 import dev.zakocoder.app.diagnostics.DiagnosticStage
+import dev.zakocoder.app.settings.SettingsRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,10 @@ class McpController(
     private val canModify: () -> Boolean = { true },
     keyAlias: String = "zakocoder-mcp-v1",
     private val preflightTimeoutMillis: Long = 8_000L,
+    private val proxyProvider: () -> String? = {
+        // The setting is read only when a request starts, never during client construction.
+        SettingsRepository(context.applicationContext).proxyForRuntime().ifBlank { null }
+    },
 ) {
     private val mutable = MutableStateFlow(McpState())
     val state = mutable.asStateFlow()
@@ -338,23 +343,30 @@ class McpController(
 
     private suspend fun list(session: McpSession, method: String, initial: JSONObject): JSONObject {
         val key = when (method) { "tools/list" -> "tools"; "resources/list" -> "resources"; "resources/templates/list" -> "resourceTemplates"; "prompts/list" -> "prompts"; else -> throw McpException(McpProblem.Protocol) }
-        val items = JSONArray(); val cursors = mutableSetOf<String>(); var params = initial; var pages = 0; var bytes = 0
-        initial.optString("cursor").takeIf { it.isNotEmpty() }?.let(cursors::add)
-        while (true) {
-            val page = session.exchange(method, params); pages++
-            val values = page.optJSONArray(key) ?: throw McpException(McpProblem.Protocol)
-            for (index in 0 until values.length()) {
-                val item = values.optJSONObject(index) ?: throw McpException(McpProblem.Protocol)
-                bytes += item.toString().toByteArray().size
-                if (bytes > 1024 * 1024 || items.length() >= 1000) throw McpException(McpProblem.Limit)
-                items.put(item)
+        // A single absolute budget covers every page, so pagination cannot renew the lock forever.
+        val result = withTimeoutOrNull<JSONObject>(McpSession.REQUEST_TIMEOUT) {
+            val items = JSONArray(); val cursors = mutableSetOf<String>(); var params = initial; var pages = 0; var bytes = 0
+            initial.optString("cursor").takeIf { it.isNotEmpty() }?.let(cursors::add)
+            while (true) {
+                val page = session.exchange(method, params); pages++
+                val values = page.optJSONArray(key) ?: throw McpException(McpProblem.Protocol)
+                for (index in 0 until values.length()) {
+                    val item = values.optJSONObject(index) ?: throw McpException(McpProblem.Protocol)
+                    bytes += item.toString().toByteArray().size
+                    if (bytes > 1024 * 1024 || items.length() >= 1000) throw McpException(McpProblem.Limit)
+                    items.put(item)
+                }
+                if (!page.has("nextCursor")) return@withTimeoutOrNull JSONObject().put(key, items)
+                val next = page.opt("nextCursor") as? String ?: throw McpException(McpProblem.Protocol)
+                if (next.length !in 1..8192 || !cursors.add(next)) throw McpException(McpProblem.Protocol)
+                if (pages >= 20) return@withTimeoutOrNull JSONObject().put(key, items).put("nextCursor", next).put("truncated", true)
+                params = JSONObject().put("cursor", next)
             }
-            if (!page.has("nextCursor")) return JSONObject().put(key, items)
-            val next = page.opt("nextCursor") as? String ?: throw McpException(McpProblem.Protocol)
-            if (next.length !in 1..8192 || !cursors.add(next)) throw McpException(McpProblem.Protocol)
-            if (pages >= 20) return JSONObject().put(key, items).put("nextCursor", next).put("truncated", true)
-            params = JSONObject().put("cursor", next)
+            // Unreachable: the loop only exits through the labeled returns above.
+            @Suppress("UNREACHABLE_CODE")
+            throw McpException(McpProblem.Protocol)
         }
+        return result ?: throw McpException(McpProblem.Timeout)
     }
     private fun readyServer(id: String): McpServer {
         if (!loadSucceeded || mutable.value.loading) throw McpException(McpProblem.Storage)
@@ -363,7 +375,7 @@ class McpController(
     }
     private fun session(project: String, server: McpServer, owner: Long, expected: Long): McpSession = synchronized(monitor) {
         checkIdentity(project, owner, expected)
-        sessions.getOrPut(project to server.id) { McpSession(server, scope) }
+        sessions.getOrPut(project to server.id) { McpSession(server, scope, proxy = proxyProvider) }
     }
     private suspend fun discard(project: String, id: String, session: McpSession) {
         synchronized(monitor) { if (sessions[project to id] === session) sessions.remove(project to id) }
